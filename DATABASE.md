@@ -1,0 +1,226 @@
+# Database
+
+PostgreSQL 16. 14 ordered migrations in `supabase/migrations/`, applied with
+`supabase db push` and verified end-to-end by `npm run db:verify`.
+
+**Migrations are immutable once applied to a live database.** Change behaviour by
+adding a new migration, never by editing an old one.
+
+---
+
+## Conventions
+
+- **Money** is always an `integer` in the currency's minor unit (cents), never a
+  float. Column names end in `_cents`.
+- **Geo** is plain `latitude`/`longitude` (`double precision`) plus
+  `blup_distance_m()`, an `IMMUTABLE` haversine function.
+- **Counters** (`attendee_count`, `saved_count`, …) are maintained by triggers
+  and reset from `OLD` on any client update. They are never authoritative input.
+- **Enums** are real Postgres enums for closed sets; text + `CHECK` where the set
+  should stay open.
+- **Timestamps** are `timestamptz`, defaulted to `now()`, with `updated_at`
+  maintained by the `set_updated_at()` trigger — not by the client.
+
+---
+
+## Migration order
+
+| File | Contents |
+|---|---|
+| `…000100_extensions_and_types` | `pgcrypto`, `citext`, all enums, `blup_distance_m`, `set_updated_at`, `blup_short_code` |
+| `…000200_profiles_and_interests` | `profiles`, `interests`, `user_interests`, `follows`, `friendships`, `is_admin`, `is_following` |
+| `…000300_organizations` | `organizations`, `organization_members`, verification requests, `is_org_member`, `is_org_verified` |
+| `…000400_events` | `events`, `event_images`, `event_attendees`, `saved_events`, `event_likes`, `event_views`, counter + capacity triggers, `can_view_event` |
+| `…000500_social` | `communities`, `event_crews`, `posts`, `post_likes`, `comments` |
+| `…000550_notifications` | `notifications`, `push_tokens`, `notification_preferences`, `notify_user`, notification triggers |
+| `…000600_ticketing_and_payments` | `ticket_types`, `orders`, `payments`, `webhook_events`, `tickets`, `ledger_entries`, `payouts`, `organization_balances`, order lifecycle + check-in + payout functions |
+| `…000700_premium` | `premium_subscriptions`, `subscription_events`, `is_premium`, `upsert_premium_subscription` |
+| `…000800_ai_signals` | `user_event_signals`, `ai_recommendation_runs/items`, `ai_requests`, `record_signal` |
+| `…000900_discovery_and_ranking` | `event_feed_item` type, `events_nearby`, `search_events`, `recommend_events`, `recommend_people`, `event_analytics` |
+| `…001000_admin_moderation` | `reports`, `admin_audit_log`, admin RPCs |
+| `…001100_rls` | RLS enabled everywhere, all policies, privilege-protection triggers, function grants/revokes |
+| `…001200_storage_and_realtime` | Storage buckets + policies, realtime publication |
+| `…001300_interest_catalogue` | The 45 interests (reference data, not demo data) |
+| `…001400_grants` | Explicit role grants; revokes on money tables |
+
+---
+
+## Core tables
+
+### profiles
+
+1:1 with `auth.users`, created automatically by the `handle_new_user` trigger,
+which also derives a unique username from the email and de-duplicates it.
+
+Identity (`username` `citext unique`, `display_name`, `avatar_url`, `bio`),
+location (`latitude`, `longitude`, `city`, `location_updated_at`), privacy
+(`is_private`, `show_location`, `anonymous_mode`, `allow_dm`), and lifecycle
+(`app_role`, `onboarding_completed`, `is_suspended`).
+
+`app_role`, `is_suspended` and `suspended_reason` cannot be changed by the owner —
+`protect_profile_privileges()` restores them from `OLD` unless the caller is an
+admin. This is what makes self-promotion impossible even with a valid session.
+
+### events
+
+Location, schedule, capacity, pricing, `status`, `visibility` and seven
+trigger-maintained counters.
+
+Two rules are enforced in the database, not the UI:
+
+```sql
+constraint events_paid_requires_org check (is_free or organization_id is not null)
+```
+
+plus `enforce_paid_event_rules()`, which additionally requires the organization
+to be **verified**. A paid event created by an unverified organization raises
+`ORGANIZATION_NOT_VERIFIED` — asserted in `test_01`.
+
+`enforce_event_capacity()` rejects an RSVP that would exceed `capacity`, counting
+only `going` and `checked_in`.
+
+Indexes: `(latitude, longitude)`, `start_at`, `(status, visibility, start_at)`,
+GIN on `tags`, and a GIN `to_tsvector` index for full-text search.
+
+### organizations
+
+Branding, `verification_status`, payout state (`stripe_account_id`,
+`charges_enabled`, `payouts_enabled`) and `platform_fee_bps` — the BLUP cut in
+basis points, default 300 (3.00%).
+
+`protect_organization_privileges()` prevents an organizer from setting their own
+verification status, payout flags, fee or Stripe account id. Only an admin can.
+
+Roles in `organization_members`: `owner`, `admin`, `event_manager`, `finance`.
+The creator becomes `owner` automatically.
+
+### Ticketing and money
+
+```
+ticket_types ──< orders ──< tickets
+                   │
+                   ├──< payments        (one row per provider transaction)
+                   └──< ledger_entries  (signed amounts, per organization)
+                                │
+                              payouts
+```
+
+- **`orders`** — one purchase intent. Amounts are computed by `create_order()`,
+  never sent by the client. Unique partial index on
+  `(provider, provider_reference)`.
+- **`tickets`** — one row per admitted person, with a unique `code` and a
+  `qr_secret`. Created only by `fulfill_order()`.
+- **`ledger_entries`** — signed: `sale` `+subtotal`, `platform_fee` `−fee`,
+  `payout` `−amount`, `refund` `−subtotal`, `adjustment` for reversals.
+  `available_at` implements the settlement delay (7 days).
+- **`organization_balances`** — a view: `balance`, `available` (settled only),
+  `pending`, `gross_sales`, `platform_fee`, `paid_out`.
+
+### premium_subscriptions
+
+Keyed by `(platform, original_transaction_id)` — the identity that survives
+renewals. Written exclusively by `upsert_premium_subscription()` from the
+receipt-verification functions. `is_premium()` is the single source of truth for
+"is this user premium right now".
+
+### Signals and AI
+
+`user_event_signals` records every meaningful interaction (impression, open,
+swipe, save, RSVP, purchase, attend). `ai_recommendation_runs` and
+`ai_recommendation_items` persist what was actually served, with the full score
+breakdown, which is what the AI debug screen reads. `ai_requests` logs LLM calls
+including failures.
+
+---
+
+## Functions worth knowing
+
+| Function | Callable by | Does |
+|---|---|---|
+| `events_nearby(...)` | anon, authenticated | bbox pre-filter → haversine → feed rows |
+| `search_events(...)` | anon, authenticated | full-text + category/date/price/distance filters |
+| `recommend_events(...)` | authenticated | the ranker, with `score_breakdown` |
+| `recommend_people(...)` | authenticated | shared interests, mutual events, mutual follows |
+| `record_signal(...)` | authenticated | append a behavioural signal (+ a view row) |
+| `check_in_ticket(code, secret, event?)` | authenticated | validates the QR, the scanner's authority and double use |
+| `request_payout(org, amount)` | authenticated (owner/finance) | validates the settled balance, writes the payout + ledger |
+| `event_analytics(event)` | authenticated (host/organizer/admin) | views, saves, RSVPs, sales, fee, net |
+| `create_order(...)` | **service role only** | computes amounts, checks availability |
+| `fulfill_order(...)` | **service role only** | marks paid, mints tickets, writes the ledger — idempotent |
+| `refund_order(...)` | **service role only** | reverses sale and fee, invalidates tickets |
+| `mark_payout_failed(...)` | **service role only** | returns the money to the balance |
+| `upsert_premium_subscription(...)` | **service role only** | the only writer of premium state |
+| `admin_*` | admins (checked inside) | suspend, moderate, verify, resolve, payout status |
+
+The service-role functions are explicitly `REVOKE`d from `authenticated` and
+`anon` in migration `…001100_rls`.
+
+---
+
+## Row Level Security
+
+Every table has RLS enabled. Highlights:
+
+- **profiles** — self and admins always; others only if not suspended and either
+  public or followed.
+- **events** — creator, organizers and admins always; everyone else only
+  `published` and (`public`/`unlisted`, or `followers` when following).
+- **orders/tickets/payments/ledger/payouts/premium** — SELECT only, scoped to
+  the buyer, the owning organization's finance roles, or an admin. **No
+  INSERT/UPDATE policy exists.**
+- **notifications** — strictly the owner.
+- **storage** — public read for `avatars`, `event-images`, `org-assets`; write
+  only where the first path segment matches `auth.uid()` (or the organization for
+  org assets). `verification-docs` is private: only the owning organization and
+  admins.
+
+---
+
+## Geo, and when to move to PostGIS
+
+`events_nearby` narrows with a bounding box on the `(latitude, longitude)` btree
+index, then filters exactly with `blup_distance_m()`. `blup_lat_delta` and
+`blup_lon_delta` convert metres to degrees (the longitude one is
+latitude-corrected).
+
+This is deliberate: no extension means the whole schema can be applied and
+asserted against a plain PostgreSQL 16 cluster in CI, which is how the 45
+assertions run on every push.
+
+Move to PostGIS when a single metro area holds hundreds of thousands of live
+events. The migration is small:
+
+```sql
+create extension postgis;
+alter table events add column location geography(Point, 4326)
+  generated always as (st_makepoint(longitude, latitude)::geography) stored;
+create index events_location_idx on events using gist (location);
+-- then swap the bbox + haversine in events_nearby for st_dwithin/st_distance
+```
+
+Nothing above the RPC changes: the app only ever sees `distance_m`.
+
+---
+
+## Testing
+
+```bash
+npm run db:verify
+```
+
+Creates a throwaway cluster, applies the local auth shim
+(`supabase/tests/_local_auth_shim.sql` — a minimal stand-in for Supabase's
+`auth` schema, never deployed), runs every migration in order, then the suite:
+
+- `test_01_events_and_rules.sql` — zero state, profile provisioning, paid-event
+  rules, counters, capacity, distance maths, nearby, search
+- `test_02_ticketing_and_money.sql` — order amounts and fee, per-order limits,
+  no tickets before payment, fulfilment, idempotency, amount tampering, ledger
+  arithmetic, payout bounds and authorization, QR check-in, refunds, analytics
+- `test_03_ai_ranking.sql` — ranking order, explainable breakdown, swipe-left
+  suppression, behaviour affinity, social relevance, people matching, run logging
+- `test_04_rls.sql` — private profiles, cross-user edits, privilege escalation,
+  draft visibility, forged counters, client-side ticket/order/premium/ledger
+  writes, notification privacy, admin-only RPCs
+
+Assertions run inside a transaction and roll back, so the suite is repeatable.

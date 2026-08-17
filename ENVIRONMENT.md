@@ -1,0 +1,107 @@
+# Environment variables
+
+Three files, three trust levels. Templates: `mobile/.env.example`,
+`supabase/.env.example`, `.env.example`. None of the real files are committed.
+
+| File | Trust | Read by |
+|---|---|---|
+| `mobile/.env` | **Public** — shipped inside the app bundle | `app.config.ts` → `src/lib/env.ts` |
+| `supabase/.env` | **Secret** — server only | Edge Functions, via `supabase secrets set` |
+| `.env` (root) | **Secret** — local only | the seed script |
+
+The rule: if a value would let someone spend money, grant access or impersonate
+the platform, it belongs in `supabase/.env` and must never appear in
+`mobile/.env`. `EXPO_PUBLIC_*` variables are readable by anyone who downloads the
+app — treat them as published.
+
+---
+
+## `mobile/.env` — public
+
+| Variable | Required | Notes |
+|---|---|---|
+| `EXPO_PUBLIC_SUPABASE_URL` | **yes** | Project Settings → API |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | **yes** | anon key. Safe to ship: RLS is the guard. |
+| `EXPO_PUBLIC_MAPS_API_KEY_ANDROID` | for Android maps | Google Cloud, “Maps SDK for Android”. Restrict to your package + SHA-1. |
+| `EXPO_PUBLIC_MAPS_API_KEY_IOS` | no | iOS uses Apple Maps by default |
+| `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | for checkout | `pk_test_…` / `pk_live_…`. **Publishable only.** |
+| `EXPO_PUBLIC_APPLE_MERCHANT_ID` | for Apple Pay | `merchant.com.blup.app` |
+| `EXPO_PUBLIC_PREMIUM_PRODUCT_ID_MONTHLY` | for premium | must match App Store Connect |
+| `EXPO_PUBLIC_PREMIUM_PRODUCT_ID_YEARLY` | for premium | " |
+| `EXPO_PUBLIC_IOS_BUNDLE_ID` | for builds | default `com.blup.app` |
+| `EXPO_PUBLIC_ANDROID_PACKAGE` | for builds | default `com.blup.app` |
+| `EXPO_PUBLIC_DEEPLINK_DOMAIN` | no | e.g. `blup.app`; enables universal/app links |
+| `EXPO_PUBLIC_ROUTING_API_KEY` | no | real walking times; without it, straight-line estimates |
+| `EXPO_PUBLIC_DEBUG_AI` | no | `true` shows the AI debug screen in release builds |
+| `EAS_PROJECT_ID` | for push | written by `eas init` |
+
+Changing any of these requires `npx expo start --clear` (they are inlined at
+build time).
+
+---
+
+## `supabase/.env` — server secrets
+
+Load with `supabase secrets set --env-file supabase/.env`.
+
+| Variable | Needed for | Where to find it |
+|---|---|---|
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | local function dev | injected automatically in deployed functions |
+| `STRIPE_SECRET_KEY` | checkout, payouts | Stripe → Developers → API keys |
+| `STRIPE_WEBHOOK_SECRET` | webhook | Stripe → Webhooks → endpoint → signing secret |
+| `STRIPE_CONNECT_RETURN_URL` / `_REFRESH_URL` | payout onboarding | default `blup://organizer/payouts` |
+| `APPLE_SHARED_SECRET` | premium | App Store Connect → App-Specific Shared Secret |
+| `APPLE_BUNDLE_ID` | premium | must match the built app |
+| `APPLE_IAP_ENVIRONMENT` | premium | `sandbox` while testing |
+| `APPLE_STRICT_CHAIN_VALIDATION` | premium | keep `true`; `false` only in sandbox |
+| `AI_PROVIDER` / `AI_API_KEY` / `AI_MODEL` | LLM explanations | ranking works without them |
+| `EXPO_ACCESS_TOKEN` | push (optional) | only if your Expo project enforces push security |
+
+**The service-role key bypasses RLS.** It exists only inside Edge Functions and
+the seed script. It must never reach the app, a client-side build, or a log.
+
+---
+
+## `.env` (root) — seed script
+
+```
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+Used by `npm run seed`. The script refuses a hosted `*.supabase.co` URL unless
+you pass `--force`, so a stray run cannot fill production with demo accounts.
+
+---
+
+## What works with what
+
+BLUP is built so a missing credential is a visible, explained state — never a
+dead button.
+
+| Configured | You get |
+|---|---|
+| Supabase only | Everything except payments, premium and LLM text: auth, profiles, uploads, GPS, maps (iOS), events, RSVP, social, search, recommendations with template explanations, notifications in-app |
+| \+ Google Maps key | Maps on Android |
+| \+ Stripe | Ticket checkout, organizer sales, payouts (with Connect onboarding) |
+| \+ Apple IAP | Premium subscriptions on iOS |
+| \+ `AI_API_KEY` | LLM-written explanations for premium users |
+| \+ EAS project | Push notifications on real devices |
+
+`GET /config-status` reports these as booleans (never key material) so the app
+can render the right message.
+
+---
+
+## Rotating a key
+
+1. Create the new key in the provider's dashboard.
+2. Update `supabase/.env`, run `supabase secrets set --env-file supabase/.env`.
+3. Redeploy the affected functions: `./scripts/deploy-functions.sh <name>`.
+4. Revoke the old key.
+
+For `mobile/.env` values a rotation means a new build (they are compiled in), so
+prefer restricting keys by bundle id / package name over rotating them.
+
+If a service-role key ever leaks: rotate it in Project Settings → API
+immediately, then redeploy every function.
