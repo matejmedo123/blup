@@ -1,0 +1,51 @@
+# dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# secrets — never commit these
+.env
+.env.local
+.env.*.local
+mobile/.env
+mobile/.env.local
+supabase/.env
+supabase/functions/.env
+
+# expo / native
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/ios/
+mobile/android/
+mobile/*.jks
+mobile/*.p8
+mobile/*.p12
+mobile/*.key
+mobile/*.mobileprovision
+mobile/expo-env.d.ts
+
+# build output
+*.tsbuildinfo
+build/
+coverage/
+
+# supabase local
+supabase/.branches/
+supabase/.temp/
+
+# logs & os noise
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+Thumbs.db
+
+# editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# local postgres verification cluster
+/tmp/blup-pgtest/
