@@ -17,11 +17,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: 'blup',
   userInterfaceStyle: 'dark',
   icon: './assets/icon.png',
-  splash: {
-    image: './assets/splash-icon.png',
-    resizeMode: 'contain',
-    backgroundColor: '#07070A',
-  },
   assetBundlePatterns: ['**/*'],
   ios: {
     supportsTablet: false,
@@ -88,6 +83,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   web: { favicon: './assets/favicon.png' },
   plugins: [
     'expo-router',
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/splash-icon.png',
+        resizeMode: 'contain',
+        backgroundColor: '#07070A',
+      },
+    ],
     'expo-secure-store',
     'expo-web-browser',
     'expo-image',

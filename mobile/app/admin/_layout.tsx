@@ -1,0 +1,33 @@
+import React from 'react';
+import { Redirect, Stack } from 'expo-router';
+
+import { useAuth } from '@/auth/AuthProvider';
+import { colors } from '@/theme';
+
+/**
+ * Admin section. Hiding it is not the security control — every admin RPC
+ * re-checks is_admin() in the database — but there is no reason to show it.
+ */
+export default function AdminLayout() {
+  const { isAdmin, initializing, loadingProfile } = useAuth();
+
+  if (initializing || loadingProfile) return null;
+  if (!isAdmin) return <Redirect href="/(tabs)/profile" />;
+
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.text,
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
+      <Stack.Screen name="index" options={{ title: 'Admin' }} />
+      <Stack.Screen name="users" options={{ title: 'Users' }} />
+      <Stack.Screen name="verifications" options={{ title: 'Verifications' }} />
+      <Stack.Screen name="reports" options={{ title: 'Reports' }} />
+      <Stack.Screen name="payouts" options={{ title: 'Payouts' }} />
+    </Stack>
+  );
+}

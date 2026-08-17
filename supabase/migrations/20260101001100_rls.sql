@@ -636,6 +636,7 @@ begin
       public.fulfill_order(uuid, payment_provider, text, integer),
       public.fail_order(uuid, text),
       public.refund_order(uuid, text),
+      public.mark_payout_failed(uuid, text),
       public.upsert_premium_subscription(uuid, subscription_platform, text, subscription_status, text, text, timestamptz, timestamptz, boolean, text, jsonb)
     from authenticated, anon;
   end if;

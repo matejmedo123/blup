@@ -1,0 +1,301 @@
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { useStripe } from '@stripe/stripe-react-native';
+
+import { getEvent } from '@/api/events';
+import { createCheckout, markTicketPurchaseSignal, waitForTickets } from '@/api/tickets';
+import { isConfigured } from '@/lib/env';
+import { messageFor } from '@/lib/errors';
+import { formatMoney, formatPrice } from '@/lib/format';
+import {
+  Body, Button, Caption, Divider, ErrorState, LoadingState, Notice, Screen, SectionHeader,
+} from '@/components/ui';
+import { colors, radius, spacing, typography } from '@/theme';
+
+type Stage = 'select' | 'paying' | 'confirming' | 'done';
+
+/**
+ * Checkout.
+ *
+ * The client never decides what anything costs and never marks an order paid:
+ *   1. checkout-create computes the amounts and returns a PaymentIntent secret
+ *   2. Stripe's PaymentSheet takes the card / Apple Pay / Google Pay
+ *   3. the webhook confirms the money and issues the tickets
+ *   4. this screen waits for those tickets to appear
+ */
+export default function CheckoutScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
+  const [ticketTypeId, setTicketTypeId] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [stage, setStage] = useState<Stage>('select');
+  const [error, setError] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+
+  const event = useQuery({
+    queryKey: ['event', id],
+    queryFn: () => getEvent(id!),
+    enabled: Boolean(id),
+  });
+
+  const ticketTypes = event.data?.ticket_types ?? [];
+  const selected = ticketTypes.find((type) => type.id === ticketTypeId) ?? ticketTypes[0];
+  const maxQuantity = selected
+    ? Math.min(selected.max_per_order, selected.quantity_total - selected.quantity_sold)
+    : 1;
+
+  const pay = async () => {
+    if (!selected) return;
+
+    setError(null);
+    setStage('paying');
+
+    try {
+      // 1. server computes amounts + creates the order
+      const session = await createCheckout(selected.id, quantity);
+      setOrderId(session.order_id);
+
+      // Free tickets skip the payment provider entirely.
+      if (!session.requires_payment) {
+        setStage('done');
+        void markTicketPurchaseSignal(id!);
+        return;
+      }
+
+      if (!session.payment_intent_client_secret) {
+        throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+      }
+
+      // 2. native payment sheet (card, Apple Pay, Google Pay)
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: event.data?.organization?.name ?? 'BLUP',
+        paymentIntentClientSecret: session.payment_intent_client_secret,
+        applePay: { merchantCountryCode: 'SK' },
+        googlePay: { merchantCountryCode: 'SK', testEnv: __DEV__ },
+        returnURL: 'blup://stripe-redirect',
+        allowsDelayedPaymentMethods: false,
+      });
+
+      if (initError) throw new Error(initError.message);
+
+      const { error: sheetError } = await presentPaymentSheet();
+
+      if (sheetError) {
+        if (sheetError.code === 'Canceled') {
+          setStage('select');
+          return;
+        }
+        throw new Error(sheetError.message);
+      }
+
+      // 3. the webhook is the source of truth — wait for the ticket to exist
+      setStage('confirming');
+      const result = await waitForTickets(session.order_id);
+
+      if (result.status === 'failed') {
+        throw new Error('The payment did not go through. You have not been charged.');
+      }
+
+      void markTicketPurchaseSignal(id!);
+      setStage('done');
+    } catch (caught) {
+      setError(messageFor(caught));
+      setStage('select');
+    }
+  };
+
+  if (event.isLoading) return <Screen><LoadingState /></Screen>;
+
+  if (event.isError || !event.data) {
+    return (
+      <Screen>
+        <ErrorState message={messageFor(event.error)} onRetry={() => void event.refetch()} />
+      </Screen>
+    );
+  }
+
+  if (ticketTypes.length === 0) {
+    return (
+      <Screen scroll>
+        <Notice
+          tone="warning"
+          title="No tickets on sale"
+          body="This event does not have any ticket types yet."
+        />
+        <Button title="Back to the event" variant="secondary" onPress={() => router.back()} />
+      </Screen>
+    );
+  }
+
+  if (stage === 'done') {
+    return (
+      <Screen scroll>
+        <View style={styles.success}>
+          <Text style={styles.successEmoji}>🎫</Text>
+          <Text style={styles.successTitle}>You’re in</Text>
+          <Body muted style={styles.successBody}>
+            Your {quantity > 1 ? `${quantity} tickets are` : 'ticket is'} confirmed and saved to your
+            account. Show the QR code at the door.
+          </Body>
+
+          <Button title="See my ticket" onPress={() => router.replace('/tickets')} />
+          <Button title="Back to the event" variant="ghost" onPress={() => router.replace(`/event/${id}`)} />
+        </View>
+      </Screen>
+    );
+  }
+
+  if (stage === 'confirming') {
+    return (
+      <Screen>
+        <LoadingState label="Confirming your payment with the bank…" />
+        <Caption style={styles.confirmHint}>
+          We wait for the payment provider to confirm before issuing your ticket. This is the honest
+          part — it takes a couple of seconds.
+        </Caption>
+      </Screen>
+    );
+  }
+
+  const subtotal = (selected?.price_cents ?? 0) * quantity;
+
+  return (
+    <Screen scroll>
+      <Text style={styles.eventTitle}>{event.data.title}</Text>
+      <Caption>{event.data.venue_name ?? event.data.address ?? ''}</Caption>
+
+      {error ? <Notice tone="danger" title="Payment problem" body={error} /> : null}
+
+      {!isConfigured.stripe ? (
+        <Notice
+          tone="warning"
+          title="Payments are not configured"
+          body="This build has no Stripe publishable key, so the payment sheet cannot open. Add EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY and the server-side keys — see PAYMENTS.md."
+        />
+      ) : null}
+
+      <SectionHeader title="Choose a ticket" />
+      {ticketTypes.map((type) => {
+        const remaining = type.quantity_total - type.quantity_sold;
+        const soldOut = remaining <= 0;
+        const isSelected = selected?.id === type.id;
+
+        return (
+          <Pressable
+            key={type.id}
+            onPress={() => {
+              if (soldOut) return;
+              setTicketTypeId(type.id);
+              setQuantity(1);
+            }}
+            style={[styles.option, isSelected && styles.optionSelected, soldOut && styles.optionDisabled]}
+          >
+            <View style={styles.flex}>
+              <Text style={styles.optionName}>{type.name}</Text>
+              {type.description ? <Caption>{type.description}</Caption> : null}
+              <Caption style={soldOut ? styles.soldOut : undefined}>
+                {soldOut ? 'Sold out' : `${remaining} available`}
+              </Caption>
+            </View>
+            <Text style={styles.optionPrice}>{formatPrice(type.price_cents, type.currency)}</Text>
+          </Pressable>
+        );
+      })}
+
+      <SectionHeader title="How many" />
+      <View style={styles.quantityRow}>
+        <Button
+          title="−"
+          variant="secondary"
+          compact
+          onPress={() => setQuantity((value) => Math.max(1, value - 1))}
+          disabled={quantity <= 1}
+        />
+        <Text style={styles.quantity}>{quantity}</Text>
+        <Button
+          title="+"
+          variant="secondary"
+          compact
+          onPress={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}
+          disabled={quantity >= maxQuantity}
+        />
+        <Caption style={styles.quantityHint}>Max {maxQuantity} per order</Caption>
+      </View>
+
+      <Divider />
+
+      <View style={styles.summaryRow}>
+        <Body muted>
+          {quantity} × {selected ? formatPrice(selected.price_cents, selected.currency) : '—'}
+        </Body>
+        <Body>{formatMoney(subtotal, selected?.currency ?? 'EUR')}</Body>
+      </View>
+
+      <View style={styles.summaryRow}>
+        <Text style={styles.total}>Total</Text>
+        <Text style={styles.total}>{formatMoney(subtotal, selected?.currency ?? 'EUR')}</Text>
+      </View>
+
+      <Caption style={styles.feeNote}>
+        The BLUP service fee is taken from the organizer’s payout, not added to your price.
+      </Caption>
+
+      <Button
+        title={subtotal === 0 ? 'Get ticket' : `Pay ${formatMoney(subtotal, selected?.currency ?? 'EUR')}`}
+        onPress={pay}
+        loading={stage === 'paying'}
+        disabled={!selected || (subtotal > 0 && !isConfigured.stripe)}
+        style={styles.payButton}
+      />
+
+      {orderId ? <Caption style={styles.orderRef}>Order {orderId.slice(0, 8)}</Caption> : null}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  eventTitle: { ...typography.heading, color: colors.text },
+
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  optionSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  optionDisabled: { opacity: 0.5 },
+  optionName: { ...typography.bodyStrong, color: colors.text },
+  optionPrice: { ...typography.subheading, color: colors.text },
+  soldOut: { color: colors.danger },
+
+  quantityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  quantity: { ...typography.heading, color: colors.text, minWidth: 30, textAlign: 'center' },
+  quantityHint: { marginLeft: 'auto' },
+
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  total: { ...typography.subheading, color: colors.text },
+  feeNote: { marginTop: spacing.sm },
+  payButton: { marginTop: spacing.xl },
+  orderRef: { textAlign: 'center', marginTop: spacing.md },
+
+  success: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.xxxl },
+  successEmoji: { fontSize: 56 },
+  successTitle: { ...typography.title, color: colors.text },
+  successBody: { textAlign: 'center', marginBottom: spacing.lg },
+
+  confirmHint: { textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xxl },
+});

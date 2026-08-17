@@ -1,0 +1,24 @@
+{
+  "name": "blup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BLUP — geolocated event discovery, communities and ticketing. Monorepo: Expo mobile app + Supabase backend.",
+  "scripts": {
+    "db:verify": "./scripts/verify-db.sh",
+    "db:push": "supabase db push",
+    "db:reset": "supabase db reset",
+    "seed": "node supabase/seed/seed.mjs",
+    "seed:clean": "node supabase/seed/seed.mjs --clean",
+    "functions:serve": "supabase functions serve",
+    "functions:deploy": "./scripts/deploy-functions.sh",
+    "mobile": "npm --prefix mobile run start",
+    "typecheck": "npm --prefix mobile run typecheck"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.112.3",
+    "dotenv": "^17.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

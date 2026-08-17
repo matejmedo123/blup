@@ -468,6 +468,47 @@ begin
 end;
 $$;
 
+-- Marks a payout failed and returns the money to the organizer balance.
+-- Service-role only (called by the payout Edge Function when the provider
+-- transfer fails); it deliberately does not require an admin session.
+create or replace function public.mark_payout_failed(
+  p_payout_id uuid,
+  p_reason    text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  po public.payouts;
+begin
+  select * into po from public.payouts where id = p_payout_id for update;
+  if not found then
+    raise exception 'PAYOUT_NOT_FOUND';
+  end if;
+
+  if po.status in ('failed', 'cancelled') then
+    return; -- already reversed, stay idempotent
+  end if;
+
+  update public.payouts
+  set status = 'failed', failure_reason = p_reason, processed_at = now()
+  where id = po.id;
+
+  insert into public.ledger_entries (organization_id, payout_id, type, amount_cents, currency, description, available_at)
+  values (po.organization_id, po.id, 'adjustment', po.amount_cents, po.currency,
+          'Payout reversal: ' || coalesce(p_reason, 'transfer failed'), now());
+
+  insert into public.notifications (user_id, type, title, body, data)
+  select m.user_id, 'payout_update', 'Payout failed',
+         coalesce(p_reason, 'The transfer could not be completed. The funds are back in your balance.'),
+         jsonb_build_object('payout_id', po.id)
+  from public.organization_members m
+  where m.organization_id = po.organization_id and m.role in ('owner', 'finance');
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Door check-in — the QR code is validated entirely server side.
 -- QR payload: blup://t/<code>/<qr_secret>

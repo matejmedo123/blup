@@ -1,0 +1,79 @@
+import { format, formatDistanceToNowStrict, isToday, isTomorrow, isThisWeek } from 'date-fns';
+
+/** Money is stored in minor units; never format a float. */
+export function formatPrice(cents: number, currency = 'EUR'): string {
+  if (cents === 0) return 'Free';
+  const amount = cents / 100;
+  const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', CZK: 'Kč', PLN: 'zł' };
+  const symbol = symbols[currency] ?? currency;
+  const value = Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2);
+  return currency === 'CZK' || currency === 'PLN' ? `${value} ${symbol}` : `${symbol}${value}`;
+}
+
+export function formatMoney(cents: number, currency = 'EUR'): string {
+  const amount = (cents / 100).toFixed(2);
+  const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' };
+  return `${symbols[currency] ?? `${currency} `}${amount}`;
+}
+
+/** "300 m from you" / "1.2 km from you" — the spec's distance language. */
+export function formatDistance(meters: number | null | undefined): string | null {
+  if (meters === null || meters === undefined) return null;
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
+  if (meters < 10000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.round(meters / 1000)} km`;
+}
+
+export function formatDistanceFromYou(meters: number | null | undefined): string | null {
+  const distance = formatDistance(meters);
+  return distance ? `${distance} from you` : null;
+}
+
+/**
+ * Rough walking time at 5 km/h. Marked as an estimate because it is straight-line
+ * distance — src/maps/routing.ts upgrades this to real walking directions once a
+ * routing provider key is configured.
+ */
+export function estimateWalkingTime(meters: number | null | undefined): string | null {
+  if (meters === null || meters === undefined || meters > 5000) return null;
+  const minutes = Math.max(1, Math.round(meters / 83));
+  return `~${minutes} min walk`;
+}
+
+export function formatEventDate(iso: string): string {
+  const date = new Date(iso);
+  if (isToday(date)) return `Today · ${format(date, 'HH:mm')}`;
+  if (isTomorrow(date)) return `Tomorrow · ${format(date, 'HH:mm')}`;
+  if (isThisWeek(date, { weekStartsOn: 1 })) return format(date, 'EEEE · HH:mm');
+  return format(date, 'd MMM · HH:mm');
+}
+
+export function formatEventDateLong(iso: string): string {
+  return format(new Date(iso), 'EEEE d MMMM yyyy · HH:mm');
+}
+
+export function formatRelative(iso: string): string {
+  return `${formatDistanceToNowStrict(new Date(iso))} ago`;
+}
+
+export function formatCount(value: number): string {
+  if (value < 1000) return String(value);
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;
+  return `${(value / 1_000_000).toFixed(1)}M`;
+}
+
+export function initialsFor(name: string | null | undefined): string {
+  if (!name) return '·';
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+/** Percentage string for the AI debug screen. */
+export function formatScore(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  return `${Math.round(value * 100)}%`;
+}
