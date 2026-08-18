@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { useStripe } from '@stripe/stripe-react-native';
+
 
 import { getEvent } from '@/api/events';
 import { createCheckout, markTicketPurchaseSignal, waitForTickets } from '@/api/tickets';
 import { isConfigured } from '@/lib/env';
+import { isStripeModuleAvailable, STRIPE_UNAVAILABLE_MESSAGE, useStripeBridge } from '@/payments/stripe';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatPrice } from '@/lib/format';
 import {
@@ -27,7 +28,7 @@ type Stage = 'select' | 'paying' | 'confirming' | 'done';
  */
 export default function CheckoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const { initPaymentSheet, presentPaymentSheet } = useStripeBridge();
 
   const [ticketTypeId, setTicketTypeId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -169,7 +170,13 @@ export default function CheckoutScreen() {
 
       {error ? <Notice tone="danger" title="Payment problem" body={error} /> : null}
 
-      {!isConfigured.stripe ? (
+      {!isStripeModuleAvailable ? (
+        <Notice
+          tone="warning"
+          title="Card payments need a development build"
+          body={STRIPE_UNAVAILABLE_MESSAGE}
+        />
+      ) : !isConfigured.stripe ? (
         <Notice
           tone="warning"
           title="Payments are not configured"
@@ -247,7 +254,7 @@ export default function CheckoutScreen() {
         title={subtotal === 0 ? 'Get ticket' : `Pay ${formatMoney(subtotal, selected?.currency ?? 'EUR')}`}
         onPress={pay}
         loading={stage === 'paying'}
-        disabled={!selected || (subtotal > 0 && !isConfigured.stripe)}
+        disabled={!selected || (subtotal > 0 && (!isConfigured.stripe || !isStripeModuleAvailable))}
         style={styles.payButton}
       />
 

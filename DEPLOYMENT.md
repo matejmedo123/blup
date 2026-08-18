@@ -59,6 +59,13 @@ npx expo start          # add --clear after changing .env
 
 Press `i`/`a` for a simulator, or scan the QR code with **Expo Go**.
 
+**Expo Go must match the SDK.** This project is on **Expo SDK 57**, which needs
+**Expo Go 57.0.9 or newer**. An older Expo Go refuses to open it with
+"Project is incompatible with this version of Expo Go". Check the installed
+version in Expo Go under the Profile tab; if the store says it is up to date but
+the app is older, delete Expo Go and reinstall it — a pending update is not an
+applied one.
+
 **Expo Go limits.** Expo Go ships a fixed set of native modules. These need a
 real build:
 
@@ -207,3 +214,5 @@ cd mobile && npx expo export --platform android   # proves the bundle builds
 | Push token errors | Run `eas init`; push needs a physical device. |
 | `db:verify` cannot start | Install PostgreSQL 16 locally (`apt install postgresql-16`). |
 | Metro resolves nothing after an env change | `npx expo start --clear`. |
+| "Project is incompatible with this version of Expo Go" | Expo Go is older than 57.0.9. Delete and reinstall it from the store; updating in place is often not applied. |
+| "Card payments need a development build" on checkout | Expected in Expo Go — the Stripe native module is not bundled there. Everything else keeps working. |

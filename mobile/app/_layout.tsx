@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
-import { StripeProvider } from '@stripe/stripe-react-native';
+import { StripeBridge } from '@/payments/stripe';
 
 import { AuthProvider } from '@/auth/AuthProvider';
 import { handleAuthDeepLink } from '@/auth/api';
@@ -78,18 +78,14 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <StatusBar style="light" />
-            {isConfigured.stripe ? (
-              <StripeProvider
-                publishableKey={env.stripePublishableKey}
-                merchantIdentifier={env.appleMerchantId || undefined}
-              >
-                {content}
-              </StripeProvider>
-            ) : (
-              // No Stripe key on this build: the app still runs completely,
-              // and the checkout screen explains what is missing.
-              content
-            )}
+            {/* StripeBridge is a passthrough when the key or the native
+                module is missing (e.g. Expo Go), so the app always renders. */}
+            <StripeBridge
+              publishableKey={isConfigured.stripe ? env.stripePublishableKey : ''}
+              merchantIdentifier={env.appleMerchantId || undefined}
+            >
+              {content}
+            </StripeBridge>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
