@@ -2,6 +2,10 @@
 -- BLUP · 0005 · Social layer: communities, crews, posts, comments
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.communities (
   id           uuid primary key default gen_random_uuid(),
   slug         citext not null unique,
@@ -38,7 +42,7 @@ create or replace function public.sync_community_member_count()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   target uuid := coalesce(new.community_id, old.community_id);
@@ -59,7 +63,7 @@ create or replace function public.handle_new_community()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   insert into public.community_members (community_id, user_id, role)
@@ -79,7 +83,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1 from public.community_members m where m.community_id = cid and m.user_id = uid
@@ -114,7 +118,7 @@ create or replace function public.handle_new_crew()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   insert into public.event_crew_members (crew_id, user_id)
@@ -133,7 +137,7 @@ create or replace function public.enforce_crew_size()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   cap integer;
@@ -191,7 +195,7 @@ create or replace function public.sync_post_like_count()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   target uuid := coalesce(new.post_id, old.post_id);
@@ -239,7 +243,7 @@ create or replace function public.sync_comment_counts()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   target_event uuid := coalesce(new.event_id, old.event_id);

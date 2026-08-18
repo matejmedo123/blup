@@ -7,6 +7,10 @@
 -- policy grants nothing.
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'anon') then

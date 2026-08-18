@@ -6,6 +6,10 @@
 -- profiles: 1:1 with auth.users. Passwords/credentials stay in auth.users and
 -- are managed exclusively by Supabase Auth (never written by application code).
 -- ---------------------------------------------------------------------------
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.profiles (
   id                uuid primary key references auth.users (id) on delete cascade,
   email             citext,
@@ -57,7 +61,7 @@ create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   base_username text;
@@ -165,7 +169,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1 from public.profiles p
@@ -178,7 +182,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1 from public.profiles p where p.id = uid and p.app_role = 'admin'
@@ -190,7 +194,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1 from public.follows f

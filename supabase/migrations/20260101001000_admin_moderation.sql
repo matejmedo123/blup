@@ -2,6 +2,10 @@
 -- BLUP · 0010 · Reports, moderation, admin actions & audit log
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.reports (
   id           uuid primary key default gen_random_uuid(),
   reporter_id  uuid not null references public.profiles (id) on delete cascade,
@@ -41,7 +45,7 @@ create or replace function public.log_admin_action(
 returns void
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   insert into public.admin_audit_log (admin_id, action, target_type, target_id, meta)
   values (auth.uid(), p_action, p_target_type, p_target_id, coalesce(p_meta, '{}'::jsonb));
@@ -58,7 +62,7 @@ create or replace function public.admin_suspend_user(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not public.is_admin() then
@@ -85,7 +89,7 @@ create or replace function public.admin_set_event_status(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not public.is_admin() then
@@ -107,7 +111,7 @@ create or replace function public.admin_review_organization(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   req record;
@@ -157,7 +161,7 @@ create or replace function public.admin_resolve_report(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not public.is_admin() then
@@ -182,7 +186,7 @@ create or replace function public.admin_update_payout_status(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   po record;
@@ -228,7 +232,7 @@ returns jsonb
 language plpgsql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not public.is_admin() then

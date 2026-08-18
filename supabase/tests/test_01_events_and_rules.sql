@@ -14,6 +14,28 @@ begin
   raise notice 'PASS zero state';
 end $$;
 
+-- --- extension helpers resolve from a bare search_path -----------------------
+-- Regression test: Supabase installs pgcrypto into the `extensions` schema, so
+-- an unqualified gen_random_bytes() inside a function fails unless that function
+-- pins its own search_path. This asserts the helpers work with a minimal path.
+do $$
+declare
+  code text;
+  saved text := current_setting('search_path');
+begin
+  perform set_config('search_path', 'public', true);
+
+  code := public.blup_short_code(10);
+  assert code is not null and char_length(code) = 10,
+    format('blup_short_code must work from a bare search_path, got %s', code);
+
+  assert public.blup_distance_m(48.0, 17.0, 48.0, 17.0) = 0,
+    'blup_distance_m must work from a bare search_path';
+
+  perform set_config('search_path', saved, true);
+  raise notice 'PASS extension helpers resolve from a bare search_path';
+end $$;
+
 -- --- users ------------------------------------------------------------------
 insert into auth.users (id, email, raw_user_meta_data) values
   ('11111111-1111-1111-1111-111111111111', 'alex@example.com', '{"display_name":"Alex"}'),

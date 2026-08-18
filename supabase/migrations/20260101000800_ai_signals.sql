@@ -4,6 +4,10 @@
 
 -- Every meaningful interaction with an event becomes a signal. These feed the
 -- ranking function in 0009 and can later train an external model.
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.user_event_signals (
   id         bigserial primary key,
   user_id    uuid not null references public.profiles (id) on delete cascade,
@@ -70,7 +74,7 @@ create or replace function public.record_signal(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if auth.uid() is null then

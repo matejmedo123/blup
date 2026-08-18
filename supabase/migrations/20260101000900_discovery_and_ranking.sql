@@ -7,6 +7,10 @@
 -- ============================================================================
 
 -- Shared row shape for every event list the app renders.
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 drop type if exists public.event_feed_item cascade;
 create type public.event_feed_item as (
   id               uuid,
@@ -65,7 +69,7 @@ returns setof public.event_feed_item
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   with me as (select auth.uid() as uid),
   bbox as (
@@ -136,7 +140,7 @@ returns setof public.event_feed_item
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   with me as (select auth.uid() as uid)
   select
@@ -220,7 +224,7 @@ returns setof public.event_feed_item
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   with
   viewer as (
@@ -400,7 +404,7 @@ create or replace function public.log_recommendation_run(
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_run_id uuid;
@@ -454,7 +458,7 @@ returns table (
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   with me as (
     select id, latitude, longitude from public.profiles where id = p_user_id
@@ -557,7 +561,7 @@ returns jsonb
 language plpgsql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   ev     record;

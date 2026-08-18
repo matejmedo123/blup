@@ -7,6 +7,10 @@
 -- subscriptions and ledger rows.
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 alter table public.profiles                            enable row level security;
 alter table public.interests                           enable row level security;
 alter table public.user_interests                      enable row level security;
@@ -77,7 +81,7 @@ create or replace function public.protect_profile_privileges()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if auth.uid() is not null and not public.is_full_admin() then
@@ -166,7 +170,7 @@ create or replace function public.protect_organization_privileges()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if auth.uid() is not null and not public.is_admin() then
@@ -265,7 +269,7 @@ create or replace function public.protect_event_counters()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if auth.uid() is not null and not public.is_admin() then

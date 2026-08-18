@@ -8,6 +8,27 @@ adding a new migration, never by editing an old one.
 
 ---
 
+## Extensions and search_path
+
+Supabase installs its extensions into a dedicated `extensions` schema that is
+**not** on the default `search_path` while migrations run. Unqualified
+`gen_random_bytes()` or a `citext` column therefore fails on a hosted project
+while working fine on a local PostgreSQL that put everything in `public`.
+
+Three rules keep the same SQL working on both:
+
+1. Migration 0001 creates the schema and installs `pgcrypto` and `citext` into it.
+2. Every migration starts with `set search_path = public, extensions;`.
+3. Every function that pins a `search_path` pins **both** schemas — including
+   `blup_short_code()`, which would otherwise only work from a session that
+   already had `extensions` on its path.
+
+`test_01` calls the pgcrypto-backed helpers from a deliberately bare
+`search_path`, so a regression here fails the suite instead of only failing on
+a real Supabase project.
+
+---
+
 ## Conventions
 
 - **Money** is always an `integer` in the currency's minor unit (cents), never a

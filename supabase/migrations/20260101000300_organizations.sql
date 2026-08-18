@@ -6,6 +6,10 @@
 -- constraint is enforced in 0004 (events) + 0006 (ticket types).
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.organizations (
   id                  uuid primary key default gen_random_uuid(),
   slug                citext not null unique,
@@ -86,7 +90,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1
@@ -102,7 +106,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1 from public.organizations o
@@ -115,7 +119,7 @@ create or replace function public.handle_new_organization()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   insert into public.organization_members (organization_id, user_id, role)

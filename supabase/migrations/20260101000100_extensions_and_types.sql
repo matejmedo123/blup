@@ -10,8 +10,18 @@
 --    for the PostGIS upgrade path once event volume requires GiST indexes.
 -- ============================================================================
 
-create extension if not exists "pgcrypto";      -- gen_random_uuid(), digest()
-create extension if not exists "citext";        -- case-insensitive usernames/emails
+-- Supabase keeps its extensions in a dedicated `extensions` schema which is NOT
+-- on the default search_path while migrations run — so an unqualified
+-- gen_random_bytes() or a `citext` column fails there while working locally.
+-- Installing into that schema and putting it on the path makes the identical
+-- SQL run on a hosted Supabase project and on the plain PostgreSQL used by the
+-- test suite. Every migration repeats the `set search_path` line for the same
+-- reason, and every SECURITY DEFINER function pins the same pair.
+create schema if not exists extensions;
+set search_path = public, extensions;
+
+create extension if not exists "pgcrypto" with schema extensions;  -- gen_random_bytes()
+create extension if not exists "citext"   with schema extensions;  -- case-insensitive usernames
 
 -- ---------------------------------------------------------------------------
 -- Enums
@@ -172,6 +182,10 @@ create or replace function public.blup_short_code(len integer default 10)
 returns text
 language sql
 volatile
+-- Pinned so gen_random_bytes() resolves no matter what search_path the caller
+-- happens to have; without this the function only works from a session that
+-- already has the extensions schema on its path.
+set search_path = public, extensions
 as $$
   select upper(
     substr(

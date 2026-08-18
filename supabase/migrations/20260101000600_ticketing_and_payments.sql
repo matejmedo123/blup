@@ -11,6 +11,10 @@
 -- which is reachable exclusively from the service-role Edge Functions.
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.ticket_types (
   id             uuid primary key default gen_random_uuid(),
   event_id       uuid not null references public.events (id) on delete cascade,
@@ -44,7 +48,7 @@ create or replace function public.enforce_ticket_type_rules()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   ev record;
@@ -167,7 +171,7 @@ create or replace function public.sync_ticket_counts()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   target_event uuid := coalesce(new.event_id, old.event_id);
@@ -271,7 +275,7 @@ create or replace function public.create_order(
 returns public.orders
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   tt       record;
@@ -345,7 +349,7 @@ create or replace function public.fulfill_order(
 returns setof public.tickets
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   o        public.orders;
@@ -423,7 +427,7 @@ create or replace function public.fail_order(p_order_id uuid, p_reason text)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   update public.orders
@@ -436,7 +440,7 @@ create or replace function public.refund_order(p_order_id uuid, p_reason text de
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   o public.orders;
@@ -478,7 +482,7 @@ create or replace function public.mark_payout_failed(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   po public.payouts;
@@ -521,7 +525,7 @@ create or replace function public.check_in_ticket(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   t   public.tickets;
@@ -592,7 +596,7 @@ create or replace function public.request_payout(
 returns public.payouts
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   bal  record;

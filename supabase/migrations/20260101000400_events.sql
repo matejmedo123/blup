@@ -2,6 +2,10 @@
 -- BLUP · 0004 · Events, gallery, RSVP, saves, likes, views
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.events (
   id               uuid primary key default gen_random_uuid(),
   creator_id       uuid not null references public.profiles (id) on delete cascade,
@@ -78,7 +82,7 @@ create or replace function public.enforce_paid_event_rules()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not new.is_free then
@@ -169,7 +173,7 @@ create or replace function public.sync_event_attendee_counts()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   target_event uuid := coalesce(new.event_id, old.event_id);
@@ -197,7 +201,7 @@ create or replace function public.sync_event_saved_count()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   target_event uuid := coalesce(new.event_id, old.event_id);
@@ -218,7 +222,7 @@ create or replace function public.sync_event_like_count()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   target_event uuid := coalesce(new.event_id, old.event_id);
@@ -240,7 +244,7 @@ create or replace function public.enforce_event_capacity()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   cap   integer;
@@ -280,7 +284,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1

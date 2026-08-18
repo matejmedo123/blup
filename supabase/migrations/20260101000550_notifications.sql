@@ -2,6 +2,10 @@
 -- BLUP · 0005b · Notifications & push tokens
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.notifications (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null references public.profiles (id) on delete cascade,
@@ -63,7 +67,7 @@ create or replace function public.notify_user(
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   new_id uuid;
@@ -85,7 +89,7 @@ create or replace function public.on_follow_created()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor_name text;
@@ -113,7 +117,7 @@ create or replace function public.on_friendship_change()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor_name text;
@@ -149,7 +153,7 @@ create or replace function public.on_attendee_created()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor_name text;
@@ -186,7 +190,7 @@ create or replace function public.on_comment_created()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   ev         record;
@@ -219,7 +223,7 @@ create or replace function public.mark_notifications_read(p_ids uuid[] default n
 returns integer
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   affected integer;

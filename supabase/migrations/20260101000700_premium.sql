@@ -6,6 +6,10 @@
 -- but can never grant itself premium.
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 create table if not exists public.premium_subscriptions (
   id                      uuid primary key default gen_random_uuid(),
   user_id                 uuid not null references public.profiles (id) on delete cascade,
@@ -54,7 +58,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1
@@ -70,7 +74,7 @@ returns jsonb
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select coalesce(
     (
@@ -110,7 +114,7 @@ create or replace function public.upsert_premium_subscription(
 returns public.premium_subscriptions
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   s public.premium_subscriptions;

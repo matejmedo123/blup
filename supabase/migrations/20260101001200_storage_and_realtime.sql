@@ -5,6 +5,10 @@
 -- schema verification (where the storage/realtime schemas do not exist).
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 do $$
 begin
   if to_regclass('storage.buckets') is null then

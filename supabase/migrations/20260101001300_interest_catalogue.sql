@@ -6,6 +6,10 @@
 -- by a migration, so a fresh database starts in a genuine zero state.
 -- ============================================================================
 
+
+-- Resolve the citext type and pgcrypto functions regardless of which schema
+-- the extensions were installed into (public locally, extensions on Supabase).
+set search_path = public, extensions;
 insert into public.interests (slug, name, category, emoji, sort_order) values
   ('techno',        'Techno',            'music',     '🔊', 10),
   ('house',         'House',             'music',     '🏠', 11),
