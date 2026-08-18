@@ -8,28 +8,29 @@ import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 import {
-  Body, Caption, EmptyState, ErrorState, LoadingState, Screen,
+  Body, Caption, EmptyState, ErrorState, LoadingState, Mono, Screen,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { AppNotification, NotificationType } from '@/types/models';
 
+/** Monochrome glyphs, matching the icon tiles in the design. */
 const ICONS: Record<NotificationType, string> = {
-  new_follower: '👋',
-  friend_request: '🤝',
-  friend_accepted: '✅',
-  event_reminder: '⏰',
-  event_starting_soon: '🚀',
-  event_updated: '✏️',
-  event_cancelled: '❌',
-  friend_attending: '👥',
-  ticket_purchased: '🎟️',
-  ticket_confirmed: '🎫',
-  payout_update: '💸',
+  new_follower: '⇄',
+  friend_request: '⇄',
+  friend_accepted: '✓',
+  event_reminder: '◷',
+  event_starting_soon: '◉',
+  event_updated: '✎',
+  event_cancelled: '✕',
+  friend_attending: '◉',
+  ticket_purchased: '◫',
+  ticket_confirmed: '◫',
+  payout_update: '€',
   org_verified: '✓',
-  org_rejected: '⚠️',
-  weekly_recommendations: '✨',
-  new_comment: '💬',
-  event_full: '🔥',
+  org_rejected: '!',
+  weekly_recommendations: '✦',
+  new_comment: '❝',
+  event_full: '★',
 };
 
 /** Activity — notifications, live over realtime. */
@@ -84,7 +85,7 @@ export default function ActivityScreen() {
     }
   };
 
-  if (isLoading) return <Screen><LoadingState label="Loading activity…" /></Screen>;
+  if (isLoading) return <Screen><LoadingState label="Načítavam notifikácie…" /></Screen>;
 
   if (isError) {
     return (
@@ -96,7 +97,7 @@ export default function ActivityScreen() {
 
   return (
     <Screen contentStyle={styles.container}>
-      <Text style={styles.title}>Activity</Text>
+      <Text style={styles.title}>Notifikácie</Text>
 
       <FlatList
         data={data ?? []}
@@ -119,24 +120,26 @@ export default function ActivityScreen() {
               pressed && styles.rowPressed,
             ]}
           >
-            <View style={styles.icon}>
-              <Text style={styles.iconText}>{ICONS[item.type] ?? '🔔'}</Text>
+            <View style={[styles.icon, !item.read_at && styles.iconUnread]}>
+              <Text style={[styles.iconText, !item.read_at && styles.iconTextUnread]}>
+                {ICONS[item.type] ?? '◉'}
+              </Text>
             </View>
 
             <View style={styles.rowBody}>
               <Text style={styles.rowTitle}>{item.title}</Text>
               {item.body ? <Body muted numberOfLines={2}>{item.body}</Body> : null}
-              <Caption style={styles.time}>{formatRelative(item.created_at)}</Caption>
+
             </View>
 
-            {!item.read_at ? <View style={styles.dot} /> : null}
+            <Mono style={styles.time}>{formatRelative(item.created_at)}</Mono>
           </Pressable>
         )}
         ListEmptyComponent={
           <EmptyState
             emoji="🔔"
-            title="Nothing yet"
-            body="Follows, RSVPs, ticket confirmations and event reminders show up here."
+            title="Zatiaľ nič"
+            body="Nové sledovania, RSVP, potvrdenia vstupeniek a pripomienky eventov sa objavia tu."
           />
         }
       />
@@ -152,27 +155,31 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    alignItems: 'flex-start',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
   },
-  rowUnread: { backgroundColor: colors.surface },
+  rowUnread: { borderColor: colors.accent, backgroundColor: colors.backgroundElevated },
   rowPressed: { backgroundColor: colors.surfacePressed },
 
   icon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
     backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconText: { fontSize: 18 },
+  iconUnread: { backgroundColor: colors.accent },
+  iconText: { fontSize: 19, color: colors.textSecondary },
+  iconTextUnread: { color: '#FFFFFF' },
 
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyStrong, color: colors.text },
-  time: { color: colors.textTertiary, marginTop: 2 },
+  time: { color: colors.textTertiary },
 
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
 });

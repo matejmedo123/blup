@@ -7,7 +7,7 @@ import {
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
-import { colors, radius, spacing, typography } from '@/theme';
+import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
 import { initialsFor } from '@/lib/format';
 
 /** Screen shell: safe area + background, used by every route. */
@@ -80,10 +80,26 @@ export function Caption({
   );
 }
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+/** Small monospace label — "◎ Bratislava", "0 blupov", "[ foto z eventu ]". */
+export function Mono({
+  children, style, accent, numberOfLines,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<TextStyle>;
+  accent?: boolean;
+  numberOfLines?: number;
+}) {
+  return (
+    <Text numberOfLines={numberOfLines} style={[styles.mono, accent && { color: colors.accentText }, style]}>
+      {children}
+    </Text>
+  );
+}
+
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'teal';
 
 export function Button({
-  title, onPress, variant = 'primary', loading, disabled, style, icon, compact,
+  title, onPress, variant = 'primary', loading, disabled, style, icon, compact, full,
 }: {
   title: string;
   onPress?: () => void;
@@ -93,6 +109,7 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   icon?: string;
   compact?: boolean;
+  full?: boolean;
 }) {
   const isDisabled = disabled || loading;
 
@@ -105,29 +122,92 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         compact && styles.buttonCompact,
+        full && styles.buttonFull,
         variant === 'primary' && styles.buttonPrimary,
         variant === 'secondary' && styles.buttonSecondary,
         variant === 'ghost' && styles.buttonGhost,
         variant === 'danger' && styles.buttonDanger,
+        variant === 'teal' && styles.buttonTeal,
         pressed && !isDisabled && styles.buttonPressed,
         isDisabled && styles.buttonDisabled,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? colors.textInverse : colors.text} />
+        <ActivityIndicator color={variant === 'primary' ? '#FFFFFF' : colors.text} />
       ) : (
         <Text
           style={[
             styles.buttonLabel,
             variant === 'primary' && styles.buttonLabelPrimary,
             variant === 'danger' && styles.buttonLabelDanger,
+            variant === 'teal' && styles.buttonLabelTeal,
           ]}
         >
           {icon ? `${icon}  ` : ''}{title}
         </Text>
       )}
     </Pressable>
+  );
+}
+
+/** Round icon button — back arrow, search, filter. */
+export function IconButton({
+  glyph, onPress, size = 44, badge, style, tone = 'surface',
+}: {
+  glyph: string;
+  onPress?: () => void;
+  size?: number;
+  badge?: boolean;
+  style?: StyleProp<ViewStyle>;
+  tone?: 'surface' | 'overlay';
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.iconButton,
+        { width: size, height: size, borderRadius: size / 2 },
+        tone === 'overlay' && styles.iconButtonOverlay,
+        pressed && styles.iconButtonPressed,
+        style,
+      ]}
+    >
+      <Text style={styles.iconGlyph}>{glyph}</Text>
+      {badge ? <View style={styles.iconBadge} /> : null}
+    </Pressable>
+  );
+}
+
+/** Two-option switch — "Zoznam / Mapa". */
+export function Segmented<T extends string>({
+  options, value, onChange, style,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (next: T) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.segmented, style]}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            onPress={() => onChange(option.value)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            style={[styles.segment, active && styles.segmentActive]}
+          >
+            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -168,13 +248,30 @@ export function Card({
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
+/** Labelled box — "KEDY / Dnes · 21:00". */
+export function InfoBox({
+  label, value, style,
+}: {
+  label: string;
+  value: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.infoBox, style]}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue} numberOfLines={2}>{value}</Text>
+    </View>
+  );
+}
+
 export function Chip({
-  label, selected, onPress, style,
+  label, selected, onPress, style, onCover,
 }: {
   label: string;
   selected?: boolean;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  onCover?: boolean;
 }) {
   return (
     <Pressable
@@ -183,6 +280,7 @@ export function Chip({
       accessibilityState={{ selected }}
       style={({ pressed }) => [
         styles.chip,
+        onCover && styles.chipOnCover,
         selected && styles.chipSelected,
         pressed && onPress ? styles.chipPressed : null,
         style,
@@ -197,58 +295,91 @@ export function Badge({
   label, tone = 'neutral',
 }: {
   label: string;
-  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'accent';
+  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'accent' | 'teal';
 }) {
-  const toneStyles: Record<string, { bg: string; fg: string }> = {
+  const palette: Record<string, { bg: string; fg: string }> = {
     neutral: { bg: colors.surfaceElevated, fg: colors.textSecondary },
     success: { bg: colors.successSoft, fg: colors.success },
     warning: { bg: colors.warningSoft, fg: colors.warning },
     danger: { bg: colors.dangerSoft, fg: colors.danger },
-    accent: { bg: colors.accentSoft, fg: colors.accent },
+    accent: { bg: colors.accentSoft, fg: colors.accentText },
+    teal: { bg: colors.tealSoft, fg: colors.teal },
   };
-  const palette = toneStyles[tone];
+  const tones = palette[tone];
 
   return (
-    <View style={[styles.badge, { backgroundColor: palette.bg }]}>
-      <Text style={[styles.badgeLabel, { color: palette.fg }]}>{label}</Text>
+    <View style={[styles.badge, { backgroundColor: tones.bg }]}>
+      <Text style={[styles.badgeLabel, { color: tones.fg }]}>{label}</Text>
+    </View>
+  );
+}
+
+/** Price pill on a card — "12 €" or "Zdarma". */
+export function PricePill({ label, style }: { label: string; style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={[styles.pricePill, style]}>
+      <Text style={styles.pricePillLabel}>{label}</Text>
     </View>
   );
 }
 
 export function Avatar({
-  url, name, size = 40,
+  url, name, size = 40, ring,
 }: {
   url?: string | null;
   name?: string | null;
   size?: number;
+  ring?: boolean;
 }) {
+  const base = {
+    width: size,
+    height: size,
+    borderRadius: size / 2,
+    ...(ring ? { borderWidth: 2, borderColor: colors.background } : {}),
+  };
+
   if (url) {
     return (
       <Image
         source={{ uri: url }}
-        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surfaceElevated }}
+        style={[base, { backgroundColor: colors.surfaceElevated }]}
         contentFit="cover"
         transition={150}
       />
     );
   }
 
+  // No photo: a vivid, stable colour from the name, like the mockups.
   return (
-    <View
-      style={[
-        styles.avatarFallback,
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
-    >
-      <Text style={{ color: colors.textSecondary, fontSize: size * 0.36, fontWeight: '700' }}>
+    <View style={[base, styles.avatarFallback, { backgroundColor: avatarColorFor(name) }]}>
+      <Text style={{ color: '#FFFFFF', fontSize: size * 0.34, fontFamily: typography.subheading.fontFamily }}>
         {initialsFor(name)}
       </Text>
     </View>
   );
 }
 
+/** Overlapping avatar row — "148 ide". */
+export function AvatarStack({
+  people, size = 30, max = 5,
+}: {
+  people: { id: string; avatar_url?: string | null; name?: string | null }[];
+  size?: number;
+  max?: number;
+}) {
+  return (
+    <View style={styles.avatarStack}>
+      {people.slice(0, max).map((person, index) => (
+        <View key={person.id} style={{ marginLeft: index === 0 ? 0 : -size * 0.32 }}>
+          <Avatar url={person.avatar_url} name={person.name} size={size} ring />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** Full-screen states — every list uses exactly these three. */
-export function LoadingState({ label = 'Loading…' }: { label?: string }) {
+export function LoadingState({ label = 'Načítavam…' }: { label?: string }) {
   return (
     <View style={styles.stateContainer}>
       <ActivityIndicator color={colors.accent} size="large" />
@@ -289,7 +420,7 @@ export function EmptyState({
 }
 
 export function ErrorState({
-  message, onRetry, title = 'That did not work',
+  message, onRetry, title = 'Toto nevyšlo',
 }: {
   message: string;
   onRetry?: () => void;
@@ -300,7 +431,7 @@ export function ErrorState({
       <Text style={styles.stateEmoji}>⚠️</Text>
       <Text style={styles.stateTitle}>{title}</Text>
       <Text style={styles.stateBody}>{message}</Text>
-      {onRetry ? <Button title="Try again" onPress={onRetry} style={styles.stateAction} /> : null}
+      {onRetry ? <Button title="Skúsiť znova" onPress={onRetry} style={styles.stateAction} /> : null}
     </View>
   );
 }
@@ -309,7 +440,7 @@ export function ErrorState({
 export function Notice({
   tone = 'warning', title, body, actionLabel, onAction,
 }: {
-  tone?: 'warning' | 'danger' | 'accent' | 'success';
+  tone?: 'warning' | 'danger' | 'accent' | 'success' | 'teal';
   title: string;
   body?: string;
   actionLabel?: string;
@@ -318,8 +449,9 @@ export function Notice({
   const palette: Record<string, { bg: string; fg: string }> = {
     warning: { bg: colors.warningSoft, fg: colors.warning },
     danger: { bg: colors.dangerSoft, fg: colors.danger },
-    accent: { bg: colors.accentSoft, fg: colors.accent },
+    accent: { bg: colors.accentSoft, fg: colors.accentText },
     success: { bg: colors.successSoft, fg: colors.success },
+    teal: { bg: colors.tealSoft, fg: colors.teal },
   };
 
   return (
@@ -400,39 +532,79 @@ const styles = StyleSheet.create({
 
   title: { ...typography.title, color: colors.text },
   heading: { ...typography.heading, color: colors.text },
-  body: { ...typography.body, color: colors.text, lineHeight: 21 },
+  body: { ...typography.body, color: colors.text },
   caption: { ...typography.caption, color: colors.textSecondary },
+  mono: { ...typography.mono, color: colors.textSecondary },
   muted: { color: colors.textSecondary },
 
   button: {
-    height: 50,
-    borderRadius: radius.md,
+    height: 54,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
-  buttonCompact: { height: 38, paddingHorizontal: spacing.md },
+  buttonCompact: { height: 40, paddingHorizontal: spacing.md, borderRadius: radius.md },
+  buttonFull: { alignSelf: 'stretch' },
   buttonPrimary: { backgroundColor: colors.accent },
-  buttonSecondary: { backgroundColor: colors.surfaceElevated },
+  buttonSecondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   buttonGhost: { backgroundColor: 'transparent' },
   buttonDanger: { backgroundColor: colors.dangerSoft },
-  buttonPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
-  buttonDisabled: { opacity: 0.45 },
-  buttonLabel: { ...typography.bodyStrong, color: colors.text },
-  buttonLabelPrimary: { color: colors.textInverse },
+  buttonTeal: { backgroundColor: colors.tealSoft },
+  buttonPressed: { opacity: 0.86, transform: [{ scale: 0.99 }] },
+  buttonDisabled: { opacity: 0.4 },
+  buttonLabel: { ...typography.button, color: colors.text },
+  buttonLabelPrimary: { color: '#FFFFFF' },
   buttonLabelDanger: { color: colors.danger },
+  buttonLabelTeal: { color: colors.teal },
+
+  iconButton: {
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  iconButtonOverlay: { backgroundColor: colors.overlay, borderColor: 'transparent' },
+  iconButtonPressed: { backgroundColor: colors.surfacePressed },
+  iconGlyph: { fontSize: 17, color: colors.text },
+  iconBadge: {
+    position: 'absolute',
+    top: 9,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.danger,
+  },
+
+  segmented: { flexDirection: 'row', gap: spacing.sm },
+  segment: {
+    flex: 1,
+    height: 46,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  segmentActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  segmentLabel: { ...typography.bodyStrong, color: colors.textSecondary },
+  segmentLabelActive: { color: '#FFFFFF' },
 
   inputGroup: { marginBottom: spacing.lg },
-  inputLabel: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.sm },
+  inputLabel: { ...typography.captionStrong, color: colors.textSecondary, marginBottom: spacing.sm },
   input: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
+    paddingVertical: 15,
     color: colors.text,
     fontSize: 16,
+    fontFamily: typography.body.fontFamily,
   },
   inputError: { borderColor: colors.danger },
   errorText: { ...typography.caption, color: colors.danger, marginTop: spacing.xs },
@@ -447,32 +619,53 @@ const styles = StyleSheet.create({
   },
   cardPressed: { backgroundColor: colors.surfacePressed },
 
+  infoBox: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: 2,
+  },
+  infoLabel: { ...typography.label, color: colors.textTertiary, textTransform: 'uppercase' },
+  infoValue: { ...typography.subheading, color: colors.text },
+
   chip: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingVertical: 9,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  chipSelected: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-  chipPressed: { opacity: 0.8 },
-  chipLabel: { ...typography.caption, color: colors.textSecondary },
-  chipLabelSelected: { color: colors.accent },
+  chipOnCover: { backgroundColor: colors.chipOnCover, borderColor: 'transparent' },
+  chipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
+  chipPressed: { opacity: 0.82 },
+  chipLabel: { ...typography.chip, color: colors.textSecondary },
+  chipLabelSelected: { color: '#FFFFFF' },
 
   badge: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: radius.sm,
     alignSelf: 'flex-start',
   },
-  badgeLabel: { ...typography.micro },
+  badgeLabel: { ...typography.label },
 
-  avatarFallback: {
+  pricePill: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 9,
+    borderRadius: radius.md,
     backgroundColor: colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
+  pricePillLabel: { ...typography.subheading, color: colors.text },
+
+  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  avatarStack: { flexDirection: 'row', alignItems: 'center' },
 
   stateContainer: {
     flex: 1,
@@ -487,11 +680,10 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 21,
     maxWidth: 320,
   },
-  stateAction: { marginTop: spacing.lg, minWidth: 220 },
-  stateActionSecondary: { minWidth: 220 },
+  stateAction: { marginTop: spacing.lg, minWidth: 240 },
+  stateActionSecondary: { minWidth: 240 },
 
   notice: {
     borderRadius: radius.md,
@@ -500,8 +692,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   noticeTitle: { ...typography.bodyStrong },
-  noticeBody: { ...typography.caption, color: colors.textSecondary, lineHeight: 19 },
-  noticeAction: { ...typography.caption, marginTop: spacing.xs, textDecorationLine: 'underline' },
+  noticeBody: { ...typography.caption, color: colors.textSecondary },
+  noticeAction: { ...typography.captionStrong, marginTop: spacing.xs, textDecorationLine: 'underline' },
 
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
   row: { flexDirection: 'row', alignItems: 'center' },
@@ -513,8 +705,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     marginTop: spacing.xl,
   },
-  sectionTitle: { ...typography.subheading, color: colors.text },
-  sectionAction: { ...typography.caption, color: colors.accent },
+  sectionTitle: { ...typography.heading, color: colors.text },
+  sectionAction: { ...typography.captionStrong, color: colors.accentText },
 
   switchRow: {
     flexDirection: 'row',
@@ -525,19 +717,14 @@ const styles = StyleSheet.create({
   switchLabel: { ...typography.body, color: colors.text },
   switchDescription: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   switchTrack: {
-    width: 48,
-    height: 28,
+    width: 50,
+    height: 30,
     borderRadius: radius.pill,
     backgroundColor: colors.surfaceElevated,
     padding: 3,
     justifyContent: 'center',
   },
   switchTrackOn: { backgroundColor: colors.accent },
-  switchThumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.textSecondary,
-  },
-  switchThumbOn: { backgroundColor: colors.textInverse, alignSelf: 'flex-end' },
+  switchThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.textTertiary },
+  switchThumbOn: { backgroundColor: '#FFFFFF', alignSelf: 'flex-end' },
 });

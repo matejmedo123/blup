@@ -12,41 +12,41 @@ export default function SettingsScreen() {
 
   return (
     <Screen scroll>
-      <SectionHeader title="Account" />
-      <Row label="Edit profile" onPress={() => router.push('/settings/profile')} />
-      <Row label="Interests" onPress={() => router.push('/settings/interests')} />
-      <Row label="Privacy" onPress={() => router.push('/settings/privacy')} />
-      <Row label="Notifications" onPress={() => router.push('/settings/notifications')} />
+      <SectionHeader title="Účet" />
+      <Row label="Upraviť profil" onPress={() => router.push('/settings/profile')} />
+      <Row label="Záujmy" onPress={() => router.push('/settings/interests')} />
+      <Row label="Súkromie" onPress={() => router.push('/settings/privacy')} />
+      <Row label="Notifikácie" onPress={() => router.push('/settings/notifications')} />
 
-      <SectionHeader title="Your stuff" />
-      <Row label="Saved events" onPress={() => router.push('/settings/saved')} />
-      <Row label="Going to" onPress={() => router.push('/settings/attending')} />
-      <Row label="Tickets" onPress={() => router.push('/tickets')} />
+      <SectionHeader title="Tvoje veci" />
+      <Row label="Uložené eventy" onPress={() => router.push('/settings/saved')} />
+      <Row label="Idem na" onPress={() => router.push('/settings/attending')} />
+      <Row label="Vstupenky" onPress={() => router.push('/tickets')} />
       <Row label="BLUP Premium" onPress={() => router.push('/premium')} />
 
-      <SectionHeader title="Organizing" />
-      <Row label="Organizer dashboard" onPress={() => router.push('/organizer')} />
+      <SectionHeader title="Organizovanie" />
+      <Row label="Nástenka organizátora" onPress={() => router.push('/organizer')} />
 
       {isAdmin ? (
         <>
-          <SectionHeader title="Staff" />
+          <SectionHeader title="Správa" />
           <Row label="Admin" onPress={() => router.push('/admin')} />
         </>
       ) : null}
 
       {env.debugAi ? (
         <>
-          <SectionHeader title="Developer" />
+          <SectionHeader title="Vývojár" />
           <Row label="AI debug" onPress={() => router.push('/debug/ai')} />
         </>
       ) : null}
 
       <Divider />
 
-      <Button title="Sign out" variant="danger" onPress={() => void signOut()} />
+      <Button title="Odhlásiť sa" variant="danger" onPress={() => void signOut()} />
 
       <Caption style={styles.footer}>
-        Signed in as {profile?.email ?? profile?.username ?? '—'}
+        Prihlásený ako {profile?.email ?? profile?.username ?? '—'}
       </Caption>
     </Screen>
   );

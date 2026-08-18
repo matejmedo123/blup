@@ -26,31 +26,31 @@ export default function AdminDashboard() {
 
   return (
     <Screen scroll>
-      <SectionHeader title="Platform" />
+      <SectionHeader title="Platforma" />
       <View style={styles.grid}>
-        <Tile label="Users" value={String(data.users)} />
-        <Tile label="Events" value={String(data.events)} />
-        <Tile label="Organizations" value={String(data.organizations)} />
-        <Tile label="Tickets" value={String(data.tickets)} />
-        <Tile label="Premium users" value={String(data.premium_users)} />
-        <Tile label="Suspended" value={String(data.suspended_users)} />
+        <Tile label="Používatelia" value={String(data.users)} />
+        <Tile label="Eventy" value={String(data.events)} />
+        <Tile label="Organizácie" value={String(data.organizations)} />
+        <Tile label="Vstupenky" value={String(data.tickets)} />
+        <Tile label="Premium používatelia" value={String(data.premium_users)} />
+        <Tile label="Pozastavení" value={String(data.suspended_users)} />
       </View>
 
-      <SectionHeader title="Revenue" />
+      <SectionHeader title="Tržby" />
       <View style={styles.grid}>
-        <Tile label="Gross sales" value={formatMoney(data.gross_sales_cents)} />
-        <Tile label="BLUP revenue" value={formatMoney(data.platform_revenue_cents)} />
+        <Tile label="Hrubý predaj" value={formatMoney(data.gross_sales_cents)} />
+        <Tile label="Príjem BLUPu" value={formatMoney(data.platform_revenue_cents)} />
       </View>
 
-      <SectionHeader title="Queues" />
+      <SectionHeader title="Fronty" />
       <Row
-        label="Verification requests"
+        label="Žiadosti o overenie"
         badge={data.pending_verifications}
         onPress={() => router.push('/admin/verifications')}
       />
-      <Row label="Open reports" badge={data.open_reports} onPress={() => router.push('/admin/reports')} />
-      <Row label="Pending payouts" badge={data.pending_payouts} onPress={() => router.push('/admin/payouts')} />
-      <Row label="Users" onPress={() => router.push('/admin/users')} />
+      <Row label="Otvorené nahlásenia" badge={data.open_reports} onPress={() => router.push('/admin/reports')} />
+      <Row label="Čakajúce výplaty" badge={data.pending_payouts} onPress={() => router.push('/admin/payouts')} />
+      <Row label="Používatelia" onPress={() => router.push('/admin/users')} />
     </Screen>
   );
 }
@@ -112,6 +112,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
   },
-  badgeText: { ...typography.micro, color: colors.textInverse },
+  badgeText: { ...typography.label, color: colors.textInverse },
   chevron: { ...typography.heading, color: colors.textTertiary },
 });

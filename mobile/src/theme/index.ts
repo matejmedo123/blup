@@ -1,46 +1,102 @@
 /**
  * BLUP design tokens.
  *
- * Dark-first (Spotify × Google Maps × BeReal), high contrast, one accent.
- * Every screen pulls from here — no ad-hoc hex values in components.
+ * Dark, blue-tinted, one vivid blue for action and a teal for the social layer.
+ * Covers are generated gradients with a diagonal stripe texture rather than
+ * stock photography, so an event without a picture still looks intentional.
+ *
+ * Nothing in a component should hardcode a colour, radius or font — it all
+ * comes from here.
  */
+
 export const colors = {
-  // surfaces
-  background: '#07070A',
-  surface: '#121218',
-  surfaceElevated: '#1A1A22',
-  surfacePressed: '#22222C',
-  overlay: 'rgba(7, 7, 10, 0.82)',
+  // surfaces — near-black with a cool cast
+  background: '#08090D',
+  backgroundElevated: '#0C0E14',
+  surface: '#12161F',
+  surfaceElevated: '#181D28',
+  surfacePressed: '#202634',
+  overlay: 'rgba(8, 9, 13, 0.78)',
+  scrim: 'rgba(8, 9, 13, 0.55)',
 
   // text
-  text: '#F5F5F7',
-  textSecondary: '#A0A0AE',
-  textTertiary: '#6C6C7C',
-  textInverse: '#07070A',
+  text: '#FFFFFF',
+  textSecondary: '#9BA3B4',
+  textTertiary: '#5F6675',
+  textInverse: '#08090D',
 
   // brand
-  accent: '#5B8CFF',
-  accentPressed: '#4A76DB',
-  accentSoft: 'rgba(91, 140, 255, 0.14)',
-  blup: '#7C5CFF',
+  accent: '#2B6BFF',
+  accentPressed: '#1E56D6',
+  accentSoft: 'rgba(43, 107, 255, 0.16)',
+  accentText: '#5A94FF',
+  accentGlow: 'rgba(43, 107, 255, 0.45)',
+
+  // secondary accent — social / connect
+  teal: '#4FD1C5',
+  tealSoft: 'rgba(79, 209, 197, 0.14)',
 
   // semantic
-  success: '#3ECF8E',
-  successSoft: 'rgba(62, 207, 142, 0.14)',
-  warning: '#FFB020',
-  warningSoft: 'rgba(255, 176, 32, 0.14)',
-  danger: '#FF5A5F',
-  dangerSoft: 'rgba(255, 90, 95, 0.14)',
+  success: '#22C55E',
+  successSoft: 'rgba(34, 197, 94, 0.14)',
+  warning: '#FBBF24',
+  warningSoft: 'rgba(251, 191, 36, 0.14)',
+  danger: '#FF4D6D',
+  dangerSoft: 'rgba(255, 77, 109, 0.14)',
 
   // lines
-  border: '#26262F',
-  borderStrong: '#35353F',
+  border: 'rgba(255, 255, 255, 0.07)',
+  borderStrong: 'rgba(255, 255, 255, 0.14)',
+
+  // chips sitting on top of a cover image
+  chipOnCover: 'rgba(10, 10, 14, 0.55)',
 
   // map
-  mapMarker: '#5B8CFF',
-  mapMarkerPaid: '#7C5CFF',
-  mapUser: '#3ECF8E',
+  mapMarker: '#2B6BFF',
+  mapMarkerPaid: '#A855F7',
+  mapUser: '#4FD1C5',
 } as const;
+
+/** Onboarding / hero background: navy fading into black. */
+export const heroGradient = ['#16294A', '#0B1220', '#08090D'] as const;
+
+/**
+ * Cover gradients. An event with no photo gets one deterministically from its
+ * id, so the same event always looks the same everywhere in the app.
+ */
+export const coverGradients: readonly (readonly [string, string])[] = [
+  ['#F05CA8', '#A855F7'], // pink → purple
+  ['#2E7BF6', '#56C7F0'], // blue → cyan
+  ['#F97316', '#F0447A'], // orange → pink
+  ['#22C55E', '#4FD1C5'], // green → teal
+  ['#7C5CFF', '#2B6BFF'], // violet → blue
+  ['#FBBF24', '#F97316'], // amber → orange
+  ['#06B6D4', '#3B82F6'], // cyan → blue
+  ['#EC4899', '#F43F5E'], // magenta → rose
+] as const;
+
+/** Avatar backgrounds, also picked deterministically from the name/id. */
+export const avatarColors = [
+  '#2B6BFF', '#FF4D8D', '#22D3EE', '#A855F7', '#FB923C', '#22C55E', '#FBBF24', '#F43F5E',
+] as const;
+
+/** Stable index from any string — same input, same colour, every render. */
+export function hashIndex(seed: string | null | undefined, length: number): number {
+  if (!seed) return 0;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % length;
+}
+
+export function coverGradientFor(seed: string | null | undefined): readonly [string, string] {
+  return coverGradients[hashIndex(seed, coverGradients.length)];
+}
+
+export function avatarColorFor(seed: string | null | undefined): string {
+  return avatarColors[hashIndex(seed, avatarColors.length)];
+}
 
 export const spacing = {
   xs: 4,
@@ -53,42 +109,69 @@ export const spacing = {
 } as const;
 
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 18,
+  sm: 10,
+  md: 14,
+  lg: 20,
   xl: 26,
+  xxl: 32,
   pill: 999,
 } as const;
 
+/**
+ * Nunito for everything readable, JetBrains Mono for the small technical
+ * labels ("◎ Bratislava", "[ foto z eventu ]", "0 blupov").
+ */
+export const fontFamily = {
+  regular: 'Nunito_400Regular',
+  medium: 'Nunito_600SemiBold',
+  bold: 'Nunito_700Bold',
+  black: 'Nunito_800ExtraBold',
+  mono: 'JetBrainsMono_400Regular',
+  monoBold: 'JetBrainsMono_700Bold',
+} as const;
+
 export const typography = {
-  display: { fontSize: 34, fontWeight: '800' as const, letterSpacing: -0.8 },
-  title: { fontSize: 26, fontWeight: '700' as const, letterSpacing: -0.5 },
-  heading: { fontSize: 20, fontWeight: '700' as const, letterSpacing: -0.3 },
-  subheading: { fontSize: 17, fontWeight: '600' as const },
-  body: { fontSize: 15, fontWeight: '400' as const },
-  bodyStrong: { fontSize: 15, fontWeight: '600' as const },
-  caption: { fontSize: 13, fontWeight: '500' as const },
-  micro: { fontSize: 11, fontWeight: '600' as const, letterSpacing: 0.4 },
+  logo: { fontFamily: fontFamily.black, fontSize: 34, letterSpacing: -1 },
+  display: { fontFamily: fontFamily.black, fontSize: 34, letterSpacing: -0.8, lineHeight: 40 },
+  title: { fontFamily: fontFamily.black, fontSize: 28, letterSpacing: -0.6, lineHeight: 34 },
+  heading: { fontFamily: fontFamily.bold, fontSize: 21, letterSpacing: -0.3, lineHeight: 27 },
+  subheading: { fontFamily: fontFamily.bold, fontSize: 17, letterSpacing: -0.2 },
+  body: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 22 },
+  bodyStrong: { fontFamily: fontFamily.medium, fontSize: 15, lineHeight: 22 },
+  caption: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18 },
+  captionStrong: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18 },
+  button: { fontFamily: fontFamily.bold, fontSize: 16, letterSpacing: -0.2 },
+  chip: { fontFamily: fontFamily.medium, fontSize: 13 },
+  mono: { fontFamily: fontFamily.mono, fontSize: 12, letterSpacing: 0.4 },
+  monoStrong: { fontFamily: fontFamily.monoBold, fontSize: 12, letterSpacing: 0.4 },
+  label: { fontFamily: fontFamily.medium, fontSize: 10, letterSpacing: 1.2 },
 } as const;
 
 export const shadow = {
   card: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 10,
   },
   floating: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
-    elevation: 14,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.5,
+    shadowRadius: 28,
+    elevation: 16,
+  },
+  glow: {
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    elevation: 12,
   },
 } as const;
 
-/** Category → emoji, used on cards and map markers. */
+/** Category → emoji, used on markers and as the cover glyph. */
 export const categoryEmoji: Record<string, string> = {
   techno: '🔊', house: '🏠', hiphop: '🎤', rock: '🎸', jazz: '🎷', indie: '🎧',
   festival: '🎪', running: '🏃', cycling: '🚴', climbing: '🧗', football: '⚽',
@@ -103,4 +186,46 @@ export const categoryEmoji: Record<string, string> = {
 
 export function emojiFor(category: string): string {
   return categoryEmoji[category] ?? '✨';
+}
+
+/** Slovak category labels for chips and filters. */
+export const categoryLabel: Record<string, string> = {
+  techno: 'Techno', house: 'House', hiphop: 'Hip-hop', rock: 'Rock', jazz: 'Jazz',
+  indie: 'Indie', festival: 'Festivaly', running: 'Beh', cycling: 'Cyklo',
+  climbing: 'Lezenie', football: 'Futbal', basketball: 'Basket', yoga: 'Joga',
+  swimming: 'Plávanie', hiking: 'Turistika', camping: 'Kemping', skiing: 'Lyže',
+  surfing: 'Surf', art: 'Umenie', theatre: 'Divadlo', cinema: 'Kino',
+  museum: 'Múzeá', photography: 'Fotenie', books: 'Knihy', food: 'Jedlo',
+  coffee: 'Káva', wine: 'Víno', 'craft-beer': 'Pivo', cooking: 'Varenie',
+  startups: 'Startupy', tech: 'Tech', design: 'Dizajn', networking: 'Networking',
+  investing: 'Investície', nightlife: 'Nočný život', bars: 'Bary',
+  karaoke: 'Karaoke', 'board-games': 'Doskovky', gaming: 'Gaming',
+  language: 'Jazyky', volunteering: 'Dobrovoľníctvo', wellness: 'Wellness',
+  meditation: 'Meditácia', dance: 'Tanec', other: 'Iné',
+};
+
+export function labelFor(category: string): string {
+  return categoryLabel[category] ?? category;
+}
+
+/**
+ * Interest *groups* (the `category` column on public.interests) — the headings
+ * on the onboarding picker. Distinct from `categoryLabel`, which labels an
+ * event's category.
+ */
+export const interestGroupLabel: Record<string, string> = {
+  music: 'Hudba',
+  sport: 'Šport',
+  outdoor: 'Vonku',
+  culture: 'Kultúra',
+  food: 'Jedlo a pitie',
+  business: 'Biznis',
+  nightlife: 'Nočný život',
+  social: 'Spoločenské',
+  wellness: 'Wellness',
+  other: 'Iné',
+};
+
+export function interestGroupFor(category: string): string {
+  return interestGroupLabel[category] ?? category;
 }

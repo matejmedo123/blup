@@ -5,12 +5,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
+import * as SplashScreen from 'expo-splash-screen';
 import { StripeBridge } from '@/payments/stripe';
 
 import { AuthProvider } from '@/auth/AuthProvider';
 import { handleAuthDeepLink } from '@/auth/api';
 import { env, isConfigured } from '@/lib/env';
 import { colors } from '@/theme';
+import { useAppFonts } from '@/theme/fonts';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,7 +29,17 @@ const queryClient = new QueryClient({
   },
 });
 
+void SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
+  const fontsReady = useAppFonts();
+
+  useEffect(() => {
+    // Nunito carries the Slovak diacritics; showing the UI before it loads
+    // would flash a system fallback and reflow every heading.
+    if (fontsReady) void SplashScreen.hideAsync();
+  }, [fontsReady]);
+
   // Email confirmation / password reset links come back into the app here.
   useEffect(() => {
     const handle = (url: string) => {
@@ -42,6 +54,8 @@ export default function RootLayout() {
 
     return () => subscription.remove();
   }, []);
+
+  if (!fontsReady) return null;
 
   const content = (
     <Stack
@@ -58,12 +72,12 @@ export default function RootLayout() {
       <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="event/[id]" options={{ headerTransparent: true, title: '' }} />
-      <Stack.Screen name="event/checkout/[id]" options={{ title: 'Checkout' }} />
-      <Stack.Screen name="event/edit/[id]" options={{ title: 'Edit event' }} />
-      <Stack.Screen name="event/attendees/[id]" options={{ title: 'Who is going' }} />
+      <Stack.Screen name="event/checkout/[id]" options={{ title: 'Pokladňa' }} />
+      <Stack.Screen name="event/edit/[id]" options={{ title: 'Upraviť event' }} />
+      <Stack.Screen name="event/attendees/[id]" options={{ title: 'Kto ide' }} />
       <Stack.Screen name="user/[id]" options={{ title: '' }} />
-      <Stack.Screen name="tickets/index" options={{ title: 'My tickets' }} />
-      <Stack.Screen name="tickets/[id]" options={{ title: 'Ticket' }} />
+      <Stack.Screen name="tickets/index" options={{ title: 'Moje vstupenky' }} />
+      <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />
       <Stack.Screen name="premium" options={{ title: 'BLUP Premium' }} />
       <Stack.Screen name="organizer" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />

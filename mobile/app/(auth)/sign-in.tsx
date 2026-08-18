@@ -4,7 +4,8 @@ import { Link, router } from 'expo-router';
 
 import { signInWithApple, signInWithEmail, signInWithOAuth } from '@/auth/api';
 import { messageFor } from '@/lib/errors';
-import { Body, Button, Input, Notice, Screen } from '@/components/ui';
+import { Body, Button, Input, Mono, Notice, Screen } from '@/components/ui';
+import { HeroBackground, Tagline, Wordmark } from '@/components/Wordmark';
 import { colors, spacing, typography } from '@/theme';
 
 export default function SignInScreen() {
@@ -18,7 +19,7 @@ export default function SignInScreen() {
     setError(null);
 
     if (!email.trim() || !password) {
-      setError('Enter your email and password.');
+      setError('Zadaj e-mail a heslo.');
       return;
     }
 
@@ -54,90 +55,93 @@ export default function SignInScreen() {
 
   return (
     <Screen edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+      <HeroBackground>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.flex}
         >
-          <View style={styles.header}>
-            <Text style={styles.logo}>BLUP</Text>
-            <Text style={styles.tagline}>What’s your next Blup?</Text>
-          </View>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.header}>
+              <Wordmark size={54} />
+              <Tagline>Nechaj sa blupnúť.</Tagline>
+              <Mono style={styles.subtitle}>eventy okolo teba · v reálnom čase</Mono>
+            </View>
 
-          {error ? <Notice tone="danger" title="Could not sign in" body={error} /> : null}
+            {error ? <Notice tone="danger" title="Prihlásenie zlyhalo" body={error} /> : null}
 
-          <Input
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            textContentType="emailAddress"
-            editable={!loading}
-          />
+            <Input
+              label="E-mail"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="ty@example.com"
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              textContentType="emailAddress"
+              editable={!loading}
+            />
 
-          <Input
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            secureTextEntry
-            autoComplete="current-password"
-            textContentType="password"
-            editable={!loading}
-            onSubmitEditing={submit}
-            returnKeyType="go"
-          />
+            <Input
+              label="Heslo"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              secureTextEntry
+              autoComplete="current-password"
+              textContentType="password"
+              editable={!loading}
+              onSubmitEditing={submit}
+              returnKeyType="go"
+            />
 
-          <Button title="Sign in" onPress={submit} loading={loading} />
+            <Button title="Prihlásiť sa" onPress={submit} loading={loading} />
 
-          <Link href="/(auth)/forgot-password" asChild>
-            <Text style={styles.link}>Forgot your password?</Text>
-          </Link>
+            <Link href="/(auth)/forgot-password" asChild>
+              <Text style={styles.link}>Zabudol si heslo?</Text>
+            </Link>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Mono style={styles.dividerText}>alebo</Mono>
+              <View style={styles.dividerLine} />
+            </View>
 
-          {Platform.OS === 'ios' ? (
+            {Platform.OS === 'ios' ? (
+              <Button
+                title="Pokračovať cez Apple"
+                icon=""
+                variant="secondary"
+                onPress={() => oauth('apple')}
+                loading={oauthLoading === 'apple'}
+                style={styles.oauthButton}
+              />
+            ) : null}
+
             <Button
-              title="Continue with Apple"
-              icon=""
+              title="Pokračovať cez Google"
               variant="secondary"
-              onPress={() => oauth('apple')}
-              loading={oauthLoading === 'apple'}
+              onPress={() => oauth('google')}
+              loading={oauthLoading === 'google'}
               style={styles.oauthButton}
             />
-          ) : null}
 
-          <Button
-            title="Continue with Google"
-            variant="secondary"
-            onPress={() => oauth('google')}
-            loading={oauthLoading === 'google'}
-            style={styles.oauthButton}
-          />
+            <Body muted style={styles.oauthHint}>
+              Prihlásenie cez sociálnu sieť vyžaduje zapnutého providera v tvojom Supabase projekte.
+            </Body>
 
-          <Body muted style={styles.oauthHint}>
-            Social sign-in needs the matching provider enabled in your Supabase project.
-          </Body>
-
-          <View style={styles.footer}>
-            <Body muted>New to BLUP? </Body>
-            <Link href="/(auth)/sign-up" asChild>
-              <Text style={styles.link}>Create an account</Text>
-            </Link>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            <View style={styles.footer}>
+              <Body muted>Nový na BLUPe? </Body>
+              <Link href="/(auth)/sign-up" asChild>
+                <Text style={styles.link}>Vytvor si účet</Text>
+              </Link>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </HeroBackground>
     </Screen>
   );
 }
@@ -146,19 +150,18 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { padding: spacing.xl, paddingTop: spacing.xxxl, flexGrow: 1 },
   header: { alignItems: 'center', marginBottom: spacing.xxxl },
-  logo: { ...typography.display, color: colors.accent, letterSpacing: 6, fontSize: 42 },
-  tagline: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
+  subtitle: { color: colors.textTertiary, marginTop: spacing.sm },
 
   link: {
-    ...typography.caption,
-    color: colors.accent,
+    ...typography.captionStrong,
+    color: colors.accentText,
     textAlign: 'center',
     marginTop: spacing.lg,
   },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: spacing.xl, gap: spacing.md },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { ...typography.caption, color: colors.textTertiary },
+  dividerText: { color: colors.textTertiary },
 
   oauthButton: { marginBottom: spacing.md },
   oauthHint: { textAlign: 'center', fontSize: 12 },

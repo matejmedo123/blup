@@ -19,10 +19,10 @@ export default function SignUpScreen() {
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (displayName.trim().length < 2) errors.displayName = 'Tell us what to call you.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'That email does not look right.';
-    if (password.length < 8) errors.password = 'Use at least 8 characters.';
-    if (password !== confirm) errors.confirm = 'The passwords do not match.';
+    if (displayName.trim().length < 2) errors.displayName = 'Napíš, ako ťa máme volať.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Tento e-mail nevyzerá správne.';
+    if (password.length < 8) errors.password = 'Použi aspoň 8 znakov.';
+    if (password !== confirm) errors.confirm = 'Heslá sa nezhodujú.';
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -65,13 +65,13 @@ export default function SignUpScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Body muted style={styles.intro}>
-            One account gets you the map, your tickets and everything you save.
+            Jeden účet ti otvorí mapu, tvoje vstupenky aj všetko, čo si uložíš.
           </Body>
 
-          {error ? <Notice tone="danger" title="Could not create the account" body={error} /> : null}
+          {error ? <Notice tone="danger" title="Účet sa nepodarilo vytvoriť" body={error} /> : null}
 
           <Input
-            label="Name"
+            label="Meno"
             value={displayName}
             onChangeText={setDisplayName}
             placeholder="Alex Kováč"
@@ -82,10 +82,10 @@ export default function SignUpScreen() {
           />
 
           <Input
-            label="Email"
+            label="E-mail"
             value={email}
             onChangeText={setEmail}
-            placeholder="you@example.com"
+            placeholder="ty@example.com"
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
@@ -94,10 +94,10 @@ export default function SignUpScreen() {
           />
 
           <Input
-            label="Password"
+            label="Heslo"
             value={password}
             onChangeText={setPassword}
-            placeholder="At least 8 characters"
+            placeholder="Aspoň 8 znakov"
             secureTextEntry
             autoComplete="new-password"
             error={fieldErrors.password}
@@ -105,10 +105,10 @@ export default function SignUpScreen() {
           />
 
           <Input
-            label="Confirm password"
+            label="Heslo znova"
             value={confirm}
             onChangeText={setConfirm}
-            placeholder="Type it again"
+            placeholder="Napíš ho ešte raz"
             secureTextEntry
             autoComplete="new-password"
             error={fieldErrors.confirm}
@@ -116,10 +116,10 @@ export default function SignUpScreen() {
             onSubmitEditing={submit}
           />
 
-          <Button title="Create account" onPress={submit} loading={loading} />
+          <Button title="Vytvoriť účet" onPress={submit} loading={loading} />
 
           <Body muted style={styles.legal}>
-            By creating an account you agree to the BLUP terms and privacy policy.
+            Vytvorením účtu súhlasíš s podmienkami BLUPu a so zásadami ochrany súkromia.
           </Body>
         </ScrollView>
       </KeyboardAvoidingView>

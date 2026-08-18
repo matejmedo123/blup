@@ -1,61 +1,55 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
 
-import { colors, emojiFor, radius, shadow, spacing, typography } from '@/theme';
-import {
-  estimateWalkingTime, formatCount, formatDistanceFromYou, formatEventDate, formatPrice,
-} from '@/lib/format';
+import { colors, labelFor, radius, shadow, spacing, typography } from '@/theme';
+import { formatCount, formatDistance, formatEventDate, formatPrice } from '@/lib/format';
 import type { EventFeedItem } from '@/types/models';
-import { Badge } from './ui';
+import { GradientCover } from './GradientCover';
+import { AvatarStack, Chip, PricePill } from './ui';
 
 /**
- * The big event card — the visual centre of the app.
- * Used in the Home rails, Explore results and the swipe deck.
+ * The event card — the visual centre of BLUP.
+ *
+ * Cover, category chips over it, a save star, then a compact meta line
+ * ("Dnes · 21:00 · 0.8 km · Nivy Tower") and a footer that pairs social proof
+ * with the price.
  */
 export function EventCard({
-  event, onPress, onSave, size = 'large', showScore,
+  event, onPress, onSave, size = 'large', showScore, attendees = [],
 }: {
   event: EventFeedItem;
   onPress?: () => void;
   onSave?: () => void;
   size?: 'large' | 'compact';
   showScore?: boolean;
+  attendees?: { id: string; avatar_url?: string | null; name?: string | null }[];
 }) {
-  const distance = formatDistanceFromYou(event.distance_m);
-  const walk = estimateWalkingTime(event.distance_m);
   const isCompact = size === 'compact';
+  const distance = formatDistance(event.distance_m);
+
+  const meta = [
+    formatEventDate(event.start_at),
+    distance,
+    event.venue_name,
+  ].filter(Boolean).join(' · ');
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${event.title}, ${formatEventDate(event.start_at)}`}
-      style={({ pressed }) => [
-        styles.card,
-        isCompact && styles.cardCompact,
-        pressed && styles.pressed,
-      ]}
+      style={({ pressed }) => [styles.card, isCompact && styles.cardCompact, pressed && styles.pressed]}
     >
-      <View style={[styles.cover, isCompact && styles.coverCompact]}>
-        {event.cover_image_url ? (
-          <Image
-            source={{ uri: event.cover_image_url }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            transition={200}
-          />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, styles.coverFallback]}>
-            <Text style={styles.coverEmoji}>{emojiFor(event.category)}</Text>
-          </View>
-        )}
-
+      <GradientCover
+        uri={event.cover_image_url}
+        seed={event.id}
+        height={isCompact ? 150 : 210}
+        showPlaceholderLabel={!isCompact}
+      >
         <View style={styles.coverTop}>
-          <View style={styles.pricePill}>
-            <Text style={styles.pricePillText}>
-              {event.is_free ? 'Free' : formatPrice(event.price_cents, event.currency)}
-            </Text>
+          <View style={styles.coverChips}>
+            <Chip label={labelFor(event.category)} onCover />
+            {event.friends_going > 0 ? <Chip label="Frčí" onCover /> : null}
           </View>
 
           {onSave ? (
@@ -63,60 +57,44 @@ export function EventCard({
               onPress={onSave}
               hitSlop={12}
               accessibilityRole="button"
-              accessibilityLabel={event.is_saved ? 'Remove from saved' : 'Save event'}
+              accessibilityLabel={event.is_saved ? 'Odstrániť z uložených' : 'Uložiť event'}
               style={styles.saveButton}
             >
-              <Text style={styles.saveIcon}>{event.is_saved ? '★' : '☆'}</Text>
+              <Text style={[styles.saveIcon, event.is_saved && styles.saveIconActive]}>
+                {event.is_saved ? '★' : '☆'}
+              </Text>
             </Pressable>
           ) : null}
         </View>
 
         {showScore && event.score !== null ? (
           <View style={styles.scorePill}>
-            <Text style={styles.scorePillText}>{Math.round(Number(event.score) * 100)}% match</Text>
+            <Text style={styles.scoreText}>{Math.round(Number(event.score) * 100)} % zhoda</Text>
           </View>
         ) : null}
-      </View>
+      </GradientCover>
 
       <View style={styles.body}>
-        <Text style={styles.date}>{formatEventDate(event.start_at)}</Text>
-        <Text style={styles.title} numberOfLines={2}>
-          {event.title}
-        </Text>
-
-        <View style={styles.metaRow}>
-          {event.venue_name ? (
-            <Text style={styles.meta} numberOfLines={1}>
-              {event.venue_name}
-            </Text>
-          ) : null}
-          {distance ? <Text style={styles.metaAccent}>{distance}</Text> : null}
-          {walk && !isCompact ? <Text style={styles.meta}>{walk}</Text> : null}
-        </View>
+        <Text style={styles.title} numberOfLines={2}>{event.title}</Text>
+        <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
 
         {event.explanation ? (
-          <Text style={styles.explanation} numberOfLines={2}>
-            ✨ {event.explanation}
-          </Text>
+          <Text style={styles.explanation} numberOfLines={2}>✨ {event.explanation}</Text>
         ) : null}
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            {formatCount(event.attendee_count)} going
-          </Text>
+          <View style={styles.footerLeft}>
+            {attendees.length > 0 ? <AvatarStack people={attendees} size={28} max={3} /> : null}
+            <Text style={styles.going}>
+              {event.friends_going > 0
+                ? `${event.friends_going} z tvojich kruhov ide`
+                : `${formatCount(event.attendee_count)} ide`}
+            </Text>
+          </View>
 
-          {event.friends_going > 0 ? (
-            <Badge
-              tone="accent"
-              label={`${event.friends_going} you follow`}
-            />
-          ) : null}
-
-          {event.organization_verified ? <Badge tone="success" label="✓ Verified" /> : null}
-
-          {event.capacity && event.attendee_count >= event.capacity ? (
-            <Badge tone="danger" label="Full" />
-          ) : null}
+          <PricePill
+            label={event.is_free ? 'Zdarma' : formatPrice(event.price_cents, event.currency)}
+          />
         </View>
       </View>
     </Pressable>
@@ -126,62 +104,51 @@ export function EventCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
     ...shadow.card,
   },
-  cardCompact: { width: 260 },
-  pressed: { opacity: 0.9, transform: [{ scale: 0.995 }] },
-
-  cover: { height: 190, backgroundColor: colors.surfaceElevated },
-  coverCompact: { height: 140 },
-  coverFallback: { alignItems: 'center', justifyContent: 'center' },
-  coverEmoji: { fontSize: 52 },
+  cardCompact: { width: 270 },
+  pressed: { opacity: 0.92, transform: [{ scale: 0.995 }] },
 
   coverTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     padding: spacing.md,
   },
-  pricePill: {
-    backgroundColor: colors.overlay,
+  coverChips: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', flex: 1 },
+  saveButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: colors.chipOnCover,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveIcon: { fontSize: 19, color: '#FFFFFF' },
+  saveIconActive: { color: colors.warning },
+
+  scorePill: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: spacing.md,
+    backgroundColor: colors.chipOnCover,
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
     borderRadius: radius.pill,
   },
-  pricePillText: { ...typography.micro, color: colors.text },
-  saveButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.overlay,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveIcon: { fontSize: 18, color: colors.text },
-
-  scorePill: {
-    position: 'absolute',
-    bottom: spacing.md,
-    left: spacing.md,
-    backgroundColor: colors.accentSoft,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-  },
-  scorePillText: { ...typography.micro, color: colors.accent },
+  scoreText: { ...typography.mono, color: '#FFFFFF' },
 
   body: { padding: spacing.lg, gap: spacing.xs },
-  date: { ...typography.micro, color: colors.accent, textTransform: 'uppercase' },
   title: { ...typography.heading, color: colors.text },
-
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   meta: { ...typography.caption, color: colors.textSecondary },
-  metaAccent: { ...typography.caption, color: colors.text },
-
   explanation: {
     ...typography.caption,
     color: colors.textSecondary,
@@ -192,9 +159,10 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    gap: spacing.md,
   },
-  footerText: { ...typography.caption, color: colors.textSecondary },
+  footerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  going: { ...typography.captionStrong, color: colors.accentText },
 });

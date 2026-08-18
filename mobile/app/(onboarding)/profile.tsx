@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { isUsernameAvailable, updateProfile } from '@/api/profiles';
 import { pickImage, uploadAvatar } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
-import { Avatar, Body, Button, Caption, Input, Notice, Screen } from '@/components/ui';
+import { Avatar, Button, Caption, Input, Mono, Notice, Screen } from '@/components/ui';
 import { colors, spacing } from '@/theme';
 
 /** Step 1 of 3 — name, handle and a real profile photo. */
@@ -52,13 +52,13 @@ export default function OnboardingProfileScreen() {
     setUsernameError(null);
 
     if (displayName.trim().length < 2) {
-      setError('Add a name so people know who you are.');
+      setError('Doplň meno, nech ťa ľudia spoznajú.');
       return;
     }
 
     const handle = username.trim().toLowerCase();
     if (!/^[a-z0-9_.]{3,24}$/.test(handle)) {
-      setUsernameError('3–24 characters: letters, numbers, _ or .');
+      setUsernameError('3–24 znakov: písmená, čísla, _ alebo .');
       return;
     }
 
@@ -66,7 +66,7 @@ export default function OnboardingProfileScreen() {
     try {
       const available = await isUsernameAvailable(handle);
       if (!available) {
-        setUsernameError('That username is taken.');
+        setUsernameError('Toto meno je už obsadené.');
         return;
       }
 
@@ -87,9 +87,9 @@ export default function OnboardingProfileScreen() {
 
   return (
     <Screen scroll>
-      <Body muted style={styles.intro}>Step 1 of 3 · This is what other Bluppers see.</Body>
+      <Mono style={styles.intro}>krok 1 z 3 · takto ťa uvidia ostatní</Mono>
 
-      {error ? <Notice tone="danger" title="Something went wrong" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Niečo sa pokazilo" body={error} /> : null}
 
       <View style={styles.avatarSection}>
         <Pressable onPress={changePhoto} disabled={uploading} accessibilityRole="button">
@@ -101,17 +101,17 @@ export default function OnboardingProfileScreen() {
           ) : null}
         </Pressable>
         <Button
-          title={avatarUrl ? 'Change photo' : 'Add a photo'}
+          title={avatarUrl ? 'Zmeniť fotku' : 'Pridať fotku'}
           variant="ghost"
           compact
           onPress={changePhoto}
           disabled={uploading}
         />
-        <Caption>Uploaded to your storage bucket, not just kept on this phone.</Caption>
+        <Caption>Nahráva sa do tvojho storage bucketu, nezostáva len v telefóne.</Caption>
       </View>
 
       <Input
-        label="Name"
+        label="Meno"
         value={displayName}
         onChangeText={setDisplayName}
         placeholder="Alex Kováč"
@@ -120,22 +120,22 @@ export default function OnboardingProfileScreen() {
       />
 
       <Input
-        label="Username"
+        label="Používateľské meno"
         value={username}
         onChangeText={(value) => setUsername(value.toLowerCase())}
         placeholder="alex"
         autoCapitalize="none"
         autoCorrect={false}
         error={usernameError}
-        hint="People find you at @username"
+        hint="Ľudia ťa nájdu ako @meno"
         editable={!saving}
       />
 
       <Input
-        label="Bio"
+        label="O tebe"
         value={bio}
         onChangeText={setBio}
-        placeholder="Techno, climbing and long coffees."
+        placeholder="Techno, lezenie a dlhé kávy."
         multiline
         numberOfLines={3}
         maxLength={300}
@@ -144,13 +144,13 @@ export default function OnboardingProfileScreen() {
         editable={!saving}
       />
 
-      <Button title="Continue" onPress={submit} loading={saving} />
+      <Button title="Pokračovať" onPress={submit} loading={saving} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  intro: { marginBottom: spacing.xl },
+  intro: { color: colors.textTertiary, marginBottom: spacing.xl },
   avatarSection: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
   avatarOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,

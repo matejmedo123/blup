@@ -87,20 +87,26 @@ export async function getPeopleRecommendations(params: {
   return (data ?? []) as PeopleMatch[];
 }
 
-/** Human sentence for a match, e.g. "4 shared interests · both going". */
+/** Human sentence for a match, e.g. "4 spoločné záujmy · idete obaja". */
 export function describeMatch(match: PeopleMatch): string {
   const parts: string[] = [];
 
   if (match.shared_interests > 0) {
     parts.push(
-      `${match.shared_interests} shared ${match.shared_interests === 1 ? 'interest' : 'interests'}`,
+      match.shared_interests === 1
+        ? '1 spoločný záujem'
+        : `${match.shared_interests} ${match.shared_interests < 5 ? 'spoločné záujmy' : 'spoločných záujmov'}`,
     );
   }
-  if (match.same_event) parts.push('both going');
-  if (match.mutual_events > 0) parts.push(`${match.mutual_events} events in common`);
-  if (match.mutual_follows > 0) parts.push(`${match.mutual_follows} mutual`);
+  if (match.same_event) parts.push('idete obaja');
+  if (match.mutual_events > 0) {
+    parts.push(
+      match.mutual_events === 1 ? '1 spoločný event' : `${match.mutual_events} spoločných eventov`,
+    );
+  }
+  if (match.mutual_follows > 0) parts.push(`${match.mutual_follows} spoločných známych`);
 
-  return parts.slice(0, 2).join(' · ') || 'Suggested for you';
+  return parts.slice(0, 2).join(' · ') || 'Návrh pre teba';
 }
 
 // --- debug / observability (spec §39) ---------------------------------------
@@ -150,12 +156,12 @@ export function explainBreakdown(
   if (!breakdown?.components) return [];
 
   const labels: Record<string, string> = {
-    interest_match: 'Interest match',
-    distance_score: 'Distance',
-    social_relevance: 'Social relevance',
-    past_behaviour: 'Past behaviour',
-    popularity: 'Popularity',
-    time_relevance: 'Time relevance',
+    interest_match: 'Zhoda záujmov',
+    distance_score: 'Vzdialenosť',
+    social_relevance: 'Sociálna relevancia',
+    past_behaviour: 'Tvoje správanie',
+    popularity: 'Popularita',
+    time_relevance: 'Časová relevancia',
   };
 
   return Object.entries(breakdown.components)

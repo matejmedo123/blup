@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getMyTickets } from '@/api/tickets';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatPrice } from '@/lib/format';
+import { ticketStatusLabel } from '@/lib/labels';
 import { Badge, Caption, EmptyState, ErrorState, LoadingState, Screen } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { TicketStatus } from '@/types/models';
@@ -23,7 +24,7 @@ export default function TicketsScreen() {
     queryFn: getMyTickets,
   });
 
-  if (isLoading) return <Screen><LoadingState label="Loading your tickets…" /></Screen>;
+  if (isLoading) return <Screen><LoadingState label="Načítavam tvoje vstupenky…" /></Screen>;
 
   if (isError) {
     return (
@@ -60,7 +61,7 @@ export default function TicketsScreen() {
             </View>
 
             <View style={styles.right}>
-              <Badge tone={TONE[item.status]} label={item.status} />
+              <Badge tone={TONE[item.status]} label={ticketStatusLabel[item.status]} />
               <Caption>{formatPrice(item.price_cents, item.currency)}</Caption>
             </View>
           </Pressable>
@@ -68,9 +69,9 @@ export default function TicketsScreen() {
         ListEmptyComponent={
           <EmptyState
             emoji="🎟️"
-            title="No tickets yet"
-            body="When you buy a ticket it lands here with a QR code you can show at the door — even offline."
-            actionLabel="Find something to go to"
+            title="Zatiaľ žiadne vstupenky"
+            body="Keď si kúpiš vstupenku, pristane tu aj s QR kódom, ktorý ukážeš pri vstupe — funguje aj offline."
+            actionLabel="Nájdi si, kam ísť"
             onAction={() => router.replace('/(tabs)/explore')}
           />
         }

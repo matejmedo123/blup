@@ -39,15 +39,15 @@ export default function TicketTypesScreen() {
     const quantityValue = Number(quantity);
 
     if (name.trim().length < 2) {
-      setError('Name the ticket, e.g. "Early bird".');
+      setError('Pomenuj vstupenku, napr. „Early bird“.');
       return;
     }
     if (!Number.isFinite(priceValue) || priceValue < 0) {
-      setError('Set a valid price.');
+      setError('Nastav platnú cenu.');
       return;
     }
     if (!Number.isInteger(quantityValue) || quantityValue < 1) {
-      setError('How many of these exist?');
+      setError('Koľko ich je?');
       return;
     }
 
@@ -86,19 +86,19 @@ export default function TicketTypesScreen() {
     <Screen scroll>
       <Text style={styles.title}>{event.data?.title}</Text>
 
-      {error ? <Notice tone="danger" title="Could not save" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa uložiť" body={error} /> : null}
 
       {event.data && event.data.is_free ? (
         <Notice
           tone="warning"
-          title="This is a free event"
-          body="Turn off ‘Free event’ in the event settings before adding paid tickets."
+          title="Toto je event zdarma"
+          body="Pred pridaním platených vstupeniek vypni v nastaveniach eventu „Event zdarma“."
         />
       ) : null}
 
-      <SectionHeader title="Existing tickets" />
+      <SectionHeader title="Existujúce vstupenky" />
       {(event.data?.ticket_types ?? []).length === 0 ? (
-        <Body muted>None yet. Add the first type below.</Body>
+        <Body muted>Zatiaľ žiadne. Prvý typ pridáš nižšie.</Body>
       ) : (
         (event.data?.ticket_types ?? []).map((ticket) => (
           <View key={ticket.id} style={styles.row}>
@@ -110,7 +110,7 @@ export default function TicketTypesScreen() {
             </View>
             <Text style={styles.price}>{formatPrice(ticket.price_cents, ticket.currency)}</Text>
             <Button
-              title={ticket.is_active ? 'Pause' : 'Resume'}
+              title={ticket.is_active ? 'Pozastaviť' : 'Obnoviť'}
               variant="ghost"
               compact
               onPress={() => toggleActive(ticket.id, ticket.is_active)}
@@ -119,13 +119,13 @@ export default function TicketTypesScreen() {
         ))
       )}
 
-      <SectionHeader title="Add a ticket type" />
-      <Input label="Name" value={name} onChangeText={setName} placeholder="Early bird" editable={!saving} />
-      <Input label="Price (EUR)" value={price} onChangeText={setPrice} placeholder="15" keyboardType="decimal-pad" editable={!saving} />
-      <Input label="How many" value={quantity} onChangeText={setQuantity} placeholder="100" keyboardType="number-pad" editable={!saving} />
-      <Input label="Max per order" value={maxPerOrder} onChangeText={setMaxPerOrder} keyboardType="number-pad" editable={!saving} />
+      <SectionHeader title="Pridať typ vstupenky" />
+      <Input label="Názov" value={name} onChangeText={setName} placeholder="Early bird" editable={!saving} />
+      <Input label="Cena (EUR)" value={price} onChangeText={setPrice} placeholder="15" keyboardType="decimal-pad" editable={!saving} />
+      <Input label="Počet kusov" value={quantity} onChangeText={setQuantity} placeholder="100" keyboardType="number-pad" editable={!saving} />
+      <Input label="Max na objednávku" value={maxPerOrder} onChangeText={setMaxPerOrder} keyboardType="number-pad" editable={!saving} />
 
-      <Button title="Add ticket type" onPress={submit} loading={saving} />
+      <Button title="Pridať typ vstupenky" onPress={submit} loading={saving} />
     </Screen>
   );
 }

@@ -1,8 +1,12 @@
 import { format, formatDistanceToNowStrict, isToday, isTomorrow, isThisWeek } from 'date-fns';
+import { sk } from 'date-fns/locale';
+
+/** Every date in the app is rendered in Slovak. */
+const locale = { locale: sk };
 
 /** Money is stored in minor units; never format a float. */
 export function formatPrice(cents: number, currency = 'EUR'): string {
-  if (cents === 0) return 'Free';
+  if (cents === 0) return 'Zdarma';
   const amount = cents / 100;
   const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', CZK: 'Kč', PLN: 'zł' };
   const symbol = symbols[currency] ?? currency;
@@ -16,7 +20,7 @@ export function formatMoney(cents: number, currency = 'EUR'): string {
   return `${symbols[currency] ?? `${currency} `}${amount}`;
 }
 
-/** "300 m from you" / "1.2 km from you" — the spec's distance language. */
+/** "300 m od teba" / "1,2 km od teba" — the spec's distance language. */
 export function formatDistance(meters: number | null | undefined): string | null {
   if (meters === null || meters === undefined) return null;
   if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
@@ -26,7 +30,7 @@ export function formatDistance(meters: number | null | undefined): string | null
 
 export function formatDistanceFromYou(meters: number | null | undefined): string | null {
   const distance = formatDistance(meters);
-  return distance ? `${distance} from you` : null;
+  return distance ? `${distance} od teba` : null;
 }
 
 /**
@@ -37,7 +41,7 @@ export function formatDistanceFromYou(meters: number | null | undefined): string
 export function estimateWalkingTime(meters: number | null | undefined): string | null {
   if (meters === null || meters === undefined || meters > 5000) return null;
   const minutes = Math.max(1, Math.round(meters / 83));
-  return `~${minutes} min walk`;
+  return `~${minutes} min pešo`;
 }
 
 /**
@@ -55,25 +59,25 @@ export function formatEventDate(iso: string): string {
   const date = parse(iso);
   if (!date) return '—';
 
-  if (isToday(date)) return `Today · ${format(date, 'HH:mm')}`;
-  if (isTomorrow(date)) return `Tomorrow · ${format(date, 'HH:mm')}`;
-  if (isThisWeek(date, { weekStartsOn: 1 })) return format(date, 'EEEE · HH:mm');
-  return format(date, 'd MMM · HH:mm');
+  if (isToday(date)) return `Dnes · ${format(date, 'HH:mm')}`;
+  if (isTomorrow(date)) return `Zajtra · ${format(date, 'HH:mm')}`;
+  if (isThisWeek(date, { weekStartsOn: 1 })) return format(date, 'EEEE · HH:mm', locale);
+  return format(date, 'd. MMM · HH:mm', locale);
 }
 
 export function formatEventDateLong(iso: string): string {
   const date = parse(iso);
-  return date ? format(date, 'EEEE d MMMM yyyy · HH:mm') : '—';
+  return date ? format(date, 'EEEE d. MMMM yyyy · HH:mm', locale) : '—';
 }
 
 export function formatRelative(iso: string): string {
   const date = parse(iso);
-  return date ? `${formatDistanceToNowStrict(date)} ago` : '—';
+  return date ? `pred ${formatDistanceToNowStrict(date, locale)}` : '—';
 }
 
 export function formatCount(value: number): string {
   if (value < 1000) return String(value);
-  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)} tis.`;
   return `${(value / 1_000_000).toFixed(1)}M`;
 }
 

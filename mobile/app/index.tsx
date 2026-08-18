@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { MISSING_SUPABASE_MESSAGE } from '@/lib/env';
+import { Wordmark } from '@/components/Wordmark';
 import { colors, spacing, typography } from '@/theme';
 
 /**
@@ -20,8 +21,8 @@ export default function Index() {
   if (!backendConfigured) {
     return (
       <View style={styles.container}>
-        <Text style={styles.logo}>BLUP</Text>
-        <Text style={styles.title}>Almost there</Text>
+        <Wordmark size={44} />
+        <Text style={styles.title}>Ešte kúsok</Text>
         <Text style={styles.body}>{MISSING_SUPABASE_MESSAGE}</Text>
       </View>
     );
@@ -30,7 +31,7 @@ export default function Index() {
   if (initializing || (isAuthenticated && loadingProfile && !profile)) {
     return (
       <View style={styles.container}>
-        <Text style={styles.logo}>BLUP</Text>
+        <Wordmark size={44} />
         <ActivityIndicator color={colors.accent} />
       </View>
     );
@@ -51,7 +52,6 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.lg,
   },
-  logo: { ...typography.display, color: colors.accent, letterSpacing: 4 },
   title: { ...typography.heading, color: colors.text },
   body: {
     ...typography.body,

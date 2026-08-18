@@ -13,13 +13,13 @@ export default function OrganizerLayout() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'Organizer' }} />
-      <Stack.Screen name="new" options={{ title: 'New organization' }} />
-      <Stack.Screen name="verification" options={{ title: 'Get verified' }} />
-      <Stack.Screen name="payouts" options={{ title: 'Balance & payouts' }} />
-      <Stack.Screen name="scan" options={{ title: 'Scan tickets' }} />
-      <Stack.Screen name="analytics/[id]" options={{ title: 'Event analytics' }} />
-      <Stack.Screen name="tickets/[id]" options={{ title: 'Ticket types' }} />
+      <Stack.Screen name="index" options={{ title: 'Organizátor' }} />
+      <Stack.Screen name="new" options={{ title: 'Nová organizácia' }} />
+      <Stack.Screen name="verification" options={{ title: 'Overenie' }} />
+      <Stack.Screen name="payouts" options={{ title: 'Zostatok a výplaty' }} />
+      <Stack.Screen name="scan" options={{ title: 'Skenovanie vstupeniek' }} />
+      <Stack.Screen name="analytics/[id]" options={{ title: 'Štatistiky eventu' }} />
+      <Stack.Screen name="tickets/[id]" options={{ title: 'Typy vstupeniek' }} />
     </Stack>
   );
 }

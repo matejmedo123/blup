@@ -1,11 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming,
 } from 'react-native-reanimated';
 
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, shadow, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
 import { EventCard } from './EventCard';
 import { Body, Button } from './ui';
@@ -110,11 +110,11 @@ export function SwipeDeck({
     return (
       <View style={styles.done}>
         <Text style={styles.doneEmoji}>🎉</Text>
-        <Body style={styles.doneTitle}>That is everything nearby</Body>
+        <Body style={styles.doneTitle}>To je všetko v okolí</Body>
         <Body muted style={styles.doneBody}>
-          You have been through every event in range. Widen the radius or check back later.
+          Prešiel si všetky eventy v dosahu. Rozšír okruh alebo sa vráť neskôr.
         </Body>
-        {onReset ? <Button title="Start over" variant="secondary" onPress={() => { setIndex(0); onReset(); }} /> : null}
+        {onReset ? <Button title="Začať odznova" variant="secondary" onPress={() => { setIndex(0); onReset(); }} /> : null}
       </View>
     );
   }
@@ -132,20 +132,45 @@ export function SwipeDeck({
           <EventCard event={current} showScore />
 
           <Animated.View style={[styles.stamp, styles.stampLike, likeStyle]} pointerEvents="none">
-            <Text style={[styles.stampText, { color: colors.success }]}>INTERESTED</Text>
+            <Text style={[styles.stampText, { color: colors.success }]}>BLUP</Text>
           </Animated.View>
 
           <Animated.View style={[styles.stamp, styles.stampNope, nopeStyle]} pointerEvents="none">
-            <Text style={[styles.stampText, { color: colors.danger }]}>NOT FOR ME</Text>
+            <Text style={[styles.stampText, { color: colors.danger }]}>NEZAUJÍMA</Text>
           </Animated.View>
         </Animated.View>
       </GestureDetector>
 
-      <View style={styles.hint}>
-        <Text style={styles.hintText}>← skip</Text>
-        <Text style={styles.hintText}>↑ open</Text>
-        <Text style={styles.hintText}>save →</Text>
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Nezaujíma ma"
+          onPress={() => advance('left')}
+          style={({ pressed }) => [styles.actionCircle, pressed && styles.actionPressed]}
+        >
+          <Text style={styles.actionGlyph}>✕</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Viac info"
+          onPress={() => advance('up')}
+          style={({ pressed }) => [styles.actionCircle, pressed && styles.actionPressed]}
+        >
+          <Text style={[styles.actionGlyph, { color: colors.teal }]}>↑</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Uložiť BLUP"
+          onPress={() => advance('right')}
+          style={({ pressed }) => [styles.blupButton, pressed && styles.actionPressed]}
+        >
+          <Text style={styles.blupLabel}>BLUP</Text>
+        </Pressable>
       </View>
+
+      <Text style={styles.hintText}>✕ nezaujíma · ↑ viac info · BLUP uložiť</Text>
     </View>
   );
 }
@@ -168,13 +193,41 @@ const styles = StyleSheet.create({
   stampNope: { right: spacing.xxl, borderColor: colors.danger, transform: [{ rotate: '12deg' }] },
   stampText: { ...typography.bodyStrong, letterSpacing: 1 },
 
-  hint: {
+  actions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xxl,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.lg,
     marginTop: spacing.xl,
   },
-  hintText: { ...typography.caption, color: colors.textTertiary },
+  actionCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionPressed: { opacity: 0.8, transform: [{ scale: 0.95 }] },
+  actionGlyph: { fontSize: 24, color: colors.textSecondary },
+  blupButton: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.glow,
+  },
+  blupLabel: { ...typography.button, color: '#FFFFFF', fontSize: 17 },
+  hintText: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
 
   done: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
   doneEmoji: { fontSize: 44 },

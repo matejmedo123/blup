@@ -63,26 +63,26 @@ export default function PremiumScreen() {
         <Text style={styles.heroEmoji}>✨</Text>
         <Text style={styles.heroTitle}>BLUP Premium</Text>
         <Body muted style={styles.heroBody}>
-          Better discovery, more control, and the full story behind every recommendation.
+          Lepší objav, viac kontroly a celý príbeh za každým odporúčaním.
         </Body>
-        {isPremium ? <Badge tone="success" label="ACTIVE" /> : null}
+        {isPremium ? <Badge tone="success" label="AKTÍVNE" /> : null}
       </View>
 
-      {error ? <Notice tone="danger" title="Could not complete" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa dokončiť" body={error} /> : null}
 
       {isPremium ? (
         <Notice
           tone="success"
-          title="You are Premium"
+          title="Máš Premium"
           body={
             status.data?.expires_at
-              ? `${status.data.auto_renew ? 'Renews' : 'Expires'} on ${new Date(status.data.expires_at).toLocaleDateString()}.`
-              : 'Your subscription is active.'
+              ? `${status.data.auto_renew ? 'Obnoví sa' : 'Vyprší'} ${new Date(status.data.expires_at).toLocaleDateString('sk-SK')}.`
+              : 'Tvoje predplatné je aktívne.'
           }
         />
       ) : null}
 
-      <SectionHeader title="What you get" />
+      <SectionHeader title="Čo z toho máš" />
       {PREMIUM_FEATURES.map((feature) => (
         <View key={feature} style={styles.feature}>
           <Text style={styles.featureCheck}>✓</Text>
@@ -97,8 +97,8 @@ export default function PremiumScreen() {
           tone="warning"
           title={
             store.reason === 'UNSUPPORTED_PLATFORM'
-              ? 'Not available on this platform'
-              : 'In-app purchases are not set up in this build'
+              ? 'Na tejto platforme nedostupné'
+              : 'Nákupy v aplikácii nie sú v tomto builde nastavené'
           }
           body={store.message}
         />
@@ -108,10 +108,10 @@ export default function PremiumScreen() {
         <>
           <View style={styles.plans}>
             <View style={styles.plan}>
-              <Text style={styles.planName}>Monthly</Text>
-              <Caption>Cancel any time</Caption>
+              <Text style={styles.planName}>Mesačne</Text>
+              <Caption>Zrušíš kedykoľvek</Caption>
               <Button
-                title="Subscribe"
+                title="Predplatiť"
                 onPress={() => buy('monthly')}
                 loading={busy === 'monthly'}
                 disabled={!store.available || busy !== null}
@@ -120,11 +120,11 @@ export default function PremiumScreen() {
             </View>
 
             <View style={[styles.plan, styles.planFeatured]}>
-              <Badge tone="accent" label="BEST VALUE" />
-              <Text style={styles.planName}>Yearly</Text>
-              <Caption>Two months free</Caption>
+              <Badge tone="accent" label="NAJVÝHODNEJŠIE" />
+              <Text style={styles.planName}>Ročne</Text>
+              <Caption>Dva mesiace zadarmo</Caption>
               <Button
-                title="Subscribe"
+                title="Predplatiť"
                 onPress={() => buy('yearly')}
                 loading={busy === 'yearly'}
                 disabled={!store.available || busy !== null}
@@ -134,7 +134,7 @@ export default function PremiumScreen() {
           </View>
 
           <Button
-            title="Restore purchases"
+            title="Obnoviť nákupy"
             variant="ghost"
             onPress={restore}
             loading={busy === 'restore'}

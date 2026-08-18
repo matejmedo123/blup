@@ -3,7 +3,6 @@ import {
   Alert, FlatList, Pressable, ScrollView, Share, StyleSheet, Text, View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Image } from 'expo-image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -19,14 +18,16 @@ import { addEventToCalendar, openDirections } from '@/maps/calendar';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import {
-  estimateWalkingTime, formatCount, formatDistanceFromYou, formatEventDateLong, formatPrice,
+  estimateWalkingTime, formatCount, formatDistanceFromYou, formatEventDate,
+  formatEventDateLong, formatPrice,
 } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
+import { GradientCover } from '@/components/GradientCover';
 import {
-  Avatar, Badge, Body, Button, Caption, Divider, ErrorState, Input, LoadingState, Notice,
-  SectionHeader,
+  Avatar, Badge, Body, Button, Caption, Chip, Divider, ErrorState, IconButton, InfoBox, Input,
+  LoadingState, Mono, Notice, SectionHeader,
 } from '@/components/ui';
-import { colors, emojiFor, radius, spacing, typography } from '@/theme';
+import { colors, labelFor, radius, spacing, typography } from '@/theme';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -177,16 +178,16 @@ export default function EventDetailScreen() {
     }
   };
 
-  if (event.isLoading) return <LoadingState label="Loading event…" />;
+  if (event.isLoading) return <LoadingState label="Načítavam event…" />;
 
   if (event.isError || !data) {
     return (
       <ErrorState
-        title="Event not available"
+        title="Event nie je dostupný"
         message={
           event.error
             ? messageFor(event.error)
-            : 'This event may have been removed, or it is not visible to you.'
+            : 'Event mohol byť odstránený, alebo ho nemáš právo vidieť.'
         }
         onRetry={() => void event.refetch()}
       />
@@ -212,44 +213,44 @@ export default function EventDetailScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      {/* --- cover ---------------------------------------------------------- */}
-      <View style={styles.cover}>
-        {data.cover_image_url ? (
-          <Image source={{ uri: data.cover_image_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, styles.coverFallback]}>
-            <Text style={styles.coverEmoji}>{emojiFor(data.category)}</Text>
+      {/* --- hero ----------------------------------------------------------- */}
+      <GradientCover uri={data.cover_image_url} seed={data.id} height={330} showPlaceholderLabel={false}>
+        <View style={styles.heroTop}>
+          <IconButton glyph="‹" tone="overlay" onPress={() => router.back()} />
+          <Pressable onPress={handleSave} style={styles.savePill}>
+            <Text style={styles.savePillLabel}>{data.is_saved ? '★' : '☆'}  Blup</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.heroBottom}>
+          <View style={styles.heroChips}>
+            <Chip label={labelFor(data.category)} onCover />
+            {data.attendee_count > 20 ? <Chip label="Frčí" onCover /> : null}
           </View>
-        )}
-      </View>
+          <Text style={styles.heroTitle}>{data.title}</Text>
+        </View>
+      </GradientCover>
 
       <View style={styles.body}>
-        {error ? <Notice tone="danger" title="Something went wrong" body={error} /> : null}
-        {notice ? <Notice tone="accent" title="Done" body={notice} /> : null}
+        {error ? <Notice tone="danger" title="Niečo sa pokazilo" body={error} /> : null}
+        {notice ? <Notice tone="accent" title="Hotovo" body={notice} /> : null}
 
         {data.status === 'cancelled' ? (
-          <Notice tone="danger" title="This event was cancelled" body="The organizer called it off." />
+          <Notice tone="danger" title="Event bol zrušený" body="Organizátor ho odvolal." />
         ) : null}
 
-        <Text style={styles.date}>{formatEventDateLong(data.start_at)}</Text>
-        <Text style={styles.title}>{data.title}</Text>
-
-        <View style={styles.badges}>
-          <Badge tone={data.is_free ? 'success' : 'accent'} label={data.is_free ? 'Free' : formatPrice(data.price_cents, data.currency)} />
-          <Badge label={data.category} />
-          {isFull ? <Badge tone="danger" label="Full" /> : null}
-          {data.organization?.verification_status === 'verified' ? (
-            <Badge tone="success" label="✓ Verified organizer" />
-          ) : null}
+        <View style={styles.infoRow}>
+          <InfoBox label="Kedy" value={formatEventDate(data.start_at)} />
+          <InfoBox label="Kde" value={data.venue_name ?? data.city ?? 'Podľa mapy'} />
         </View>
 
         {/* --- host --------------------------------------------------------- */}
         <Pressable style={styles.host} onPress={() => router.push(`/user/${data.creator_id}`)}>
           <Avatar url={data.creator?.avatar_url} name={data.creator?.display_name} size={40} />
           <View style={styles.flex}>
-            <Caption>Hosted by</Caption>
+            <Caption>Organizuje</Caption>
             <Text style={styles.hostName}>
-              {data.organization?.name ?? data.creator?.display_name ?? 'Someone on BLUP'}
+              {data.organization?.name ?? data.creator?.display_name ?? 'Niekto na BLUPe'}
             </Text>
           </View>
         </Pressable>
@@ -257,7 +258,7 @@ export default function EventDetailScreen() {
         {/* --- actions ------------------------------------------------------ */}
         <View style={styles.actionRow}>
           <Button
-            title={data.my_rsvp === 'going' ? '✓ Going' : 'I’m going'}
+            title={data.my_rsvp === 'going' ? '✓ Idem' : 'Idem'}
             variant={data.my_rsvp === 'going' ? 'secondary' : 'primary'}
             onPress={() => handleRsvp('going')}
             loading={busy}
@@ -265,7 +266,7 @@ export default function EventDetailScreen() {
             style={styles.flex}
           />
           <Button
-            title={data.my_rsvp === 'interested' ? '✓ Interested' : 'Interested'}
+            title={data.my_rsvp === 'interested' ? '✓ Zaujíma ma' : 'Zaujíma ma'}
             variant="secondary"
             onPress={() => handleRsvp('interested')}
             disabled={isPast}
@@ -274,16 +275,16 @@ export default function EventDetailScreen() {
         </View>
 
         <View style={styles.iconRow}>
-          <IconButton label={data.is_saved ? '★ Saved' : '☆ Save'} onPress={handleSave} />
-          <IconButton label={`♥ ${formatCount(data.like_count)}`} onPress={handleLike} />
-          <IconButton label="↗ Share" onPress={handleShare} />
-          <IconButton label="📅 Calendar" onPress={handleCalendar} />
+          <ActionPill label={data.is_saved ? '★ Uložené' : '☆ Uložiť'} onPress={handleSave} />
+          <ActionPill label={`♥ ${formatCount(data.like_count)}`} onPress={handleLike} />
+          <ActionPill label="↗ Zdieľať" onPress={handleShare} />
+          <ActionPill label="📅 Kalendár" onPress={handleCalendar} />
         </View>
 
         {/* --- tickets ------------------------------------------------------ */}
         {hasTickets && !isPast ? (
           <>
-            <SectionHeader title="Tickets" />
+            <SectionHeader title="Vstupenky" />
             {data.ticket_types.map((ticket) => {
               const remaining = ticket.quantity_total - ticket.quantity_sold;
               const soldOut = remaining <= 0;
@@ -294,7 +295,7 @@ export default function EventDetailScreen() {
                     <Text style={styles.ticketName}>{ticket.name}</Text>
                     {ticket.description ? <Caption>{ticket.description}</Caption> : null}
                     <Caption style={soldOut ? styles.soldOut : undefined}>
-                      {soldOut ? 'Sold out' : `${remaining} left`}
+                      {soldOut ? 'Vypredané' : `zostáva ${remaining}`}
                     </Caption>
                   </View>
                   <Text style={styles.ticketPrice}>
@@ -305,7 +306,7 @@ export default function EventDetailScreen() {
             })}
 
             <Button
-              title="Get tickets"
+              title="Kúpiť lístok"
               onPress={() => router.push(`/event/checkout/${data.id}`)}
               disabled={data.ticket_types.every((t) => t.quantity_sold >= t.quantity_total)}
               style={styles.ticketButton}
@@ -316,13 +317,13 @@ export default function EventDetailScreen() {
         {/* --- about -------------------------------------------------------- */}
         {data.description ? (
           <>
-            <SectionHeader title="About" />
+            <SectionHeader title="O evente" />
             <Body>{data.description}</Body>
           </>
         ) : null}
 
         {/* --- location ----------------------------------------------------- */}
-        <SectionHeader title="Where" />
+        <SectionHeader title="Kde to je" />
         <View style={styles.mapWrapper}>
           <EventMap
             events={[{ ...data, friends_going: 0, is_saved: false, is_attending: false } as never]}
@@ -341,32 +342,32 @@ export default function EventDetailScreen() {
                 {distance}{walk ? ` · ${walk}` : ''}
               </Caption>
             ) : (
-              <Caption>Turn on location to see how far away this is.</Caption>
+              <Caption>Zapni polohu a uvidíš, ako ďaleko to je.</Caption>
             )}
           </View>
-          <Button title="Directions" variant="secondary" compact onPress={() => openDirections(data)} />
+          <Button title="Navigovať" variant="secondary" compact onPress={() => openDirections(data)} />
         </View>
 
         {/* --- who is going ------------------------------------------------- */}
         <SectionHeader
-          title={`Going · ${formatCount(data.attendee_count)}`}
-          action={attendees.data && attendees.data.length > 6 ? 'See all' : undefined}
+          title={`Kto ide · ${formatCount(data.attendee_count)}`}
+          action={attendees.data && attendees.data.length > 6 ? 'Zobraziť všetkých' : undefined}
           onAction={() => router.push(`/event/attendees/${data.id}`)}
         />
 
         {(followedGoing.data ?? []).length > 0 ? (
           <Notice
             tone="accent"
-            title={`${followedGoing.data!.length} ${followedGoing.data!.length === 1 ? 'person you follow is' : 'people you follow are'} going`}
+            title={`${followedGoing.data!.length} z tvojich kruhov ide`}
             body={followedGoing
               .data!.slice(0, 3)
-              .map((attendee) => attendee.profile?.display_name ?? 'Someone')
+              .map((attendee) => attendee.profile?.display_name ?? 'Niekto')
               .join(', ')}
           />
         ) : null}
 
         {(attendees.data ?? []).length === 0 ? (
-          <Body muted>Nobody yet — be the first to say you are going.</Body>
+          <Body muted>Zatiaľ nikto — buď prvý, kto povie, že ide.</Body>
         ) : (
           <FlatList
             horizontal
@@ -391,8 +392,8 @@ export default function EventDetailScreen() {
         {/* --- BLUP Connect ------------------------------------------------- */}
         {(connect.data ?? []).length > 0 ? (
           <>
-            <SectionHeader title="BLUP Connect" />
-            <Caption style={styles.connectHint}>People here you would probably get on with.</Caption>
+            <SectionHeader title="Blup Connect" />
+            <Caption style={styles.connectHint}>Ľudia odtiaľto, s ktorými si asi sadneš.</Caption>
             {(connect.data ?? []).slice(0, 5).map((match) => (
               <Pressable
                 key={match.user_id}
@@ -411,29 +412,29 @@ export default function EventDetailScreen() {
         ) : null}
 
         {/* --- comments ----------------------------------------------------- */}
-        <SectionHeader title={`Comments · ${formatCount(data.comment_count)}`} />
+        <SectionHeader title={`Komentáre · ${formatCount(data.comment_count)}`} />
 
         <View style={styles.commentInput}>
           <Input
             value={comment}
             onChangeText={setComment}
-            placeholder="Ask something or say hi"
+            placeholder="Opýtaj sa alebo pozdrav"
             multiline
             maxLength={1000}
             style={styles.commentField}
           />
-          <Button title="Post" compact onPress={postComment} loading={busy} disabled={!comment.trim()} />
+          <Button title="Poslať" compact onPress={postComment} loading={busy} disabled={!comment.trim()} />
         </View>
 
         {(comments.data ?? []).length === 0 ? (
-          <Body muted>No comments yet.</Body>
+          <Body muted>Zatiaľ žiadne komentáre.</Body>
         ) : (
           (comments.data ?? []).map((item) => (
             <View key={item.id} style={styles.comment}>
               <Avatar url={item.author?.avatar_url} name={item.author?.display_name} size={34} />
               <View style={styles.flex}>
                 <Text style={styles.commentAuthor}>
-                  {item.author?.display_name ?? item.author?.username ?? 'Someone'}
+                  {item.author?.display_name ?? item.author?.username ?? 'Niekto'}
                 </Text>
                 <Body>{item.body}</Body>
               </View>
@@ -446,27 +447,27 @@ export default function EventDetailScreen() {
         {isOwner ? (
           <View style={styles.ownerActions}>
             <Button
-              title="Edit event"
+              title="Upraviť event"
               variant="secondary"
               onPress={() => router.push(`/event/edit/${data.id}`)}
             />
             {!data.is_free ? (
               <Button
-                title="Organizer tools"
+                title="Organizátor"
                 variant="secondary"
                 onPress={() => router.push(`/organizer/analytics/${data.id}`)}
               />
             ) : null}
           </View>
         ) : (
-          <Button title="Report this event" variant="ghost" onPress={handleReport} />
+          <Button title="Nahlásiť event" variant="ghost" onPress={handleReport} />
         )}
       </View>
     </ScrollView>
   );
 }
 
-function IconButton({ label, onPress }: { label: string; onPress: () => void }) {
+function ActionPill({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
@@ -493,16 +494,37 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxxl },
   flex: { flex: 1 },
 
-  cover: { height: 280, backgroundColor: colors.surfaceElevated },
-  coverFallback: { alignItems: 'center', justifyContent: 'center' },
-  coverEmoji: { fontSize: 72 },
 
-  body: { padding: spacing.lg, marginTop: -spacing.xl, backgroundColor: colors.background,
-    borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+  heroTop: {
+    position: 'absolute',
+    top: spacing.xxl,
+    left: spacing.lg,
+    right: spacing.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  savePill: {
+    backgroundColor: colors.overlay,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 11,
+    borderRadius: radius.md,
+  },
+  savePillLabel: { ...typography.bodyStrong, color: colors.text },
+  heroBottom: { padding: spacing.lg, gap: spacing.sm },
+  heroChips: { flexDirection: 'row', gap: spacing.sm },
+  heroTitle: { ...typography.title, color: '#FFFFFF' },
 
-  date: { ...typography.micro, color: colors.accent, textTransform: 'uppercase' },
-  title: { ...typography.title, color: colors.text, marginTop: spacing.xs },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  body: {
+    padding: spacing.lg,
+    marginTop: -spacing.xl,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    gap: spacing.md,
+  },
+  infoRow: { flexDirection: 'row', gap: spacing.md },
+
 
   host: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg },
   hostName: { ...typography.bodyStrong, color: colors.text },

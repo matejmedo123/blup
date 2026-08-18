@@ -14,10 +14,10 @@ export default function AuthLayout() {
       }}
     >
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-      <Stack.Screen name="sign-up" options={{ title: 'Create account' }} />
-      <Stack.Screen name="forgot-password" options={{ title: 'Reset password' }} />
-      <Stack.Screen name="reset-password" options={{ title: 'New password' }} />
-      <Stack.Screen name="verify-email" options={{ title: 'Confirm your email' }} />
+      <Stack.Screen name="sign-up" options={{ title: 'Vytvoriť účet' }} />
+      <Stack.Screen name="forgot-password" options={{ title: 'Obnova hesla' }} />
+      <Stack.Screen name="reset-password" options={{ title: 'Nové heslo' }} />
+      <Stack.Screen name="verify-email" options={{ title: 'Potvrdenie e-mailu' }} />
     </Stack>
   );
 }

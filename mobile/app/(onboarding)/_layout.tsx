@@ -14,9 +14,9 @@ export default function OnboardingLayout() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
-      <Stack.Screen name="interests" options={{ title: 'What are you into?' }} />
-      <Stack.Screen name="location" options={{ title: 'Find what is near you' }} />
+      <Stack.Screen name="profile" options={{ title: 'Tvoj profil' }} />
+      <Stack.Screen name="interests" options={{ title: 'Čo ťa baví?' }} />
+      <Stack.Screen name="location" options={{ title: 'Čo je okolo teba' }} />
     </Stack>
   );
 }

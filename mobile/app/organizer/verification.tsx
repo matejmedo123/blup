@@ -35,7 +35,7 @@ export default function VerificationScreen() {
   if (!organization) {
     return (
       <Screen>
-        <EmptyState emoji="🏢" title="No organization" body="Create one first." />
+        <EmptyState emoji="🏢" title="Žiadna organizácia" body="Najprv si nejakú vytvor." />
       </Screen>
     );
   }
@@ -46,7 +46,7 @@ export default function VerificationScreen() {
     setError(null);
 
     if (legalName.trim().length < 2 || !contactEmail.includes('@')) {
-      setError('We need the registered legal name and a contact email.');
+      setError('Potrebujeme registrovaný právny názov a kontaktný e-mail.');
       return;
     }
 
@@ -74,8 +74,8 @@ export default function VerificationScreen() {
       <Screen scroll>
         <Notice
           tone="success"
-          title="Verified"
-          body="You can create ticketed events and receive payouts."
+          title="Overená"
+          body="Môžeš robiť platené eventy a dostávať výplaty."
         />
       </Screen>
     );
@@ -83,38 +83,38 @@ export default function VerificationScreen() {
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not submit" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa odoslať" body={error} /> : null}
 
       {pending || sent ? (
         <Notice
           tone="warning"
-          title="Verification in review"
+          title="Overenie sa posudzuje"
           body={
             pending
               ? `Submitted ${formatRelative(pending.created_at as string)}. A BLUP admin reviews these by hand — you will get a notification when it is decided.`
-              : 'Submitted. A BLUP admin will review it shortly.'
+              : 'Odoslané. Admin BLUPu sa na to čoskoro pozrie.'
           }
         />
       ) : (
         <>
           <Body muted style={{ marginBottom: 24 }}>
-            Verification is what lets you take money from ticket buyers. We check that the
-            organization is a real, contactable legal entity.
+            Overenie je to, čo ti umožní prijímať peniaze od kupujúcich. Kontrolujeme, či je
+            organizácia skutočný a kontaktovateľný právny subjekt.
           </Body>
 
-          <Input label="Registered legal name" value={legalName} onChangeText={setLegalName} placeholder="Nova Collective s.r.o." editable={!saving} />
-          <Input label="Company registration number" value={registrationNumber} onChangeText={setRegistrationNumber} placeholder="12345678" editable={!saving} />
-          <Input label="VAT number (optional)" value={vatNumber} onChangeText={setVatNumber} placeholder="SK1234567890" autoCapitalize="characters" editable={!saving} />
-          <Input label="Contact email" value={contactEmail} onChangeText={setContactEmail} placeholder="legal@example.com" autoCapitalize="none" keyboardType="email-address" editable={!saving} />
-          <Input label="Registered address" value={address} onChangeText={setAddress} placeholder="Street, city, country" editable={!saving} />
+          <Input label="Registrovaný právny názov" value={legalName} onChangeText={setLegalName} placeholder="Nova Collective s.r.o." editable={!saving} />
+          <Input label="IČO" value={registrationNumber} onChangeText={setRegistrationNumber} placeholder="12345678" editable={!saving} />
+          <Input label="IČ DPH (nepovinné)" value={vatNumber} onChangeText={setVatNumber} placeholder="SK1234567890" autoCapitalize="characters" editable={!saving} />
+          <Input label="Kontaktný e-mail" value={contactEmail} onChangeText={setContactEmail} placeholder="legal@example.com" autoCapitalize="none" keyboardType="email-address" editable={!saving} />
+          <Input label="Sídlo" value={address} onChangeText={setAddress} placeholder="Ulica, mesto, krajina" editable={!saving} />
 
-          <Button title="Submit for verification" onPress={submit} loading={saving} />
+          <Button title="Odoslať na overenie" onPress={submit} loading={saving} />
         </>
       )}
 
-      <SectionHeader title="History" />
+      <SectionHeader title="História" />
       {(requests.data ?? []).length === 0 ? (
-        <Body muted>No requests yet.</Body>
+        <Body muted>Zatiaľ žiadne žiadosti.</Body>
       ) : (
         (requests.data ?? []).map((request) => (
           <Caption key={request.id as string} style={{ marginBottom: 8 }}>

@@ -24,10 +24,10 @@ export default function AdminLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: 'Admin' }} />
-      <Stack.Screen name="users" options={{ title: 'Users' }} />
-      <Stack.Screen name="verifications" options={{ title: 'Verifications' }} />
-      <Stack.Screen name="reports" options={{ title: 'Reports' }} />
-      <Stack.Screen name="payouts" options={{ title: 'Payouts' }} />
+      <Stack.Screen name="users" options={{ title: 'Používatelia' }} />
+      <Stack.Screen name="verifications" options={{ title: 'Overenia' }} />
+      <Stack.Screen name="reports" options={{ title: 'Nahlásenia' }} />
+      <Stack.Screen name="payouts" options={{ title: 'Výplaty' }} />
     </Stack>
   );
 }

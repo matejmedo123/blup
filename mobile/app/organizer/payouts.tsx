@@ -64,7 +64,7 @@ export default function PayoutsScreen() {
   if (!organization) {
     return (
       <Screen>
-        <EmptyState emoji="🏢" title="No organization" body="Create one first to see a balance." />
+        <EmptyState emoji="🏢" title="Žiadna organizácia" body="Najprv si nejakú vytvor, aby si videl zostatok." />
       </Screen>
     );
   }
@@ -79,7 +79,7 @@ export default function PayoutsScreen() {
         // Re-read the capability flags once the user comes back.
         await refreshPayoutStatus(organization.id);
         await queryClient.invalidateQueries({ queryKey: ['organizations'] });
-        setNotice('Onboarding opened. Your payout status updates once the provider confirms.');
+        setNotice('Onboarding otvorený. Stav výplat sa aktualizuje, keď to poskytovateľ potvrdí.');
       }
     } catch (caught) {
       setError(messageFor(caught));
@@ -94,13 +94,13 @@ export default function PayoutsScreen() {
 
     const value = Number(amount.replace(',', '.'));
     if (!Number.isFinite(value) || value <= 0) {
-      setError('Enter how much you want to withdraw.');
+      setError('Zadaj, koľko chceš vybrať.');
       return;
     }
 
     const cents = Math.round(value * 100);
     if (cents > (balance.data?.available_cents ?? 0)) {
-      setError('That is more than your available balance.');
+      setError('To je viac, než máš k dispozícii.');
       return;
     }
 
@@ -127,11 +127,11 @@ export default function PayoutsScreen() {
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not complete" body={error} /> : null}
-      {notice ? <Notice tone="accent" title="Payout" body={notice} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa dokončiť" body={error} /> : null}
+      {notice ? <Notice tone="accent" title="Výplata" body={notice} /> : null}
 
       <View style={styles.hero}>
-        <Caption>Available to withdraw</Caption>
+        <Caption>K výberu</Caption>
         <Text style={styles.heroValue}>
           {formatMoney(balance.data?.available_cents ?? 0, currency)}
         </Text>
@@ -141,27 +141,27 @@ export default function PayoutsScreen() {
       </View>
 
       <View style={styles.summary}>
-        <SummaryRow label="Gross ticket sales" value={formatMoney(balance.data?.gross_sales_cents ?? 0, currency)} />
+        <SummaryRow label="Hrubý predaj vstupeniek" value={formatMoney(balance.data?.gross_sales_cents ?? 0, currency)} />
         <SummaryRow
           label={`BLUP fee (${(organization.platform_fee_bps / 100).toFixed(2)}%)`}
           value={`− ${formatMoney(balance.data?.platform_fee_cents ?? 0, currency)}`}
         />
-        <SummaryRow label="Already paid out" value={`− ${formatMoney(balance.data?.paid_out_cents ?? 0, currency)}`} />
+        <SummaryRow label="Už vyplatené" value={`− ${formatMoney(balance.data?.paid_out_cents ?? 0, currency)}`} />
         <Divider />
-        <SummaryRow label="Your balance" value={formatMoney(balance.data?.balance_cents ?? 0, currency)} strong />
+        <SummaryRow label="Tvoj zostatok" value={formatMoney(balance.data?.balance_cents ?? 0, currency)} strong />
       </View>
 
       {!organization.payouts_enabled ? (
         <Notice
           tone="warning"
-          title="Payout onboarding not finished"
-          body="Before money can leave BLUP, the payment provider needs your identity and bank details (KYC). This is a legal requirement, not a BLUP one."
-          actionLabel="Start payout onboarding"
+          title="Onboarding výplat nie je dokončený"
+          body="Kým peniaze odídu z BLUPu, poskytovateľ platieb potrebuje tvoju identitu a bankové údaje (KYC). Je to zákonná požiadavka, nie výmysel BLUPu."
+          actionLabel="Spustiť onboarding výplat"
           onAction={onboard}
         />
       ) : null}
 
-      <SectionHeader title="Withdraw" />
+      <SectionHeader title="Výber" />
       <Input
         label={`Amount (${currency})`}
         value={amount}
@@ -171,20 +171,20 @@ export default function PayoutsScreen() {
         editable={organization.payouts_enabled}
         hint={
           organization.payouts_enabled
-            ? 'Goes to the bank account you connected during onboarding.'
-            : 'Finish payout onboarding to enable withdrawals.'
+            ? 'Pôjde na bankový účet, ktorý si pripojil pri onboardingu.'
+            : 'Dokonči onboarding výplat, aby si mohol vyberať.'
         }
       />
       <Button
-        title="Request payout"
+        title="Požiadať o výplatu"
         onPress={withdraw}
         loading={busy === 'withdraw'}
         disabled={!organization.payouts_enabled || (balance.data?.available_cents ?? 0) <= 0}
       />
 
-      <SectionHeader title="Payout history" />
+      <SectionHeader title="História výplat" />
       {(payouts.data ?? []).length === 0 ? (
-        <Body muted>No payouts yet.</Body>
+        <Body muted>Zatiaľ žiadne výplaty.</Body>
       ) : (
         (payouts.data ?? []).map((payout) => (
           <View key={payout.id} style={styles.row}>
@@ -200,9 +200,9 @@ export default function PayoutsScreen() {
         ))
       )}
 
-      <SectionHeader title="Transactions" />
+      <SectionHeader title="Transakcie" />
       {(ledger.data ?? []).length === 0 ? (
-        <Body muted>Nothing yet — this fills up as tickets sell.</Body>
+        <Body muted>Zatiaľ nič — naplní sa to, ako sa budú predávať vstupenky.</Body>
       ) : (
         (ledger.data ?? []).map((entry) => (
           <View key={entry.id as string} style={styles.row}>

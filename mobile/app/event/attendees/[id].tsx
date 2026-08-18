@@ -46,7 +46,7 @@ export default function AttendeesScreen() {
         ListHeaderComponent={
           (matches.data ?? []).length > 0 ? (
             <View>
-              <SectionHeader title="You might click with" />
+              <SectionHeader title="S týmito si môžeš sadnúť" />
               {(matches.data ?? []).slice(0, 5).map((match) => (
                 <Pressable
                   key={match.user_id}
@@ -61,7 +61,7 @@ export default function AttendeesScreen() {
                   <Badge tone="accent" label={`${Math.round(match.score * 100)}%`} />
                 </Pressable>
               ))}
-              <SectionHeader title="Everyone going" />
+              <SectionHeader title="Všetci, čo idú" />
             </View>
           ) : null
         }
@@ -72,11 +72,11 @@ export default function AttendeesScreen() {
               <Text style={styles.name}>{item.profile?.display_name ?? item.profile?.username}</Text>
               {item.profile?.bio ? <Caption numberOfLines={1}>{item.profile.bio}</Caption> : null}
             </View>
-            {item.status === 'checked_in' ? <Badge tone="success" label="Checked in" /> : null}
+            {item.status === 'checked_in' ? <Badge tone="success" label="Na mieste" /> : null}
           </Pressable>
         )}
         ListEmptyComponent={
-          <EmptyState emoji="👥" title="Nobody yet" body="Be the first to say you are going." />
+          <EmptyState emoji="👥" title="Zatiaľ nikto" body="Buď prvý, kto povie, že ide." />
         }
       />
     </Screen>

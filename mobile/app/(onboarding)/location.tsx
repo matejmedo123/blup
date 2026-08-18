@@ -7,8 +7,8 @@ import { useLocation } from '@/hooks/useLocation';
 import { updateProfile } from '@/api/profiles';
 import { registerForPushNotifications } from '@/notifications/push';
 import { messageFor } from '@/lib/errors';
-import { Body, Button, Caption, Notice, Screen, Title } from '@/components/ui';
-import { spacing } from '@/theme';
+import { Body, Button, Caption, Mono, Notice, Screen, Title } from '@/components/ui';
+import { colors, spacing } from '@/theme';
 
 /** Step 3 of 3 — real GPS permission plus push, then into the app. */
 export default function OnboardingLocationScreen() {
@@ -38,23 +38,24 @@ export default function OnboardingLocationScreen() {
 
   return (
     <Screen scroll>
-      <Title>Show me what is around me</Title>
+      <Mono style={styles.step}>krok 3 z 3</Mono>
+      <Title>Ukáž mi, čo je okolo</Title>
       <Body muted style={styles.intro}>
-        Step 3 of 3 · BLUP uses your position to sort events by real distance and to draw you on the
-        map. Nothing is shared with other users unless you turn on location sharing in settings.
+        BLUP používa tvoju polohu, aby zoradil eventy podľa skutočnej vzdialenosti a vykreslil ťa
+        na mape. S nikým sa nezdieľa, kým si zdieľanie polohy sám nezapneš v nastaveniach.
       </Body>
 
-      {error ? <Notice tone="danger" title="Could not finish" body={error} /> : null}
-      {pushNote ? <Notice tone="warning" title="Notifications are off" body={pushNote} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa dokončiť" body={error} /> : null}
+      {pushNote ? <Notice tone="warning" title="Notifikácie sú vypnuté" body={pushNote} /> : null}
 
       {location.status === 'granted' && location.coords ? (
         <Notice
           tone="success"
-          title="Location on"
+          title="Poloha zapnutá"
           body={
             location.city
-              ? `We have you in ${location.city}. Distances are live from here.`
-              : `Position locked in (±${Math.round(location.accuracy ?? 0)} m).`
+              ? `Sme s tebou v meste ${location.city}. Vzdialenosti počítame odtiaľto.`
+              : `Poloha zameraná (±${Math.round(location.accuracy ?? 0)} m).`
           }
         />
       ) : null}
@@ -62,9 +63,9 @@ export default function OnboardingLocationScreen() {
       {location.status === 'denied' ? (
         <Notice
           tone="warning"
-          title="Location is off"
-          body="You can still browse and search — events just will not be sorted by distance."
-          actionLabel="Open settings"
+          title="Poloha je vypnutá"
+          body="Prezerať a hľadať môžeš aj tak — eventy sa len nezoradia podľa vzdialenosti."
+          actionLabel="Otvoriť nastavenia"
           onAction={location.openSettings}
         />
       ) : null}
@@ -72,9 +73,9 @@ export default function OnboardingLocationScreen() {
       {location.status === 'services_disabled' ? (
         <Notice
           tone="warning"
-          title="Location services are off"
-          body="Turn on location services in your device settings to see what is happening nearby."
-          actionLabel="Open settings"
+          title="Lokalizačné služby sú vypnuté"
+          body="Zapni lokalizačné služby v nastaveniach zariadenia, nech uvidíš, čo sa deje v okolí."
+          actionLabel="Otvoriť nastavenia"
           onAction={location.openSettings}
         />
       ) : null}
@@ -82,14 +83,14 @@ export default function OnboardingLocationScreen() {
       <View style={styles.actions}>
         {location.status !== 'granted' ? (
           <Button
-            title="Enable location"
+            title="Zapnúť polohu"
             onPress={() => void location.request()}
             loading={location.status === 'requesting'}
           />
         ) : null}
 
         <Button
-          title={location.status === 'granted' ? 'Start exploring' : 'Continue without location'}
+          title={location.status === 'granted' ? 'Poďme na to' : 'Pokračovať bez polohy'}
           variant={location.status === 'granted' ? 'primary' : 'secondary'}
           onPress={finish}
           loading={finishing}
@@ -97,13 +98,14 @@ export default function OnboardingLocationScreen() {
       </View>
 
       <Caption style={styles.footnote}>
-        You can change this any time in Profile → Settings → Privacy.
+        Kedykoľvek to zmeníš v Ja → Nastavenia → Súkromie.
       </Caption>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  step: { color: colors.textTertiary, marginBottom: spacing.sm },
   intro: { marginTop: spacing.md, marginBottom: spacing.xl },
   actions: { gap: spacing.md, marginTop: spacing.xl },
   footnote: { textAlign: 'center', marginTop: spacing.lg },

@@ -6,9 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 import { getInterests, setMyInterests } from '@/api/profiles';
 import { messageFor } from '@/lib/errors';
 import {
-  Body, Button, Chip, ErrorState, LoadingState, Notice, Screen,
+  Body, Button, Chip, ErrorState, LoadingState, Mono, Notice, Screen,
 } from '@/components/ui';
-import { colors, spacing, typography } from '@/theme';
+import { colors, interestGroupFor, spacing, typography } from '@/theme';
 
 const MIN_INTERESTS = 3;
 
@@ -44,7 +44,7 @@ export default function OnboardingInterestsScreen() {
     setError(null);
 
     if (selected.size < MIN_INTERESTS) {
-      setError(`Pick at least ${MIN_INTERESTS} so we have something to work with.`);
+      setError(`Vyber si aspoň ${MIN_INTERESTS}, nech máme s čím pracovať.`);
       return;
     }
 
@@ -59,13 +59,13 @@ export default function OnboardingInterestsScreen() {
     }
   };
 
-  if (isLoading) return <Screen><LoadingState label="Loading interests…" /></Screen>;
+  if (isLoading) return <Screen><LoadingState label="Načítavam záujmy…" /></Screen>;
 
   if (isError) {
     return (
       <Screen>
         <ErrorState
-          message="Could not load the interest list. Check your connection."
+          message="Zoznam záujmov sa nepodarilo načítať. Skontroluj pripojenie."
           onRetry={() => void refetch()}
         />
       </Screen>
@@ -74,15 +74,16 @@ export default function OnboardingInterestsScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <Body muted style={styles.intro}>
-        Step 2 of 3 · These shape what BLUP puts in front of you. You can change them any time.
+      <Mono style={styles.intro}>krok 2 z 3</Mono>
+      <Body muted style={styles.introBody}>
+        Podľa nich ti BLUP vyberá, čo uvidíš. Kedykoľvek ich vieš zmeniť.
       </Body>
 
-      {error ? <Notice tone="warning" title="Almost" body={error} /> : null}
+      {error ? <Notice tone="warning" title="Ešte kúsok" body={error} /> : null}
 
       {grouped.map(([category, items]) => (
         <View key={category} style={styles.group}>
-          <Text style={styles.groupTitle}>{category}</Text>
+          <Text style={styles.groupTitle}>{interestGroupFor(category)}</Text>
           <View style={styles.chips}>
             {(items ?? []).map((interest) => (
               <Chip
@@ -100,8 +101,8 @@ export default function OnboardingInterestsScreen() {
         <Button
           title={
             selected.size >= MIN_INTERESTS
-              ? `Continue with ${selected.size}`
-              : `Pick ${MIN_INTERESTS - selected.size} more`
+              ? `Pokračovať s ${selected.size}`
+              : `Vyber ešte ${MIN_INTERESTS - selected.size}`
           }
           onPress={submit}
           loading={saving}
@@ -114,10 +115,11 @@ export default function OnboardingInterestsScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxxl },
-  intro: { marginBottom: spacing.lg },
+  intro: { color: colors.textTertiary },
+  introBody: { marginTop: spacing.xs, marginBottom: spacing.lg },
   group: { marginBottom: spacing.xl },
   groupTitle: {
-    ...typography.micro,
+    ...typography.label,
     color: colors.textTertiary,
     textTransform: 'uppercase',
     marginBottom: spacing.md,

@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getInterests, getMyInterests, setMyInterests } from '@/api/profiles';
 import { messageFor } from '@/lib/errors';
 import { Body, Button, Chip, LoadingState, Notice, Screen } from '@/components/ui';
-import { colors, spacing, typography } from '@/theme';
+import { colors, interestGroupFor, spacing, typography } from '@/theme';
 
 export default function InterestsSettingsScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -48,16 +48,15 @@ export default function InterestsSettingsScreen() {
   return (
     <Screen scroll>
       <Body muted style={styles.intro}>
-        These feed the recommendation ranker directly — the more accurate they are, the better your
-        feed gets.
+        Idú priamo do odporúčacieho algoritmu — čím presnejšie sú, tým lepší máš feed.
       </Body>
 
-      {error ? <Notice tone="danger" title="Could not save" body={error} /> : null}
-      {saved ? <Notice tone="success" title="Saved" body="Your feed will update on the next refresh." /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa uložiť" body={error} /> : null}
+      {saved ? <Notice tone="success" title="Uložené" body="Feed sa aktualizuje pri najbližšom obnovení." /> : null}
 
       {grouped.map(([category, items]) => (
         <View key={category} style={styles.group}>
-          <Text style={styles.groupTitle}>{category}</Text>
+          <Text style={styles.groupTitle}>{interestGroupFor(category)}</Text>
           <View style={styles.chips}>
             {(items ?? []).map((interest) => (
               <Chip
@@ -78,8 +77,8 @@ export default function InterestsSettingsScreen() {
         </View>
       ))}
 
-      <Button title={`Save ${selected.size} interests`} onPress={save} loading={saving} />
-      <Button title="Back" variant="ghost" onPress={() => router.back()} />
+      <Button title={`Uložiť ${selected.size} záujmov`} onPress={save} loading={saving} />
+      <Button title="Späť" variant="ghost" onPress={() => router.back()} />
     </Screen>
   );
 }
@@ -88,7 +87,7 @@ const styles = StyleSheet.create({
   intro: { marginBottom: spacing.lg },
   group: { marginBottom: spacing.xl },
   groupTitle: {
-    ...typography.micro,
+    ...typography.label,
     color: colors.textTertiary,
     textTransform: 'uppercase',
     marginBottom: spacing.md,

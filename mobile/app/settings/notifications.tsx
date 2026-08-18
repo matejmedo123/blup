@@ -35,58 +35,58 @@ export default function NotificationSettingsScreen() {
 
   const enablePush = async () => {
     const result = await registerForPushNotifications();
-    setPushNote(result.ok ? 'This device is registered for push notifications.' : result.message);
+    setPushNote(result.ok ? 'Toto zariadenie je zaregistrované na push notifikácie.' : result.message);
   };
 
   if (query.isLoading || !preferences) return <Screen><LoadingState /></Screen>;
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not save" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa uložiť" body={error} /> : null}
       {pushNote ? <Notice tone="accent" title="Push" body={pushNote} /> : null}
 
       <Switch
-        label="Push notifications"
-        description="The master switch for this account."
+        label="Push notifikácie"
+        description="Hlavný vypínač pre tento účet."
         value={preferences.push_enabled}
         onValueChange={(value) => update({ push_enabled: value })}
       />
       <Switch
-        label="New followers"
+        label="Noví sledujúci"
         value={preferences.new_follower}
         onValueChange={(value) => update({ new_follower: value })}
       />
       <Switch
-        label="Friend requests"
+        label="Žiadosti o priateľstvo"
         value={preferences.friend_requests}
         onValueChange={(value) => update({ friend_requests: value })}
       />
       <Switch
-        label="Event reminders"
-        description="Two hours before something you are going to."
+        label="Pripomienky eventov"
+        description="Dve hodiny pred tým, na čo ideš."
         value={preferences.event_reminders}
         onValueChange={(value) => update({ event_reminders: value })}
       />
       <Switch
-        label="People you follow are going"
+        label="Ľudia, ktorých sleduješ, idú"
         value={preferences.friend_attending}
         onValueChange={(value) => update({ friend_attending: value })}
       />
       <Switch
-        label="Tickets and payouts"
+        label="Vstupenky a výplaty"
         value={preferences.ticket_updates}
         onValueChange={(value) => update({ ticket_updates: value })}
       />
       <Switch
-        label="Weekly recommendations"
+        label="Týždenné odporúčania"
         value={preferences.weekly_recommendations}
         onValueChange={(value) => update({ weekly_recommendations: value })}
       />
 
       <Body muted style={{ marginTop: 24, marginBottom: 12 }}>
-        Not getting anything? Register this device again.
+        Nechodí ti nič? Zaregistruj toto zariadenie znova.
       </Body>
-      <Button title="Register this device" variant="secondary" onPress={enablePush} />
+      <Button title="Zaregistrovať toto zariadenie" variant="secondary" onPress={enablePush} />
     </Screen>
   );
 }

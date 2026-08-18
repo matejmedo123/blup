@@ -17,7 +17,7 @@ export default function ForgotPasswordScreen() {
     setError(null);
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('Enter the email address you signed up with.');
+      setError('Zadaj e-mail, s ktorým si sa registroval.');
       return;
     }
 
@@ -37,10 +37,10 @@ export default function ForgotPasswordScreen() {
       <Screen scroll>
         <Notice
           tone="success"
-          title="Check your inbox"
-          body={`We sent a reset link to ${email.trim()}. Open it on this device and you will land back in BLUP.`}
+          title="Pozri si schránku"
+          body={`Poslali sme odkaz na obnovu na ${email.trim()}. Otvor ho na tomto zariadení a vrátiš sa späť do BLUPu.`}
         />
-        <Button title="Back to sign in" variant="secondary" onPress={() => router.replace('/(auth)/sign-in')} />
+        <Button title="Späť na prihlásenie" variant="secondary" onPress={() => router.replace('/(auth)/sign-in')} />
       </Screen>
     );
   }
@@ -48,16 +48,16 @@ export default function ForgotPasswordScreen() {
   return (
     <Screen scroll>
       <Body muted style={styles.intro}>
-        Enter your email and we will send you a link to set a new password.
+        Zadaj e-mail a pošleme ti odkaz na nastavenie nového hesla.
       </Body>
 
-      {error ? <Notice tone="danger" title="Could not send the email" body={error} /> : null}
+      {error ? <Notice tone="danger" title="E-mail sa nepodarilo poslať" body={error} /> : null}
 
       <Input
-        label="Email"
+        label="E-mail"
         value={email}
         onChangeText={setEmail}
-        placeholder="you@example.com"
+        placeholder="ty@example.com"
         autoCapitalize="none"
         keyboardType="email-address"
         autoComplete="email"
@@ -65,7 +65,7 @@ export default function ForgotPasswordScreen() {
         onSubmitEditing={submit}
       />
 
-      <Button title="Send reset link" onPress={submit} loading={loading} />
+      <Button title="Poslať odkaz" onPress={submit} loading={loading} />
     </Screen>
   );
 }

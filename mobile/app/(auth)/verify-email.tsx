@@ -16,7 +16,7 @@ export default function VerifyEmailScreen() {
     setStatus(null);
     try {
       await resendConfirmationEmail(email);
-      setStatus({ tone: 'success', message: 'Sent again. It can take a minute to arrive.' });
+      setStatus({ tone: 'success', message: 'Poslané znova. Doručenie môže chvíľu trvať.' });
     } catch (caught) {
       setStatus({ tone: 'danger', message: messageFor(caught) });
     } finally {
@@ -29,25 +29,25 @@ export default function VerifyEmailScreen() {
       {status ? (
         <Notice
           tone={status.tone}
-          title={status.tone === 'success' ? 'Email sent' : 'Could not resend'}
+          title={status.tone === 'success' ? 'E-mail odoslaný' : 'Nepodarilo sa poslať znova'}
           body={status.message}
         />
       ) : null}
 
       <EmptyState
         emoji="📬"
-        title="Confirm your email"
+        title="Potvrď si e-mail"
         body={
           email
-            ? `We sent a confirmation link to ${email}. Tap it on this device and BLUP will open with you signed in.`
-            : 'We sent you a confirmation link. Tap it on this device to finish signing up.'
+            ? `Poslali sme potvrdzovací odkaz na ${email}. Klikni naň na tomto zariadení a BLUP sa otvorí prihlásený.`
+            : 'Poslali sme ti potvrdzovací odkaz. Klikni naň na tomto zariadení a registrácia sa dokončí.'
         }
-        actionLabel={email ? 'Resend the email' : undefined}
+        actionLabel={email ? 'Poslať e-mail znova' : undefined}
         onAction={email ? resend : undefined}
       />
 
       <Button
-        title="Back to sign in"
+        title="Späť na prihlásenie"
         variant="ghost"
         loading={loading}
         onPress={() => router.replace('/(auth)/sign-in')}

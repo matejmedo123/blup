@@ -7,6 +7,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { getTicket, ticketQrPayload } from '@/api/tickets';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong, formatPrice, formatRelative } from '@/lib/format';
+import { ticketStatusLabel } from '@/lib/labels';
 import {
   Badge, Body, Caption, Divider, ErrorState, LoadingState, Notice, Screen,
 } from '@/components/ui';
@@ -32,7 +33,7 @@ export default function TicketScreen() {
     return (
       <Screen>
         <ErrorState
-          message={error ? messageFor(error) : 'This ticket could not be found.'}
+          message={error ? messageFor(error) : 'Túto vstupenku sa nepodarilo nájsť.'}
           onRetry={() => void refetch()}
         />
       </Screen>
@@ -63,41 +64,41 @@ export default function TicketScreen() {
               </Text>
               <Body muted>
                 {data.status === 'used'
-                  ? 'Already checked in'
+                  ? 'Už bola použitá pri vstupe'
                   : data.status === 'refunded'
-                    ? 'Refunded'
-                    : 'Cancelled'}
+                    ? 'Peniaze boli vrátené'
+                    : 'Zrušená'}
               </Body>
             </View>
           )}
         </View>
 
         <Text style={styles.code}>{data.code}</Text>
-        <Badge tone={isUsable ? 'success' : 'neutral'} label={data.status.toUpperCase()} />
+        <Badge tone={isUsable ? 'success' : 'neutral'} label={ticketStatusLabel[data.status].toUpperCase()} />
       </View>
 
       {data.checked_in_at ? (
         <Notice
           tone="accent"
-          title="Checked in"
-          body={`Scanned at the door ${formatRelative(data.checked_in_at)}.`}
+          title="Na mieste"
+          body={`Naskenovaná pri vstupe ${formatRelative(data.checked_in_at)}.`}
         />
       ) : null}
 
       <Divider />
 
       <View style={styles.detailRow}>
-        <Caption>Paid</Caption>
+        <Caption>Zaplatené</Caption>
         <Body>{formatPrice(data.price_cents, data.currency)}</Body>
       </View>
       <View style={styles.detailRow}>
-        <Caption>Issued</Caption>
+        <Caption>Vydaná</Caption>
         <Body>{formatRelative(data.created_at)}</Body>
       </View>
 
       <Caption style={styles.footnote}>
-        Keep this screen for the door. The code is validated against BLUP’s servers, so a screenshot
-        of someone else’s ticket will not get anyone in.
+        Túto obrazovku ukáž pri vstupe. Kód sa overuje na serveroch BLUPu, takže screenshot cudzej
+        vstupenky nikoho dnu nedostane.
       </Caption>
     </Screen>
   );

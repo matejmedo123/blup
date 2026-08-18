@@ -47,41 +47,41 @@ export default function AdminVerificationsScreen() {
   if ((requests.data ?? []).length === 0) {
     return (
       <Screen>
-        <EmptyState emoji="✅" title="Queue is clear" body="No organizations waiting for review." />
+        <EmptyState emoji="✅" title="Fronta je prázdna" body="Žiadna organizácia nečaká na posúdenie." />
       </Screen>
     );
   }
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not review" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa posúdiť" body={error} /> : null}
 
       {(requests.data ?? []).map((request) => {
         const organization = request.organization as { name?: string; slug?: string } | null;
 
         return (
           <View key={request.id as string} style={styles.card}>
-            <Text style={styles.name}>{organization?.name ?? 'Organization'}</Text>
+            <Text style={styles.name}>{organization?.name ?? 'Organizácia'}</Text>
             <Caption>@{organization?.slug}</Caption>
 
             <View style={styles.details}>
-              <Detail label="Legal name" value={String(request.legal_name)} />
-              <Detail label="Registration" value={String(request.registration_number ?? '—')} />
-              <Detail label="VAT" value={String(request.vat_number ?? '—')} />
-              <Detail label="Contact" value={String(request.contact_email)} />
-              <Detail label="Address" value={String(request.address ?? '—')} />
-              <Detail label="Submitted" value={formatRelative(request.created_at as string)} />
+              <Detail label="Právny názov" value={String(request.legal_name)} />
+              <Detail label="IČO" value={String(request.registration_number ?? '—')} />
+              <Detail label="IČ DPH" value={String(request.vat_number ?? '—')} />
+              <Detail label="Kontakt" value={String(request.contact_email)} />
+              <Detail label="Adresa" value={String(request.address ?? '—')} />
+              <Detail label="Odoslané" value={formatRelative(request.created_at as string)} />
             </View>
 
             <View style={styles.actions}>
               <Button
-                title="Approve"
+                title="Schváliť"
                 onPress={() => review(request.id as string, true)}
                 loading={busy === request.id}
                 style={styles.flex}
               />
               <Button
-                title="Reject"
+                title="Zamietnuť"
                 variant="danger"
                 onPress={() => review(request.id as string, false)}
                 disabled={busy !== null}

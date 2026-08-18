@@ -17,7 +17,7 @@ import { DateTimeField } from '@/components/DateTimeField';
 import {
   Body, Button, Caption, Chip, Input, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, labelFor, radius, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
 
 const CATEGORIES = [
@@ -83,7 +83,7 @@ export default function CreateEventScreen() {
 
     return [{
       id: 'draft',
-      title: title.trim() || 'Your event',
+      title: title.trim() || 'Tvoj event',
       description: description.trim() || null,
       cover_image_url: coverUrl,
       category,
@@ -142,16 +142,16 @@ export default function CreateEventScreen() {
   };
 
   const validate = (): string | null => {
-    if (title.trim().length < 3) return 'Give your event a title (at least 3 characters).';
-    if (!eventCoords) return 'Pick a location — tap the map or turn on your GPS.';
-    if (startAt.getTime() < Date.now() - 60_000) return 'Pick a start time in the future.';
+    if (title.trim().length < 3) return 'Daj eventu názov (aspoň 3 znaky).';
+    if (!eventCoords) return 'Vyber miesto — klikni na mapu alebo zapni GPS.';
+    if (startAt.getTime() < Date.now() - 60_000) return 'Vyber čas začiatku v budúcnosti.';
     if (!isFree) {
-      if (!organizationId) return 'Ticketed events must be published by a verified organization.';
+      if (!organizationId) return 'Platené eventy môže zverejniť iba overená organizácia.';
       const amount = Number(price.replace(',', '.'));
-      if (!Number.isFinite(amount) || amount <= 0) return 'Set a ticket price above zero.';
+      if (!Number.isFinite(amount) || amount <= 0) return 'Nastav cenu vstupenky vyššiu ako nula.';
     }
     if (capacity && (!Number.isInteger(Number(capacity)) || Number(capacity) < 1)) {
-      return 'Capacity must be a whole number.';
+      return 'Kapacita musí byť celé číslo.';
     }
     return null;
   };
@@ -197,11 +197,11 @@ export default function CreateEventScreen() {
 
       if (!isFree) {
         Alert.alert(
-          'Event published',
-          'Now add ticket types so people can buy. You can do that from the organizer dashboard.',
+          'Event zverejnený',
+          'Teraz pridaj typy vstupeniek, aby si ľudia mohli kúpiť. Spravíš to v nástenke organizátora.',
           [
-            { text: 'Later', onPress: () => router.push(`/event/${event.id}`) },
-            { text: 'Add tickets', onPress: () => router.push(`/organizer/tickets/${event.id}`) },
+            { text: 'Neskôr', onPress: () => router.push(`/event/${event.id}`) },
+            { text: 'Pridať vstupenky', onPress: () => router.push(`/organizer/tickets/${event.id}`) },
           ],
         );
       } else {
@@ -216,12 +216,12 @@ export default function CreateEventScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <Text style={styles.title}>Create a BLUP</Text>
+      <Text style={styles.title}>Vytvor BLUP</Text>
       <Body muted style={styles.intro}>
-        It goes live the moment you publish — on the map, in search and in other people’s feeds.
+        Hneď po zverejnení je vonku — na mape, vo vyhľadávaní aj vo feede ostatných.
       </Body>
 
-      {error ? <Notice tone="danger" title="Fix this first" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Toto ešte oprav" body={error} /> : null}
 
       {/* --- cover ---------------------------------------------------------- */}
       <Pressable onPress={changeCover} style={styles.cover} disabled={uploadingCover}>
@@ -230,33 +230,33 @@ export default function CreateEventScreen() {
         ) : (
           <View style={styles.coverPlaceholder}>
             <Text style={styles.coverEmoji}>📷</Text>
-            <Caption>{uploadingCover ? 'Uploading…' : 'Add a cover photo'}</Caption>
+            <Caption>{uploadingCover ? 'Nahrávam…' : 'Pridaj titulnú fotku'}</Caption>
           </View>
         )}
       </Pressable>
 
       {coverUrl ? (
         <View style={styles.coverActions}>
-          <Button title="Replace" variant="ghost" compact onPress={changeCover} />
-          <Button title="Remove" variant="ghost" compact onPress={() => setCoverUrl(null)} />
+          <Button title="Vymeniť" variant="ghost" compact onPress={changeCover} />
+          <Button title="Odstrániť" variant="ghost" compact onPress={() => setCoverUrl(null)} />
         </View>
       ) : null}
 
       {/* --- basics --------------------------------------------------------- */}
       <Input
-        label="Title"
+        label="Názov"
         value={title}
         onChangeText={setTitle}
-        placeholder="Sunset run along the river"
+        placeholder="Západ slnka a beh pri Dunaji"
         maxLength={120}
         editable={!saving}
       />
 
       <Input
-        label="Description"
+        label="Popis"
         value={description}
         onChangeText={setDescription}
-        placeholder="What is it, who is it for, what should people bring?"
+        placeholder="Čo to je, pre koho to je, čo si majú ľudia priniesť?"
         multiline
         numberOfLines={4}
         maxLength={5000}
@@ -264,12 +264,12 @@ export default function CreateEventScreen() {
         editable={!saving}
       />
 
-      <SectionHeader title="Category" />
+      <SectionHeader title="Kategória" />
       <View style={styles.chips}>
         {CATEGORIES.map((item) => (
           <Chip
             key={item}
-            label={item}
+            label={labelFor(item)}
             selected={category === item}
             onPress={() => setCategory(item)}
           />
@@ -277,7 +277,7 @@ export default function CreateEventScreen() {
       </View>
 
       {/* --- when ----------------------------------------------------------- */}
-      <SectionHeader title="When" />
+      <SectionHeader title="Kedy" />
       <DateTimeField value={startAt} onChange={setStartAt} minimumDate={new Date()} />
 
       <View style={styles.chips}>
@@ -292,9 +292,9 @@ export default function CreateEventScreen() {
       </View>
 
       {/* --- where ---------------------------------------------------------- */}
-      <SectionHeader title="Where" />
+      <SectionHeader title="Kde" />
       <Caption style={styles.mapHint}>
-        {coords ? 'Custom location set.' : 'Using your current position — tap the map to move the pin.'}
+        {coords ? 'Miesto je nastavené.' : 'Používame tvoju aktuálnu pozíciu — klikni na mapu a posuň špendlík.'}
       </Caption>
 
       <View style={styles.mapWrapper}>
@@ -312,14 +312,14 @@ export default function CreateEventScreen() {
       </View>
 
       <Input
-        label="Venue"
+        label="Miesto"
         value={venueName}
         onChangeText={setVenueName}
-        placeholder="Old Market Hall"
+        placeholder="Stará tržnica"
         editable={!saving}
       />
       <Input
-        label="Address"
+        label="Adresa"
         value={address}
         onChangeText={setAddress}
         placeholder="Námestie SNP 25, Bratislava"
@@ -327,29 +327,29 @@ export default function CreateEventScreen() {
       />
 
       {/* --- tickets -------------------------------------------------------- */}
-      <SectionHeader title="Tickets" />
+      <SectionHeader title="Vstupenky" />
       <Switch
         value={isFree}
         onValueChange={(next) => {
           setIsFree(next);
           if (next) setPrice('');
         }}
-        label="Free event"
-        description="Anyone can create free events. Selling tickets needs a verified organizer account."
+        label="Event zdarma"
+        description="Eventy zdarma môže vytvoriť ktokoľvek. Na predaj vstupeniek potrebuješ overený účet organizátora."
       />
 
       {!isFree ? (
         verifiedOrgs.length === 0 ? (
           <Notice
             tone="warning"
-            title="You need a verified organizer account"
-            body="BLUP only lets verified organizations sell tickets — that is what makes payouts and refunds accountable."
-            actionLabel="Set up an organizer account"
+            title="Potrebuješ overený účet organizátora"
+            body="BLUP dovolí predávať vstupenky iba overeným organizáciám — vďaka tomu sú výplaty a refundácie dohľadateľné."
+            actionLabel="Založiť účet organizátora"
             onAction={() => router.push('/organizer/new')}
           />
         ) : (
           <>
-            <Caption style={styles.orgHint}>Publish as</Caption>
+            <Caption style={styles.orgHint}>Zverejniť ako</Caption>
             <View style={styles.chips}>
               {verifiedOrgs.map((org) => (
                 <Chip
@@ -362,12 +362,12 @@ export default function CreateEventScreen() {
             </View>
 
             <Input
-              label="Ticket price (EUR)"
+              label="Cena vstupenky (EUR)"
               value={price}
               onChangeText={setPrice}
               placeholder="15"
               keyboardType="decimal-pad"
-              hint="You can add multiple ticket types after publishing."
+              hint="Po zverejnení môžeš pridať viac typov vstupeniek."
               editable={!saving}
             />
           </>
@@ -375,23 +375,23 @@ export default function CreateEventScreen() {
       ) : null}
 
       <Input
-        label="Capacity (optional)"
+        label="Kapacita (nepovinné)"
         value={capacity}
         onChangeText={setCapacity}
-        placeholder="Leave empty for unlimited"
+        placeholder="Nechaj prázdne pre neobmedzenú"
         keyboardType="number-pad"
         editable={!saving}
       />
 
       <Button
-        title="Publish event"
+        title="Zverejniť event"
         onPress={submit}
         loading={saving}
         style={styles.submit}
       />
 
       {!profile?.onboarding_completed ? (
-        <Caption style={styles.footnote}>Finish your profile so people know who is hosting.</Caption>
+        <Caption style={styles.footnote}>Doplň si profil, nech ľudia vedia, kto event robí.</Caption>
       ) : null}
     </Screen>
   );

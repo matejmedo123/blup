@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { getNearbyEvents, saveEvent, unsaveEvent } from '@/api/events';
+import { getFollowing } from '@/api/profiles';
 import { getAIRecommendations } from '@/api/ai';
 import { recordSignal, queueImpression } from '@/api/signals';
 import { supabase } from '@/lib/supabase';
@@ -14,12 +15,18 @@ import { messageFor } from '@/lib/errors';
 import { EventCard } from '@/components/EventCard';
 import { EventMap } from '@/components/EventMap';
 import { SwipeDeck, type SwipeDirection } from '@/components/SwipeDeck';
-import { Badge, Body, Button, EmptyState, ErrorState, LoadingState, Notice, SectionHeader } from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/theme';
+import {
+  AvatarStack, Badge, Body, Button, Caption, Chip, EmptyState, ErrorState, IconButton,
+  LoadingState, Mono, Notice, SectionHeader, Segmented,
+} from '@/components/ui';
+import { colors, labelFor, radius, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
 
 type Mode = 'map' | 'feed' | 'swipe';
 const RADIUS_OPTIONS = [2000, 5000, 25000, 100000];
+
+/** The quick filters from the design; the full list lives in Explore. */
+const QUICK_CATEGORIES = ['techno', 'startups', 'hiking', 'art', 'food', 'running'];
 
 /**
  * Home — the map, "Today near me", the AI "For you" rail and the swipe deck.
@@ -32,21 +39,29 @@ export default function HomeScreen() {
 
   const [mode, setMode] = useState<Mode>('map');
   const [radiusM, setRadiusM] = useState(25000);
+  const [categories, setCategories] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const coords = location.coords;
 
   const nearby = useQuery({
-    queryKey: ['events', 'nearby', coords?.latitude, coords?.longitude, radiusM],
+    queryKey: ['events', 'nearby', coords?.latitude, coords?.longitude, radiusM, categories],
     queryFn: () =>
       getNearbyEvents({
         latitude: coords?.latitude,
         longitude: coords?.longitude,
         radiusM,
+        categories,
         limit: 60,
       }),
     enabled: Boolean(coords),
+  });
+
+  const following = useQuery({
+    queryKey: ['profile', 'following', profile?.id],
+    queryFn: () => getFollowing(profile!.id),
+    enabled: Boolean(profile?.id),
   });
 
   const recommendations = useQuery({
@@ -74,6 +89,11 @@ export default function HomeScreen() {
   }, [queryClient]);
 
   const events = nearby.data ?? [];
+  const circles = (following.data ?? []).map((person) => ({
+    id: person.id,
+    avatar_url: person.avatar_url,
+    name: person.display_name ?? person.username,
+  }));
   const recommended = recommendations.data?.events ?? [];
 
   const todayEvents = useMemo(() => {
@@ -125,51 +145,71 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>
-            {profile?.display_name ? `Hey ${profile.display_name.split(' ')[0]}` : 'Hey'}
-          </Text>
-          <Text style={styles.subGreeting}>
-            {location.city ? `What's happening in ${location.city}` : "What's happening around you"}
-          </Text>
+        <View style={styles.flex}>
+          <Mono accent>◎ {location.city ?? 'Zisťujem polohu'}</Mono>
+          <Text style={styles.greeting}>Dnes okolo teba</Text>
         </View>
 
-        <Pressable onPress={() => router.push('/tickets')} hitSlop={8} style={styles.headerButton}>
-          <Text style={styles.headerButtonText}>🎟️</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <IconButton
+            glyph="◔"
+            onPress={() => {
+              const index = RADIUS_OPTIONS.indexOf(radiusM);
+              setRadiusM(RADIUS_OPTIONS[(index + 1) % RADIUS_OPTIONS.length]);
+            }}
+          />
+          <IconButton glyph="⌕" onPress={() => router.push('/(tabs)/explore')} />
+        </View>
       </View>
 
-      <View style={styles.modeRow}>
-        {(['map', 'feed', 'swipe'] as Mode[]).map((option) => (
-          <Pressable
-            key={option}
-            onPress={() => setMode(option)}
-            style={[styles.modeChip, mode === option && styles.modeChipActive]}
-          >
-            <Text style={[styles.modeLabel, mode === option && styles.modeLabelActive]}>
-              {option === 'map' ? 'Map' : option === 'feed' ? 'Feed' : 'Swipe'}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={styles.controls}>
+        <Segmented
+          options={[
+            { value: 'feed' as Mode, label: 'Zoznam' },
+            { value: 'map' as Mode, label: 'Mapa' },
+          ]}
+          value={mode === 'swipe' ? 'feed' : mode}
+          onChange={setMode}
+        />
 
-        <View style={styles.flex} />
-
-        <Pressable
-          onPress={() => {
-            const index = RADIUS_OPTIONS.indexOf(radiusM);
-            setRadiusM(RADIUS_OPTIONS[(index + 1) % RADIUS_OPTIONS.length]);
-          }}
-          style={styles.radiusChip}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryRow}
         >
-          <Text style={styles.radiusLabel}>
-            {radiusM >= 1000 ? `${radiusM / 1000} km` : `${radiusM} m`}
-          </Text>
+          <Chip label="Všetko" selected={categories.length === 0} onPress={() => setCategories([])} />
+          {QUICK_CATEGORIES.map((item) => (
+            <Chip
+              key={item}
+              label={labelFor(item)}
+              selected={categories.includes(item)}
+              onPress={() =>
+                setCategories((previous) =>
+                  previous.includes(item)
+                    ? previous.filter((value) => value !== item)
+                    : [...previous, item],
+                )
+              }
+            />
+          ))}
+        </ScrollView>
+
+        {circles.length > 0 ? (
+          <View style={styles.circlesRow}>
+            <AvatarStack people={circles} size={30} max={5} />
+            <Caption style={styles.circlesLabel}>Tvoje kruhy dnes niekam idú</Caption>
+          </View>
+        ) : null}
+
+        <Pressable style={styles.swipeCta} onPress={() => setMode('swipe')}>
+          <Text style={styles.swipeCtaLabel}>◈  Blupni si program</Text>
+          <Mono accent>{recommended.length} eventov</Mono>
         </Pressable>
       </View>
 
       {actionError ? (
         <View style={styles.noticeWrapper}>
-          <Notice tone="danger" title="Could not do that" body={actionError} />
+          <Notice tone="danger" title="Toto sa nepodarilo" body={actionError} />
         </View>
       ) : null}
 
@@ -177,12 +217,12 @@ export default function HomeScreen() {
         <View style={styles.noticeWrapper}>
           <Notice
             tone="warning"
-            title={location.status === 'denied' ? 'Location is off' : 'Turn on location'}
+            title={location.status === 'denied' ? 'Poloha je vypnutá' : 'Zapni polohu'}
             body={
               location.error ??
-              'BLUP needs your position to show what is happening around you and how far away it is.'
+              'BLUP potrebuje tvoju polohu, aby ti ukázal, čo sa deje okolo teba a ako ďaleko to je.'
             }
-            actionLabel={location.status === 'denied' ? 'Open settings' : 'Enable location'}
+            actionLabel={location.status === 'denied' ? 'Otvoriť nastavenia' : 'Zapnúť polohu'}
             onAction={location.status === 'denied' ? location.openSettings : () => void location.request()}
           />
         </View>
@@ -222,13 +262,13 @@ export default function HomeScreen() {
 
       {mode === 'swipe' ? (
         recommendations.isLoading ? (
-          <LoadingState label="Finding events for you…" />
+          <LoadingState label="Hľadám pre teba eventy…" />
         ) : recommended.length === 0 ? (
           <EmptyState
             emoji="🫧"
-            title="Nothing to swipe through yet"
-            body="No events match you in this radius. Widen it, or be the first to put something on the map."
-            actionLabel="Create the first BLUP"
+            title="Zatiaľ nie je čo blupnúť"
+            body="V tomto okolí ti nič nesedí. Rozšír okruh alebo buď prvý, kto sem niečo dá."
+            actionLabel="Vytvor prvý BLUP"
             onAction={() => router.push('/(tabs)/create')}
           />
         ) : (
@@ -276,7 +316,7 @@ function MapMode({
 
       {loading ? (
         <View style={styles.mapLoading}>
-          <Text style={styles.mapLoadingText}>Loading events…</Text>
+          <Text style={styles.mapLoadingText}>Načítavam eventy…</Text>
         </View>
       ) : null}
 
@@ -286,11 +326,11 @@ function MapMode({
         </View>
       ) : events.length === 0 && !loading ? (
         <View style={styles.mapEmpty}>
-          <Text style={styles.mapEmptyTitle}>Nothing happening here yet</Text>
+          <Text style={styles.mapEmptyTitle}>Tu sa zatiaľ nič nedeje</Text>
           <Body muted style={styles.mapEmptyBody}>
-            Be the first — put your event on the map and people nearby will see it.
+            Buď prvý — daj svoj event na mapu a ľudia v okolí ho uvidia.
           </Body>
-          <Button title="Create the first BLUP" onPress={() => router.push('/(tabs)/create')} />
+          <Button title="Vytvor prvý BLUP" onPress={() => router.push('/(tabs)/create')} />
         </View>
       ) : null}
     </View>
@@ -316,7 +356,7 @@ function FeedMode({
   }, [recommended]);
 
   if (loading && all.length === 0 && recommended.length === 0) {
-    return <LoadingState label="Looking around you…" />;
+    return <LoadingState label="Rozhliadam sa okolo teba…" />;
   }
 
   if (error && all.length === 0) return <ErrorState message={error} onRetry={onRefresh} />;
@@ -325,9 +365,9 @@ function FeedMode({
     return (
       <EmptyState
         emoji="🫧"
-        title="Nothing happening here yet"
-        body="No events near you right now. Create the first BLUP and it appears on everyone's map instantly."
-        actionLabel="Create the first BLUP"
+        title="Tu sa zatiaľ nič nedeje"
+        body="Vo tvojom okolí teraz nič nie je. Vytvor prvý BLUP a hneď sa objaví každému na mape."
+        actionLabel="Vytvor prvý BLUP"
         onAction={() => router.push('/(tabs)/create')}
       />
     );
@@ -343,7 +383,7 @@ function FeedMode({
     >
       {today.length > 0 ? (
         <>
-          <SectionHeader title="Today near you" />
+          <SectionHeader title="Dnes v okolí" />
           <FlatList
             horizontal
             data={today}
@@ -365,13 +405,13 @@ function FeedMode({
       {recommended.length > 0 ? (
         <>
           <View style={styles.forYouHeader}>
-            <SectionHeader title="For you" />
+            <SectionHeader title="Pre teba" />
             {explanationSource && explanationSource !== 'none' ? (
               <Badge
                 tone="accent"
                 label={explanationSource.startsWith('local') || explanationSource.startsWith('fallback')
-                  ? 'Ranked by BLUP'
-                  : 'AI explained'}
+                  ? 'Zoradil BLUP'
+                  : 'Vysvetlené AI'}
               />
             ) : null}
           </View>
@@ -389,7 +429,7 @@ function FeedMode({
         </>
       ) : null}
 
-      <SectionHeader title="Everything nearby" />
+      <SectionHeader title="Všetko v okolí" />
       {all.map((event) => (
         <View key={event.id} style={styles.feedItem}>
           <EventCard event={event} onPress={() => onOpen(event)} onSave={() => onSave(event)} />
@@ -405,46 +445,32 @@ const styles = StyleSheet.create({
 
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
   },
-  greeting: { ...typography.title, color: colors.text },
-  subGreeting: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  headerButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerButtonText: { fontSize: 19 },
+  headerActions: { flexDirection: 'row', gap: spacing.sm },
+  greeting: { ...typography.title, color: colors.text, marginTop: 2 },
 
-  modeRow: {
+  controls: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.md },
+  categoryRow: { flexDirection: 'row', gap: spacing.sm, paddingRight: spacing.lg },
+  circlesRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  circlesLabel: { flex: 1 },
+  swipeCta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  modeChip: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 7,
-    borderRadius: radius.pill,
+    justifyContent: 'space-between',
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  modeChipActive: { backgroundColor: colors.accent },
-  modeLabel: { ...typography.caption, color: colors.textSecondary },
-  modeLabelActive: { color: colors.textInverse },
-  radiusChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceElevated,
-  },
-  radiusLabel: { ...typography.caption, color: colors.text },
+  swipeCtaLabel: { ...typography.bodyStrong, color: colors.text },
+
 
   noticeWrapper: { paddingHorizontal: spacing.lg },
 

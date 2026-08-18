@@ -26,7 +26,7 @@ export default function AdminPayoutsScreen() {
     setBusy(id);
     try {
       await updatePayoutStatus(id, status, {
-        failureReason: status === 'failed' ? 'Marked failed by an admin' : undefined,
+        failureReason: status === 'failed' ? 'Označené adminom ako zlyhané' : undefined,
       });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'payouts'] });
     } catch (caught) {
@@ -41,14 +41,14 @@ export default function AdminPayoutsScreen() {
   if ((payouts.data ?? []).length === 0) {
     return (
       <Screen>
-        <EmptyState emoji="💸" title="No payouts" body="Nothing has been requested yet." />
+        <EmptyState emoji="💸" title="Žiadne výplaty" body="Zatiaľ nikto o nič nepožiadal." />
       </Screen>
     );
   }
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not update" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa upraviť" body={error} /> : null}
 
       {(payouts.data ?? []).map((payout) => {
         const organization = payout.organization as { name?: string } | null;
@@ -66,7 +66,7 @@ export default function AdminPayoutsScreen() {
               />
             </View>
 
-            <Caption>{organization?.name ?? 'Organization'}</Caption>
+            <Caption>{organization?.name ?? 'Organizácia'}</Caption>
             <Caption>Requested {formatRelative(payout.requested_at as string)}</Caption>
             {payout.provider_transfer_id ? (
               <Caption>Transfer {String(payout.provider_transfer_id)}</Caption>
@@ -75,13 +75,13 @@ export default function AdminPayoutsScreen() {
             {status === 'pending' || status === 'processing' ? (
               <View style={styles.actions}>
                 <Button
-                  title="Mark paid"
+                  title="Označiť ako vyplatené"
                   loading={busy === payout.id}
                   onPress={() => update(payout.id as string, 'paid')}
                   style={styles.flex}
                 />
                 <Button
-                  title="Mark failed"
+                  title="Označiť ako zlyhané"
                   variant="danger"
                   disabled={busy !== null}
                   onPress={() => update(payout.id as string, 'failed')}

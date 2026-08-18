@@ -24,11 +24,11 @@ export default function ResetPasswordScreen() {
     setError(null);
 
     if (password.length < 8) {
-      setError('Use at least 8 characters.');
+      setError('Použi aspoň 8 znakov.');
       return;
     }
     if (password !== confirm) {
-      setError('The passwords do not match.');
+      setError('Heslá sa nezhodujú.');
       return;
     }
 
@@ -48,8 +48,8 @@ export default function ResetPasswordScreen() {
       <Screen scroll>
         <Notice
           tone="warning"
-          title="This link is not active"
-          body="Open the reset link from your email on this device. Links expire after an hour."
+          title="Tento odkaz už neplatí"
+          body="Otvor odkaz z e-mailu na tomto zariadení. Odkazy platia hodinu."
           actionLabel="Request a new link"
           onAction={() => router.replace('/(auth)/forgot-password')}
         />
@@ -61,19 +61,19 @@ export default function ResetPasswordScreen() {
     <Screen scroll>
       <Body muted style={styles.intro}>Choose a new password for your account.</Body>
 
-      {error ? <Notice tone="danger" title="Could not update" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa uložiť" body={error} /> : null}
 
       <Input
-        label="New password"
+        label="Nové heslo"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
         autoComplete="new-password"
-        placeholder="At least 8 characters"
+        placeholder="Aspoň 8 znakov"
         editable={!loading}
       />
       <Input
-        label="Confirm password"
+        label="Heslo znova"
         value={confirm}
         onChangeText={setConfirm}
         secureTextEntry
@@ -82,7 +82,7 @@ export default function ResetPasswordScreen() {
         onSubmitEditing={submit}
       />
 
-      <Button title="Save new password" onPress={submit} loading={loading} />
+      <Button title="Uložiť nové heslo" onPress={submit} loading={loading} />
     </Screen>
   );
 }

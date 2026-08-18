@@ -25,11 +25,11 @@ export const PREMIUM_PRODUCTS = {
 };
 
 export const PREMIUM_FEATURES = [
-  'Advanced AI recommendations tuned to your behaviour',
-  'See why every event was recommended',
-  'Anonymous mode — browse without appearing in people matching',
-  'Unlimited saved events and advanced filters',
-  'Early access to ticket drops from verified organizers',
+  'Pokročilé AI odporúčania naladené na tvoje správanie',
+  'Uvidíš, prečo ti bol každý event odporúčaný',
+  'Anonymný režim — prezeraj bez toho, aby si sa objavil v párovaní ľudí',
+  'Neobmedzene uložených eventov a pokročilé filtre',
+  'Skorší prístup k vstupenkám od overených organizátorov',
 ] as const;
 
 export async function getPremiumStatus(): Promise<PremiumStatus> {

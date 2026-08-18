@@ -97,7 +97,7 @@ export default function CheckoutScreen() {
       const result = await waitForTickets(session.order_id);
 
       if (result.status === 'failed') {
-        throw new Error('The payment did not go through. You have not been charged.');
+        throw new Error('Platba neprešla. Nič sme ti nestrhli.');
       }
 
       void markTicketPurchaseSignal(id!);
@@ -123,10 +123,10 @@ export default function CheckoutScreen() {
       <Screen scroll>
         <Notice
           tone="warning"
-          title="No tickets on sale"
-          body="This event does not have any ticket types yet."
+          title="Žiadne vstupenky v predaji"
+          body="Tento event zatiaľ nemá žiadne typy vstupeniek."
         />
-        <Button title="Back to the event" variant="secondary" onPress={() => router.back()} />
+        <Button title="Späť na event" variant="secondary" onPress={() => router.back()} />
       </Screen>
     );
   }
@@ -136,14 +136,14 @@ export default function CheckoutScreen() {
       <Screen scroll>
         <View style={styles.success}>
           <Text style={styles.successEmoji}>🎫</Text>
-          <Text style={styles.successTitle}>You’re in</Text>
+          <Text style={styles.successTitle}>Si dnu</Text>
           <Body muted style={styles.successBody}>
-            Your {quantity > 1 ? `${quantity} tickets are` : 'ticket is'} confirmed and saved to your
-            account. Show the QR code at the door.
+            {quantity > 1 ? `${quantity} vstupenky sú` : 'Vstupenka je'} potvrdená a uložená v tvojom
+            účte. Pri vstupe ukáž QR kód.
           </Body>
 
-          <Button title="See my ticket" onPress={() => router.replace('/tickets')} />
-          <Button title="Back to the event" variant="ghost" onPress={() => router.replace(`/event/${id}`)} />
+          <Button title="Zobraziť vstupenku" onPress={() => router.replace('/tickets')} />
+          <Button title="Späť na event" variant="ghost" onPress={() => router.replace(`/event/${id}`)} />
         </View>
       </Screen>
     );
@@ -152,10 +152,10 @@ export default function CheckoutScreen() {
   if (stage === 'confirming') {
     return (
       <Screen>
-        <LoadingState label="Confirming your payment with the bank…" />
+        <LoadingState label="Potvrdzujem platbu s bankou…" />
         <Caption style={styles.confirmHint}>
-          We wait for the payment provider to confirm before issuing your ticket. This is the honest
-          part — it takes a couple of seconds.
+          Kým vydáme vstupenku, čakáme na potvrdenie od platobnej brány. Toto je tá poctivá časť —
+          trvá pár sekúnd.
         </Caption>
       </Screen>
     );
@@ -168,23 +168,23 @@ export default function CheckoutScreen() {
       <Text style={styles.eventTitle}>{event.data.title}</Text>
       <Caption>{event.data.venue_name ?? event.data.address ?? ''}</Caption>
 
-      {error ? <Notice tone="danger" title="Payment problem" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Problém s platbou" body={error} /> : null}
 
       {!isStripeModuleAvailable ? (
         <Notice
           tone="warning"
-          title="Card payments need a development build"
+          title="Platby kartou potrebujú development build"
           body={STRIPE_UNAVAILABLE_MESSAGE}
         />
       ) : !isConfigured.stripe ? (
         <Notice
           tone="warning"
-          title="Payments are not configured"
-          body="This build has no Stripe publishable key, so the payment sheet cannot open. Add EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY and the server-side keys — see PAYMENTS.md."
+          title="Platby nie sú nakonfigurované"
+          body="Tento build nemá Stripe publishable key, takže platobný formulár sa nedá otvoriť. Doplň EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY a serverové kľúče — pozri PAYMENTS.md."
         />
       ) : null}
 
-      <SectionHeader title="Choose a ticket" />
+      <SectionHeader title="Vyber si vstupenku" />
       {ticketTypes.map((type) => {
         const remaining = type.quantity_total - type.quantity_sold;
         const soldOut = remaining <= 0;
@@ -204,7 +204,7 @@ export default function CheckoutScreen() {
               <Text style={styles.optionName}>{type.name}</Text>
               {type.description ? <Caption>{type.description}</Caption> : null}
               <Caption style={soldOut ? styles.soldOut : undefined}>
-                {soldOut ? 'Sold out' : `${remaining} available`}
+                {soldOut ? 'Vypredané' : `${remaining} k dispozícii`}
               </Caption>
             </View>
             <Text style={styles.optionPrice}>{formatPrice(type.price_cents, type.currency)}</Text>
@@ -212,7 +212,7 @@ export default function CheckoutScreen() {
         );
       })}
 
-      <SectionHeader title="How many" />
+      <SectionHeader title="Koľko kusov" />
       <View style={styles.quantityRow}>
         <Button
           title="−"
@@ -229,7 +229,7 @@ export default function CheckoutScreen() {
           onPress={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}
           disabled={quantity >= maxQuantity}
         />
-        <Caption style={styles.quantityHint}>Max {maxQuantity} per order</Caption>
+        <Caption style={styles.quantityHint}>Max {maxQuantity} na objednávku</Caption>
       </View>
 
       <Divider />
@@ -242,7 +242,7 @@ export default function CheckoutScreen() {
       </View>
 
       <View style={styles.summaryRow}>
-        <Text style={styles.total}>Total</Text>
+        <Text style={styles.total}>Spolu</Text>
         <Text style={styles.total}>{formatMoney(subtotal, selected?.currency ?? 'EUR')}</Text>
       </View>
 
@@ -251,14 +251,14 @@ export default function CheckoutScreen() {
       </Caption>
 
       <Button
-        title={subtotal === 0 ? 'Get ticket' : `Pay ${formatMoney(subtotal, selected?.currency ?? 'EUR')}`}
+        title={subtotal === 0 ? 'Získať vstupenku' : `Zaplatiť ${formatMoney(subtotal, selected?.currency ?? 'EUR')}`}
         onPress={pay}
         loading={stage === 'paying'}
         disabled={!selected || (subtotal > 0 && (!isConfigured.stripe || !isStripeModuleAvailable))}
         style={styles.payButton}
       />
 
-      {orderId ? <Caption style={styles.orderRef}>Order {orderId.slice(0, 8)}</Caption> : null}
+      {orderId ? <Caption style={styles.orderRef}>Objednávka {orderId.slice(0, 8)}</Caption> : null}
     </Screen>
   );
 }

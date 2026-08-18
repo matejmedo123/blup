@@ -77,8 +77,8 @@ export default function UserProfileScreen() {
 
   const report = async () => {
     try {
-      await reportContent({ targetType: 'user', targetId: id!, reason: 'Reported from profile' });
-      setNotice('Reported. Our moderators will review it.');
+      await reportContent({ targetType: 'user', targetId: id!, reason: 'Nahlásené z profilu' });
+      setNotice('Nahlásené. Naši moderátori sa na to pozrú.');
     } catch (caught) {
       setError(messageFor(caught));
     }
@@ -99,8 +99,8 @@ export default function UserProfileScreen() {
       <Screen>
         <EmptyState
           emoji="🔒"
-          title="Profile not available"
-          body="This account is private, suspended, or no longer exists."
+          title="Profil nie je dostupný"
+          body="Tento účet je súkromný, pozastavený alebo už neexistuje."
         />
       </Screen>
     );
@@ -111,8 +111,8 @@ export default function UserProfileScreen() {
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not do that" body={error} /> : null}
-      {notice ? <Notice tone="accent" title="Thanks" body={notice} /> : null}
+      {error ? <Notice tone="danger" title="Toto sa nepodarilo" body={error} /> : null}
+      {notice ? <Notice tone="accent" title="Ďakujeme" body={notice} /> : null}
 
       <View style={styles.header}>
         <Avatar url={person.avatar_url} name={person.display_name} size={84} />
@@ -125,11 +125,11 @@ export default function UserProfileScreen() {
           <View style={styles.stats}>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{formatCount(counts.data?.followers ?? 0)}</Text>
-              <Caption>followers</Caption>
+              <Caption>sledujú</Caption>
             </View>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{formatCount(counts.data?.following ?? 0)}</Text>
-              <Caption>following</Caption>
+              <Caption>sleduje</Caption>
             </View>
           </View>
         </View>
@@ -140,7 +140,7 @@ export default function UserProfileScreen() {
       {!isMe ? (
         <View style={styles.actions}>
           <Button
-            title={following.data ? 'Following' : 'Follow'}
+            title={following.data ? 'Sledujem' : 'Sledovať'}
             variant={following.data ? 'secondary' : 'primary'}
             onPress={toggleFollow}
             loading={busy}
@@ -149,7 +149,7 @@ export default function UserProfileScreen() {
         </View>
       ) : (
         <Button
-          title="Edit your profile"
+          title="Upraviť profil"
           variant="secondary"
           onPress={() => router.push('/settings/profile')}
           style={styles.actions}
@@ -158,7 +158,7 @@ export default function UserProfileScreen() {
 
       {(interests.data ?? []).length > 0 ? (
         <>
-          <SectionHeader title="Interests" />
+          <SectionHeader title="Záujmy" />
           <View style={styles.chips}>
             {(interests.data ?? []).map((interest) => (
               <Chip key={interest.id} label={`${interest.emoji ?? ''} ${interest.name}`.trim()} />
@@ -167,9 +167,9 @@ export default function UserProfileScreen() {
         </>
       ) : null}
 
-      <SectionHeader title="Events" />
+      <SectionHeader title="Eventy" />
       {(events.data ?? []).length === 0 ? (
-        <Body muted>Nothing public yet.</Body>
+        <Body muted>Zatiaľ nič verejné.</Body>
       ) : (
         (events.data ?? []).map((event) => (
           <View key={event.id} style={styles.eventItem}>
@@ -179,7 +179,7 @@ export default function UserProfileScreen() {
       )}
 
       {!isMe ? (
-        <Button title="Report this profile" variant="ghost" onPress={report} style={styles.report} />
+        <Button title="Nahlásiť tento profil" variant="ghost" onPress={report} style={styles.report} />
       ) : null}
     </Screen>
   );

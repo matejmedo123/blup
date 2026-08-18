@@ -40,7 +40,7 @@ export default function AiDebugScreen() {
     enabled: Boolean(runs.data?.[0]?.id),
   });
 
-  if (live.isLoading) return <Screen><LoadingState label="Running the ranker…" /></Screen>;
+  if (live.isLoading) return <Screen><LoadingState label="Spúšťam ranker…" /></Screen>;
 
   if (live.isError) {
     return (
@@ -61,8 +61,8 @@ export default function AiDebugScreen() {
       {(live.data ?? []).length === 0 ? (
         <EmptyState
           emoji="🧪"
-          title="Nothing to rank"
-          body="The ranker found no candidate events. Create a few, or widen your radius."
+          title="Nie je čo zoraďovať"
+          body="Ranker nenašiel žiadne kandidátske eventy. Vytvor nejaké alebo rozšír okruh."
         />
       ) : (
         (live.data ?? []).map((event, index) => {
@@ -106,7 +106,7 @@ export default function AiDebugScreen() {
 
                   <Divider />
 
-                  <Caption>Facts the ranker used</Caption>
+                  <Caption>Fakty, ktoré ranker použil</Caption>
                   <Body muted style={styles.facts}>
                     interest hits: {breakdown.facts.interest_hits} · friends going:{' '}
                     {breakdown.facts.friends_going} · follows creator:{' '}
@@ -124,14 +124,14 @@ export default function AiDebugScreen() {
         })
       )}
 
-      <SectionHeader title="Stored runs" />
+      <SectionHeader title="Uložené behy" />
       <Caption style={styles.runsHint}>
-        Every call to the recommendations endpoint is persisted with its scores, so you can audit
-        what a user actually saw.
+        Každé volanie odporúčacieho endpointu sa ukladá aj so skóre, takže vieš spätne overiť, čo
+        používateľ naozaj videl.
       </Caption>
 
       {(runs.data ?? []).length === 0 ? (
-        <Body muted>No runs logged yet. Open the home feed to create one.</Body>
+        <Body muted>Zatiaľ nie sú zalogované žiadne behy. Otvor domovský feed a jeden vznikne.</Body>
       ) : (
         <>
           {(runs.data ?? []).map((run) => (
@@ -143,7 +143,7 @@ export default function AiDebugScreen() {
 
           {(runItems.data ?? []).length > 0 ? (
             <>
-              <Caption style={styles.runsHint}>Latest run served:</Caption>
+              <Caption style={styles.runsHint}>Posledný beh vrátil:</Caption>
               {(runItems.data ?? []).map((item) => (
                 <View key={item.event_id} style={styles.runItem}>
                   <Text style={styles.runRank}>#{item.rank}</Text>

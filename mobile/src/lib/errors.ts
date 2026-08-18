@@ -9,52 +9,52 @@ import { FunctionError } from './supabase';
  */
 const MESSAGES: Record<string, string> = {
   // auth
-  'Invalid login credentials': 'That email and password combination is not right.',
-  'Email not confirmed': 'Confirm your email first — check your inbox for the link.',
-  'User already registered': 'That email already has an account. Try signing in.',
-  UNAUTHENTICATED: 'Your session expired. Please sign in again.',
+  'Invalid login credentials': 'Táto kombinácia e-mailu a hesla nesedí.',
+  'Email not confirmed': 'Najprv si potvrď e-mail — odkaz máš v schránke.',
+  'User already registered': 'Na tento e-mail už účet existuje. Skús sa prihlásiť.',
+  UNAUTHENTICATED: 'Tvoja relácia vypršala. Prihlás sa znova.',
 
   // events
-  EVENT_AT_CAPACITY: 'This event is full.',
-  EVENT_NOT_AVAILABLE: 'This event is no longer available.',
+  EVENT_AT_CAPACITY: 'Tento event je plný.',
+  EVENT_NOT_AVAILABLE: 'Tento event už nie je dostupný.',
   PAID_EVENT_REQUIRES_ORGANIZATION:
-    'Selling tickets needs an organizer account. Create one in Profile → Organizer.',
+    'Na predaj vstupeniek potrebuješ účet organizátora. Vytvor si ho v Ja → Organizátor.',
   ORGANIZATION_NOT_VERIFIED:
-    'Your organization must be verified by BLUP before you can sell tickets.',
+    'Tvoju organizáciu musí BLUP overiť, až potom môžeš predávať vstupenky.',
 
   // ticketing
-  SOLD_OUT: 'These tickets are sold out.',
-  QUANTITY_ABOVE_LIMIT: 'That is more tickets than this event allows per order.',
-  SALES_ENDED: 'Ticket sales for this event have ended.',
-  SALES_NOT_STARTED: 'Ticket sales have not started yet.',
-  TICKET_TYPE_INACTIVE: 'This ticket is no longer on sale.',
-  AMOUNT_MISMATCH: 'The payment amount did not match the order. You were not charged.',
+  SOLD_OUT: 'Tieto vstupenky sú vypredané.',
+  QUANTITY_ABOVE_LIMIT: 'To je viac vstupeniek, než tento event povoľuje na jednu objednávku.',
+  SALES_ENDED: 'Predaj vstupeniek na tento event sa skončil.',
+  SALES_NOT_STARTED: 'Predaj vstupeniek sa ešte nezačal.',
+  TICKET_TYPE_INACTIVE: 'Táto vstupenka už nie je v predaji.',
+  AMOUNT_MISMATCH: 'Suma platby nesedela s objednávkou. Nič sme ti nestrhli.',
 
   // payouts
-  INSUFFICIENT_AVAILABLE_BALANCE: 'That is more than your available balance.',
-  PAYOUTS_NOT_ENABLED: 'Finish payout onboarding before withdrawing.',
+  INSUFFICIENT_AVAILABLE_BALANCE: 'To je viac, než máš k dispozícii.',
+  PAYOUTS_NOT_ENABLED: 'Pred výberom dokonči onboarding výplat.',
 
   // configuration
   PAYMENT_PROVIDER_NOT_CONFIGURED:
-    'Payments are not configured on this deployment yet. Add your Stripe keys to enable checkout.',
+    'Platby zatiaľ nie sú na tomto nasadení nakonfigurované. Doplň Stripe kľúče a pokladňa sa zapne.',
   APPLE_IAP_NOT_CONFIGURED:
-    'Premium purchases are not configured on this deployment yet.',
+    'Nákupy Premium zatiaľ nie sú na tomto nasadení nakonfigurované.',
   AI_NOT_CONFIGURED:
-    'The AI explanation service is not configured. Recommendations still work — they use the built-in ranker.',
-  SUPABASE_NOT_CONFIGURED: 'The backend is not configured for this build.',
+    'Služba AI vysvetlení nie je nakonfigurovaná. Odporúčania fungujú ďalej — beží zabudovaný ranker.',
+  SUPABASE_NOT_CONFIGURED: 'Backend nie je pre tento build nakonfigurovaný.',
 
   // generic
-  NOT_AUTHORIZED: 'You do not have permission to do that.',
-  RATE_LIMITED: 'Too many attempts. Wait a moment and try again.',
-  CREW_FULL: 'This crew is already full.',
-  NETWORK: 'No connection. Check your internet and try again.',
+  NOT_AUTHORIZED: 'Na toto nemáš oprávnenie.',
+  RATE_LIMITED: 'Priveľa pokusov. Chvíľu počkaj a skús znova.',
+  CREW_FULL: 'Táto partia je už plná.',
+  NETWORK: 'Bez pripojenia. Skontroluj internet a skús znova.',
 };
 
 export function messageFor(error: unknown): string {
-  if (!error) return 'Something went wrong.';
+  if (!error) return 'Niečo sa pokazilo.';
 
   if (error instanceof FunctionError) {
-    return MESSAGES[error.code] ?? error.message ?? 'Something went wrong.';
+    return MESSAGES[error.code] ?? error.message ?? 'Niečo sa pokazilo.';
   }
 
   const raw =
@@ -73,7 +73,7 @@ export function messageFor(error: unknown): string {
 
   if (/network request failed|fetch failed/i.test(raw)) return MESSAGES.NETWORK;
 
-  return raw || 'Something went wrong.';
+  return raw || 'Niečo sa pokazilo.';
 }
 
 /** True when the failure is "this deployment has no credentials for that". */

@@ -20,7 +20,7 @@ export default function NewOrganizationScreen() {
     setError(null);
 
     if (name.trim().length < 2) {
-      setError('Give the organization a name.');
+      setError('Zadaj názov organizácie.');
       return;
     }
 
@@ -46,35 +46,35 @@ export default function NewOrganizationScreen() {
   return (
     <Screen scroll>
       <Body muted style={{ marginBottom: 24 }}>
-        Organizations are how ticketed events work on BLUP. You can still create free events without
-        one.
+        Organizácie sú spôsob, akým na BLUPe fungujú platené eventy. Eventy zdarma vieš robiť aj
+        bez nej.
       </Body>
 
-      {error ? <Notice tone="danger" title="Could not create" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa vytvoriť" body={error} /> : null}
 
-      <Input label="Name" value={name} onChangeText={setName} placeholder="Nova Collective" editable={!saving} />
+      <Input label="Názov" value={name} onChangeText={setName} placeholder="Nova Collective" editable={!saving} />
       <Input
-        label="Handle"
+        label="Odkaz (handle)"
         value={slug}
         onChangeText={(value) => setSlug(value.toLowerCase())}
         placeholder="nova-collective"
         autoCapitalize="none"
-        hint="Used in links. Lowercase letters, numbers and dashes."
+        hint="Používa sa v odkazoch. Malé písmená, čísla a pomlčky."
         editable={!saving}
       />
       <Input
-        label="Description"
+        label="Popis"
         value={description}
         onChangeText={setDescription}
-        placeholder="Warehouse parties and techno nights since 2019."
+        placeholder="Warehouse párty a techno noci od roku 2019."
         multiline
         numberOfLines={3}
         style={{ height: 90, textAlignVertical: 'top', paddingTop: 12 }}
         editable={!saving}
       />
-      <Input label="Website" value={website} onChangeText={setWebsite} placeholder="https://" autoCapitalize="none" editable={!saving} />
+      <Input label="Web" value={website} onChangeText={setWebsite} placeholder="https://" autoCapitalize="none" editable={!saving} />
       <Input
-        label="Contact email"
+        label="Kontaktný e-mail"
         value={contactEmail}
         onChangeText={setContactEmail}
         placeholder="hello@example.com"
@@ -83,16 +83,16 @@ export default function NewOrganizationScreen() {
         editable={!saving}
       />
       <Input
-        label="Country"
+        label="Krajina"
         value={country}
         onChangeText={(value) => setCountry(value.toUpperCase().slice(0, 2))}
         placeholder="SK"
         autoCapitalize="characters"
-        hint="Two-letter code — determines the payout provider setup."
+        hint="Dvojpísmenový kód — určuje nastavenie poskytovateľa výplat."
         editable={!saving}
       />
 
-      <Button title="Create organization" onPress={submit} loading={saving} />
+      <Button title="Vytvoriť organizáciu" onPress={submit} loading={saving} />
     </Screen>
   );
 }

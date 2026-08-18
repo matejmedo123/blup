@@ -35,9 +35,9 @@ export default function AttendingScreen() {
         ListEmptyComponent={
           <EmptyState
             emoji="📅"
-            title="Nothing in your calendar"
-            body="RSVP to an event and it shows up here."
-            actionLabel="Explore events"
+            title="V kalendári máš prázdno"
+            body="Označ pri evente, že ideš, a objaví sa tu."
+            actionLabel="Prezerať eventy"
             onAction={() => router.replace('/(tabs)/explore')}
           />
         }

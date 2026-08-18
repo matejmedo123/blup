@@ -44,37 +44,37 @@ export default function EventAnalyticsScreen() {
     <Screen scroll>
       <Text style={styles.title}>{data.title}</Text>
 
-      <SectionHeader title="Reach" />
+      <SectionHeader title="Dosah" />
       <View style={styles.grid}>
-        <Tile label="Views" value={String(data.views)} />
-        <Tile label="Unique viewers" value={String(data.unique_viewers)} />
-        <Tile label="Saves" value={String(data.saves)} />
-        <Tile label="Likes" value={String(data.likes)} />
+        <Tile label="Zobrazenia" value={String(data.views)} />
+        <Tile label="Unikátni návštevníci" value={String(data.unique_viewers)} />
+        <Tile label="Uloženia" value={String(data.saves)} />
+        <Tile label="Páči sa" value={String(data.likes)} />
       </View>
 
-      <SectionHeader title="Attendance" />
+      <SectionHeader title="Účasť" />
       <View style={styles.grid}>
-        <Tile label="Going" value={String(data.rsvp_going)} />
-        <Tile label="Interested" value={String(data.rsvp_interested)} />
-        <Tile label="Tickets sold" value={String(data.tickets_sold)} />
-        <Tile label="Checked in" value={String(data.checked_in)} />
+        <Tile label="Idú" value={String(data.rsvp_going)} />
+        <Tile label="Zaujíma ich to" value={String(data.rsvp_interested)} />
+        <Tile label="Predané vstupenky" value={String(data.tickets_sold)} />
+        <Tile label="Odbavení" value={String(data.checked_in)} />
       </View>
 
-      <SectionHeader title="Money" />
+      <SectionHeader title="Peniaze" />
       <View style={styles.money}>
-        <MoneyRow label="Gross revenue" value={formatMoney(data.gross_revenue_cents, data.currency)} />
-        <MoneyRow label="BLUP fee" value={`− ${formatMoney(data.platform_fee_cents, data.currency)}`} />
+        <MoneyRow label="Hrubý príjem" value={formatMoney(data.gross_revenue_cents, data.currency)} />
+        <MoneyRow label="Poplatok BLUP" value={`− ${formatMoney(data.platform_fee_cents, data.currency)}`} />
         <Divider />
-        <MoneyRow label="Your net" value={formatMoney(data.organizer_net_cents, data.currency)} strong />
+        <MoneyRow label="Tvoj čistý príjem" value={formatMoney(data.organizer_net_cents, data.currency)} strong />
       </View>
 
       <Caption style={styles.conversion}>
         Conversion: {data.conversion_rate}% of views became a ticket.
       </Caption>
 
-      <SectionHeader title="Recent orders" />
+      <SectionHeader title="Posledné objednávky" />
       {paidOrders.length === 0 ? (
-        <Body muted>No paid orders yet.</Body>
+        <Body muted>Zatiaľ žiadne platené objednávky.</Body>
       ) : (
         paidOrders.slice(0, 20).map((order) => (
           <View key={order.id as string} style={styles.orderRow}>

@@ -24,7 +24,7 @@ export default function AdminUsersScreen() {
     setError(null);
     setBusy(id);
     try {
-      await suspendUser(id, !suspended, suspended ? undefined : 'Suspended by an admin');
+      await suspendUser(id, !suspended, suspended ? undefined : 'Pozastavené adminom');
       await queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
     } catch (caught) {
       setError(messageFor(caught));
@@ -39,11 +39,11 @@ export default function AdminUsersScreen() {
         <Input
           value={search}
           onChangeText={setSearch}
-          placeholder="Search by name, username or email"
+          placeholder="Hľadaj podľa mena, používateľského mena alebo e-mailu"
           autoCapitalize="none"
           style={styles.search}
         />
-        {error ? <Notice tone="danger" title="Could not update" body={error} /> : null}
+        {error ? <Notice tone="danger" title="Nepodarilo sa upraviť" body={error} /> : null}
       </View>
 
       {users.isLoading ? (
@@ -62,7 +62,7 @@ export default function AdminUsersScreen() {
                 {item.app_role !== 'user' ? <Badge tone="accent" label={item.app_role} /> : null}
               </View>
               <Button
-                title={item.is_suspended ? 'Restore' : 'Suspend'}
+                title={item.is_suspended ? 'Obnoviť' : 'Pozastaviť'}
                 variant={item.is_suspended ? 'secondary' : 'danger'}
                 compact
                 loading={busy === item.id}
@@ -70,7 +70,7 @@ export default function AdminUsersScreen() {
               />
             </View>
           )}
-          ListEmptyComponent={<EmptyState emoji="👤" title="No users match" />}
+          ListEmptyComponent={<EmptyState emoji="👤" title="Nikto sa nezhoduje" />}
         />
       )}
     </Screen>

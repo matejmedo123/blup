@@ -13,13 +13,13 @@ export default function SettingsLayout() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'Settings' }} />
-      <Stack.Screen name="profile" options={{ title: 'Edit profile' }} />
-      <Stack.Screen name="interests" options={{ title: 'Interests' }} />
-      <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
-      <Stack.Screen name="privacy" options={{ title: 'Privacy' }} />
-      <Stack.Screen name="saved" options={{ title: 'Saved events' }} />
-      <Stack.Screen name="attending" options={{ title: 'Going to' }} />
+      <Stack.Screen name="index" options={{ title: 'Nastavenia' }} />
+      <Stack.Screen name="profile" options={{ title: 'Upraviť profil' }} />
+      <Stack.Screen name="interests" options={{ title: 'Záujmy' }} />
+      <Stack.Screen name="notifications" options={{ title: 'Notifikácie' }} />
+      <Stack.Screen name="privacy" options={{ title: 'Súkromie' }} />
+      <Stack.Screen name="saved" options={{ title: 'Uložené eventy' }} />
+      <Stack.Screen name="attending" options={{ title: 'Idem na' }} />
     </Stack>
   );
 }

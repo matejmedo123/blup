@@ -41,12 +41,12 @@ export default function PrivacySettingsScreen() {
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not save" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa uložiť" body={error} /> : null}
 
-      <SectionHeader title="Visibility" />
+      <SectionHeader title="Viditeľnosť" />
       <Switch
-        label="Private profile"
-        description="Only people who follow you can see your profile and events."
+        label="Súkromný profil"
+        description="Tvoj profil a eventy uvidia len ľudia, ktorí ťa sledujú."
         value={isPrivate}
         onValueChange={(value) => {
           setIsPrivate(value);
@@ -54,8 +54,8 @@ export default function PrivacySettingsScreen() {
         }}
       />
       <Switch
-        label="Show my city"
-        description="Your exact coordinates are never shown to other users — only distances."
+        label="Zobrazovať moje mesto"
+        description="Tvoje presné súradnice sa nikomu nezobrazia — iba vzdialenosti."
         value={showLocation}
         onValueChange={(value) => {
           setShowLocation(value);
@@ -63,7 +63,7 @@ export default function PrivacySettingsScreen() {
         }}
       />
       <Switch
-        label="Allow messages"
+        label="Povoliť správy"
         value={allowDm}
         onValueChange={(value) => {
           setAllowDm(value);
@@ -71,10 +71,10 @@ export default function PrivacySettingsScreen() {
         }}
       />
 
-      <SectionHeader title="Anonymous mode" />
+      <SectionHeader title="Anonymný režim" />
       <Switch
-        label={isPremium ? 'Browse anonymously' : 'Browse anonymously (Premium)'}
-        description="Keeps you out of people matching and attendee lists while you look around."
+        label={isPremium ? 'Prezerať anonymne' : 'Prezerať anonymne (Premium)'}
+        description="Kým sa rozhliadaš, nebudeš v párovaní ľudí ani v zoznamoch účastníkov."
         value={anonymousMode}
         onValueChange={(value) => {
           if (!isPremium) return;
@@ -85,19 +85,19 @@ export default function PrivacySettingsScreen() {
       {!isPremium ? (
         <Notice
           tone="accent"
-          title="Anonymous mode is a Premium feature"
-          body="Everything else on this page is available to everyone."
+          title="Anonymný režim je Premium funkcia"
+          body="Všetko ostatné na tejto stránke má každý."
         />
       ) : null}
 
-      <SectionHeader title="Location" />
+      <SectionHeader title="Poloha" />
       <Body muted style={{ marginBottom: 12 }}>
         {location.status === 'granted'
-          ? `Location is on${location.city ? ` (${location.city})` : ''}. BLUP stores your last position to rank events by distance.`
-          : 'Location is off. Events cannot be sorted by distance.'}
+          ? `Poloha je zapnutá${location.city ? ` (${location.city})` : ''}. BLUP si pamätá tvoju poslednú pozíciu, aby zoradil eventy podľa vzdialenosti.`
+          : 'Poloha je vypnutá. Eventy sa nedajú zoradiť podľa vzdialenosti.'}
       </Body>
       <Button
-        title={location.status === 'granted' ? 'Refresh my position' : 'Enable location'}
+        title={location.status === 'granted' ? 'Obnoviť moju pozíciu' : 'Zapnúť polohu'}
         variant="secondary"
         onPress={() => void location.request()}
       />

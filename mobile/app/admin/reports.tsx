@@ -24,7 +24,7 @@ export default function AdminReportsScreen() {
     try {
       // Actioning a reported event also takes it down.
       if (status === 'actioned' && targetType === 'event' && targetId) {
-        await setEventStatus(targetId, 'cancelled', 'Removed after a report');
+        await setEventStatus(targetId, 'cancelled', 'Odstránené po nahlásení');
       }
       await resolveReport(id, status);
       await queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] });
@@ -40,14 +40,14 @@ export default function AdminReportsScreen() {
   if ((reports.data ?? []).length === 0) {
     return (
       <Screen>
-        <EmptyState emoji="🛡️" title="Nothing reported" body="No open reports right now." />
+        <EmptyState emoji="🛡️" title="Žiadne nahlásenia" body="Momentálne nie sú otvorené žiadne nahlásenia." />
       </Screen>
     );
   }
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not resolve" body={error} /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa vyriešiť" body={error} /> : null}
 
       {(reports.data ?? []).map((report) => (
         <View key={report.id as string} style={styles.card}>
@@ -60,7 +60,7 @@ export default function AdminReportsScreen() {
           {report.details ? <Body muted>{String(report.details)}</Body> : null}
 
           <Button
-            title="Open the reported item"
+            title="Otvoriť nahlásený obsah"
             variant="ghost"
             compact
             onPress={() => {
@@ -73,7 +73,7 @@ export default function AdminReportsScreen() {
 
           <View style={styles.actions}>
             <Button
-              title="Take it down"
+              title="Stiahnuť"
               variant="danger"
               loading={busy === report.id}
               onPress={() =>
@@ -82,7 +82,7 @@ export default function AdminReportsScreen() {
               style={styles.flex}
             />
             <Button
-              title="Dismiss"
+              title="Zamietnuť"
               variant="secondary"
               disabled={busy !== null}
               onPress={() => resolve(report.id as string, 'dismissed')}

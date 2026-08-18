@@ -86,10 +86,10 @@ export default function EditEventScreen() {
   };
 
   const confirmCancel = () => {
-    Alert.alert('Cancel this event?', 'Everyone who RSVP’d will see it as cancelled.', [
-      { text: 'Keep it', style: 'cancel' },
+    Alert.alert('Zrušiť tento event?', 'Každý, kto sa prihlásil, ho uvidí ako zrušený.', [
+      { text: 'Nechať', style: 'cancel' },
       {
-        text: 'Cancel event',
+        text: 'Zrušiť event',
         style: 'destructive',
         onPress: async () => {
           try {
@@ -104,10 +104,10 @@ export default function EditEventScreen() {
   };
 
   const confirmDelete = () => {
-    Alert.alert('Delete permanently?', 'This cannot be undone. Tickets and RSVPs go with it.', [
-      { text: 'Keep it', style: 'cancel' },
+    Alert.alert('Zmazať natrvalo?', 'Toto sa nedá vrátiť. Zmiznú aj vstupenky a prihlášky.', [
+      { text: 'Nechať', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'Zmazať',
         style: 'destructive',
         onPress: async () => {
           try {
@@ -123,15 +123,15 @@ export default function EditEventScreen() {
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not save" body={error} /> : null}
-      {saved ? <Notice tone="success" title="Saved" body="Everyone sees the update immediately." /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa uložiť" body={error} /> : null}
+      {saved ? <Notice tone="success" title="Uložené" body="Zmena je hneď viditeľná pre všetkých." /> : null}
 
-      <Button title="Change cover photo" variant="secondary" onPress={changeCover} disabled={saving} />
+      <Button title="Zmeniť titulnú fotku" variant="secondary" onPress={changeCover} disabled={saving} />
 
-      <SectionHeader title="Details" />
-      <Input label="Title" value={title} onChangeText={setTitle} editable={!saving} />
+      <SectionHeader title="Detaily" />
+      <Input label="Názov" value={title} onChangeText={setTitle} editable={!saving} />
       <Input
-        label="Description"
+        label="Popis"
         value={description}
         onChangeText={setDescription}
         multiline
@@ -139,23 +139,23 @@ export default function EditEventScreen() {
         style={styles.textarea}
         editable={!saving}
       />
-      <Input label="Venue" value={venueName} onChangeText={setVenueName} editable={!saving} />
-      <Input label="Address" value={address} onChangeText={setAddress} editable={!saving} />
+      <Input label="Miesto" value={venueName} onChangeText={setVenueName} editable={!saving} />
+      <Input label="Adresa" value={address} onChangeText={setAddress} editable={!saving} />
       <Input
-        label="Capacity"
+        label="Kapacita"
         value={capacity}
         onChangeText={setCapacity}
         keyboardType="number-pad"
-        placeholder="Leave empty for unlimited"
+        placeholder="Nechaj prázdne pre neobmedzenú"
         editable={!saving}
       />
 
-      <Button title="Save changes" onPress={save} loading={saving} />
+      <Button title="Uložiť zmeny" onPress={save} loading={saving} />
 
       <Divider />
 
-      <Button title="Cancel this event" variant="danger" onPress={confirmCancel} />
-      <Button title="Delete permanently" variant="ghost" onPress={confirmDelete} />
+      <Button title="Zrušiť tento event" variant="danger" onPress={confirmCancel} />
+      <Button title="Zmazať natrvalo" variant="ghost" onPress={confirmDelete} />
     </Screen>
   );
 }

@@ -68,7 +68,7 @@ export default function EditProfileScreen() {
       if (handle !== profile?.username) {
         const available = await isUsernameAvailable(handle);
         if (!available) {
-          setError('That username is taken.');
+          setError('Toto meno je už obsadené.');
           return;
         }
       }
@@ -91,8 +91,8 @@ export default function EditProfileScreen() {
 
   return (
     <Screen scroll>
-      {error ? <Notice tone="danger" title="Could not save" body={error} /> : null}
-      {saved ? <Notice tone="success" title="Saved" body="Your profile is updated." /> : null}
+      {error ? <Notice tone="danger" title="Nepodarilo sa uložiť" body={error} /> : null}
+      {saved ? <Notice tone="success" title="Uložené" body="Tvoj profil je aktualizovaný." /> : null}
 
       <View style={styles.avatarSection}>
         <Pressable onPress={() => changePhoto('library')} disabled={uploading}>
@@ -105,17 +105,17 @@ export default function EditProfileScreen() {
         </Pressable>
 
         <View style={styles.photoActions}>
-          <Button title="Choose" variant="ghost" compact onPress={() => changePhoto('library')} disabled={uploading} />
-          <Button title="Camera" variant="ghost" compact onPress={() => changePhoto('camera')} disabled={uploading} />
+          <Button title="Vybrať" variant="ghost" compact onPress={() => changePhoto('library')} disabled={uploading} />
+          <Button title="Fotoaparát" variant="ghost" compact onPress={() => changePhoto('camera')} disabled={uploading} />
           {profile?.avatar_url ? (
-            <Button title="Remove" variant="ghost" compact onPress={deletePhoto} disabled={uploading} />
+            <Button title="Odstrániť" variant="ghost" compact onPress={deletePhoto} disabled={uploading} />
           ) : null}
         </View>
       </View>
 
-      <Input label="Name" value={displayName} onChangeText={setDisplayName} editable={!saving} />
+      <Input label="Meno" value={displayName} onChangeText={setDisplayName} editable={!saving} />
       <Input
-        label="Username"
+        label="Používateľské meno"
         value={username}
         onChangeText={(value) => setUsername(value.toLowerCase())}
         autoCapitalize="none"
@@ -123,7 +123,7 @@ export default function EditProfileScreen() {
         editable={!saving}
       />
       <Input
-        label="Bio"
+        label="O tebe"
         value={bio}
         onChangeText={setBio}
         multiline
@@ -133,10 +133,10 @@ export default function EditProfileScreen() {
         hint={`${bio.length}/300`}
         editable={!saving}
       />
-      <Input label="City" value={city} onChangeText={setCity} placeholder="Bratislava" editable={!saving} />
+      <Input label="Mesto" value={city} onChangeText={setCity} placeholder="Bratislava" editable={!saving} />
 
-      <Button title="Save changes" onPress={save} loading={saving} />
-      <Button title="Back" variant="ghost" onPress={() => router.back()} />
+      <Button title="Uložiť zmeny" onPress={save} loading={saving} />
+      <Button title="Späť" variant="ghost" onPress={() => router.back()} />
     </Screen>
   );
 }

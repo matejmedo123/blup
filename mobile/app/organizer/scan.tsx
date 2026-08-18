@@ -8,13 +8,13 @@ import { Body, Button, Caption, Notice, Screen } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
 const REASONS: Record<string, string> = {
-  TICKET_NOT_FOUND: 'No such ticket. This code is not from BLUP.',
-  INVALID_SIGNATURE: 'This QR code is not genuine.',
-  ALREADY_USED: 'Already checked in.',
-  NOT_AUTHORIZED: 'You do not run this event.',
-  WRONG_EVENT: 'This ticket is for a different event.',
-  REFUNDED: 'This ticket was refunded.',
-  CANCELLED: 'This ticket was cancelled.',
+  TICKET_NOT_FOUND: 'Takáto vstupenka neexistuje. Tento kód nie je z BLUPu.',
+  INVALID_SIGNATURE: 'Tento QR kód nie je pravý.',
+  ALREADY_USED: 'Už bola použitá pri vstupe.',
+  NOT_AUTHORIZED: 'Tento event nerobíš ty.',
+  WRONG_EVENT: 'Táto vstupenka je na iný event.',
+  REFUNDED: 'Táto vstupenka bola refundovaná.',
+  CANCELLED: 'Táto vstupenka bola zrušená.',
 };
 
 /**
@@ -35,7 +35,7 @@ export default function ScanScreen() {
 
     const parsed = parseTicketQr(data);
     if (!parsed) {
-      setError('That is not a BLUP ticket.');
+      setError('Toto nie je vstupenka z BLUPu.');
       return;
     }
 
@@ -61,17 +61,17 @@ export default function ScanScreen() {
     setScanning(true);
   };
 
-  if (!permission) return <Screen><Body>Checking camera access…</Body></Screen>;
+  if (!permission) return <Screen><Body>Overujem prístup ku kamere…</Body></Screen>;
 
   if (!permission.granted) {
     return (
       <Screen scroll>
         <Notice
           tone="warning"
-          title="Camera access needed"
-          body="BLUP uses the camera only to read ticket QR codes at the door."
+          title="Potrebujeme prístup ku kamere"
+          body="BLUP používa kameru iba na čítanie QR kódov vstupeniek pri vstupe."
         />
-        <Button title="Allow camera" onPress={() => void requestPermission()} />
+        <Button title="Povoliť kameru" onPress={() => void requestPermission()} />
       </Screen>
     );
   }
@@ -87,7 +87,7 @@ export default function ScanScreen() {
 
       <View style={styles.frame} pointerEvents="none">
         <View style={styles.reticle} />
-        <Text style={styles.hint}>Point at the ticket QR code</Text>
+        <Text style={styles.hint}>Namier na QR kód vstupenky</Text>
       </View>
 
       {(result || error) ? (
@@ -95,21 +95,21 @@ export default function ScanScreen() {
           {error ? (
             <>
               <Text style={styles.resultEmoji}>⚠️</Text>
-              <Text style={styles.resultTitle}>Could not check in</Text>
+              <Text style={styles.resultTitle}>Nepodarilo sa odbaviť</Text>
               <Body muted style={styles.resultBody}>{error}</Body>
             </>
           ) : result?.ok ? (
             <>
               <Text style={styles.resultEmoji}>✅</Text>
-              <Text style={[styles.resultTitle, { color: colors.success }]}>Checked in</Text>
+              <Text style={[styles.resultTitle, { color: colors.success }]}>Vstup potvrdený</Text>
               <Body muted style={styles.resultBody}>{result.event_title}</Body>
             </>
           ) : (
             <>
               <Text style={styles.resultEmoji}>⛔</Text>
-              <Text style={[styles.resultTitle, { color: colors.danger }]}>Not valid</Text>
+              <Text style={[styles.resultTitle, { color: colors.danger }]}>Neplatná</Text>
               <Body muted style={styles.resultBody}>
-                {REASONS[result?.reason ?? ''] ?? result?.reason ?? 'This ticket cannot be used.'}
+                {REASONS[result?.reason ?? ''] ?? result?.reason ?? 'Táto vstupenka sa nedá použiť.'}
               </Body>
               {result?.checked_in_at ? (
                 <Caption>Scanned at {new Date(result.checked_in_at).toLocaleTimeString()}</Caption>
@@ -117,7 +117,7 @@ export default function ScanScreen() {
             </>
           )}
 
-          <Button title="Scan the next one" onPress={scanNext} style={styles.nextButton} />
+          <Button title="Skenovať ďalšiu" onPress={scanNext} style={styles.nextButton} />
         </View>
       ) : null}
     </View>

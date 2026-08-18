@@ -19,9 +19,9 @@ import { Button, EmptyState, LoadingState, Notice, Screen } from '@/components/u
  */
 const ERROR_MESSAGES: Record<string, string> = {
   otp_expired:
-    'This link has expired or was already used. Request a new one and open it within the hour.',
-  access_denied: 'This link is no longer valid.',
-  invalid_request: 'This link is malformed. Try requesting a new email.',
+    'Tento odkaz vypršal alebo už bol použitý. Vyžiadaj si nový a otvor ho do hodiny.',
+  access_denied: 'Tento odkaz už neplatí.',
+  invalid_request: 'Tento odkaz je poškodený. Skús si vyžiadať nový e-mail.',
 };
 
 export default function AuthCallbackScreen() {
@@ -49,7 +49,7 @@ export default function AuthCallbackScreen() {
       setMessage(
         ERROR_MESSAGES[errorCode ?? ''] ??
           params.error_description?.replace(/\+/g, ' ') ??
-          'This link could not be used.',
+          'Tento odkaz sa nedal použiť.',
       );
       setStatus('error');
       return;
@@ -61,29 +61,29 @@ export default function AuthCallbackScreen() {
     handleAuthDeepLink(url)
       .then(() => router.replace('/'))
       .catch((caught) => {
-        setMessage(caught instanceof Error ? caught.message : 'Could not complete sign-in.');
+        setMessage(caught instanceof Error ? caught.message : 'Prihlásenie sa nepodarilo dokončiť.');
         setStatus('error');
       });
   }, [params.code, params.error, params.error_code, params.error_description]);
 
   if (status === 'working') {
-    return <Screen><LoadingState label="Confirming…" /></Screen>;
+    return <Screen><LoadingState label="Potvrdzujem…" /></Screen>;
   }
 
   return (
     <Screen scroll>
-      <Notice tone="warning" title="This link did not work" body={message ?? ''} />
+      <Notice tone="warning" title="Tento odkaz nefungoval" body={message ?? ''} />
 
       <EmptyState
         emoji="✉️"
-        title="Nothing is lost"
-        body="Your account still exists — the link is just single-use and short-lived. Sign in, or request a fresh email."
-        actionLabel="Go to sign in"
+        title="Nič nie je stratené"
+        body="Tvoj účet stále existuje — odkaz je len jednorazový a krátko platný. Prihlás sa alebo si vyžiadaj nový e-mail."
+        actionLabel="Prejsť na prihlásenie"
         onAction={() => router.replace('/(auth)/sign-in')}
       />
 
       <Button
-        title="Request a new link"
+        title="Vyžiadať nový odkaz"
         variant="ghost"
         onPress={() => router.replace('/(auth)/forgot-password')}
       />
