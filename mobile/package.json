@@ -61,7 +61,9 @@
     "build:dev:android": "eas build --profile development --platform android",
     "build:dev:ios": "eas build --profile development --platform ios",
     "build:preview:android": "eas build --profile preview --platform android",
-    "build:prod": "eas build --profile production --platform all"
+    "build:prod": "eas build --profile production --platform all",
+    "web": "expo start --web",
+    "web:clear": "expo start --web --clear"
   },
   "private": true
 }
