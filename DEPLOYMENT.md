@@ -67,6 +67,19 @@ version in Expo Go under the Profile tab; if the store says it is up to date but
 the app is older, delete Expo Go and reinstall it — a pending update is not an
 applied one.
 
+### Trying it without a phone: the web build
+
+```bash
+npm run web        # or: cd mobile && npx expo start --web
+```
+
+Opens the whole app in a browser — auth, profiles, events, RSVP, comments,
+search, recommendations and uploads all work against the same Supabase project.
+Two screens are honest about the difference: the map renders as a positional
+list (react-native-maps is native-only) and checkout says card payments need a
+development build. Useful when Expo Go is uncooperative or you just want to see
+the app immediately.
+
 **Expo Go limits.** Expo Go ships a fixed set of native modules. These need a
 real build:
 
@@ -216,4 +229,5 @@ cd mobile && npx expo export --platform android   # proves the bundle builds
 | `db:verify` cannot start | Install PostgreSQL 16 locally (`apt install postgresql-16`). |
 | Metro resolves nothing after an env change | `npx expo start --clear`. |
 | "Project is incompatible with this version of Expo Go" | Expo Go is older than 57.0.9. Delete and reinstall it from the store; updating in place is often not applied. |
-| "Card payments need a development build" on checkout | Expected in Expo Go — the Stripe native module is not bundled there. Everything else keeps working. |
+| "Card payments need a development build" on checkout | Expected in Expo Go and on web — the Stripe native module is not bundled there. Everything else keeps working. |
+| Expo Go refuses to open the project at all | Use `npm run web` to try the app in a browser while you sort the Expo Go version out. |

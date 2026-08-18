@@ -3,7 +3,6 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Crypto from 'expo-crypto';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -14,6 +13,7 @@ import { pickImage, uploadEventCover } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
+import { DateTimeField } from '@/components/DateTimeField';
 import {
   Body, Button, Caption, Chip, Input, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
@@ -57,7 +57,6 @@ export default function CreateEventScreen() {
     return date;
   });
   const [durationHours, setDurationHours] = useState(3);
-  const [picker, setPicker] = useState<'date' | 'time' | null>(null);
 
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -228,30 +227,7 @@ export default function CreateEventScreen() {
 
       {/* --- when ----------------------------------------------------------- */}
       <SectionHeader title="When" />
-      <View style={styles.dateRow}>
-        <Pressable style={styles.dateButton} onPress={() => setPicker('date')}>
-          <Caption>Starts</Caption>
-          <Text style={styles.dateText}>{formatEventDateLong(startAt.toISOString())}</Text>
-        </Pressable>
-      </View>
-
-      {picker ? (
-        <DateTimePicker
-          value={startAt}
-          mode={picker}
-          display="spinner"
-          themeVariant="dark"
-          minimumDate={new Date()}
-          onChange={(pickerEvent, selected) => {
-            if (pickerEvent.type === 'dismissed') {
-              setPicker(null);
-              return;
-            }
-            if (selected) setStartAt(selected);
-            setPicker(picker === 'date' ? 'time' : null);
-          }}
-        />
-      ) : null}
+      <DateTimeField value={startAt} onChange={setStartAt} minimumDate={new Date()} />
 
       <View style={styles.chips}>
         {[2, 3, 4, 6, 8, 12].map((hours) => (
@@ -404,16 +380,6 @@ const styles = StyleSheet.create({
   textarea: { height: 110, textAlignVertical: 'top', paddingTop: spacing.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
 
-  dateRow: { marginBottom: spacing.md },
-  dateButton: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  dateText: { ...typography.bodyStrong, color: colors.text },
 
   mapHint: { marginBottom: spacing.sm },
   mapWrapper: {

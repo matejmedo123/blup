@@ -12,7 +12,8 @@
     "functions:serve": "supabase functions serve",
     "functions:deploy": "./scripts/deploy-functions.sh",
     "mobile": "npm --prefix mobile run start",
-    "typecheck": "npm --prefix mobile run typecheck"
+    "typecheck": "npm --prefix mobile run typecheck",
+    "web": "npm --prefix mobile run web"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.112.3",

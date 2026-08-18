@@ -80,7 +80,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         ]
       : undefined,
   },
-  web: { favicon: './assets/favicon.png' },
+  // The web build is a convenience target: it runs the whole app in a browser
+  // so it can be tried without a device. react-native-maps and the payment
+  // SDKs are native-only, and those screens say so explicitly on web.
+  web: { bundler: 'metro', output: 'single', favicon: './assets/favicon.png' },
   plugins: [
     'expo-router',
     [

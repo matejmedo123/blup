@@ -102,7 +102,17 @@ without it.
 npm run mobile           # or: cd mobile && npx expo start
 ```
 
-### 8. Get it on your phone
+### 8. Try it right now, in a browser
+
+```bash
+npm run web
+```
+
+The whole app runs on web against the same Supabase project. The map becomes a
+positional list and checkout is disabled (both are native-only modules) — every
+other flow is the real one.
+
+### 9. Get it on your phone
 
 **Quickest path — Expo Go** (works for everything except Stripe’s native payment
 sheet, in-app purchases and maps on Android):

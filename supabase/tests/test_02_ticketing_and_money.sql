@@ -223,6 +223,35 @@ begin
   raise notice 'PASS refund reverses sale and platform fee';
 end $$;
 
+-- --- the balance view must not leak across organizations ---------------------
+-- organization_balances is security_invoker, so RLS on ledger_entries applies to
+-- whoever queries it. A stranger must not be able to read this org's revenue.
+do $$
+declare
+  visible integer;
+begin
+  set local role authenticated;
+
+  perform set_config('request.jwt.claim.sub', '33333333-3333-3333-3333-333333333333', true);
+  select count(*) into visible
+  from public.organization_balances
+  where organization_id = 'bbbbbbb1-0000-0000-0000-000000000001'
+    and gross_sales_cents <> 0;
+  assert visible = 0,
+    'a non-member must not see another organization''s balance';
+
+  perform set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+  select count(*) into visible
+  from public.organization_balances
+  where organization_id = 'bbbbbbb1-0000-0000-0000-000000000001'
+    and gross_sales_cents <> 0;
+  assert visible = 1,
+    'the organization owner must still see their own balance';
+
+  reset role;
+  raise notice 'PASS organization_balances respects RLS';
+end $$;
+
 -- --- organizer analytics -----------------------------------------------------
 do $$
 declare a jsonb;
