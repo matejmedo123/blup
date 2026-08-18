@@ -118,6 +118,8 @@ export interface ScoreBreakdown {
     past_behaviour: number;
     popularity: number;
     time_relevance: number;
+    /** Paid visibility. Present only when a boost is live. */
+    boost?: number;
   };
   weights: Record<string, number>;
   facts: {
@@ -126,6 +128,7 @@ export interface ScoreBreakdown {
     follows_creator: boolean;
     distance_m: number;
     category_affinity: number;
+    is_boosted?: boolean;
   };
 }
 

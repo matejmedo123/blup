@@ -208,13 +208,22 @@ export default function OrganizerDashboard() {
             </View>
 
             {!event.is_free ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => router.push(`/organizer/tickets/${event.id}`)}
-                style={({ pressed }) => [styles.eventAction, pressed && styles.eventRowPressed]}
-              >
-                <Text style={styles.eventActionLabel}>Vstupenky</Text>
-              </Pressable>
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push(`/organizer/tickets/${event.id}`)}
+                  style={({ pressed }) => [styles.eventAction, pressed && styles.eventRowPressed]}
+                >
+                  <Text style={styles.eventActionLabel}>Vstupenky</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push(`/organizer/promo/${event.id}`)}
+                  style={({ pressed }) => [styles.eventAction, pressed && styles.eventRowPressed]}
+                >
+                  <Text style={styles.eventActionLabel}>Promo</Text>
+                </Pressable>
+              </>
             ) : null}
 
             <Text style={styles.chevron}>›</Text>

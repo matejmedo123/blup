@@ -28,6 +28,57 @@ export async function getOrganization(id: string): Promise<Organization | null> 
   return (data as Organization) ?? null;
 }
 
+/**
+ * One-tap organizer profile for an individual.
+ *
+ * The concept document wants "ticketing pre všetkých" — anybody able to charge
+ * for their own event. Legally, money can only be paid out to a verified,
+ * identifiable entity, so this does not skip verification; it removes the form
+ * standing between a person and starting it, by creating a personal
+ * organization from their existing profile.
+ */
+export async function createPersonalOrganization(profile: {
+  id: string;
+  display_name: string | null;
+  username: string | null;
+  email?: string | null;
+  city?: string | null;
+}): Promise<Organization> {
+  const name = profile.display_name?.trim() || profile.username || 'Môj profil';
+
+  const base = (profile.username || name)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+
+  // Slugs are unique; a personal one is namespaced and suffixed if taken.
+  const candidate = base.length >= 3 ? base : `blup-${profile.id.slice(0, 8)}`;
+
+  try {
+    return await createOrganization({
+      name,
+      slug: candidate,
+      description: 'Osobný profil organizátora',
+      contactEmail: profile.email ?? undefined,
+      city: profile.city ?? undefined,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!/duplicate|unique/i.test(message)) throw error;
+
+    return createOrganization({
+      name,
+      slug: `${candidate}-${profile.id.slice(0, 4)}`.slice(0, 40),
+      description: 'Osobný profil organizátora',
+      contactEmail: profile.email ?? undefined,
+      city: profile.city ?? undefined,
+    });
+  }
+}
+
 export async function createOrganization(input: {
   name: string;
   slug: string;
@@ -44,7 +95,7 @@ export async function createOrganization(input: {
 
   const slug = input.slug.trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) {
-    throw new Error('The handle must be 3–40 characters: lowercase letters, numbers and dashes.');
+    throw new Error('Odkaz musí mať 3–40 znakov: malé písmená, čísla a pomlčky.');
   }
 
   const { data, error } = await supabase

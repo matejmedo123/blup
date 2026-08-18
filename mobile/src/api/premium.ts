@@ -76,7 +76,7 @@ export function getStore(): StoreAvailability {
     return {
       available: false,
       reason: 'UNSUPPORTED_PLATFORM',
-      message: 'Subscriptions are only available in the iOS and Android apps.',
+      message: 'Predplatné je dostupné iba v iOS a Android aplikácii.',
     };
   }
 
@@ -127,7 +127,7 @@ export async function purchasePremium(plan: 'monthly' | 'yearly'): Promise<Premi
 
   if (Platform.OS === 'ios') {
     if (!store.module.getReceiptIOS) {
-      throw new Error('The store module does not expose a receipt to verify.');
+      throw new Error('Modul obchodu nevrátil doklad na overenie.');
     }
     const receipt = await store.module.getReceiptIOS();
     return verifyAppleReceipt(receipt);
@@ -146,7 +146,7 @@ export async function restorePurchases(): Promise<PremiumStatus> {
   if (!store.available) throw new Error(store.message);
 
   if (Platform.OS !== 'ios' || !store.module.getReceiptIOS) {
-    throw new Error('Restoring purchases is currently only implemented for iOS.');
+    throw new Error('Obnovenie nákupov je zatiaľ implementované len pre iOS.');
   }
 
   await store.module.initConnection();

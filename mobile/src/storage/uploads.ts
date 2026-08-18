@@ -38,8 +38,8 @@ export async function pickImage(options: {
   if (!permission.granted) {
     throw new Error(
       source === 'camera'
-        ? 'Camera access is off. Enable it in Settings to take a photo.'
-        : 'Photo access is off. Enable it in Settings to choose a picture.',
+        ? 'Prístup ku kamere je vypnutý. Zapni ho v Nastaveniach, ak chceš fotiť.'
+        : 'Prístup k fotkám je vypnutý. Zapni ho v Nastaveniach, ak chceš vybrať fotku.',
     );
   }
 
@@ -86,7 +86,7 @@ async function uploadToBucket(params: {
   const arrayBuffer = await response.arrayBuffer();
 
   if (arrayBuffer.byteLength > MAX_BYTES) {
-    throw new Error('That image is too large (max 5 MB after compression).');
+    throw new Error('Táto fotka je príliš veľká (max 5 MB po kompresii).');
   }
 
   const { error } = await supabase.storage
@@ -235,6 +235,20 @@ export async function signChatImage(path: string): Promise<string | null> {
 
   if (error) return null;
   return data?.signedUrl ?? null;
+}
+
+/** A photo attached to a community post. Public bucket — the feed is public. */
+export async function uploadCommunityImage(uri: string, communityId: string): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) throw new Error('UNAUTHENTICATED');
+
+  const compressed = await compress(uri, 1400);
+  return uploadToBucket({
+    bucket: 'event-images',
+    path: `${userId}/community/${communityId}/${Date.now()}.jpg`,
+    uri: compressed.uri,
+  });
 }
 
 export async function uploadOrganizationLogo(uri: string, organizationId: string): Promise<string> {

@@ -5,17 +5,32 @@ import { useQuery } from '@tanstack/react-query';
 
 
 import { getEvent } from '@/api/events';
-import { createCheckout, markTicketPurchaseSignal, waitForTickets } from '@/api/tickets';
+import {
+  createCheckout, markTicketPurchaseSignal, previewPromoCode, waitForTickets,
+  type PromoPreview,
+} from '@/api/tickets';
 import { isConfigured } from '@/lib/env';
 import { isStripeModuleAvailable, STRIPE_UNAVAILABLE_MESSAGE, useStripeBridge } from '@/payments/stripe';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatPrice } from '@/lib/format';
 import {
-  Body, Button, Caption, Divider, ErrorState, LoadingState, Notice, Screen, SectionHeader,
+  Body, Button, Caption, Divider, ErrorState, Input, LoadingState, Mono, Notice, Screen,
+  SectionHeader,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
 type Stage = 'select' | 'paying' | 'confirming' | 'done';
+
+const PROMO_REASON: Record<string, string> = {
+  PROMO_NOT_FOUND: 'Taký kód pre tento event neexistuje.',
+  PROMO_EXPIRED: 'Platnosť kódu už vypršala.',
+  PROMO_NOT_STARTED: 'Kód ešte nie je aktívny.',
+  PROMO_EXHAUSTED: 'Kód už bol vyčerpaný.',
+};
+
+function promoReason(reason?: string): string {
+  return (reason && PROMO_REASON[reason]) || 'Skús iný kód.';
+}
 
 /**
  * Checkout.
@@ -35,6 +50,9 @@ export default function CheckoutScreen() {
   const [stage, setStage] = useState<Stage>('select');
   const [error, setError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState('');
+  const [promo, setPromo] = useState<PromoPreview | null>(null);
+  const [checkingPromo, setCheckingPromo] = useState(false);
 
   const event = useQuery({
     queryKey: ['event', id],
@@ -48,6 +66,20 @@ export default function CheckoutScreen() {
     ? Math.min(selected.max_per_order, selected.quantity_total - selected.quantity_sold)
     : 1;
 
+  const applyPromo = async () => {
+    if (!selected || !id) return;
+    setError(null);
+    setCheckingPromo(true);
+    try {
+      const result = await previewPromoCode(id, promoCode, selected.price_cents * quantity);
+      setPromo(result);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setCheckingPromo(false);
+    }
+  };
+
   const pay = async () => {
     if (!selected) return;
 
@@ -56,7 +88,7 @@ export default function CheckoutScreen() {
 
     try {
       // 1. server computes amounts + creates the order
-      const session = await createCheckout(selected.id, quantity);
+      const session = await createCheckout(selected.id, quantity, promo?.valid ? promoCode : null);
       setOrderId(session.order_id);
 
       // Free tickets skip the payment provider entirely.
@@ -162,6 +194,8 @@ export default function CheckoutScreen() {
   }
 
   const subtotal = (selected?.price_cents ?? 0) * quantity;
+  const discount = promo?.valid ? promo.amount_off : 0;
+  const payable = Math.max(subtotal - discount, 0);
 
   return (
     <Screen scroll>
@@ -241,24 +275,79 @@ export default function CheckoutScreen() {
         <Body>{formatMoney(subtotal, selected?.currency ?? 'EUR')}</Body>
       </View>
 
-      <View style={styles.summaryRow}>
-        <Text style={styles.total}>Spolu</Text>
-        <Text style={styles.total}>{formatMoney(subtotal, selected?.currency ?? 'EUR')}</Text>
-      </View>
+      <SectionHeader title="Promo kód" />
+        <View style={styles.promoRow}>
+          <Input
+            value={promoCode}
+            onChangeText={(value) => {
+              setPromoCode(value.toUpperCase());
+              setPromo(null);
+            }}
+            placeholder="Napr. BLUP20"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={stage === 'select'}
+            style={styles.promoInput}
+          />
+          <Button
+            title="Použiť"
+            variant="secondary"
+            compact
+            loading={checkingPromo}
+            disabled={!promoCode.trim() || stage !== 'select'}
+            onPress={applyPromo}
+          />
+        </View>
 
-      <Caption style={styles.feeNote}>
-        The BLUP service fee is taken from the organizer’s payout, not added to your price.
-      </Caption>
+        {promo ? (
+          promo.valid ? (
+            <Notice
+              tone="success"
+              title={`Zľava ${formatMoney(promo.amount_off, selected?.currency ?? 'EUR')}`}
+              body="Zľavu prepočíta server pri vytvorení objednávky — to, čo vidíš, je to, čo zaplatíš."
+            />
+          ) : (
+            <Notice tone="warning" title="Kód neplatí" body={promoReason(promo.reason)} />
+          )
+        ) : null}
 
-      <Button
-        title={subtotal === 0 ? 'Získať vstupenku' : `Zaplatiť ${formatMoney(subtotal, selected?.currency ?? 'EUR')}`}
-        onPress={pay}
-        loading={stage === 'paying'}
-        disabled={!selected || (subtotal > 0 && (!isConfigured.stripe || !isStripeModuleAvailable))}
-        style={styles.payButton}
-      />
+        <Divider />
 
-      {orderId ? <Caption style={styles.orderRef}>Objednávka {orderId.slice(0, 8)}</Caption> : null}
+        {discount > 0 ? (
+          <>
+            <View style={styles.summaryRow}>
+              <Body muted>Medzisúčet</Body>
+              <Body muted>{formatMoney(subtotal, selected?.currency ?? 'EUR')}</Body>
+            </View>
+            <View style={styles.summaryRow}>
+              <Mono style={styles.discountLabel}>ZĽAVA {promoCode}</Mono>
+              <Body style={styles.discountValue}>
+                − {formatMoney(discount, selected?.currency ?? 'EUR')}
+              </Body>
+            </View>
+          </>
+        ) : null}
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.total}>Spolu</Text>
+          <Text style={styles.total}>{formatMoney(payable, selected?.currency ?? 'EUR')}</Text>
+        </View>
+
+        <Caption style={styles.feeNote}>
+          Servisný poplatok BLUPu sa strháva z výplaty organizátora, nepripočítava sa k tvojej cene.
+        </Caption>
+
+        <Button
+          title={payable === 0 ? 'Získať vstupenku' : `Zaplatiť ${formatMoney(payable, selected?.currency ?? 'EUR')}`}
+          onPress={pay}
+          loading={stage === 'paying'}
+          disabled={!selected || (payable > 0 && (!isConfigured.stripe || !isStripeModuleAvailable))}
+          style={styles.payButton}
+        />
+
+        {orderId ? (
+          <Caption style={styles.orderRef}>Objednávka {orderId.slice(0, 8)}</Caption>
+        ) : null}
     </Screen>
   );
 }
@@ -286,6 +375,10 @@ const styles = StyleSheet.create({
 
   quantityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   quantity: { ...typography.heading, color: colors.text, minWidth: 30, textAlign: 'center' },
+  promoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  discountLabel: { color: colors.success },
+  discountValue: { color: colors.success },
+  promoInput: { flex: 1, marginBottom: 0 },
   quantityHint: { marginLeft: 'auto' },
 
   summaryRow: {

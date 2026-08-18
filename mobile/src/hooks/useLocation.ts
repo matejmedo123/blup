@@ -85,7 +85,7 @@ export function useLocation(options: { persist?: boolean; watch?: boolean } = {}
         setState((previous) => ({
           ...previous,
           status: 'services_disabled',
-          error: 'Location services are turned off on this device.',
+          error: 'Lokalizačné služby sú na tomto zariadení vypnuté.',
         }));
         return null;
       }
@@ -111,7 +111,7 @@ export function useLocation(options: { persist?: boolean; watch?: boolean } = {}
       setState((previous) => ({
         ...previous,
         status: 'error',
-        error: error instanceof Error ? error.message : 'Could not determine your location.',
+        error: error instanceof Error ? error.message : 'Polohu sa nepodarilo zistiť.',
       }));
       return null;
     }

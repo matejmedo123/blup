@@ -7,6 +7,7 @@ import { useLocation } from '@/hooks/useLocation';
 import { searchEvents } from '@/api/events';
 import { searchProfiles } from '@/api/profiles';
 import { getPeopleRecommendations, describeMatch } from '@/api/ai';
+import { getCommunities } from '@/api/communities';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { formatDistance } from '@/lib/format';
@@ -16,11 +17,12 @@ import {
 } from '@/components/ui';
 import { colors, labelFor, radius, spacing, typography } from '@/theme';
 
-type Tab = 'events' | 'people' | 'organizations';
+type Tab = 'events' | 'people' | 'communities' | 'organizations';
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'events', label: 'Eventy' },
   { value: 'people', label: 'Ľudia' },
+  { value: 'communities', label: 'Komunity' },
   { value: 'organizations', label: 'Organizátori' },
 ];
 
@@ -103,6 +105,12 @@ export default function ExploreScreen() {
     enabled: tab === 'people',
   });
 
+  const communitiesQuery = useQuery({
+    queryKey: ['communities', query],
+    queryFn: () => getCommunities({ query }),
+    enabled: tab === 'communities',
+  });
+
   const organizationsQuery = useQuery({
     queryKey: ['search', 'organizations', query],
     queryFn: async () => {
@@ -128,7 +136,9 @@ export default function ExploreScreen() {
     ? 'Hľadaj ľudí podľa mena'
     : tab === 'organizations'
       ? 'Hľadaj organizátorov'
-      : 'Hľadaj eventy, miesta, žánre';
+      : tab === 'communities'
+        ? 'Hľadaj komunitu'
+        : 'Hľadaj eventy, miesta, žánre';
 
   return (
     <Screen contentStyle={styles.container}>
@@ -291,6 +301,45 @@ export default function ExploreScreen() {
         )
       ) : null}
 
+      {tab === 'communities' ? (
+        <FlatList
+          data={communitiesQuery.data ?? []}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <Pressable style={styles.newCommunity} onPress={() => router.push('/community/new')}>
+              <Text style={styles.newCommunityGlyph}>＋</Text>
+              <Text style={styles.newCommunityLabel}>Založiť komunitu</Text>
+            </Pressable>
+          }
+          renderItem={({ item }) => (
+            <PersonRow
+              name={item.name}
+              username={item.slug}
+              avatarUrl={item.cover_url}
+              detail={item.description ?? `${item.member_count} členov`}
+              trailing={`${item.member_count}`}
+              square
+              onPress={() => router.push(`/community/${item.id}`)}
+            />
+          )}
+          ListEmptyComponent={
+            communitiesQuery.isLoading ? (
+              <LoadingState label="Načítavam komunity…" />
+            ) : (
+              <EmptyState
+                emoji="👥"
+                title="Zatiaľ žiadne komunity"
+                body="Komunita je tematická skupina — techno, startupy, lezenie. Založ prvú."
+                actionLabel="Založiť komunitu"
+                onAction={() => router.push('/community/new')}
+              />
+            )
+          }
+        />
+      ) : null}
+
       {tab === 'organizations' ? (
         <FlatList
           data={organizationsQuery.data ?? []}
@@ -411,4 +460,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
   },
   tagLabel: { ...typography.chip, fontSize: 11, color: colors.accentText },
+
+  newCommunity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  newCommunityGlyph: { fontSize: 20, color: colors.accentText },
+  newCommunityLabel: { ...typography.bodyStrong, color: colors.accentText },
 });

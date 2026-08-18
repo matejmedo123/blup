@@ -3,7 +3,10 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
 import { StripeBridge } from '@/payments/stripe';
@@ -18,6 +21,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
+      // Keep answers for a day so the offline agenda has something to show.
+      gcTime: 24 * 60 * 60 * 1000,
       retry: (failureCount, error) => {
         // Never retry an authorization failure — it will never succeed.
         const message = (error as Error)?.message ?? '';
@@ -27,6 +32,20 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
   },
+});
+
+/**
+ * Offline mode ("offline režim – event agenda aj bez netu").
+ *
+ * The query cache is written to device storage, so tickets, the events you are
+ * going to and the last feed you loaded are still readable on a festival field
+ * with no signal. Only cacheable reads are persisted — nothing that needs a
+ * fresh authorization decision, and no write ever replays from here.
+ */
+const persister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: 'blup-query-cache',
+  throttleTime: 2000,
 });
 
 void SplashScreen.preventAutoHideAsync();
@@ -83,6 +102,9 @@ export default function RootLayout() {
       <Stack.Screen name="badges" options={{ title: 'Odznaky' }} />
       <Stack.Screen name="chat/[id]" options={{ title: '' }} />
       <Stack.Screen name="event/photos/[id]" options={{ title: 'Fotky eventu' }} />
+      <Stack.Screen name="community/index" options={{ title: 'Komunity' }} />
+      <Stack.Screen name="community/new" options={{ title: 'Nová komunita' }} />
+      <Stack.Screen name="community/[id]" options={{ title: '' }} />
       <Stack.Screen name="organizer" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
@@ -95,7 +117,23 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister,
+            maxAge: 24 * 60 * 60 * 1000,
+            dehydrateOptions: {
+              // Persist only successful reads of things that are useful without
+              // a connection; anything else is refetched when the net is back.
+              shouldDehydrateQuery: (query) => {
+                if (query.state.status !== 'success') return false;
+                const root = String(query.queryKey[0] ?? '');
+                return ['tickets', 'events', 'event', 'profile', 'interests', 'conversations',
+                        'messages', 'gamification'].includes(root);
+              },
+            },
+          }}
+        >
           <AuthProvider>
             <StatusBar style="light" />
             {/* StripeBridge is a passthrough when the key or the native
@@ -107,7 +145,7 @@ export default function RootLayout() {
               {content}
             </StripeBridge>
           </AuthProvider>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

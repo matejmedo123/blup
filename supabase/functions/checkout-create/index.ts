@@ -1,9 +1,10 @@
 /**
  * POST /functions/v1/checkout-create
  *
- * Starts a ticket purchase. The client sends only { ticket_type_id, quantity } —
- * every amount (price, BLUP fee, total) is computed by create_order() in the
- * database, so a tampered client cannot change what it pays.
+ * Starts a ticket purchase. The client sends only { ticket_type_id, quantity }
+ * and optionally a promo code — every amount (price, discount, BLUP fee, total)
+ * is computed by create_order() in the database, so a tampered client cannot
+ * change what it pays, and cannot invent its own discount.
  *
  * Returns the PaymentIntent client secret for the Stripe PaymentSheet. The order
  * stays `requires_payment` until the webhook confirms the money moved.
@@ -16,6 +17,8 @@ import { stripe } from '../_shared/stripe.ts';
 interface CheckoutRequest {
   ticket_type_id: string;
   quantity: number;
+  /** Optional promo code. The discount is computed by the database, not here. */
+  promo_code?: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -45,6 +48,7 @@ Deno.serve(async (req) => {
         p_buyer_id: user.id,
         p_ticket_type_id: body.ticket_type_id,
         p_quantity: quantity,
+        p_promo_code: typeof body.promo_code === 'string' ? body.promo_code.trim() : null,
       })
       .single();
 
@@ -106,6 +110,8 @@ Deno.serve(async (req) => {
       payment_intent_client_secret: intent.client_secret,
       publishable_key_required: true,
       amount_cents: order.total_cents,
+      subtotal_cents: order.subtotal_cents,
+      discount_cents: order.discount_cents,
       platform_fee_cents: order.platform_fee_cents,
       currency: order.currency,
       quantity: order.quantity,

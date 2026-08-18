@@ -16,6 +16,8 @@ export interface CheckoutSession {
   requires_payment: boolean;
   payment_intent_client_secret?: string;
   amount_cents: number;
+  subtotal_cents?: number;
+  discount_cents?: number;
   platform_fee_cents?: number;
   currency: string;
   quantity?: number;
@@ -26,11 +28,41 @@ export interface CheckoutSession {
 export async function createCheckout(
   ticketTypeId: string,
   quantity: number,
+  promoCode?: string | null,
 ): Promise<CheckoutSession> {
   return callFunction<CheckoutSession>('checkout-create', {
     ticket_type_id: ticketTypeId,
     quantity,
+    promo_code: promoCode?.trim() || null,
   });
+}
+
+export interface PromoPreview {
+  valid: boolean;
+  reason?: string;
+  amount_off: number;
+  total_after?: number;
+  kind?: 'percent' | 'fixed';
+  value?: number;
+}
+
+/**
+ * Previews what a promo code is worth. The same database function computes the
+ * real discount at order time, so the preview and the charge cannot disagree.
+ */
+export async function previewPromoCode(
+  eventId: string,
+  code: string,
+  subtotalCents: number,
+): Promise<PromoPreview> {
+  const { data, error } = await supabase.rpc('evaluate_promo_code', {
+    p_event: eventId,
+    p_code: code.trim(),
+    p_subtotal: subtotalCents,
+  });
+
+  if (error) throw error;
+  return data as PromoPreview;
 }
 
 /**

@@ -11,6 +11,7 @@ import { getMyTickets } from '@/api/tickets';
 import { getMyOrganizations } from '@/api/organizations';
 import { getPremiumStatus } from '@/api/premium';
 import { getGamification, levelProgress, levelTitle, xpToNextLevel } from '@/api/gamification';
+import { getMyCommunities } from '@/api/communities';
 import { env } from '@/lib/env';
 import { formatCount } from '@/lib/format';
 import { EventCard } from '@/components/EventCard';
@@ -41,6 +42,7 @@ export default function ProfileScreen() {
   const organizations = useQuery({ queryKey: ['organizations', 'mine'], queryFn: getMyOrganizations });
   const premium = useQuery({ queryKey: ['premium', 'status'], queryFn: getPremiumStatus });
   const game = useQuery({ queryKey: ['gamification', 'me'], queryFn: () => getGamification() });
+  const communities = useQuery({ queryKey: ['communities', 'mine'], queryFn: getMyCommunities });
 
   if (loadingProfile && !profile) {
     return <Screen><LoadingState /></Screen>;
@@ -239,6 +241,12 @@ export default function ProfileScreen() {
             label="Aktivita"
             detail="notifikácie"
             onPress={() => router.push('/activity')}
+          />
+          <Tile
+            glyph="◈"
+            label="Komunity"
+            detail={`${communities.data?.length ?? 0} tvojich`}
+            onPress={() => router.push('/community')}
           />
           {isAdmin ? (
             <Tile glyph="⚑" label="Admin" detail="Moderácia" onPress={() => router.push('/admin')} />

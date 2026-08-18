@@ -145,10 +145,10 @@ export default function PremiumScreen() {
 
       <Caption style={styles.legal}>
         {Platform.OS === 'ios'
-          ? 'Billed through your Apple ID. Manage or cancel in Settings → Apple ID → Subscriptions. ' +
-            'Every purchase is verified with Apple on our servers before Premium unlocks.'
-          : 'Billed through Google Play. Manage or cancel in the Play Store. ' +
-            'Every purchase is verified on our servers before Premium unlocks.'}
+          ? 'Účtuje sa cez tvoje Apple ID. Spravuješ alebo rušíš v Nastavenia → Apple ID → Predplatné. ' +
+            'Každý nákup overujeme u Apple na našich serveroch, až potom sa Premium odomkne.'
+          : 'Účtuje sa cez Google Play. Spravuješ alebo rušíš v Play Store. ' +
+            'Každý nákup overujeme na našich serveroch, až potom sa Premium odomkne.'}
       </Caption>
     </Screen>
   );

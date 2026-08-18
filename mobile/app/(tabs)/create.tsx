@@ -8,7 +8,7 @@ import * as Crypto from 'expo-crypto';
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { createEvent } from '@/api/events';
-import { getMyOrganizations } from '@/api/organizations';
+import { createPersonalOrganization, getMyOrganizations } from '@/api/organizations';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong } from '@/lib/format';
@@ -61,12 +61,15 @@ export default function CreateEventScreen() {
 
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [creatingOrg, setCreatingOrg] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: organizations } = useQuery({
+  const organizationsQuery = useQuery({
     queryKey: ['organizations', 'mine'],
     queryFn: getMyOrganizations,
   });
+
+  const organizations = organizationsQuery.data;
 
   const verifiedOrgs = useMemo(
     () => (organizations ?? []).filter((org) => org.verification_status === 'verified'),
@@ -154,6 +157,34 @@ export default function CreateEventScreen() {
       return 'Kapacita musí byť celé číslo.';
     }
     return null;
+  };
+
+  /**
+   * "Ticketing pre všetkých": creates a personal organizer profile from the
+   * signed-in profile and drops the user straight into verification, instead of
+   * making them fill in a company form before they can price a ticket.
+   */
+  const becomeOrganizer = async () => {
+    if (!profile) return;
+    setError(null);
+    setCreatingOrg(true);
+    try {
+      const organization = await createPersonalOrganization({
+        id: profile.id,
+        display_name: profile.display_name,
+        username: profile.username,
+        email: profile.email,
+        city: profile.city,
+      });
+
+      await organizationsQuery.refetch();
+      setOrganizationId(organization.id);
+      router.push('/organizer/verification');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setCreatingOrg(false);
+    }
   };
 
   const submit = async () => {
@@ -342,10 +373,10 @@ export default function CreateEventScreen() {
         verifiedOrgs.length === 0 ? (
           <Notice
             tone="warning"
-            title="Potrebuješ overený účet organizátora"
-            body="BLUP dovolí predávať vstupenky iba overeným organizáciám — vďaka tomu sú výplaty a refundácie dohľadateľné."
-            actionLabel="Založiť účet organizátora"
-            onAction={() => router.push('/organizer/new')}
+            title="Na predaj vstupeniek potrebuješ profil organizátora"
+            body="Vstupné si môže nastaviť ktokoľvek — stačí jedno klepnutie. Peniaze však vieme vyplatiť až overenému subjektu, to je zákonná požiadavka, nie naše pravidlo."
+            actionLabel={creatingOrg ? 'Zakladám…' : 'Založiť to za mňa'}
+            onAction={becomeOrganizer}
           />
         ) : (
           <>

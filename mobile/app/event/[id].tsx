@@ -18,6 +18,8 @@ import { reportContent } from '@/api/admin';
 import { addEventToCalendar, openDirections } from '@/maps/calendar';
 import { supabase } from '@/lib/supabase';
 import { joinEventConversation } from '@/api/messages';
+import { createCrew, getEventCrews, joinCrew, leaveCrew } from '@/api/crews';
+import { getEventRating, getMyReview, reviewEvent } from '@/api/reviews';
 import { messageFor } from '@/lib/errors';
 import {
   estimateWalkingTime, formatCount, formatDistanceFromYou, formatEventDate,
@@ -41,6 +43,8 @@ export default function EventDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [crewName, setCrewName] = useState('');
+  const [reviewBody, setReviewBody] = useState('');
 
   const event = useQuery({
     queryKey: ['event', id],
@@ -57,6 +61,24 @@ export default function EventDetailScreen() {
   const followedGoing = useQuery({
     queryKey: ['event', id, 'followed'],
     queryFn: () => getFollowedAttendees(id!),
+    enabled: Boolean(id),
+  });
+
+  const crews = useQuery({
+    queryKey: ['event', id, 'crews'],
+    queryFn: () => getEventCrews(id!),
+    enabled: Boolean(id),
+  });
+
+  const rating = useQuery({
+    queryKey: ['event', id, 'rating'],
+    queryFn: () => getEventRating(id!),
+    enabled: Boolean(id),
+  });
+
+  const myReview = useQuery({
+    queryKey: ['event', id, 'my-review'],
+    queryFn: () => getMyReview(id!),
     enabled: Boolean(id),
   });
 
@@ -153,11 +175,11 @@ export default function EventDetailScreen() {
   };
 
   const handleReport = () => {
-    Alert.prompt?.('Report this event', 'What is wrong with it?', async (reason) => {
+    Alert.prompt?.('Nahlásiť event', 'Čo je s ním zle?', async (reason) => {
       if (!reason?.trim()) return;
       try {
         await reportContent({ targetType: 'event', targetId: id!, reason: reason.trim() });
-        setNotice('Reported. Our moderators will take a look.');
+        setNotice('Nahlásené. Naši moderátori sa na to pozrú.');
       } catch (caught) {
         setError(messageFor(caught));
       }
@@ -212,6 +234,46 @@ export default function EventDetailScreen() {
   const isFull = Boolean(data.capacity && data.attendee_count >= data.capacity);
   const hasTickets = data.ticket_types.length > 0;
   const isPast = new Date(data.start_at).getTime() < Date.now();
+
+  const toggleCrew = async (crewId: string, joined: boolean) => {
+    setError(null);
+    try {
+      if (joined) await leaveCrew(crewId);
+      else await joinCrew(crewId);
+      await crews.refetch();
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  };
+
+  const startCrew = async () => {
+    const name = crewName.trim();
+    if (!name) return;
+
+    setError(null);
+    setBusy(true);
+    try {
+      await createCrew({ eventId: data.id, name });
+      setCrewName('');
+      await crews.refetch();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitReview = async (value: number) => {
+    setError(null);
+    try {
+      await reviewEvent(data.id, value, reviewBody);
+      setReviewBody('');
+      await Promise.all([rating.refetch(), myReview.refetch()]);
+      setNotice('Ďakujeme za hodnotenie.');
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  };
 
   const openGroupChat = async () => {
     setError(null);
@@ -472,6 +534,113 @@ export default function EventDetailScreen() {
           </>
         ) : null}
 
+        {/* --- crews --------------------------------------------------------- */}
+        {!isPast && data.status !== 'cancelled' ? (
+          <>
+            <SectionHeader title="Spoločné plány" />
+            <Caption style={styles.crewHint}>
+              Partia, ktorá ide spolu. Založ si vlastnú alebo sa pridaj k existujúcej.
+            </Caption>
+
+            {(crews.data ?? []).map((crew) => {
+              const full = (crew.member_count ?? 0) >= crew.max_size;
+
+              return (
+                <View key={crew.id} style={styles.crewRow}>
+                  <View style={styles.flex}>
+                    <Text style={styles.hostName}>{crew.name}</Text>
+                    <Caption>
+                      {crew.member_count}/{crew.max_size} ľudí
+                      {full && !crew.joined ? ' · plná' : ''}
+                    </Caption>
+                  </View>
+
+                  <Button
+                    title={crew.joined ? 'Odísť' : 'Pridať sa'}
+                    variant={crew.joined ? 'ghost' : 'teal'}
+                    compact
+                    disabled={!crew.joined && full}
+                    onPress={() => toggleCrew(crew.id, Boolean(crew.joined))}
+                  />
+                </View>
+              );
+            })}
+
+            <View style={styles.crewComposer}>
+              <Input
+                value={crewName}
+                onChangeText={setCrewName}
+                placeholder="Napr. Ideme vlakom o 18:00"
+                maxLength={60}
+                style={styles.crewInput}
+              />
+              <Button
+                title="Založiť"
+                compact
+                onPress={startCrew}
+                loading={busy}
+                disabled={!crewName.trim()}
+              />
+            </View>
+          </>
+        ) : null}
+
+        {/* --- rating -------------------------------------------------------- */}
+        {isPast ? (
+          <>
+            <SectionHeader
+              title={
+                (rating.data?.count ?? 0) > 0
+                  ? `Hodnotenie · ${rating.data?.average.toFixed(1)} ★ (${rating.data?.count})`
+                  : 'Hodnotenie'
+              }
+            />
+
+            {data.my_rsvp === 'going' || data.my_rsvp === 'checked_in' ? (
+              <View style={styles.reviewBox}>
+                <Caption>
+                  {myReview.data
+                    ? 'Tvoje hodnotenie — kliknutím ho zmeníš.'
+                    : 'Bol si tam. Ako to bolo?'}
+                </Caption>
+
+                <View style={styles.starRow}>
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <Pressable key={value} onPress={() => submitReview(value)} hitSlop={6}>
+                      <Text
+                        style={[
+                          styles.star,
+                          (myReview.data?.rating ?? 0) >= value && styles.starActive,
+                        ]}
+                      >
+                        {(myReview.data?.rating ?? 0) >= value ? '★' : '☆'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Input
+                  value={reviewBody}
+                  onChangeText={setReviewBody}
+                  placeholder="Napíš pár slov (nepovinné)"
+                  multiline
+                  maxLength={2000}
+                  style={styles.reviewInput}
+                />
+                <Button
+                  title="Uložiť hodnotenie"
+                  variant="secondary"
+                  compact
+                  disabled={!myReview.data && !reviewBody.trim()}
+                  onPress={() => submitReview(myReview.data?.rating ?? 5)}
+                />
+              </View>
+            ) : (rating.data?.count ?? 0) === 0 ? (
+              <Body muted>Zatiaľ bez hodnotení. Hodnotiť môžu len tí, čo tam boli.</Body>
+            ) : null}
+          </>
+        ) : null}
+
         {/* --- comments ----------------------------------------------------- */}
         <SectionHeader title={`Komentáre · ${formatCount(data.comment_count)}`} />
 
@@ -591,6 +760,34 @@ const styles = StyleSheet.create({
   },
   chatGlyph: { fontSize: 17, color: colors.accentText },
   chevron: { ...typography.heading, color: colors.textTertiary },
+
+  crewHint: { marginBottom: spacing.sm },
+  crewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  crewComposer: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  crewInput: { flex: 1, marginBottom: 0 },
+
+  reviewBox: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.sm,
+  },
+  starRow: { flexDirection: 'row', gap: spacing.xs },
+  star: { fontSize: 30, color: colors.textTertiary },
+  starActive: { color: colors.warning },
+  reviewInput: { minHeight: 70, textAlignVertical: 'top', marginBottom: 0 },
 
   screen: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl },

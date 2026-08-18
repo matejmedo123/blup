@@ -31,7 +31,7 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
     return {
       ok: false,
       reason: 'SIMULATOR',
-      message: 'Push notifications only work on a physical device.',
+      message: 'Push notifikácie fungujú iba na fyzickom zariadení.',
     };
   }
 
@@ -57,7 +57,7 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
       return {
         ok: false,
         reason: 'PERMISSION_DENIED',
-        message: 'Notifications are off. Turn them on in Settings to get event reminders.',
+        message: 'Notifikácie sú vypnuté. Zapni ich v Nastaveniach, nech ti chodia pripomienky eventov.',
       };
     }
 
@@ -95,7 +95,7 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
     return {
       ok: false,
       reason: 'ERROR',
-      message: error instanceof Error ? error.message : 'Could not register for notifications.',
+      message: error instanceof Error ? error.message : 'Registrácia na notifikácie sa nepodarila.',
     };
   }
 }
@@ -119,7 +119,7 @@ export async function scheduleEventReminder(event: {
   return Notifications.scheduleNotificationAsync({
     content: {
       title: `${event.title} starts soon`,
-      body: event.venue_name ? `Doors at ${event.venue_name}` : 'Starting in 2 hours',
+      body: event.venue_name ? `Miesto: ${event.venue_name}` : 'Začína o 2 hodiny',
       data: { event_id: event.id, type: 'event_reminder' },
     },
     trigger: {

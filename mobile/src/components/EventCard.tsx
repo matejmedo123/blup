@@ -50,6 +50,9 @@ export function EventCard({
           <View style={styles.coverChips}>
             <Chip label={labelFor(event.category)} onCover />
             {event.friends_going > 0 ? <Chip label="Frčí" onCover /> : null}
+            {/* A promoted event says so. The ranker reports the boost in the
+                breakdown, so hiding it here would only hide it from the user. */}
+            {event.score_breakdown?.facts?.is_boosted ? <Chip label="Sponzorované" onCover /> : null}
           </View>
 
           {onSave ? (

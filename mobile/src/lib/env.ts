@@ -49,7 +49,7 @@ export const isConfigured = {
 };
 
 export const MISSING_SUPABASE_MESSAGE =
-  'BLUP is not connected to a backend yet.\n\n' +
-  'Copy mobile/.env.example to mobile/.env and fill in EXPO_PUBLIC_SUPABASE_URL and ' +
-  'EXPO_PUBLIC_SUPABASE_ANON_KEY from your Supabase project, then restart with ' +
+  'BLUP zatiaľ nie je pripojený na backend.\n\n' +
+  'Skopíruj mobile/.env.example do mobile/.env a doplň EXPO_PUBLIC_SUPABASE_URL a ' +
+  'EXPO_PUBLIC_SUPABASE_ANON_KEY zo svojho Supabase projektu, potom reštartuj cez ' +
   '`npx expo start --clear`.';

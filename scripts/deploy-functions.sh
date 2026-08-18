@@ -34,6 +34,7 @@ FUNCTIONS=(
   "stripe-webhook:false"
   "iap-apple-notifications:false"
   "push-dispatch:false"
+  "weekly-digest:false"
   "config-status:false"
 )
 

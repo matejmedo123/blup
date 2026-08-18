@@ -46,8 +46,8 @@ const stripeModule = resolveStripe();
 export const isStripeModuleAvailable = stripeModule !== null;
 
 export const STRIPE_UNAVAILABLE_MESSAGE =
-  'Card payments need a development build — the Stripe module is not part of Expo Go.\n\n' +
-  'Run `npm run build:dev:android` (or :ios) and open the app from that build. See DEPLOYMENT.md.';
+  'Platby kartou potrebujú development build — Stripe modul nie je súčasťou Expo Go.\n\n' +
+  'Spusti `npm run build:dev:android` (alebo :ios) a otvor appku z toho buildu. Pozri DEPLOYMENT.md.';
 
 /**
  * Renders the real StripeProvider when it is available, and simply passes the

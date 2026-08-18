@@ -2,15 +2,23 @@ import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { BlupMark } from './BlupMark';
 import { colors, heroGradient, spacing, typography } from '@/theme';
 
 /**
  * The BLUP wordmark: "Blup" in extra-bold with the dot in accent blue.
  * One component so the logo is identical on every screen that shows it.
  */
-export function Wordmark({ size = 48, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
+export function Wordmark({
+  size = 48, style, withMark = true,
+}: {
+  size?: number;
+  style?: StyleProp<ViewStyle>;
+  withMark?: boolean;
+}) {
   return (
     <View style={[styles.row, style]}>
+      {withMark ? <BlupMark size={size * 0.95} style={styles.mark} /> : null}
       <Text style={[styles.word, { fontSize: size, lineHeight: size * 1.15 }]}>Blup</Text>
       <Text style={[styles.dot, { fontSize: size, lineHeight: size * 1.15 }]}>.</Text>
     </View>
@@ -37,6 +45,7 @@ export function Tagline({ children }: { children: React.ReactNode }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-end' },
+  mark: { marginRight: 8, marginBottom: 2 },
   word: { ...typography.logo, color: colors.text },
   dot: { ...typography.logo, color: colors.accent },
 
