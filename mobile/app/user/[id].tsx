@@ -9,6 +9,8 @@ import {
   unfollowUser,
 } from '@/api/profiles';
 import { reportContent } from '@/api/admin';
+import { startDirectConversation } from '@/api/messages';
+import { getGamification, levelTitle } from '@/api/gamification';
 import { messageFor } from '@/lib/errors';
 import { formatCount } from '@/lib/format';
 import { EventCard } from '@/components/EventCard';
@@ -16,7 +18,7 @@ import {
   Avatar, Badge, Body, Button, Caption, Chip, EmptyState, ErrorState, LoadingState, Notice,
   Screen, SectionHeader,
 } from '@/components/ui';
-import { colors, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -51,6 +53,13 @@ export default function UserProfileScreen() {
     enabled: Boolean(id),
   });
 
+  const game = useQuery({
+    queryKey: ['gamification', id],
+    queryFn: () => getGamification(id!),
+    enabled: Boolean(id),
+    retry: false,
+  });
+
   const events = useQuery({
     queryKey: ['profile', 'events', id],
     queryFn: () => getEventsByCreator(id!),
@@ -68,6 +77,19 @@ export default function UserProfileScreen() {
         queryClient.invalidateQueries({ queryKey: ['profile', 'is-following', id] }),
         queryClient.invalidateQueries({ queryKey: ['profile', 'counts', id] }),
       ]);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const message = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const conversationId = await startDirectConversation(id!);
+      router.push(`/chat/${conversationId}`);
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -122,6 +144,18 @@ export default function UserProfileScreen() {
           <Caption>@{person.username}</Caption>
           {person.city ? <Caption>{person.city}</Caption> : null}
 
+          {game.data ? (
+            <View style={styles.levelRow}>
+              <View style={styles.levelPill}>
+                <Text style={styles.levelPillText}>LVL {game.data.level}</Text>
+              </View>
+              <Caption>{levelTitle(game.data.level)}</Caption>
+              {(game.data.badges ?? []).slice(0, 4).map((badge) => (
+                <Text key={badge.slug} style={styles.badgeEmoji}>{badge.emoji}</Text>
+              ))}
+            </View>
+          ) : null}
+
           <View style={styles.stats}>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{formatCount(counts.data?.followers ?? 0)}</Text>
@@ -144,6 +178,13 @@ export default function UserProfileScreen() {
             variant={following.data ? 'secondary' : 'primary'}
             onPress={toggleFollow}
             loading={busy}
+            style={styles.flex}
+          />
+          <Button
+            title="Napísať"
+            variant="teal"
+            onPress={message}
+            disabled={busy}
             style={styles.flex}
           />
         </View>
@@ -195,6 +236,16 @@ const styles = StyleSheet.create({
   statValue: { ...typography.subheading, color: colors.text },
 
   bio: { marginTop: spacing.lg },
+  levelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  levelPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
+  },
+  levelPillText: { ...typography.mono, color: colors.accentText },
+  badgeEmoji: { fontSize: 14 },
+
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   eventItem: { marginBottom: spacing.lg },

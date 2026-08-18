@@ -347,3 +347,92 @@ export interface Coordinates {
   latitude: number;
   longitude: number;
 }
+
+// --- messaging --------------------------------------------------------------
+
+export type ConversationKind = 'direct' | 'event';
+
+/** One row of the inbox, as returned by my_conversations(). */
+export interface ConversationSummary {
+  id: string;
+  kind: ConversationKind;
+  event_id: string | null;
+  title: string | null;
+  last_message_at: string | null;
+  last_message: string | null;
+  last_sender_id: string | null;
+  unread_count: number;
+  muted: boolean;
+  other_user_id: string | null;
+  other_name: string | null;
+  other_username: string | null;
+  other_avatar_url: string | null;
+  participant_count: number;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string | null;
+  body: string | null;
+  attachment_url: string | null;
+  created_at: string;
+  edited_at: string | null;
+  deleted_at: string | null;
+  sender?: {
+    id: string;
+    display_name: string | null;
+    username: string | null;
+    avatar_url: string | null;
+  } | null;
+}
+
+export interface ConversationParticipant {
+  conversation_id: string;
+  user_id: string;
+  joined_at: string;
+  last_read_at: string;
+  muted: boolean;
+  left_at: string | null;
+  profile?: Profile | null;
+}
+
+// --- gamification -----------------------------------------------------------
+
+export interface EarnedBadge {
+  slug: string;
+  name: string;
+  description: string;
+  emoji: string;
+  tier: number;
+  awarded_at: string;
+}
+
+/** The shape returned by gamification_for(). */
+export interface Gamification {
+  user_id: string;
+  xp: number;
+  level: number;
+  level_floor: number;
+  level_ceiling: number;
+  events_created: number;
+  events_attended: number;
+  check_ins: number;
+  blups_saved: number;
+  streak_days: number;
+  longest_streak: number;
+  badges: EarnedBadge[];
+}
+
+export interface BadgeProgress {
+  slug: string;
+  name: string;
+  description: string;
+  emoji: string;
+  tier: number;
+  threshold: number;
+  metric: string;
+  progress: number;
+  earned: boolean;
+  awarded_at: string | null;
+}

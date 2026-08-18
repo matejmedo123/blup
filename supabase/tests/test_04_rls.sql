@@ -169,13 +169,19 @@ begin
   values ('11111111-1111-1111-1111-111111111111', 'new_follower', 'Someone followed you');
   set local role authenticated;
 
+  -- Filter by the row we just inserted: gamification also writes notifications
+  -- (badges, level-ups), so a global count is not a stable assertion.
   perform set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
-  select count(*) into n from public.notifications;
+  select count(*) into n from public.notifications where title = 'Someone followed you';
   assert n = 0, 'notifications must only be readable by their owner';
 
   perform set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
-  select count(*) into n from public.notifications;
+  select count(*) into n from public.notifications where title = 'Someone followed you';
   assert n = 1, 'the owner must see their notifications';
+
+  select count(*) into n from public.notifications
+   where user_id <> '11111111-1111-1111-1111-111111111111';
+  assert n = 0, 'no notification belonging to another user may leak';
   raise notice 'PASS notification privacy';
 end $$;
 

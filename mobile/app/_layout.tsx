@@ -79,6 +79,10 @@ export default function RootLayout() {
       <Stack.Screen name="tickets/index" options={{ title: 'Moje vstupenky' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />
       <Stack.Screen name="premium" options={{ title: 'BLUP Premium' }} />
+      <Stack.Screen name="activity" options={{ title: 'Aktivita' }} />
+      <Stack.Screen name="badges" options={{ title: 'Odznaky' }} />
+      <Stack.Screen name="chat/[id]" options={{ title: '' }} />
+      <Stack.Screen name="event/photos/[id]" options={{ title: 'Fotky eventu' }} />
       <Stack.Screen name="organizer" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />

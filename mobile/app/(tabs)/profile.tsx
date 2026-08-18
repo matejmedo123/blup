@@ -10,6 +10,7 @@ import { getMyEvents, getSavedEvents, getAttendingEvents, toFeedItem } from '@/a
 import { getMyTickets } from '@/api/tickets';
 import { getMyOrganizations } from '@/api/organizations';
 import { getPremiumStatus } from '@/api/premium';
+import { getGamification, levelProgress, levelTitle, xpToNextLevel } from '@/api/gamification';
 import { env } from '@/lib/env';
 import { formatCount } from '@/lib/format';
 import { EventCard } from '@/components/EventCard';
@@ -39,6 +40,7 @@ export default function ProfileScreen() {
   const tickets = useQuery({ queryKey: ['tickets', 'mine'], queryFn: getMyTickets });
   const organizations = useQuery({ queryKey: ['organizations', 'mine'], queryFn: getMyOrganizations });
   const premium = useQuery({ queryKey: ['premium', 'status'], queryFn: getPremiumStatus });
+  const game = useQuery({ queryKey: ['gamification', 'me'], queryFn: () => getGamification() });
 
   if (loadingProfile && !profile) {
     return <Screen><LoadingState /></Screen>;
@@ -112,6 +114,59 @@ export default function ProfileScreen() {
         </View>
       </LinearGradient>
 
+      {/* --- level ---------------------------------------------------------- */}
+      <View style={styles.section}>
+        <SectionHeader title="Tvoj level" action="Odznaky" onAction={() => router.push('/badges')} />
+
+        <Pressable
+          onPress={() => router.push('/badges')}
+          style={({ pressed }) => [styles.levelCard, pressed && styles.pressed]}
+        >
+          <View style={styles.levelTop}>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelNumber}>{game.data?.level ?? 1}</Text>
+            </View>
+
+            <View style={styles.flex}>
+              <Text style={styles.levelTitle}>{levelTitle(game.data?.level ?? 1)}</Text>
+              <Mono style={styles.levelMeta}>
+                {game.data?.xp ?? 0} XP · ešte {xpToNextLevel(game.data)} do ďalšieho levelu
+              </Mono>
+            </View>
+
+            {(game.data?.streak_days ?? 0) > 1 ? (
+              <View style={styles.streak}>
+                <Text style={styles.streakEmoji}>🔥</Text>
+                <Mono style={styles.streakValue}>{game.data?.streak_days}</Mono>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.track}>
+            <View
+              style={[styles.trackFill, { width: `${Math.round(levelProgress(game.data) * 100)}%` }]}
+            />
+          </View>
+
+          {(game.data?.badges ?? []).length > 0 ? (
+            <View style={styles.badgeRow}>
+              {(game.data?.badges ?? []).slice(0, 6).map((badge) => (
+                <View key={badge.slug} style={styles.badgeChip}>
+                  <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
+                </View>
+              ))}
+              {(game.data?.badges ?? []).length > 6 ? (
+                <Mono style={styles.badgeMore}>+{(game.data?.badges ?? []).length - 6}</Mono>
+              ) : null}
+            </View>
+          ) : (
+            <Mono style={styles.levelMeta}>
+              odznaky sa odomykajú za reálne veci — event, účasť, check-in
+            </Mono>
+          )}
+        </Pressable>
+      </View>
+
       {/* --- interests ------------------------------------------------------ */}
       <View style={styles.section}>
         <SectionHeader
@@ -172,6 +227,18 @@ export default function ProfileScreen() {
                 : 'Predávaj vstupenky'
             }
             onPress={() => router.push(organizations.data?.length ? '/organizer' : '/organizer/new')}
+          />
+          <Tile
+            glyph="🏅"
+            label="Odznaky"
+            detail={`${(game.data?.badges ?? []).length} získaných`}
+            onPress={() => router.push('/badges')}
+          />
+          <Tile
+            glyph="✦"
+            label="Aktivita"
+            detail="notifikácie"
+            onPress={() => router.push('/activity')}
           />
           {isAdmin ? (
             <Tile glyph="⚑" label="Admin" detail="Moderácia" onPress={() => router.push('/admin')} />
@@ -294,6 +361,50 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing.sm, alignSelf: 'stretch', marginTop: spacing.md },
 
   section: { paddingHorizontal: spacing.lg, marginTop: spacing.xl },
+
+  levelCard: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.md,
+  },
+  levelTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  levelBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelNumber: { ...typography.subheading, color: '#FFFFFF' },
+  levelTitle: { ...typography.bodyStrong, color: colors.text },
+  levelMeta: { color: colors.textTertiary, marginTop: 2 },
+  streak: { alignItems: 'center' },
+  streakEmoji: { fontSize: 18 },
+  streakValue: { color: colors.textSecondary },
+
+  track: {
+    height: 7,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceElevated,
+    overflow: 'hidden',
+  },
+  trackFill: { height: 7, borderRadius: radius.pill, backgroundColor: colors.accent },
+
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  badgeChip: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeEmoji: { fontSize: 17 },
+  badgeMore: { color: colors.textTertiary },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },

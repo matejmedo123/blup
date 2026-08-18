@@ -247,6 +247,38 @@ export async function updateEvent(
   return data as BlupEvent;
 }
 
+// --- photos -----------------------------------------------------------------
+
+export interface EventImage {
+  id: string;
+  event_id: string;
+  url: string;
+  storage_path: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export async function getEventImages(eventId: string): Promise<EventImage[]> {
+  const { data, error } = await supabase
+    .from('event_images')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('sort_order', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as EventImage[];
+}
+
+/** Promotes one gallery photo to the event's cover — the card image. */
+export async function setEventCover(eventId: string, url: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('events')
+    .update({ cover_image_url: url })
+    .eq('id', eventId);
+
+  if (error) throw error;
+}
+
 export async function cancelEvent(eventId: string): Promise<void> {
   const { error } = await supabase.from('events').update({ status: 'cancelled' }).eq('id', eventId);
   if (error) throw error;

@@ -75,6 +75,35 @@ export function formatRelative(iso: string): string {
   return date ? `pred ${formatDistanceToNowStrict(date, locale)}` : '—';
 }
 
+/** Clock time on a chat bubble. */
+export function formatMessageTime(iso: string): string {
+  const date = parse(iso);
+  return date ? format(date, 'HH:mm') : '';
+}
+
+/** True when two timestamps fall on the same calendar day. */
+export function isSameDay(a: string, b: string): boolean {
+  const first = parse(a);
+  const second = parse(b);
+  if (!first || !second) return false;
+  return first.toDateString() === second.toDateString();
+}
+
+/** The day separator inside a thread: "Dnes", "Včera", or a date. */
+export function formatDayLabel(iso: string): string {
+  const date = parse(iso);
+  if (!date) return '';
+
+  if (isToday(date)) return 'Dnes';
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'Včera';
+
+  if (isThisWeek(date, { weekStartsOn: 1 })) return format(date, 'EEEE', locale);
+  return format(date, 'd. MMMM yyyy', locale);
+}
+
 export function formatCount(value: number): string {
   if (value < 1000) return String(value);
   if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)} tis.`;

@@ -193,6 +193,50 @@ export async function deleteEventGalleryImage(imageId: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * A photo sent in a chat.
+ *
+ * Goes to the PRIVATE `chat-media` bucket — a picture in a private thread must
+ * not be readable by URL alone. What is stored on the message is the object
+ * path; the app turns it into a short-lived signed URL when it renders it.
+ */
+export async function uploadChatImage(uri: string, conversationId: string): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) throw new Error('UNAUTHENTICATED');
+
+  const compressed = await compress(uri, 1400);
+
+  const response = await fetch(compressed.uri);
+  const arrayBuffer = await response.arrayBuffer();
+
+  if (arrayBuffer.byteLength > MAX_BYTES) {
+    throw new Error('Fotka je príliš veľká (max 5 MB po kompresii).');
+  }
+
+  const path = `${conversationId}/${userId}/${Date.now()}.jpg`;
+
+  const { error } = await supabase.storage
+    .from('chat-media')
+    .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: false });
+
+  if (error) throw error;
+  return path;
+}
+
+/** Signs a chat attachment path for viewing. Valid for an hour. */
+export async function signChatImage(path: string): Promise<string | null> {
+  // Older messages may already hold a full URL; leave those alone.
+  if (/^https?:\/\//.test(path)) return path;
+
+  const { data, error } = await supabase.storage
+    .from('chat-media')
+    .createSignedUrl(path, 3600);
+
+  if (error) return null;
+  return data?.signedUrl ?? null;
+}
+
 export async function uploadOrganizationLogo(uri: string, organizationId: string): Promise<string> {
   const compressed = await compress(uri, 600);
   return uploadToBucket({

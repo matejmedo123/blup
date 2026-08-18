@@ -9,6 +9,8 @@ import { useLocation } from '@/hooks/useLocation';
 import { getNearbyEvents, saveEvent, unsaveEvent } from '@/api/events';
 import { getFollowing } from '@/api/profiles';
 import { getAIRecommendations } from '@/api/ai';
+import { getUnreadCount } from '@/api/notifications';
+import { touchActivity } from '@/api/gamification';
 import { recordSignal, queueImpression } from '@/api/signals';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
@@ -58,6 +60,14 @@ export default function HomeScreen() {
     enabled: Boolean(coords),
   });
 
+  // The bell badge. Notifications moved out of the tab bar to make room for
+  // messages, exactly as in the design.
+  const { data: unreadNotifications } = useQuery({
+    queryKey: ['notifications', 'unread'],
+    queryFn: getUnreadCount,
+    refetchInterval: 60_000,
+  });
+
   const following = useQuery({
     queryKey: ['profile', 'following', profile?.id],
     queryFn: () => getFollowing(profile!.id),
@@ -69,6 +79,18 @@ export default function HomeScreen() {
     queryFn: () => getAIRecommendations({ coords, radiusM: Math.max(radiusM, 50000), limit: 20 }),
     enabled: Boolean(profile),
   });
+
+  // Records that the account was open today, which is what drives the streak.
+  // The database counts a day once, so calling it on every mount is harmless.
+  useEffect(() => {
+    touchActivity()
+      .then((result) => {
+        if (result?.xp_awarded) {
+          void queryClient.invalidateQueries({ queryKey: ['gamification'] });
+        }
+      })
+      .catch(() => undefined);
+  }, [queryClient]);
 
   // Realtime: a new event created by anyone shows up here without a refresh.
   useEffect(() => {
@@ -152,13 +174,18 @@ export default function HomeScreen() {
 
         <View style={styles.headerActions}>
           <IconButton
-            glyph="◔"
+            glyph="◎"
             onPress={() => {
               const index = RADIUS_OPTIONS.indexOf(radiusM);
               setRadiusM(RADIUS_OPTIONS[(index + 1) % RADIUS_OPTIONS.length]);
             }}
           />
           <IconButton glyph="⌕" onPress={() => router.push('/(tabs)/explore')} />
+          <IconButton
+            glyph="✦"
+            badge={(unreadNotifications ?? 0) > 0}
+            onPress={() => router.push('/activity')}
+          />
         </View>
       </View>
 

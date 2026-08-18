@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
-import { getUnreadCount } from '@/api/notifications';
+import { getUnreadMessageCount } from '@/api/messages';
 import { colors, radius, typography } from '@/theme';
 
 /**
@@ -19,9 +19,11 @@ function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  // The badge on the messages tab counts unread messages; notifications live
+  // behind the bell in the home header.
   const { data: unread } = useQuery({
-    queryKey: ['notifications', 'unread'],
-    queryFn: getUnreadCount,
+    queryKey: ['messages', 'unread'],
+    queryFn: getUnreadMessageCount,
     refetchInterval: 60_000,
   });
 
@@ -67,12 +69,10 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="activity"
+        name="messages"
         options={{
-          // Notifications, not chat — BLUP has no messaging backend, so the tab
-          // is not labelled as if it did.
-          title: 'Aktivita',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="✦" focused={focused} />,
+          title: 'Správy',
+          tabBarIcon: ({ focused }) => <TabIcon glyph="✉" focused={focused} />,
           tabBarBadge: unread && unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
         }}
       />

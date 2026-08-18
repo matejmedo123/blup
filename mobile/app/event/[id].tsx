@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Alert, FlatList, Pressable, ScrollView, Share, StyleSheet, Text, View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -16,6 +17,7 @@ import { recordSignal } from '@/api/signals';
 import { reportContent } from '@/api/admin';
 import { addEventToCalendar, openDirections } from '@/maps/calendar';
 import { supabase } from '@/lib/supabase';
+import { joinEventConversation } from '@/api/messages';
 import { messageFor } from '@/lib/errors';
 import {
   estimateWalkingTime, formatCount, formatDistanceFromYou, formatEventDate,
@@ -211,6 +213,16 @@ export default function EventDetailScreen() {
   const hasTickets = data.ticket_types.length > 0;
   const isPast = new Date(data.start_at).getTime() < Date.now();
 
+  const openGroupChat = async () => {
+    setError(null);
+    try {
+      const conversationId = await joinEventConversation(data.id);
+      router.push(`/chat/${conversationId}`);
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  };
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       {/* --- hero ----------------------------------------------------------- */}
@@ -281,6 +293,21 @@ export default function EventDetailScreen() {
           <ActionPill label="📅 Kalendár" onPress={handleCalendar} />
         </View>
 
+        {/* --- group chat ---------------------------------------------------- */}
+        {data.my_rsvp === 'going' || data.my_rsvp === 'checked_in' || isOwner ? (
+          <Pressable
+            style={({ pressed }) => [styles.chatCard, pressed && styles.chatCardPressed]}
+            onPress={openGroupChat}
+          >
+            <View style={styles.chatIcon}><Text style={styles.chatGlyph}>✉</Text></View>
+            <View style={styles.flex}>
+              <Text style={styles.hostName}>Chat eventu</Text>
+              <Caption>Dohodni sa s ostatnými, kto čo nesie a o koľkej vyrážate.</Caption>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        ) : null}
+
         {/* --- tickets ------------------------------------------------------ */}
         {hasTickets && !isPast ? (
           <>
@@ -319,6 +346,40 @@ export default function EventDetailScreen() {
           <>
             <SectionHeader title="O evente" />
             <Body>{data.description}</Body>
+          </>
+        ) : null}
+
+        {/* --- gallery ------------------------------------------------------ */}
+        {(data.gallery ?? []).length > 0 || isOwner ? (
+          <>
+            <SectionHeader
+              title={`Fotky · ${(data.gallery ?? []).length}`}
+              action={isOwner ? 'Spravovať' : undefined}
+              onAction={() => router.push(`/event/photos/${data.id}`)}
+            />
+
+            {(data.gallery ?? []).length === 0 ? (
+              <Pressable
+                style={styles.galleryEmpty}
+                onPress={() => router.push(`/event/photos/${data.id}`)}
+              >
+                <Text style={styles.galleryEmptyGlyph}>＋</Text>
+                <Caption>Pridaj titulnú fotku a fotky z miesta</Caption>
+              </Pressable>
+            ) : (
+              <FlatList
+                horizontal
+                data={data.gallery ?? []}
+                keyExtractor={(item) => item.id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.galleryRail}
+                renderItem={({ item }) => (
+                  <Pressable onPress={() => router.push(`/event/photos/${data.id}`)}>
+                    <Image source={{ uri: item.url }} style={styles.galleryImage} contentFit="cover" />
+                  </Pressable>
+                )}
+              />
+            )}
           </>
         ) : null}
 
@@ -490,6 +551,47 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
 }
 
 const styles = StyleSheet.create({
+  galleryRail: { gap: spacing.sm, paddingVertical: spacing.xs },
+  galleryImage: {
+    width: 140,
+    height: 105,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceElevated,
+  },
+  galleryEmpty: {
+    height: 105,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  galleryEmptyGlyph: { fontSize: 24, color: colors.textTertiary },
+
+  chatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chatCardPressed: { backgroundColor: colors.surfacePressed },
+  chatIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatGlyph: { fontSize: 17, color: colors.accentText },
+  chevron: { ...typography.heading, color: colors.textTertiary },
+
   screen: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl },
   flex: { flex: 1 },
