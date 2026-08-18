@@ -7,13 +7,14 @@ From a clone to an app on a phone, then to the stores.
 ## 1. Backend
 
 ```bash
-npm install -g supabase
-supabase login
-supabase link --project-ref <your-project-ref>
+# The CLI cannot be installed as a global npm module; use npx, or
+# install it natively (brew install supabase/tap/supabase).
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
 
-supabase db push                              # migrations
-supabase secrets set --env-file supabase/.env # server secrets
-./scripts/deploy-functions.sh                 # all 9 Edge Functions
+npx supabase db push                              # migrations
+npx supabase secrets set --env-file supabase/.env # server secrets
+./scripts/deploy-functions.sh                     # all 9 Edge Functions
 ```
 
 The deploy script uses `--no-verify-jwt` for `stripe-webhook`,

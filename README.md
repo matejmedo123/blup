@@ -64,10 +64,11 @@ See [ENVIRONMENT.md](ENVIRONMENT.md) for every variable.
 ### 4. Run the migrations
 
 ```bash
-npm install -g supabase        # or: brew install supabase/tap/supabase
-supabase login
-supabase link --project-ref <your-project-ref>
-supabase db push               # applies supabase/migrations in order
+# The Supabase CLI blocks global npm installs — run it with npx,
+# or install it natively (macOS: brew install supabase/tap/supabase).
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push           # applies supabase/migrations in order
 ```
 
 Your database is now complete **and completely empty** — that is deliberate.
@@ -88,9 +89,12 @@ start genuinely empty.
 ### 6. Deploy the Edge Functions
 
 ```bash
-supabase secrets set --env-file supabase/.env
+npx supabase secrets set --env-file supabase/.env
 ./scripts/deploy-functions.sh
 ```
+
+You only need this once you add Stripe, Apple or AI credentials — the app runs
+without it.
 
 ### 7. Start the app
 

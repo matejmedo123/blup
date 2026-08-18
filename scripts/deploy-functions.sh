@@ -12,9 +12,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if ! command -v supabase >/dev/null 2>&1; then
-  echo "✖ The Supabase CLI is not installed."
-  echo "  npm install -g supabase   (or: brew install supabase/tap/supabase)"
+# Prefer a native install; fall back to npx (the CLI cannot be installed as a
+# global npm module).
+if command -v supabase >/dev/null 2>&1; then
+  SUPABASE="supabase"
+elif command -v npx >/dev/null 2>&1; then
+  SUPABASE="npx --yes supabase"
+else
+  echo "✖ Neither the Supabase CLI nor npx is available."
+  echo "  Install Node.js, or: brew install supabase/tap/supabase"
   exit 1
 fi
 
@@ -35,10 +41,10 @@ deploy() {
   local name="$1" verify="$2"
   if [ "$verify" = "false" ]; then
     echo "→ $name (no JWT — authenticated by signature/service key)"
-    supabase functions deploy "$name" --no-verify-jwt
+    $SUPABASE functions deploy "$name" --no-verify-jwt
   else
     echo "→ $name"
-    supabase functions deploy "$name"
+    $SUPABASE functions deploy "$name"
   fi
 }
 
@@ -64,4 +70,4 @@ fi
 
 echo ""
 echo "✅ Done. Remember to set the secrets once:"
-echo "   supabase secrets set --env-file supabase/.env"
+echo "   $SUPABASE secrets set --env-file supabase/.env"
