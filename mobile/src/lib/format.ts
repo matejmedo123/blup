@@ -40,8 +40,21 @@ export function estimateWalkingTime(meters: number | null | undefined): string |
   return `~${minutes} min walk`;
 }
 
-export function formatEventDate(iso: string): string {
+/**
+ * date-fns throws "Invalid time value" on an unparseable date, which takes the
+ * whole screen down. A date formatter is never worth a crash: parse defensively
+ * and return a placeholder so a bad row degrades to "—" instead.
+ */
+function parse(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
   const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatEventDate(iso: string): string {
+  const date = parse(iso);
+  if (!date) return '—';
+
   if (isToday(date)) return `Today · ${format(date, 'HH:mm')}`;
   if (isTomorrow(date)) return `Tomorrow · ${format(date, 'HH:mm')}`;
   if (isThisWeek(date, { weekStartsOn: 1 })) return format(date, 'EEEE · HH:mm');
@@ -49,11 +62,13 @@ export function formatEventDate(iso: string): string {
 }
 
 export function formatEventDateLong(iso: string): string {
-  return format(new Date(iso), 'EEEE d MMMM yyyy · HH:mm');
+  const date = parse(iso);
+  return date ? format(date, 'EEEE d MMMM yyyy · HH:mm') : '—';
 }
 
 export function formatRelative(iso: string): string {
-  return `${formatDistanceToNowStrict(new Date(iso))} ago`;
+  const date = parse(iso);
+  return date ? `${formatDistanceToNowStrict(date)} ago` : '—';
 }
 
 export function formatCount(value: number): string {

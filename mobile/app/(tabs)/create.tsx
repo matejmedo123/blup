@@ -18,6 +18,7 @@ import {
   Body, Button, Caption, Chip, Input, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
+import type { EventFeedItem } from '@/types/models';
 
 const CATEGORIES = [
   'techno', 'house', 'hiphop', 'rock', 'jazz', 'indie', 'festival', 'running', 'cycling',
@@ -73,6 +74,56 @@ export default function CreateEventScreen() {
   );
 
   const eventCoords = coords ?? location.coords;
+
+  // The map preview shows the draft exactly as it will be published. Building a
+  // complete EventFeedItem (rather than casting a partial one to `never`) is
+  // what keeps preview and card in sync — a missing field is a compile error.
+  const draftPreview = useMemo<EventFeedItem[]>(() => {
+    if (!eventCoords) return [];
+
+    return [{
+      id: 'draft',
+      title: title.trim() || 'Your event',
+      description: description.trim() || null,
+      cover_image_url: coverUrl,
+      category,
+      tags: [],
+      latitude: eventCoords.latitude,
+      longitude: eventCoords.longitude,
+      address: address || null,
+      venue_name: venueName || null,
+      city: location.city ?? null,
+      start_at: startAt.toISOString(),
+      end_at: new Date(startAt.getTime() + durationHours * 3600 * 1000).toISOString(),
+      is_free: isFree,
+      price_cents: isFree ? 0 : Math.round(Number(price.replace(',', '.') || 0) * 100),
+      currency: 'EUR',
+      capacity: capacity ? Number(capacity) : null,
+      attendee_count: 0,
+      saved_count: 0,
+      like_count: 0,
+      comment_count: 0,
+      status: 'draft',
+      visibility: 'public',
+      creator_id: profile?.id ?? '',
+      creator_username: profile?.username ?? null,
+      creator_display_name: profile?.display_name ?? null,
+      creator_avatar_url: profile?.avatar_url ?? null,
+      organization_id: organizationId,
+      organization_name: null,
+      organization_verified: null,
+      distance_m: null,
+      friends_going: 0,
+      is_saved: false,
+      is_attending: false,
+      score: null,
+      score_breakdown: null,
+    }];
+  }, [
+    eventCoords, title, description, coverUrl, category, address, venueName,
+    location.city, startAt, durationHours, isFree, price, capacity, profile,
+    organizationId,
+  ]);
 
   const changeCover = async () => {
     setError(null);
@@ -248,19 +299,7 @@ export default function CreateEventScreen() {
 
       <View style={styles.mapWrapper}>
         <EventMap
-          events={
-            eventCoords
-              ? [
-                  {
-                    id: 'draft',
-                    latitude: eventCoords.latitude,
-                    longitude: eventCoords.longitude,
-                    category,
-                    is_free: isFree,
-                  } as never,
-                ]
-              : []
-          }
+          events={draftPreview}
           userLocation={location.coords}
           style={styles.map}
           onRegionChange={(region) =>
