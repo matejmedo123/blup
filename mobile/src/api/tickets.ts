@@ -236,3 +236,77 @@ export async function checkInTicket(
 export async function markTicketPurchaseSignal(eventId: string): Promise<void> {
   await recordSignal(eventId, 'ticket_purchase', {}, 2);
 }
+
+// --- delivery by email -------------------------------------------------------
+
+/**
+ * Where this account's tickets are emailed. Null means the address is unknown,
+ * which the UI must say out loud rather than silently sending nothing anywhere.
+ */
+export async function getTicketEmail(): Promise<string | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) return null;
+
+  const { data, error } = await supabase.rpc('ticket_email_for', { p_user_id: userId });
+  if (error) throw error;
+  return (data as string | null) ?? null;
+}
+
+/** Sets (or, with null, clears) the address tickets are delivered to. */
+export async function setTicketEmail(email: string | null): Promise<string | null> {
+  const { data, error } = await supabase.rpc('set_ticket_email', { p_email: email });
+  if (error) throw error;
+  return (data as string | null) ?? null;
+}
+
+export interface TicketEmailDelivery {
+  id: string;
+  to_email: string;
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'skipped';
+  attempts: number;
+  last_error: string | null;
+  sent_at: string | null;
+}
+
+/** The delivery record for an order, so the app can say what actually happened. */
+export async function getTicketEmailStatus(orderId: string): Promise<TicketEmailDelivery | null> {
+  const { data, error } = await supabase
+    .from('email_deliveries')
+    .select('id, to_email, status, attempts, last_error, sent_at')
+    .eq('order_id', orderId)
+    .eq('kind', 'ticket')
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data as TicketEmailDelivery) ?? null;
+}
+
+/**
+ * Sends the ticket again, optionally somewhere else.
+ *
+ * The queue is reset by the database and the send itself happens in the Edge
+ * Function, so a slow mail provider cannot leave the button spinning — the
+ * response says the delivery was accepted, not that it has landed.
+ */
+export async function resendTicketEmail(
+  orderId: string,
+  email?: string | null,
+): Promise<TicketEmailDelivery> {
+  const { data, error } = await supabase.rpc('resend_ticket_email', {
+    p_order_id: orderId,
+    p_email: email?.trim() || null,
+  });
+  if (error) throw error;
+
+  // Nudge the sender so it goes out now rather than on the next cron sweep.
+  // A failure here is not a failure of the request: the row is queued either
+  // way, which is exactly why the queue exists.
+  try {
+    await callFunction('ticket-email', { order_id: orderId });
+  } catch {
+    // ignore — the sweep will pick it up
+  }
+
+  return data as TicketEmailDelivery;
+}

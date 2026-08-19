@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'react-native-qrcode-svg';
 
-import { getTicket, ticketQrPayload } from '@/api/tickets';
+import {
+  getTicket, getTicketEmail, getTicketEmailStatus, resendTicketEmail, ticketQrPayload,
+} from '@/api/tickets';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong, formatPrice, formatRelative } from '@/lib/format';
 import { ticketStatusLabel } from '@/lib/labels';
 import {
-  Badge, Body, Caption, Divider, ErrorState, LoadingState, Notice, Screen,
+  Badge, Body, Button, Caption, Divider, ErrorState, Input, LoadingState, Notice, Screen,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -20,12 +22,43 @@ import { colors, radius, spacing, typography } from '@/theme';
  */
 export default function TicketScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const queryClient = useQueryClient();
+
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ticket', id],
     queryFn: () => getTicket(id!),
     enabled: Boolean(id),
   });
+
+  const defaultEmail = useQuery({ queryKey: ['ticket-email'], queryFn: getTicketEmail });
+
+  const delivery = useQuery({
+    queryKey: ['ticket-email-status', data?.order_id],
+    queryFn: () => getTicketEmailStatus(data!.order_id!),
+    enabled: Boolean(data?.order_id),
+  });
+
+  const sendAgain = async (address?: string | null) => {
+    if (!data?.order_id) return;
+    setSendError(null);
+    setSending(true);
+    try {
+      const result = await resendTicketEmail(data.order_id, address);
+      setSentTo(result.to_email);
+      setEditingEmail(false);
+      await queryClient.invalidateQueries({ queryKey: ['ticket-email-status', data.order_id] });
+    } catch (caught) {
+      setSendError(messageFor(caught));
+    } finally {
+      setSending(false);
+    }
+  };
 
   if (isLoading) return <Screen><LoadingState /></Screen>;
 
@@ -96,9 +129,83 @@ export default function TicketScreen() {
         <Body>{formatRelative(data.created_at)}</Body>
       </View>
 
+      <Divider />
+
+      {/* --- delivery by email --------------------------------------------- */}
+      <View style={styles.emailBlock}>
+        <Caption>Vstupenka e-mailom</Caption>
+
+        {sendError ? <Notice tone="danger" title="Neodoslané" body={sendError} /> : null}
+
+        {sentTo ? (
+          <Notice
+            tone="success"
+            title="Posielame"
+            body={`Vstupenka ide na ${sentTo}. Ak nepríde do pár minút, pozri sa aj do spamu.`}
+          />
+        ) : delivery.data?.status === 'sent' ? (
+          <Body muted>
+            Poslaná na {delivery.data.to_email}
+            {delivery.data.sent_at ? ` · ${formatRelative(delivery.data.sent_at)}` : ''}
+          </Body>
+        ) : delivery.data?.status === 'skipped' ? (
+          <Body muted>
+            Odosielanie e-mailov zatiaľ nie je nastavené. Vstupenku máš tu v aplikácii a platí
+            rovnako.
+          </Body>
+        ) : delivery.data ? (
+          <Body muted>Vstupenka je vo fronte na odoslanie na {delivery.data.to_email}.</Body>
+        ) : (
+          <Body muted>
+            {defaultEmail.data
+              ? `Pošleme ju na ${defaultEmail.data} ako PDF s QR kódom.`
+              : 'K účtu nemáme e-mail, tak zadaj, kam ju máme poslať.'}
+          </Body>
+        )}
+
+        {editingEmail ? (
+          <>
+            <Input
+              value={emailDraft}
+              onChangeText={setEmailDraft}
+              placeholder="meno@example.com"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="emailAddress"
+            />
+            <Button
+              title="Poslať sem"
+              loading={sending}
+              disabled={!emailDraft.includes('@')}
+              onPress={() => void sendAgain(emailDraft)}
+            />
+            <Button title="Zrušiť" variant="ghost" onPress={() => setEditingEmail(false)} />
+          </>
+        ) : (
+          <>
+            <Button
+              title={delivery.data?.status === 'sent' ? 'Poslať znova' : 'Poslať na e-mail'}
+              variant="secondary"
+              loading={sending}
+              disabled={!data.order_id || !defaultEmail.data}
+              onPress={() => void sendAgain(null)}
+            />
+            <Button
+              title="Poslať na inú adresu"
+              variant="ghost"
+              onPress={() => {
+                setEmailDraft(defaultEmail.data ?? '');
+                setEditingEmail(true);
+              }}
+            />
+          </>
+        )}
+      </View>
+
       <Caption style={styles.footnote}>
-        Túto obrazovku ukáž pri vstupe. Kód sa overuje na serveroch BLUPu, takže screenshot cudzej
-        vstupenky nikoho dnu nedostane.
+        Túto obrazovku ukáž pri vstupe — alebo QR z PDF, ktoré ti príde e-mailom. Kód sa overuje na
+        serveroch BLUPu, takže screenshot cudzej vstupenky nikoho dnu nedostane.
       </Caption>
     </Screen>
   );
@@ -126,6 +233,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  emailBlock: { gap: spacing.sm, marginTop: spacing.md },
   qrDisabled: { alignItems: 'center', gap: spacing.sm },
   qrDisabledEmoji: { fontSize: 56, color: colors.textInverse },
 

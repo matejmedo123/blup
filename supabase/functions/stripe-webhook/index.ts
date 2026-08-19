@@ -12,6 +12,27 @@
  */
 import { adminClient, errorResponse, json } from '../_shared/http.ts';
 import { verifyStripeSignature } from '../_shared/stripe.ts';
+import { env } from '../_shared/env.ts';
+
+/**
+ * Fire-and-forget call to the ticket-email function. Failure here is not
+ * failure of the webhook: the delivery row is already committed, so the cron
+ * sweep picks it up on the next pass.
+ */
+async function triggerTicketEmail(): Promise<void> {
+  try {
+    await fetch(`${env.supabaseUrl()}/functions/v1/ticket-email`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.serviceRoleKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ limit: 25 }),
+    });
+  } catch (error) {
+    console.error('ticket-email nudge failed, cron will retry:', error);
+  }
+}
 
 interface StripeEvent {
   id: string;
@@ -71,6 +92,13 @@ Deno.serve(async (req) => {
           p_amount_cents: Number(object.amount_received ?? object.amount),
         });
         if (error) throw error;
+
+        // fulfill_order queued the ticket email inside its transaction; nudge
+        // the sender so it goes out in seconds rather than waiting for cron.
+        // Deliberately not awaited into the webhook's result: Stripe must get
+        // its 200 even if the mail provider is having a bad afternoon, and the
+        // queue survives either way.
+        void triggerTicketEmail();
         break;
       }
 

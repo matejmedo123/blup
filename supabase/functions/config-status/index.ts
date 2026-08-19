@@ -35,6 +35,10 @@ Deno.serve((req) => {
       push: {
         expo_access_token: Boolean(optionalEnv('EXPO_ACCESS_TOKEN')),
       },
+      email: {
+        configured: configured.email(),
+        from: configured.email() ? (optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.app>') : null,
+      },
     });
   } catch (error) {
     return errorResponse(error);

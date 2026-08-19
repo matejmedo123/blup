@@ -48,6 +48,11 @@ export const env = {
   aiModel: () => optionalEnv('AI_MODEL') ?? 'claude-sonnet-5',
 
   expoAccessToken: () => optionalEnv('EXPO_ACCESS_TOKEN'),
+
+  resendApiKey: () => requireEnv('RESEND_API_KEY', 'EMAIL_NOT_CONFIGURED'),
+  emailFrom: () => optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.app>',
+  emailReplyTo: () => optionalEnv('EMAIL_REPLY_TO'),
+  appUrl: () => optionalEnv('APP_PUBLIC_URL') ?? 'https://blup.app',
 };
 
 /** True when a provider has everything it needs — used for health reporting. */
@@ -56,4 +61,5 @@ export const configured = {
   stripeWebhook: () => Boolean(optionalEnv('STRIPE_WEBHOOK_SECRET')),
   appleIap: () => Boolean(optionalEnv('APPLE_SHARED_SECRET')),
   ai: () => Boolean(optionalEnv('AI_API_KEY')),
+  email: () => Boolean(optionalEnv('RESEND_API_KEY')),
 };

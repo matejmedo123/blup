@@ -105,3 +105,20 @@ prefer restricting keys by bundle id / package name over rotating them.
 
 If a service-role key ever leaks: rotate it in Project Settings → API
 immediately, then redeploy every function.
+
+## Email (ticket delivery)
+
+| Variable | Required | What it is |
+|---|---|---|
+| `RESEND_API_KEY` | for email | Resend API key. Without it, deliveries are recorded as `skipped` and the ticket still lives in the app. |
+| `EMAIL_FROM` | no | Sender, e.g. `Blup <tickets@blup.app>`. The domain must be verified with the provider or mail lands in spam. |
+| `EMAIL_REPLY_TO` | no | Where replies go — usually support, not the sending address. |
+| `APP_PUBLIC_URL` | no | Base URL used in email links. Defaults to `https://blup.app`. |
+
+Ticket emails are queued by `fulfill_order()` inside the transaction that mints
+the tickets, and sent by the `ticket-email` function. Run it on a schedule as
+well as from the webhook, so a provider outage recovers on its own:
+
+```
+*/5 * * * *  POST /functions/v1/ticket-email   { "limit": 50 }
+```

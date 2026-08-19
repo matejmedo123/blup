@@ -316,3 +316,34 @@ Play Developer API and then reusing `upsert_premium_subscription()`.
 | Payout above available | `INSUFFICIENT_AVAILABLE_BALANCE` with the real figure |
 | Transfer fails | Payout marked failed, money returned to the balance, organizer notified |
 | IAP module missing | Premium screen explains exactly what to install and build |
+
+---
+
+## Ticket delivery by email
+
+A ticket that only exists inside the app is a ticket you lose when your phone
+dies at the door, so every paid order also goes out as an email with a PDF
+attached — one page per ticket, QR included.
+
+`fulfill_order()` calls `queue_ticket_email()` in the same transaction that
+mints the tickets: an email is never queued for an order that did not complete,
+and never lost for one that did. Sending is a separate, retryable step, because
+a slow mail provider must not be able to hold up (or roll back) a payment that
+already went through.
+
+| Piece | Where |
+|---|---|
+| Queue + retry state | `email_deliveries`, unique on `(kind, order_id)` |
+| Claiming | `claim_email_deliveries()` — `for update skip locked`, so two workers never send the same ticket twice |
+| Render + send | `ticket-email` Edge Function |
+| QR | `_shared/qr.ts` — ISO/IEC 18004, byte mode, level M |
+| PDF | `_shared/pdf.ts` — hand-built, no dependency |
+
+The QR is generated in-house rather than fetched from an image service: the
+payload *is* the ticket (`blup://t/{code}/{secret}`), and asking a third party
+to render it would mean handing them every ticket's secret.
+
+Retries back off 2/4/8/16 minutes and stop after five attempts, so a permanently
+bad address stops burning quota. A deployment with no `RESEND_API_KEY` records
+deliveries as `skipped` rather than failing them — an integration that has not
+been wired up is not an error to retry.
