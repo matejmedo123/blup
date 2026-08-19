@@ -2,9 +2,10 @@
  * POST /functions/v1/checkout-create
  *
  * Starts a ticket purchase. The client sends only { ticket_type_id, quantity }
- * and optionally a promo code — every amount (price, discount, BLUP fee, total)
- * is computed by create_order() in the database, so a tampered client cannot
- * change what it pays, and cannot invent its own discount.
+ * and optionally a promo code — every amount (price, discount, commission,
+ * archive fee, total) is computed by create_order() in the database, so a
+ * tampered client cannot change what it pays, and cannot invent its own
+ * discount.
  *
  * Returns the PaymentIntent client secret for the Stripe PaymentSheet. The order
  * stays `requires_payment` until the webhook confirms the money moved.
@@ -89,7 +90,10 @@ Deno.serve(async (req) => {
       orderId: order.id,
       buyerId: user.id,
       eventId: order.event_id,
-      applicationFeeCents: order.platform_fee_cents,
+      // What BLUP keeps out of this charge: the commission plus the archive
+      // fee. `platform_fee_cents` is only the organizer-side deduction, so
+      // using it here would hand the buyer-paid archive fee to the organizer.
+      applicationFeeCents: order.blup_revenue_cents,
       connectedAccountId: org?.charges_enabled ? org.stripe_account_id : null,
       customerEmail: user.email,
     });
@@ -112,6 +116,10 @@ Deno.serve(async (req) => {
       amount_cents: order.total_cents,
       subtotal_cents: order.subtotal_cents,
       discount_cents: order.discount_cents,
+      net_cents: order.net_cents,
+      archive_fee_cents: order.archive_fee_cents,
+      archive_fee_payer: order.archive_fee_payer,
+      commission_cents: order.commission_cents,
       platform_fee_cents: order.platform_fee_cents,
       currency: order.currency,
       quantity: order.quantity,

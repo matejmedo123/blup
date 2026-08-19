@@ -139,8 +139,32 @@ balance. Writes the payout and the debiting ledger entry in one transaction.
 ### `event_analytics(p_event_id)`
 
 Views, unique viewers, saves, likes, comments, RSVPs, check-ins, tickets sold,
-conversion rate, gross revenue, BLUP fee, organizer net. Host, organizer or
-admin only.
+conversion rate, and the full money split: gross (list price), discounts, net,
+commission, archive fee, what the organizer keeps and what the buyers paid.
+Host, organizer or admin only.
+
+### `quote_order(p_ticket_type_id, p_quantity, p_promo_code)`
+
+Prices a basket without creating anything — the same arithmetic `create_order()`
+uses, so checkout can show the archive fee and the discount before the buyer
+commits. Returns `{valid, reason, …}` rather than raising: a sold-out ticket or
+a mistyped code is normal, not exceptional.
+
+### `resolve_fees(p_organization_id)`
+
+The fee schedule that applies to one organization: the platform values from
+`platform_settings` with any negotiated override laid on top.
+
+### `accounting_orders / accounting_ledger / accounting_summary(p_organization_id, p_from, p_to)`
+
+The sales journal, the movement book with a running balance, and the monthly
+summary. Owner, admin or finance on that organization, or a BLUP admin — each
+one authorizes before it reads a row.
+
+### `platform_accounting_summary(p_from, p_to)`
+
+BLUP's own monthly books: commission, archive fees and boost revenue. Admin
+only.
 
 ### `admin_*`
 
@@ -170,22 +194,30 @@ Base URL: `https://<project-ref>.functions.supabase.co`
 | `POST /stripe-webhook` | Stripe signature | **the only path that mints a ticket** |
 | `POST /iap-apple-notifications` | Apple JWS | renewals, expiry, refunds, revocations |
 | `POST /push-dispatch` | service-role key | deliver queued notifications via Expo |
+| `POST /boost-create` | user JWT | buy a paid boost for an event |
+| `POST /accounting-export` | user JWT | books as CSV, rendered under the caller's own session |
 | `GET /config-status` | none | which integrations have credentials (booleans only) |
 
 ### `POST /checkout-create`
 
 ```json
 // request
-{ "ticket_type_id": "uuid", "quantity": 2 }
+{ "ticket_type_id": "uuid", "quantity": 2, "promo_code": null }
 
-// response
+// response — a EUR 25 ticket x2 on the standard 4 % + 1 EUR schedule
 {
   "order_id": "uuid",
   "status": "requires_payment",
   "requires_payment": true,
   "payment_intent_client_secret": "pi_..._secret_...",
-  "amount_cents": 5000,
-  "platform_fee_cents": 200,
+  "amount_cents": 5200,          // what the buyer is charged
+  "subtotal_cents": 5000,
+  "discount_cents": 0,
+  "net_cents": 5000,             // ticket revenue after discounts
+  "archive_fee_cents": 200,
+  "archive_fee_payer": "buyer",
+  "commission_cents": 200,
+  "platform_fee_cents": 200,     // deducted from the organizer
   "currency": "EUR",
   "quantity": 2,
   "split_at_source": true

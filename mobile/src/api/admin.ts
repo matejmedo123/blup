@@ -160,3 +160,51 @@ export async function reportContent(input: {
 
   if (error) throw error;
 }
+
+/**
+ * The platform fee schedule.
+ *
+ * These are the numbers BLUP charges: a percentage of every ticket sale and a
+ * fixed amount per issued ticket. They live in one row so changing the price is
+ * an update, not a release — and every order records the values that applied at
+ * the moment it was created, so a change never rewrites history.
+ */
+export interface PlatformSettings {
+  platform_fee_bps: number;
+  archive_fee_cents: number;
+  archive_fee_payer: 'buyer' | 'organizer';
+  settlement_days: number;
+  default_currency: string;
+  updated_at: string;
+}
+
+export async function getPlatformSettings(): Promise<PlatformSettings> {
+  const { data, error } = await supabase
+    .from('platform_settings')
+    .select('platform_fee_bps, archive_fee_cents, archive_fee_payer, settlement_days, default_currency, updated_at')
+    .single();
+
+  if (error) throw error;
+  return data as PlatformSettings;
+}
+
+/**
+ * Only a full admin can write these — the RLS policy on `platform_settings`
+ * enforces it, so a rejected update here is the database refusing, not the app.
+ */
+export async function updatePlatformSettings(
+  patch: Partial<Pick<PlatformSettings,
+    'platform_fee_bps' | 'archive_fee_cents' | 'archive_fee_payer' | 'settlement_days'>>,
+): Promise<PlatformSettings> {
+  const { data: userData } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('platform_settings')
+    .update({ ...patch, updated_at: new Date().toISOString(), updated_by: userData?.user?.id ?? null })
+    .eq('id', true)
+    .select('platform_fee_bps, archive_fee_cents, archive_fee_payer, settlement_days, default_currency, updated_at')
+    .single();
+
+  if (error) throw error;
+  return data as PlatformSettings;
+}

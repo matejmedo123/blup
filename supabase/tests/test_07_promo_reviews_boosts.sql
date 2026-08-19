@@ -53,14 +53,21 @@ begin
     format('subtotal must be the list price, got %s', v_order.subtotal_cents);
   assert v_order.discount_cents = 800,
     format('20%% of 4000 is 800, got %s', v_order.discount_cents);
-  assert v_order.total_cents = 3200,
-    format('the charge must be the discounted total, got %s', v_order.total_cents);
+  assert v_order.net_cents = 3200,
+    format('the ticket revenue must be the discounted total, got %s', v_order.net_cents);
+  -- two tickets, 1.00 EUR archive fee each, carried by the buyer
+  assert v_order.total_cents = 3400,
+    format('the charge is the discounted total plus the archive fee, got %s', v_order.total_cents);
 
-  -- The platform fee follows what is actually paid, not the list price.
+  -- This organization negotiated 5 %, so it does not follow the 4 % platform
+  -- default — and the commission follows what is actually paid, not the list
+  -- price, so a discount is funded by the organizer and not by BLUP's cut.
+  assert v_order.commission_cents = 160,
+    format('5%% of 3200 is 160, got %s', v_order.commission_cents);
   assert v_order.platform_fee_cents = 160,
-    format('5%% of 3200 is 160, got %s', v_order.platform_fee_cents);
+    format('only the commission is deducted from the organizer, got %s', v_order.platform_fee_cents);
 
-  raise notice 'PASS a percentage promo code discounts the order and the fee';
+  raise notice 'PASS a percentage promo code discounts the order and the commission';
 end $$;
 
 -- --- a fixed code takes a flat amount off -----------------------------------
@@ -73,7 +80,9 @@ begin
   v_order := public.create_order('06666666-0000-0000-0000-000000000001', v_tt, 1, 'FIVEOFF');
 
   assert v_order.discount_cents = 500, format('expected 500 off, got %s', v_order.discount_cents);
-  assert v_order.total_cents = 1500, format('expected 1500 total, got %s', v_order.total_cents);
+  assert v_order.net_cents = 1500, format('expected 1500 net, got %s', v_order.net_cents);
+  assert v_order.total_cents = 1600,
+    format('expected 1500 + one archive fee = 1600, got %s', v_order.total_cents);
   raise notice 'PASS a fixed promo code takes a flat amount off';
 end $$;
 

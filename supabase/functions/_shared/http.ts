@@ -65,6 +65,24 @@ export function adminClient(): SupabaseClient {
 }
 
 /**
+ * A client that carries the caller's own JWT, so `auth.uid()` is set inside
+ * PostgreSQL and RLS — plus any SECURITY DEFINER function that authorizes on
+ * `auth.uid()` — applies to them personally.
+ *
+ * Reach for this instead of `adminClient()` whenever the database is the thing
+ * deciding what the caller may see. A service-role client makes `auth.uid()`
+ * null, which those functions read as "an Edge Function acting on an already
+ * authorized request" — exactly the check you did not want to skip.
+ */
+export function userClient(req: Request): SupabaseClient {
+  const authHeader = req.headers.get('Authorization') ?? '';
+  return createClient(env.supabaseUrl(), env.anonKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: authHeader } },
+  });
+}
+
+/**
  * Resolves the calling user from the Authorization header. Every function that
  * acts on behalf of a user must call this — we never trust a user id sent in
  * the request body.

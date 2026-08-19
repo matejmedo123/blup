@@ -40,7 +40,13 @@ export default function AdminDashboard() {
       <View style={styles.grid}>
         <Tile label="Hrubý predaj" value={formatMoney(data.gross_sales_cents)} />
         <Tile label="Príjem BLUPu" value={formatMoney(data.platform_revenue_cents)} />
+        <Tile label="Provízia" value={formatMoney(data.commission_cents ?? 0)} />
+        <Tile label="Archívne poplatky" value={formatMoney(data.archive_fee_cents ?? 0)} />
+        <Tile label="Boosty" value={formatMoney(data.boost_revenue_cents ?? 0)} />
+        <Tile label="Po zľavách" value={formatMoney(data.net_sales_cents ?? 0)} />
       </View>
+      <Row label="Účtovníctvo platformy" onPress={() => router.push('/admin/accounting')} />
+      <Row label="Poplatky a sadzby" onPress={() => router.push('/admin/fees')} />
 
       <SectionHeader title="Fronty" />
       <Row

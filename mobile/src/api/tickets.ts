@@ -15,13 +15,67 @@ export interface CheckoutSession {
   status: 'requires_payment' | 'succeeded';
   requires_payment: boolean;
   payment_intent_client_secret?: string;
+  /** What the buyer is charged: tickets after discount, plus the archive fee. */
   amount_cents: number;
   subtotal_cents?: number;
   discount_cents?: number;
+  net_cents?: number;
+  archive_fee_cents?: number;
+  archive_fee_payer?: 'buyer' | 'organizer';
+  commission_cents?: number;
+  /** What is deducted from the organizer — not the same as BLUP's revenue. */
   platform_fee_cents?: number;
   currency: string;
   quantity?: number;
   split_at_source?: boolean;
+}
+
+/**
+ * The priced basket, exactly as the database will charge it.
+ *
+ * `valid: false` carries a `reason` instead of throwing — a sold-out ticket or
+ * a mistyped promo code is a normal thing for a person to run into, not an
+ * exceptional one.
+ */
+export interface OrderQuote {
+  valid: boolean;
+  reason?: string | null;
+  quantity: number;
+  unit_price_cents: number;
+  subtotal_cents: number;
+  discount_cents: number;
+  /** Ticket revenue after any discount — what the organizer's sale is worth. */
+  net_cents: number;
+  archive_fee_cents: number;
+  archive_fee_payer: 'buyer' | 'organizer';
+  commission_cents: number;
+  platform_fee_bps: number;
+  /** The number on the pay button. */
+  buyer_total_cents: number;
+  organizer_net_cents: number;
+  blup_revenue_cents: number;
+  currency: string;
+  promo?: PromoPreview | null;
+}
+
+/**
+ * Prices a basket without creating anything. The same function `create_order`
+ * uses, so the breakdown on the checkout screen and the amount that reaches the
+ * card cannot drift apart — the app adds nothing of its own.
+ */
+export async function quoteOrder(
+  ticketTypeId: string,
+  quantity: number,
+  promoCode?: string | null,
+): Promise<OrderQuote> {
+  const { data, error } = await supabase.rpc('quote_order', {
+    p_ticket_type_id: ticketTypeId,
+    p_quantity: quantity,
+    p_promo_code: promoCode?.trim() || null,
+  });
+
+  if (error) throw error;
+  return data as OrderQuote;
 }
 
 /** Step 1 of checkout: create the order and get a payment intent. */

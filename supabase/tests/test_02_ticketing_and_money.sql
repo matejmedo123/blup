@@ -33,11 +33,50 @@ begin
                            'ccccccc1-0000-0000-0000-000000000001', 2);
 
   assert o.subtotal_cents = 5000, format('subtotal should be 5000, got %s', o.subtotal_cents);
-  -- 4.00% of 5000 = 200
-  assert o.platform_fee_cents = 200, format('BLUP fee should be 200, got %s', o.platform_fee_cents);
-  assert o.total_cents = 5000, 'buyer pays the ticket price';
+  assert o.net_cents = 5000, format('net should be 5000, got %s', o.net_cents);
+  -- 4.00 % of 5000
+  assert o.commission_cents = 200, format('commission should be 200, got %s', o.commission_cents);
+  -- 1.00 EUR per ticket, two tickets
+  assert o.archive_fee_cents = 200, format('archive fee should be 200, got %s', o.archive_fee_cents);
+  assert o.archive_fee_payer = 'buyer', 'the buyer carries the archive fee by default';
+  -- the organizer is charged the commission only; the archive fee sits on top
+  assert o.platform_fee_cents = 200,
+    format('organizer deduction should be 200, got %s', o.platform_fee_cents);
+  assert o.total_cents = 5200,
+    format('buyer pays tickets plus the archive fee, got %s', o.total_cents);
+  assert o.blup_revenue_cents = 400,
+    format('BLUP earns commission + archive fee, got %s', o.blup_revenue_cents);
   assert o.payment_status = 'requires_payment', 'a fresh order must not be paid';
-  raise notice 'PASS create_order computes amounts and BLUP fee';
+  raise notice 'PASS create_order splits commission and archive fee';
+end $$;
+
+-- --- the money adds up in both directions -----------------------------------
+do $$
+declare o public.orders;
+begin
+  select * into o from public.orders limit 1;
+  -- Whatever the buyer hands over is exactly what the organizer is credited
+  -- plus what BLUP keeps. If this ever fails, money is being invented.
+  assert o.total_cents = (o.net_cents - o.platform_fee_cents) + o.blup_revenue_cents,
+    format('buyer %s <> organizer %s + BLUP %s',
+           o.total_cents, o.net_cents - o.platform_fee_cents, o.blup_revenue_cents);
+  raise notice 'PASS buyer total = organizer net + BLUP revenue';
+end $$;
+
+-- --- quote_order prices the same basket without creating anything -----------
+do $$
+declare q jsonb; n integer;
+begin
+  select count(*) into n from public.orders;
+  q := public.quote_order('ccccccc1-0000-0000-0000-000000000001', 2);
+
+  assert (q ->> 'valid')::boolean, format('quote should be valid: %s', q);
+  assert (q ->> 'buyer_total_cents')::int = 5200,
+    format('quote must match create_order, got %s', q ->> 'buyer_total_cents');
+  assert (q ->> 'archive_fee_cents')::int = 200, 'quote must state the archive fee';
+  assert (q ->> 'commission_cents')::int = 200, 'quote must state the commission';
+  assert (select count(*) from public.orders) = n, 'a quote must not create an order';
+  raise notice 'PASS quote_order previews without side effects';
 end $$;
 
 -- --- quantity above the per-order limit is rejected -------------------------
@@ -67,7 +106,7 @@ declare
   n integer;
 begin
   select id into v_order_id from public.orders limit 1;
-  perform public.fulfill_order(v_order_id, 'stripe', 'pi_test_123', 5000);
+  perform public.fulfill_order(v_order_id, 'stripe', 'pi_test_123', 5200);
 
   select count(*) into n from public.tickets where order_id = v_order_id;
   assert n = 2, format('two tickets should be issued, got %s', n);
@@ -92,7 +131,7 @@ do $$
 declare v_order_id uuid;
 begin
   select id into v_order_id from public.orders limit 1;
-  perform public.fulfill_order(v_order_id, 'stripe', 'pi_test_123', 5000);
+  perform public.fulfill_order(v_order_id, 'stripe', 'pi_test_123', 5200);
   assert (select count(*) from public.tickets) = 2,
     'replaying the webhook must not issue duplicate tickets';
   raise notice 'PASS fulfil_order is idempotent';
@@ -121,6 +160,10 @@ begin
 
   assert b.gross_sales_cents = 5000, format('gross should be 5000, got %s', b.gross_sales_cents);
   assert b.platform_fee_cents = 200, format('BLUP fee should be 200, got %s', b.platform_fee_cents);
+  assert b.commission_cents = 200, format('commission should be 200, got %s', b.commission_cents);
+  -- the buyer paid the archive fee, so it never touches the organizer's ledger
+  assert b.archive_fee_cents = 0,
+    format('a buyer-paid archive fee must not be deducted from the organizer, got %s', b.archive_fee_cents);
   assert b.balance_cents = 4800, format('organizer balance should be 4800, got %s', b.balance_cents);
   -- funds are held for the settlement delay
   assert b.available_cents = 0, 'fresh sales must not be immediately available';

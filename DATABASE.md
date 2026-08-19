@@ -243,5 +243,14 @@ Creates a throwaway cluster, applies the local auth shim
 - `test_04_rls.sql` — private profiles, cross-user edits, privilege escalation,
   draft visibility, forged counters, client-side ticket/order/premium/ledger
   writes, notification privacy, admin-only RPCs
+- `test_05_messaging.sql` — direct and event conversations, closed inboxes,
+  participant-only reads, forged senders, unread counts, rate limiting
+- `test_06_gamification.sql` — XP on real actions only, idempotent awards,
+  levels, streaks, badges that cannot be self-granted
+- `test_07_promo_reviews_boosts.sql` — promo arithmetic and limits, attendee-only
+  reviews, paid boosts that activate only on a confirmed payment
+- `test_08_fees_and_accounting.sql` — the 4 % + 1 € schedule, free tickets,
+  who carries the archive fee, the money-conservation invariant, and the
+  accounting export's totals and authorization
 
 Assertions run inside a transaction and roll back, so the suite is repeatable.

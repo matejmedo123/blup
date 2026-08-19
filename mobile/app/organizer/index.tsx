@@ -345,6 +345,11 @@ export default function OrganizerScreen() {
                 style={styles.flex}
               />
             </View>
+            <Button
+              title="Účtovníctvo a export"
+              variant="secondary"
+              onPress={() => router.push('/organizer/accounting')}
+            />
           </>
         ) : null}
       </ScrollView>

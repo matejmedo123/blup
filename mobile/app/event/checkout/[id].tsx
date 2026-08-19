@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getEvent } from '@/api/events';
 import {
-  createCheckout, markTicketPurchaseSignal, previewPromoCode, waitForTickets,
+  createCheckout, markTicketPurchaseSignal, previewPromoCode, quoteOrder, waitForTickets,
   type PromoPreview,
 } from '@/api/tickets';
 import { isConfigured } from '@/lib/env';
@@ -62,6 +62,16 @@ export default function CheckoutScreen() {
 
   const ticketTypes = event.data?.ticket_types ?? [];
   const selected = ticketTypes.find((type) => type.id === ticketTypeId) ?? ticketTypes[0];
+
+  // The price comes from the database, never from arithmetic done here. The
+  // quote is the same function that will charge the card, so what this screen
+  // shows and what the buyer pays are the same number by construction.
+  const appliedPromo = promo?.valid ? promoCode : null;
+  const quote = useQuery({
+    queryKey: ['order-quote', selected?.id, quantity, appliedPromo],
+    queryFn: () => quoteOrder(selected!.id, quantity, appliedPromo),
+    enabled: Boolean(selected?.id),
+  });
   const maxQuantity = selected
     ? Math.min(selected.max_per_order, selected.quantity_total - selected.quantity_sold)
     : 1;
@@ -193,9 +203,16 @@ export default function CheckoutScreen() {
     );
   }
 
-  const subtotal = (selected?.price_cents ?? 0) * quantity;
-  const discount = promo?.valid ? promo.amount_off : 0;
-  const payable = Math.max(subtotal - discount, 0);
+  const currency = quote.data?.currency ?? selected?.currency ?? 'EUR';
+  // While the quote is in flight, fall back to the list price so the screen
+  // never shows a blank total. Every fee line below is rendered only from the
+  // quote, so a fallback can under-state but never invent a charge.
+  const subtotal = quote.data?.subtotal_cents ?? (selected?.price_cents ?? 0) * quantity;
+  const discount = quote.data?.discount_cents ?? 0;
+  const archiveFee = quote.data?.archive_fee_payer === 'buyer'
+    ? quote.data.archive_fee_cents
+    : 0;
+  const payable = quote.data?.buyer_total_cents ?? Math.max(subtotal - discount, 0);
 
   return (
     <Screen scroll>
@@ -328,17 +345,31 @@ export default function CheckoutScreen() {
           </>
         ) : null}
 
+        {archiveFee > 0 ? (
+          <View style={styles.summaryRow}>
+            <View>
+              <Body muted>Archívny poplatok</Body>
+              <Caption>
+                {quantity} × {formatMoney(archiveFee / quantity, currency)} za vstupenku
+              </Caption>
+            </View>
+            <Body muted>{formatMoney(archiveFee, currency)}</Body>
+          </View>
+        ) : null}
+
         <View style={styles.summaryRow}>
           <Text style={styles.total}>Spolu</Text>
-          <Text style={styles.total}>{formatMoney(payable, selected?.currency ?? 'EUR')}</Text>
+          <Text style={styles.total}>{formatMoney(payable, currency)}</Text>
         </View>
 
         <Caption style={styles.feeNote}>
-          Servisný poplatok BLUPu sa strháva z výplaty organizátora, nepripočítava sa k tvojej cene.
+          {archiveFee > 0
+            ? 'Archívny poplatok pokrýva vydanie a uchovanie vstupenky. Provízia BLUPu sa strháva z výplaty organizátora — k tvojej cene sa nepripočítava.'
+            : 'Provízia BLUPu sa strháva z výplaty organizátora, nepripočítava sa k tvojej cene.'}
         </Caption>
 
         <Button
-          title={payable === 0 ? 'Získať vstupenku' : `Zaplatiť ${formatMoney(payable, selected?.currency ?? 'EUR')}`}
+          title={payable === 0 ? 'Získať vstupenku' : `Zaplatiť ${formatMoney(payable, currency)}`}
           onPress={pay}
           loading={stage === 'paying'}
           disabled={!selected || (payable > 0 && (!isConfigured.stripe || !isStripeModuleAvailable))}

@@ -51,16 +51,26 @@ tickets* when it lands.
 
 ### What the client can and cannot influence
 
-It sends exactly `{ticket_type_id, quantity}`. It cannot set a price, a fee, a
-currency, an order status, or which organization gets paid. `create_order()`
-reads the price from `ticket_types`, the fee from `organizations.platform_fee_bps`,
-and computes:
+It sends exactly `{ticket_type_id, quantity}` plus an optional promo code. It
+cannot set a price, a fee, a currency, an order status, or which organization
+gets paid. `create_order()` reads the price from `ticket_types`, the discount
+from `evaluate_promo_code()` and the fee schedule from `resolve_fees()`, and
+computes:
 
 ```
-subtotal = unit_price_cents × quantity
-fee      = subtotal × platform_fee_bps / 10000    (integer division)
-total    = subtotal                                (the buyer pays the ticket price)
+subtotal   = unit_price_cents × quantity
+net        = subtotal − discount                       (what the tickets sold for)
+archive    = archive_fee_cents × quantity              (0 when net = 0)
+commission = net × platform_fee_bps / 10000            (integer division)
+
+buyer pays      = net + archive        when the buyer carries the archive fee
+organizer keeps = net − commission     (− archive when the organizer carries it)
+BLUP keeps      = commission + archive always
 ```
+
+`quote_order()` runs exactly this arithmetic without writing anything, so the
+checkout screen can show the breakdown before the buyer commits and cannot
+disagree with the charge.
 
 `fulfill_order()` additionally refuses to fulfil when the confirmed amount does
 not equal `total_cents` (`AMOUNT_MISMATCH`) — asserted in `test_02`.
@@ -86,18 +96,43 @@ and notification path runs.
 
 ## The BLUP fee and the organizer ledger
 
-BLUP takes a percentage of every ticket sale — `platform_fee_bps`, default 300
-(3.00%), adjustable per organization by an admin only.
+BLUP charges two things, both stored in `platform_settings` so changing the
+price is an UPDATE rather than a release:
 
-Every sale writes two ledger rows:
+| | Default | Basis |
+|---|---|---|
+| Commission | **4.00 %** (`platform_fee_bps = 400`) | the discounted ticket revenue |
+| Archive fee | **1.00 € per ticket** (`archive_fee_cents = 100`) | each issued paid ticket |
+
+An organization may carry a negotiated override in
+`organizations.platform_fee_bps` / `archive_fee_cents`; `null` means "use the
+platform value". Only an admin can write either — `protect_organization_privileges()`
+reverts the columns on any other update.
+
+**Who pays the archive fee** is a recorded decision, not an accident of
+arithmetic. `archive_fee_payer` defaults to `buyer`: it appears as its own line
+on the checkout, which is how ticketing platforms state it and which keeps a
+3 € ticket from reaching the organizer as 1.88 €. Setting it to `organizer`
+moves it to the organizer's side of the ledger with no application change. Free
+tickets are never charged it — an archive fee on a zero-price ticket would be a
+fee for nothing.
+
+Every sale writes two or three ledger rows:
 
 ```
-sale          +subtotal_cents      available_at = now() + 7 days
-platform_fee  −fee_cents           available_at = now() + 7 days
+sale          +net_cents           available_at = now() + settlement_days
+platform_fee  −commission_cents    available_at = now() + settlement_days
+platform_fee  −archive_fee_cents   only when the organizer carries it
 ```
+
+The sale credits `net_cents`, not `subtotal_cents`: the organizer is credited
+what the buyer actually paid for tickets, so a promo code is funded by the
+organizer who issued it rather than by money that was never collected. (Until
+migration 0021 it credited the list price — a real bug, fixed there.)
 
 A payout writes `payout −amount` (immediately available). A refund writes
-`refund −subtotal` plus an `adjustment +fee` that gives the fee back.
+`refund −net` plus an `adjustment +platform_fee` that gives BLUP's cut back —
+a refunded order earns BLUP nothing.
 
 `organization_balances` derives everything from those rows:
 
@@ -107,20 +142,53 @@ A payout writes `payout −amount` (immediately available). A refund writes
 | `available_cents` | only entries whose `available_at` has passed — this is what can be withdrawn |
 | `pending_cents` | still inside the settlement delay |
 | `gross_sales_cents` | sum of `sale` |
-| `platform_fee_cents` | what BLUP took |
+| `platform_fee_cents` | everything deducted from the organizer |
+| `commission_cents` | the percentage part of that |
+| `archive_fee_cents` | the per-ticket part — `0` while the buyer carries it |
+| `refunded_cents` | reversed sales |
 | `paid_out_cents` | already transferred |
 
-Worked example, asserted in `test_02` (a €25 ticket, quantity 2, 4% fee):
+Worked example, asserted in `test_02` (a €25 ticket, quantity 2, 4 % + 1 €):
 
 ```
-gross           5000
-BLUP fee        −200
+buyer pays      5200   = 5000 tickets + 200 archive fee
+sale           +5000
+commission      −200
 balance         4800   (all pending for 7 days)
 payout 4000    −4000
 balance          800
 refund         −5000 +200 (fee reversal)
 balance        −4000
+
+BLUP revenue     400   = 200 commission + 200 archive fee
 ```
+
+The invariant `test_02` asserts on every order:
+
+```
+buyer total = (organizer net) + (BLUP revenue)
+```
+
+If that ever fails, money is being invented somewhere.
+
+---
+
+## Accounting export
+
+`accounting_orders()`, `accounting_ledger()` and `accounting_summary()` are the
+sales journal, the movement book with a running balance, and the monthly
+summary. `platform_accounting_summary()` is the same monthly shape for BLUP's
+own books, with boost revenue alongside ticket revenue.
+
+Each one authorizes before it reads a row — owner, admin or finance on that
+organization, or a BLUP admin — as a statement rather than a `WHERE` predicate,
+because a predicate the planner is free to skip is not an authorization rule.
+
+`accounting-export` renders them as RFC 4180 CSV with a UTF-8 BOM (so Excel
+stops guessing a legacy code page and mangling accented event titles) and runs
+the query under the **caller's own JWT**, not the service role: a service-role
+call presents as "no user", which those functions read as an already-authorized
+Edge Function and would skip exactly the check that matters.
 
 ---
 

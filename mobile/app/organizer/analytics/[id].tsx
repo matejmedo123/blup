@@ -62,14 +62,32 @@ export default function EventAnalyticsScreen() {
 
       <SectionHeader title="Peniaze" />
       <View style={styles.money}>
-        <MoneyRow label="Hrubý príjem" value={formatMoney(data.gross_revenue_cents, data.currency)} />
-        <MoneyRow label="Poplatok BLUP" value={`− ${formatMoney(data.platform_fee_cents, data.currency)}`} />
+        <MoneyRow label="Predaj v cenníku" value={formatMoney(data.gross_revenue_cents, data.currency)} />
+        {data.discount_cents > 0 ? (
+          <MoneyRow
+            label="Zľavy z promo kódov"
+            value={`− ${formatMoney(data.discount_cents, data.currency)}`}
+          />
+        ) : null}
+        <MoneyRow label="Tržba po zľavách" value={formatMoney(data.net_revenue_cents, data.currency)} />
+        <Divider />
+        <MoneyRow
+          label="Provízia BLUP"
+          value={`− ${formatMoney(data.commission_cents, data.currency)}`}
+        />
         <Divider />
         <MoneyRow label="Tvoj čistý príjem" value={formatMoney(data.organizer_net_cents, data.currency)} strong />
       </View>
 
+      {data.archive_fee_cents > 0 ? (
+        <Caption style={styles.conversion}>
+          Kupujúci zaplatili navyše {formatMoney(data.archive_fee_cents, data.currency)} archívneho
+          poplatku — z tvojej tržby ti neuberá.
+        </Caption>
+      ) : null}
+
       <Caption style={styles.conversion}>
-        Conversion: {data.conversion_rate}% of views became a ticket.
+        Z {data.views} zobrazení skončilo vstupenkou {data.conversion_rate} %.
       </Caption>
 
       <SectionHeader title="Posledné objednávky" />

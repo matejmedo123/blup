@@ -244,8 +244,22 @@ export interface Order {
   buyer_id: string;
   quantity: number;
   unit_price_cents: number;
+  /** List price × quantity, before any discount. */
   subtotal_cents: number;
+  discount_cents: number;
+  /** subtotal − discount: the ticket revenue the sale is actually worth. */
+  net_cents: number;
+  /** BLUP's percentage of `net_cents`. */
+  commission_cents: number;
+  /** BLUP's per-ticket fee. Free tickets carry none. */
+  archive_fee_cents: number;
+  archive_fee_payer: 'buyer' | 'organizer';
+  /** What is deducted from the organizer — commission, plus the archive fee
+   *  only when the organizer is the one carrying it. */
   platform_fee_cents: number;
+  /** commission + archive fee, whoever was billed for them. */
+  blup_revenue_cents: number;
+  /** What the buyer is charged. */
   total_cents: number;
   currency: string;
   payment_status: PaymentStatus;
@@ -326,9 +340,18 @@ export interface EventAnalytics {
   checked_in: number;
   tickets_sold: number;
   conversion_rate: number;
+  /** List price of everything sold, before promo discounts. */
   gross_revenue_cents: number;
+  discount_cents: number;
+  /** gross − discounts: what the tickets were actually sold for. */
+  net_revenue_cents: number;
+  commission_cents: number;
+  archive_fee_cents: number;
+  /** Deducted from the organizer. Excludes a buyer-paid archive fee. */
   platform_fee_cents: number;
   organizer_net_cents: number;
+  /** Everything the buyers handed over, archive fee included. */
+  buyers_paid_cents: number;
   currency: string;
 }
 
@@ -342,6 +365,14 @@ export interface PlatformStats {
   tickets: number;
   open_reports: number;
   gross_sales_cents: number;
+  /** Ticket revenue after promo discounts. */
+  net_sales_cents: number;
+  /** BLUP's percentage of ticket sales. */
+  commission_cents: number;
+  /** BLUP's per-ticket archive fee. */
+  archive_fee_cents: number;
+  boost_revenue_cents: number;
+  /** commission + archive fees + boosts */
   platform_revenue_cents: number;
   pending_payouts: number;
   premium_users: number;

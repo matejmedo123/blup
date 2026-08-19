@@ -169,7 +169,12 @@ The SQL suite asserts the things that actually matter:
 - capacity limits, counters and per-order ticket limits hold
 - tickets exist only after a payment is confirmed, and replaying a webhook does
   not mint duplicates
-- gross − BLUP fee = organizer balance, and payouts cannot exceed the settled part
+- the buyer's total always equals the organizer's net plus BLUP's revenue, and
+  payouts cannot exceed the settled part of the ledger
+- the fee schedule (4 % + 1 € per ticket) resolves from the platform settings,
+  free tickets carry no archive fee, and an organizer cannot rewrite their own rate
+- the accounting export closes on the same balance the app shows, and refuses a
+  caller who is not on that organization
 - forged QR codes, foreign scanners and double check-ins are all rejected
 - the ranker orders by interest, distance, time and social proof, and explains itself
 - RLS blocks privilege escalation, cross-user edits, self-granted premium and
