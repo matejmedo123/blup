@@ -136,3 +136,15 @@ The web build needs **no** `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` — the Checkout
 URL is issued by the server, so the browser never holds a Stripe key.
 
 See WEB.md for the full web story.
+
+## Web Push
+
+| Variable | Where | What it is |
+|---|---|---|
+| `VAPID_PUBLIC_KEY` | server + client | Identifies BLUP to the push service. Public by design. |
+| `VAPID_PRIVATE_KEY` | server only | Signs the delivery request. Never leaves the Edge Function environment. |
+| `VAPID_SUBJECT` | server | `mailto:` the push service can reach you at. |
+| `EXPO_PUBLIC_VAPID_PUBLIC_KEY` | client | The same public key, shipped to the browser. |
+
+Generate once with `node scripts/generate-vapid-keys.mjs`. Rotating the public
+key invalidates every existing subscription.

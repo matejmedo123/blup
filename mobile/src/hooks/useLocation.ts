@@ -177,12 +177,21 @@ export function useLocation(options: { persist?: boolean; watch?: boolean } = {}
   }, [watch, state.status]);
 
   const openSettings = useCallback(() => {
+    // A browser has no app settings to open, and `Linking.openSettings()` is a
+    // silent no-op there — a button that appears to work and does nothing. The
+    // permission is re-requested instead, which is the only thing a page can
+    // actually do; if it was hard-denied the browser shows its own control in
+    // the address bar, which the copy on screen points at.
+    if (Platform.OS === 'web') {
+      void request();
+      return;
+    }
     if (Platform.OS === 'ios') {
       void Linking.openURL('app-settings:');
     } else {
       void Linking.openSettings();
     }
-  }, []);
+  }, [request]);
 
   return { ...state, request, openSettings, isReady: state.status === 'granted' && Boolean(state.coords) };
 }

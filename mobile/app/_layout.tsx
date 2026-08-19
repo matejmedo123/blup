@@ -15,6 +15,7 @@ import { ToastProvider } from '@/components/Toast';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { handleAuthDeepLink } from '@/auth/api';
 import { env, isConfigured } from '@/lib/env';
+import { registerServiceWorker } from '@/lib/pwa';
 import { colors } from '@/theme';
 import { useAppFonts } from '@/theme/fonts';
 
@@ -53,6 +54,12 @@ void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const fontsReady = useAppFonts();
+
+  // Web only: the service worker gives the browser offline support and lets it
+  // receive push while no tab is open. A no-op everywhere else.
+  useEffect(() => {
+    void registerServiceWorker();
+  }, []);
 
   useEffect(() => {
     // Nunito carries the Slovak diacritics; showing the UI before it loads

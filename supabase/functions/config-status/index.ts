@@ -80,6 +80,9 @@ Deno.serve(async (req) => {
       },
       push: {
         expo_access_token: Boolean(optionalEnv('EXPO_ACCESS_TOKEN')),
+        // The public half is safe to publish — that is what it is for.
+        web_push_configured: configured.webPush(),
+        vapid_public_key: configured.webPush() ? optionalEnv('VAPID_PUBLIC_KEY') : null,
       },
       email: {
         configured: configured.email(),

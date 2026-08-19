@@ -40,8 +40,11 @@ runtime and nothing native is bundled into the browser build.
 | **Door scanner** | expo-camera | `BarcodeDetector`, plus manual entry |
 | **Add to calendar** | writes to the OS calendar | downloads an `.ics` |
 | **Accounting export** | share sheet | file download |
-| **Push notifications** | APNs / FCM | not yet — Activity + email instead |
-| **Maps** | react-native-maps | list + distance, no embedded map |
+| **Sharing an event** | OS share sheet | `navigator.share`, else the clipboard |
+| **Push notifications** | APNs / FCM via Expo | Web Push (RFC 8291), same `notifications` rows |
+| **Maps** | react-native-maps | tiled map: pan, zoom, markers, no dependency |
+| **Offline** | persisted query cache | service worker + the same query cache |
+| **Install** | App Store / Play | PWA — "Add to home screen" |
 
 Two rules held throughout: **no button does nothing**, and **nothing is
 faked**. Where the web cannot do something, it says so and offers what it can.
@@ -142,11 +145,66 @@ kit, not a convenience.
 
 ---
 
+### The map
+
+`react-native-maps` has no web build, so `EventMap.web.tsx` draws a slippy map
+directly: Web Mercator tiles in a grid, markers positioned over them, drag to
+pan and wheel to zoom. About two hundred lines and no dependency — which
+matters more than it sounds, because Leaflet and Mapbox GL each want a
+stylesheet Metro cannot import and a bundle several times the size.
+
+Tiles come from CARTO's dark basemap over OpenStreetMap data. **Attribution is
+rendered on the map because it is a condition of use.** Both are courtesy tiers:
+fine for a launch, not for scale. When traffic outgrows them, change
+`TILE_URL` in that one file to a paid provider (MapTiler, Stadia, Mapbox) — the
+rest of the component does not care where a tile came from.
+
+### Push notifications
+
+Real Web Push, not a shim. The browser hands out a subscription, the server
+encrypts each notification so only that browser can read it (RFC 8291) and
+signs the request so the push service knows it is us (VAPID, RFC 8292). Both
+are implemented in `_shared/webpush.ts` on Web Crypto alone, and verified by a
+round-trip test that decrypts as a browser would.
+
+The same `notifications` rows drive phones and browsers; `push-dispatch` splits
+them by `push_tokens.platform` and fans out to Expo and to Web Push in one run.
+A `404`/`410` from the push service means the browser threw the subscription
+away, and the row is deleted rather than retried forever.
+
+Generate the keys once:
+
+```bash
+node scripts/generate-vapid-keys.mjs
+```
+
+Rotating the public key invalidates every existing subscription and every
+browser has to be asked again — so generate once and keep it.
+
+**iOS caveat:** Safari grants push only to a site installed to the home screen,
+never to a tab. `registerForPushNotifications()` returns `NEEDS_INSTALL` there
+and the UI says how to install, rather than reporting a generic failure.
+
+### Offline
+
+The service worker (`public/sw.js`) caches the app shell and the content-hashed
+bundles, so opening Blup with no connection shows the app rather than the
+browser's error page; the app then hydrates from its own persisted query cache,
+which already holds your tickets and the events you are going to.
+
+Nothing from the API is cached by the worker. Two caches disagreeing about the
+same data is worse than one cache — the query cache knows what is safe to keep,
+the service worker does not.
+
+Verified with the origin server killed outright: the page still loads and
+renders.
+
+---
+
 ## Still missing on the web
 
-- **Web Push.** Needs a service worker and VAPID keys, and Safari only honours
-  it for installed PWAs. Until then the Activity feed and ticket emails carry
-  the load; the notification rows themselves already exist either way.
-- **An embedded map.** The list shows distance and links out to directions.
-- **Offline.** The native build persists its query cache; the web build has no
-  service worker yet, so a browser tab needs a connection.
+- **Background sync.** An action taken offline is not queued and replayed; it
+  fails and says so. Replaying writes needs care around idempotency that has
+  not been built.
+- **Native-quality maps at scale.** The tile provider is a courtesy tier (see
+  above).

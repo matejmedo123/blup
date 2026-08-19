@@ -58,6 +58,13 @@ export const env = {
   // web build sells Premium through Stripe at the same shelf price.
   stripePremiumMonthly: () => requireEnv('STRIPE_PRICE_PREMIUM_MONTHLY', 'PREMIUM_PRICING_NOT_CONFIGURED'),
   stripePremiumYearly: () => requireEnv('STRIPE_PRICE_PREMIUM_YEARLY', 'PREMIUM_PRICING_NOT_CONFIGURED'),
+
+  // Web Push (RFC 8292). The public key is also shipped to the browser as
+  // EXPO_PUBLIC_VAPID_PUBLIC_KEY — it identifies us to the push service and
+  // cannot send anything on its own. The private key never leaves here.
+  vapidPublicKey: () => requireEnv('VAPID_PUBLIC_KEY', 'WEB_PUSH_NOT_CONFIGURED'),
+  vapidPrivateKey: () => requireEnv('VAPID_PRIVATE_KEY', 'WEB_PUSH_NOT_CONFIGURED'),
+  vapidSubject: () => optionalEnv('VAPID_SUBJECT') ?? 'mailto:hello@blup.app',
 };
 
 /** True when a provider has everything it needs — used for health reporting. */
@@ -67,6 +74,8 @@ export const configured = {
   appleIap: () => Boolean(optionalEnv('APPLE_SHARED_SECRET')),
   ai: () => Boolean(optionalEnv('AI_API_KEY')),
   email: () => Boolean(optionalEnv('RESEND_API_KEY')),
+  webPush: () =>
+    Boolean(optionalEnv('VAPID_PUBLIC_KEY')) && Boolean(optionalEnv('VAPID_PRIVATE_KEY')),
   webPremium: () =>
     Boolean(optionalEnv('STRIPE_SECRET_KEY')) &&
     Boolean(optionalEnv('STRIPE_PRICE_PREMIUM_MONTHLY')),

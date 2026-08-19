@@ -13,6 +13,7 @@ import {
   rsvpToEvent, saveEvent, toggleLike, unsaveEvent,
 } from '@/api/events';
 import { getPeopleRecommendations, describeMatch } from '@/api/ai';
+import { shareEvent } from '@/lib/share';
 import { recordSignal } from '@/api/signals';
 import { reportContent } from '@/api/admin';
 import { addEventToCalendar, openDirections } from '@/maps/calendar';
@@ -161,10 +162,13 @@ export default function EventDetailScreen() {
   const handleShare = async () => {
     if (!data) return;
     try {
-      await Share.share({
-        message: `${data.title} · ${formatEventDateLong(data.start_at)}\n\nSee it on BLUP: blup://event/${data.id}`,
+      const result = await shareEvent({
+        id: data.id,
+        title: data.title,
+        whenLabel: formatEventDateLong(data.start_at),
       });
-      void recordSignal(data.id, 'share');
+      if (result.copied) setNotice('Odkaz je v schránke — stačí ho vložiť.');
+      if (result.shared) void recordSignal(data.id, 'share');
     } catch {
       /* user dismissed */
     }

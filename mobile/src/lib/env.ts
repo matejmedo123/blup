@@ -25,6 +25,12 @@ type Extra = {
 const extra = (Constants.expoConfig?.extra ?? {}) as Partial<Extra>;
 
 export const env = {
+  /** Origin the web build is served from; used for shareable links. */
+  webUrl: process.env.EXPO_PUBLIC_WEB_URL ?? '',
+  /** VAPID public key for Web Push. Public by design — it identifies us to the
+   *  push service and cannot be used to send anything. */
+  vapidPublicKey: process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY ?? '',
+
   supabaseUrl: extra.supabaseUrl ?? '',
   supabaseAnonKey: extra.supabaseAnonKey ?? '',
   stripePublishableKey: extra.stripePublishableKey ?? '',
