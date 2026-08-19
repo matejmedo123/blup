@@ -35,6 +35,8 @@ export interface CommunityPost {
   comment_count: number;
   created_at: string;
   author?: Pick<Profile, 'id' | 'display_name' | 'username' | 'avatar_url'> | null;
+  event?: { id: string; title: string; category: string } | null;
+  event_rating?: { count: number; average: number } | null;
   liked_by_me?: boolean;
 }
 
@@ -191,6 +193,23 @@ export async function createCommunity(input: {
   return data as Community;
 }
 
+// --- micro-events -----------------------------------------------------------
+
+/**
+ * Events hosted by a community — the concept document's "micro-eventy":
+ * small workshops and meetups organised inside an interest group rather than
+ * by a ticketing organizer.
+ */
+export async function getCommunityEvents(communityId: string, limit = 20) {
+  const { data, error } = await supabase.rpc('community_events', {
+    p_community: communityId,
+    p_limit: limit,
+  });
+
+  if (error) throw error;
+  return (data ?? []) as import('@/types/models').EventFeedItem[];
+}
+
 // --- feed -------------------------------------------------------------------
 
 /**
@@ -229,6 +248,76 @@ export async function getPosts(params: {
 
   const liked = new Set((likes ?? []).map((like) => like.post_id as string));
   return posts.map((post) => ({ ...post, liked_by_me: liked.has(post.id) }));
+}
+
+/**
+ * The main feed: posts from people you follow and from communities you are in,
+ * newest first. Falls back to the public feed for a brand-new account so the
+ * screen is not empty before you follow anybody.
+ */
+export async function getFeed(limit = 50): Promise<CommunityPost[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+
+  const { data, error } = await supabase
+    .from('posts')
+    .select(
+      `*,
+       author:profiles!posts_author_id_fkey (id, display_name, username, avatar_url),
+       event:events (id, title, category)`,
+    )
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  const posts = (data ?? []) as unknown as CommunityPost[];
+  if (!userId || posts.length === 0) return posts;
+
+  const [{ data: likes }, ratings] = await Promise.all([
+    supabase
+      .from('post_likes')
+      .select('post_id')
+      .eq('user_id', userId)
+      .in('post_id', posts.map((post) => post.id)),
+    ratingsFor(posts),
+  ]);
+
+  const liked = new Set((likes ?? []).map((like) => like.post_id as string));
+
+  return posts.map((post) => ({
+    ...post,
+    liked_by_me: liked.has(post.id),
+    event_rating: post.event ? (ratings[post.event.id] ?? null) : null,
+  }));
+}
+
+/** One rating lookup per distinct event, rather than one per post. */
+async function ratingsFor(
+  posts: CommunityPost[],
+): Promise<Record<string, { count: number; average: number }>> {
+  const eventIds = [...new Set(posts.map((post) => post.event?.id).filter(Boolean))] as string[];
+  if (eventIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('event_reviews')
+    .select('event_id, rating')
+    .in('event_id', eventIds);
+
+  if (error) return {};
+
+  const buckets: Record<string, number[]> = {};
+  for (const row of (data ?? []) as { event_id: string; rating: number }[]) {
+    (buckets[row.event_id] ??= []).push(row.rating);
+  }
+
+  return Object.fromEntries(
+    Object.entries(buckets).map(([id, values]) => [
+      id,
+      { count: values.length, average: values.reduce((a, b) => a + b, 0) / values.length },
+    ]),
+  );
 }
 
 export async function createPost(input: {

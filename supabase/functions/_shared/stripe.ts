@@ -122,6 +122,32 @@ export const stripe = {
         : {}),
     }, `pi_${params.orderId}`),
 
+  /**
+   * A boost is bought by BLUP, not by the organizer's connected account — the
+   * money is ours, so there is no transfer_data and no application fee.
+   */
+  createBoostPaymentIntent: (params: {
+    amountCents: number;
+    currency: string;
+    boostId: string;
+    buyerId: string;
+    eventId: string;
+    customerEmail?: string;
+  }) =>
+    stripeRequest<StripePaymentIntent>('/payment_intents', 'POST', {
+      amount: params.amountCents,
+      currency: params.currency.toLowerCase(),
+      'automatic_payment_methods[enabled]': 'true',
+      receipt_email: params.customerEmail,
+      metadata: {
+        boost_id: params.boostId,
+        buyer_id: params.buyerId,
+        event_id: params.eventId,
+        kind: 'boost',
+        platform: 'blup',
+      },
+    }, `boost_${params.boostId}`),
+
   retrievePaymentIntent: (id: string) =>
     stripeRequest<StripePaymentIntent>(`/payment_intents/${id}`, 'GET'),
 

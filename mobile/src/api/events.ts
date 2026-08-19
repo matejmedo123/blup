@@ -170,6 +170,8 @@ export interface CreateEventInput {
   currency?: string;
   coverImageUrl?: string | null;
   organizationId?: string | null;
+  /** Hosting community — makes this a micro-event. Membership is enforced in SQL. */
+  communityId?: string | null;
   visibility?: 'public' | 'followers' | 'private' | 'unlisted';
   status?: 'draft' | 'published';
 }
@@ -184,6 +186,7 @@ export async function createEvent(input: CreateEventInput): Promise<BlupEvent> {
     .insert({
       creator_id: userId,
       organization_id: input.organizationId ?? null,
+      community_id: input.communityId ?? null,
       title: input.title.trim(),
       description: input.description?.trim() || null,
       category: input.category,

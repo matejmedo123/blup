@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
+} from 'react-native';
 import { router } from 'expo-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
@@ -16,72 +19,77 @@ import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { EventCard } from '@/components/EventCard';
 import { EventMap } from '@/components/EventMap';
-import { SwipeDeck, type SwipeDirection } from '@/components/SwipeDeck';
+import { useToast } from '@/components/Toast';
+import { BottomSheet } from '@/components/BottomSheet';
 import {
-  AvatarStack, Badge, Body, Button, Caption, Chip, EmptyState, ErrorState, IconButton,
-  LoadingState, Mono, Notice, SectionHeader, Segmented,
+  AvatarStack, Body, Button, EmptyState, ErrorState, IconButton, LoadingState, Notice,
 } from '@/components/ui';
-import { colors, labelFor, radius, spacing, typography } from '@/theme';
+import {
+  categoriesInFamily, categoryFilters, colors, radius, spacing, typography,
+  type CategoryFamily,
+} from '@/theme';
 import type { EventFeedItem } from '@/types/models';
 
-type Mode = 'map' | 'feed' | 'swipe';
-const RADIUS_OPTIONS = [2000, 5000, 25000, 100000];
-
-/** The quick filters from the design; the full list lives in Explore. */
-const QUICK_CATEGORIES = ['techno', 'startups', 'hiking', 'art', 'food', 'running'];
+type View_ = 'list' | 'map';
 
 /**
- * Home — the map, "Today near me", the AI "For you" rail and the swipe deck.
- * Everything on this screen comes from the database; nothing is hardcoded.
+ * Domov.
+ *
+ * The city header with the notification bell and search, the Zoznam/Mapa
+ * switch, the category chips, then: your circles, the big event cards, the AI
+ * "Pre teba" rail, and the two banners. Everything comes from the database —
+ * an empty database shows the empty state, not a demo event.
  */
 export default function HomeScreen() {
   const { profile } = useAuth();
   const location = useLocation({ watch: true });
   const queryClient = useQueryClient();
+  const toast = useToast();
 
-  const [mode, setMode] = useState<Mode>('map');
-  const [radiusM, setRadiusM] = useState(25000);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [view, setView] = useState<View_>('list');
+  const [family, setFamily] = useState<CategoryFamily | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [weeklyOpen, setWeeklyOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const coords = location.coords;
+  const categories = useMemo(() => (family ? categoriesInFamily(family) : []), [family]);
 
   const nearby = useQuery({
-    queryKey: ['events', 'nearby', coords?.latitude, coords?.longitude, radiusM, categories],
+    queryKey: ['events', 'nearby', coords?.latitude, coords?.longitude, categories],
     queryFn: () =>
       getNearbyEvents({
         latitude: coords?.latitude,
         longitude: coords?.longitude,
-        radiusM,
+        radiusM: 50000,
         categories,
         limit: 60,
       }),
     enabled: Boolean(coords),
   });
 
-  // The bell badge. Notifications moved out of the tab bar to make room for
-  // messages, exactly as in the design.
-  const { data: unreadNotifications } = useQuery({
-    queryKey: ['notifications', 'unread'],
-    queryFn: getUnreadCount,
-    refetchInterval: 60_000,
-  });
-
-  const following = useQuery({
+  const circles = useQuery({
     queryKey: ['profile', 'following', profile?.id],
     queryFn: () => getFollowing(profile!.id),
     enabled: Boolean(profile?.id),
   });
 
   const recommendations = useQuery({
-    queryKey: ['events', 'recommended', coords?.latitude, coords?.longitude],
-    queryFn: () => getAIRecommendations({ coords, radiusM: Math.max(radiusM, 50000), limit: 20 }),
-    enabled: Boolean(profile),
+    queryKey: ['ai', 'recommendations', coords?.latitude, coords?.longitude],
+    queryFn: () =>
+      getAIRecommendations({ coords, limit: 8 }),
+    enabled: Boolean(coords),
+  });
+
+  const recommended = recommendations.data?.events ?? [];
+
+  const { data: unreadNotifications } = useQuery({
+    queryKey: ['notifications', 'unread'],
+    queryFn: getUnreadCount,
+    refetchInterval: 60_000,
   });
 
   // Records that the account was open today, which is what drives the streak.
-  // The database counts a day once, so calling it on every mount is harmless.
   useEffect(() => {
     touchActivity()
       .then((result) => {
@@ -92,7 +100,7 @@ export default function HomeScreen() {
       .catch(() => undefined);
   }, [queryClient]);
 
-  // Realtime: a new event created by anyone shows up here without a refresh.
+  // Realtime: an event created by anyone shows up without a refresh.
   useEffect(() => {
     const channel = supabase
       .channel('home-events')
@@ -110,426 +118,448 @@ export default function HomeScreen() {
     };
   }, [queryClient]);
 
-  const events = nearby.data ?? [];
-  const circles = (following.data ?? []).map((person) => ({
-    id: person.id,
-    avatar_url: person.avatar_url,
-    name: person.display_name ?? person.username,
-  }));
-  const recommended = recommendations.data?.events ?? [];
-
-  const todayEvents = useMemo(() => {
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-    return events.filter((event) => new Date(event.start_at) <= endOfDay);
-  }, [events]);
+  // Impressions feed the ranker; queued so scrolling is not a write storm.
+  useEffect(() => {
+    for (const event of nearby.data ?? []) queueImpression(event.id);
+  }, [nearby.data]);
 
   const toggleSave = useCallback(
     async (event: EventFeedItem) => {
-      setActionError(null);
+      setError(null);
       try {
-        if (event.is_saved) await unsaveEvent(event.id);
-        else await saveEvent(event.id);
+        if (event.is_saved) {
+          await unsaveEvent(event.id);
+          toast.show('Blup odobraný');
+        } else {
+          await saveEvent(event.id);
+          await recordSignal(event.id, 'save');
+          toast.show('Blupnuté, uložené do Ja');
+        }
         await queryClient.invalidateQueries({ queryKey: ['events'] });
       } catch (caught) {
-        setActionError(messageFor(caught));
+        setError(messageFor(caught));
       }
     },
-    [queryClient],
+    [queryClient, toast],
   );
 
-  const handleSwipe = useCallback(
-    async (event: EventFeedItem, direction: SwipeDirection) => {
-      if (direction === 'up') {
-        router.push(`/event/${event.id}`);
-        return;
-      }
+  const openEvent = (event: EventFeedItem) => {
+    void recordSignal(event.id, 'open_detail');
+    router.push(`/event/${event.id}`);
+  };
 
-      if (direction === 'right') {
-        await recordSignal(event.id, 'swipe_right');
-        try {
-          await saveEvent(event.id);
-        } catch (caught) {
-          setActionError(messageFor(caught));
-        }
-      } else {
-        await recordSignal(event.id, 'swipe_left');
-      }
-    },
-    [],
-  );
+  const events = nearby.data ?? [];
+  const selected = events.find((event) => event.id === selectedId) ?? null;
 
-  const openEvent = (event: EventFeedItem) => router.push(`/event/${event.id}`);
-
-  // --- location gates -------------------------------------------------------
-  const needsLocation = !coords && location.status !== 'requesting';
+  // The weekly digest picks the best of the coming week from the same ranker
+  // the notification uses.
+  const weekly = useMemo(() => {
+    const horizon = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    return recommended
+      .filter((event) => {
+        const start = new Date(event.start_at).getTime();
+        return Number.isFinite(start) && start > Date.now() && start <= horizon;
+      })
+      .slice(0, 3);
+  }, [recommended]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
+      {/* --- header --------------------------------------------------------- */}
       <View style={styles.header}>
         <View style={styles.flex}>
-          <Mono accent>◎ {location.city ?? 'Zisťujem polohu'}</Mono>
-          <Text style={styles.greeting}>Dnes okolo teba</Text>
+          <Text style={styles.city}>◎ {(location.city ?? 'Zisťujem polohu').toUpperCase()}</Text>
+          <Text style={styles.title}>Dnes okolo teba</Text>
         </View>
 
         <View style={styles.headerActions}>
           <IconButton
-            glyph="◎"
-            onPress={() => {
-              const index = RADIUS_OPTIONS.indexOf(radiusM);
-              setRadiusM(RADIUS_OPTIONS[(index + 1) % RADIUS_OPTIONS.length]);
-            }}
-          />
-          <IconButton glyph="⌕" onPress={() => router.push('/(tabs)/explore')} />
-          <IconButton
-            glyph="✦"
+            glyph="◔"
+            size={42}
             badge={(unreadNotifications ?? 0) > 0}
             onPress={() => router.push('/activity')}
           />
+          <IconButton glyph="⌕" size={42} onPress={() => router.push('/search')} />
         </View>
       </View>
 
-      <View style={styles.controls}>
-        <Segmented
-          options={[
-            { value: 'feed' as Mode, label: 'Zoznam' },
-            { value: 'map' as Mode, label: 'Mapa' },
-          ]}
-          value={mode === 'swipe' ? 'feed' : mode}
-          onChange={setMode}
-        />
+      {/* --- view switch ----------------------------------------------------- */}
+      <View style={styles.switchRow}>
+        {(['list', 'map'] as View_[]).map((option) => (
+          <Pressable
+            key={option}
+            onPress={() => setView(option)}
+            style={[styles.switch, view === option && styles.switchActive]}
+          >
+            <Text style={[styles.switchLabel, view === option && styles.switchLabelActive]}>
+              {option === 'list' ? 'Zoznam' : 'Mapa'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryRow}
+      {/* --- categories ------------------------------------------------------ */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipRow}
+        style={styles.chipScroll}
+      >
+        <Pressable
+          onPress={() => setFamily(null)}
+          style={[styles.chip, family === null && styles.chipActive]}
         >
-          <Chip label="Všetko" selected={categories.length === 0} onPress={() => setCategories([])} />
-          {QUICK_CATEGORIES.map((item) => (
-            <Chip
-              key={item}
-              label={labelFor(item)}
-              selected={categories.includes(item)}
-              onPress={() =>
-                setCategories((previous) =>
-                  previous.includes(item)
-                    ? previous.filter((value) => value !== item)
-                    : [...previous, item],
-                )
-              }
-            />
-          ))}
-        </ScrollView>
-
-        {circles.length > 0 ? (
-          <View style={styles.circlesRow}>
-            <AvatarStack people={circles} size={30} max={5} />
-            <Caption style={styles.circlesLabel}>Tvoje kruhy dnes niekam idú</Caption>
-          </View>
-        ) : null}
-
-        <Pressable style={styles.swipeCta} onPress={() => setMode('swipe')}>
-          <Text style={styles.swipeCtaLabel}>◈  Blupni si program</Text>
-          <Mono accent>{recommended.length} eventov</Mono>
+          <Text style={[styles.chipLabel, family === null && styles.chipLabelActive]}>Všetko</Text>
         </Pressable>
-      </View>
 
-      {actionError ? (
-        <View style={styles.noticeWrapper}>
-          <Notice tone="danger" title="Toto sa nepodarilo" body={actionError} />
-        </View>
-      ) : null}
+        {categoryFilters.map((filter) => (
+          <Pressable
+            key={filter.key}
+            onPress={() => setFamily(family === filter.key ? null : filter.key)}
+            style={[styles.chip, family === filter.key && styles.chipActive]}
+          >
+            <Text style={[styles.chipLabel, family === filter.key && styles.chipLabelActive]}>
+              {filter.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
 
-      {needsLocation ? (
-        <View style={styles.noticeWrapper}>
+      {error ? <Notice tone="danger" title="Toto sa nepodarilo" body={error} /> : null}
+
+      {!coords && location.status !== 'requesting' ? (
+        <View style={styles.locationGate}>
           <Notice
-            tone="warning"
-            title={location.status === 'denied' ? 'Poloha je vypnutá' : 'Zapni polohu'}
-            body={
-              location.error ??
-              'BLUP potrebuje tvoju polohu, aby ti ukázal, čo sa deje okolo teba a ako ďaleko to je.'
-            }
-            actionLabel={location.status === 'denied' ? 'Otvoriť nastavenia' : 'Zapnúť polohu'}
-            onAction={location.status === 'denied' ? location.openSettings : () => void location.request()}
+            tone="accent"
+            title="Zapni polohu"
+            body="BLUP zoradí eventy podľa toho, ako ďaleko naozaj sú."
+            actionLabel="Zapnúť polohu"
+            onAction={() => void location.request()}
           />
         </View>
       ) : null}
 
-      {mode === 'map' ? (
-        <MapMode
-          events={events}
-          coords={coords}
-          radiusM={radiusM}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onOpen={openEvent}
-          loading={nearby.isLoading}
-          error={nearby.isError ? messageFor(nearby.error) : null}
-          onRetry={() => void nearby.refetch()}
-        />
-      ) : null}
-
-      {mode === 'feed' ? (
-        <FeedMode
-          today={todayEvents}
-          recommended={recommended}
-          all={events}
-          loading={nearby.isLoading || recommendations.isLoading}
-          error={nearby.isError ? messageFor(nearby.error) : null}
-          refreshing={nearby.isRefetching}
-          onRefresh={() => {
-            void nearby.refetch();
-            void recommendations.refetch();
-          }}
-          onOpen={openEvent}
-          onSave={toggleSave}
-          explanationSource={recommendations.data?.explanations_by}
-        />
-      ) : null}
-
-      {mode === 'swipe' ? (
-        recommendations.isLoading ? (
-          <LoadingState label="Hľadám pre teba eventy…" />
-        ) : recommended.length === 0 ? (
-          <EmptyState
-            emoji="🫧"
-            title="Zatiaľ nie je čo blupnúť"
-            body="V tomto okolí ti nič nesedí. Rozšír okruh alebo buď prvý, kto sem niečo dá."
-            actionLabel="Vytvor prvý BLUP"
-            onAction={() => router.push('/(tabs)/create')}
+      {/* --- content --------------------------------------------------------- */}
+      {view === 'map' ? (
+        <View style={styles.mapWrapper}>
+          <EventMap
+            events={events}
+            userLocation={coords}
+            selectedId={selectedId}
+            onSelect={(event) => setSelectedId(event.id)}
+            style={styles.map}
           />
-        ) : (
-          <SwipeDeck
-            events={recommended}
-            onSwipe={handleSwipe}
-            onReset={() => void recommendations.refetch()}
-            onExhausted={() => void recommendations.refetch()}
-          />
-        )
-      ) : null}
-    </SafeAreaView>
-  );
-}
 
-// ---------------------------------------------------------------------------
-
-function MapMode({
-  events, coords, radiusM, selectedId, onSelect, onOpen, loading, error, onRetry,
-}: {
-  events: EventFeedItem[];
-  coords: { latitude: number; longitude: number } | null;
-  radiusM: number;
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  onOpen: (event: EventFeedItem) => void;
-  loading: boolean;
-  error: string | null;
-  onRetry: () => void;
-}) {
-  const selected = events.find((event) => event.id === selectedId);
-
-  if (error) return <ErrorState message={error} onRetry={onRetry} />;
-
-  return (
-    <View style={styles.flex}>
-      <EventMap
-        events={events}
-        userLocation={coords}
-        selectedId={selectedId}
-        radiusM={radiusM}
-        onSelect={(event) => onSelect(event.id)}
-        style={styles.flex}
-      />
-
-      {loading ? (
-        <View style={styles.mapLoading}>
-          <Text style={styles.mapLoadingText}>Načítavam eventy…</Text>
+          {selected ? (
+            <Pressable style={styles.mapCard} onPress={() => openEvent(selected)}>
+              <View style={styles.mapThumb}>
+                <Text style={styles.mapThumbGlyph}>◉</Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.mapTitle} numberOfLines={1}>{selected.title}</Text>
+                <Text style={styles.mapMeta} numberOfLines={1}>
+                  {selected.venue_name ?? selected.city ?? ''}
+                </Text>
+                <Text style={styles.mapGoing}>{selected.attendee_count} ide</Text>
+              </View>
+              <View style={styles.mapButton}>
+                <Text style={styles.mapButtonLabel}>Detail</Text>
+              </View>
+            </Pressable>
+          ) : null}
         </View>
-      ) : null}
-
-      {selected ? (
-        <View style={styles.mapCard}>
-          <EventCard event={selected} size="compact" onPress={() => onOpen(selected)} />
-        </View>
-      ) : events.length === 0 && !loading ? (
-        <View style={styles.mapEmpty}>
-          <Text style={styles.mapEmptyTitle}>Tu sa zatiaľ nič nedeje</Text>
-          <Body muted style={styles.mapEmptyBody}>
-            Buď prvý — daj svoj event na mapu a ľudia v okolí ho uvidia.
-          </Body>
-          <Button title="Vytvor prvý BLUP" onPress={() => router.push('/(tabs)/create')} />
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function FeedMode({
-  today, recommended, all, loading, error, refreshing, onRefresh, onOpen, onSave, explanationSource,
-}: {
-  today: EventFeedItem[];
-  recommended: EventFeedItem[];
-  all: EventFeedItem[];
-  loading: boolean;
-  error: string | null;
-  refreshing: boolean;
-  onRefresh: () => void;
-  onOpen: (event: EventFeedItem) => void;
-  onSave: (event: EventFeedItem) => void;
-  explanationSource?: string;
-}) {
-  useEffect(() => {
-    for (const event of recommended.slice(0, 8)) queueImpression(event.id);
-  }, [recommended]);
-
-  if (loading && all.length === 0 && recommended.length === 0) {
-    return <LoadingState label="Rozhliadam sa okolo teba…" />;
-  }
-
-  if (error && all.length === 0) return <ErrorState message={error} onRetry={onRefresh} />;
-
-  if (all.length === 0 && recommended.length === 0) {
-    return (
-      <EmptyState
-        emoji="🫧"
-        title="Tu sa zatiaľ nič nedeje"
-        body="Vo tvojom okolí teraz nič nie je. Vytvor prvý BLUP a hneď sa objaví každému na mape."
-        actionLabel="Vytvor prvý BLUP"
-        onAction={() => router.push('/(tabs)/create')}
-      />
-    );
-  }
-
-  return (
-    <ScrollView
-      contentContainerStyle={styles.feedContent}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
-      }
-    >
-      {today.length > 0 ? (
-        <>
-          <SectionHeader title="Dnes v okolí" />
-          <FlatList
-            horizontal
-            data={today}
-            keyExtractor={(item) => item.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.rail}
-            renderItem={({ item }) => (
+      ) : nearby.isLoading ? (
+        <LoadingState label="Hľadám eventy okolo teba…" />
+      ) : nearby.isError ? (
+        <ErrorState message={messageFor(nearby.error)} onRetry={() => void nearby.refetch()} />
+      ) : (
+        <FlatList
+          data={events}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={nearby.isRefetching}
+              onRefresh={() => void nearby.refetch()}
+              tintColor={colors.accent}
+            />
+          }
+          ListHeaderComponent={
+            (circles.data ?? []).length > 0 ? (
+              <Pressable style={styles.circles} onPress={() => router.push('/community')}>
+                <AvatarStack
+                  people={(circles.data ?? []).slice(0, 5).map((person) => ({
+                    id: person.id,
+                    avatar_url: person.avatar_url,
+                    name: person.display_name ?? person.username,
+                  }))}
+                  size={30}
+                  max={5}
+                />
+                <Text style={styles.circlesLabel}>Tvoje kruhy dnes niekam idú</Text>
+              </Pressable>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <View style={styles.cardWrapper}>
               <EventCard
                 event={item}
-                size="compact"
-                onPress={() => onOpen(item)}
-                onSave={() => onSave(item)}
-              />
-            )}
-          />
-        </>
-      ) : null}
-
-      {recommended.length > 0 ? (
-        <>
-          <View style={styles.forYouHeader}>
-            <SectionHeader title="Pre teba" />
-            {explanationSource && explanationSource !== 'none' ? (
-              <Badge
-                tone="accent"
-                label={explanationSource.startsWith('local') || explanationSource.startsWith('fallback')
-                  ? 'Zoradil BLUP'
-                  : 'Vysvetlené AI'}
-              />
-            ) : null}
-          </View>
-
-          {recommended.slice(0, 10).map((event) => (
-            <View key={event.id} style={styles.feedItem}>
-              <EventCard
-                event={event}
-                onPress={() => onOpen(event)}
-                onSave={() => onSave(event)}
-                showScore
+                onPress={() => openEvent(item)}
+                onSave={() => toggleSave(item)}
               />
             </View>
-          ))}
-        </>
-      ) : null}
+          )}
+          ListFooterComponent={
+            events.length > 0 ? (
+              <View>
+                {/* --- for you --------------------------------------------- */}
+                {recommended.length > 0 ? (
+                  <>
+                    <View style={styles.railHeader}>
+                      <Text style={styles.section}>Pre teba</Text>
+                      <Text style={styles.railMono}>AI ODPORÚČANIA</Text>
+                    </View>
 
-      <SectionHeader title="Všetko v okolí" />
-      {all.map((event) => (
-        <View key={event.id} style={styles.feedItem}>
-          <EventCard event={event} onPress={() => onOpen(event)} onSave={() => onSave(event)} />
-        </View>
-      ))}
-    </ScrollView>
+                    <FlatList
+                      horizontal
+                      data={recommended}
+                      keyExtractor={(item) => item.id}
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.rail}
+                      renderItem={({ item }) => (
+                        <EventCard
+                          event={item}
+                          size="compact"
+                          onPress={() => openEvent(item)}
+                        />
+                      )}
+                    />
+                  </>
+                ) : null}
+
+                {/* --- banners --------------------------------------------- */}
+                <Pressable
+                  onPress={() => router.push('/community')}
+                  style={({ pressed }) => [pressed && styles.pressed]}
+                >
+                  <LinearGradient
+                    colors={[colors.accent, colors.purple]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0.7 }}
+                    style={styles.banner}
+                  >
+                    <Text style={styles.bannerTitle}>Ľudia ako ty</Text>
+                    <Text style={styles.bannerBody}>
+                      Kto má rovnaké záujmy a chodí na to isté čo ty.
+                    </Text>
+                  </LinearGradient>
+                </Pressable>
+
+                {weekly.length > 0 ? (
+                  <Pressable style={styles.weekly} onPress={() => setWeeklyOpen(true)}>
+                    <View style={styles.flex}>
+                      <Text style={styles.weeklyTitle}>Týždenný prehľad</Text>
+                      <Text style={styles.weeklyBody}>
+                        {weekly.length} {weekly.length === 1 ? 'tip' : 'tipy'} na najbližšie dni
+                      </Text>
+                    </View>
+                    <Text style={styles.weeklyGlyph}>›</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            <EmptyState
+              emoji="🌍"
+              title="Zatiaľ sa tu nič nedeje"
+              body="V tvojom okolí zatiaľ nikto nič nevytvoril. Môžeš byť prvý — trvá to minútu."
+              actionLabel="Vytvor prvý BLUP"
+              onAction={() => router.push('/organizer/create')}
+            />
+          }
+        />
+      )}
+
+      {/* --- weekly sheet ----------------------------------------------------- */}
+      <BottomSheet
+        visible={weeklyOpen}
+        onClose={() => setWeeklyOpen(false)}
+        title="Na najbližšie dni"
+        subtitle="Vybrané tým istým algoritmom, ktorý ti posiela týždenné zhrnutie."
+        footer={
+          <Button
+            title="Zavrieť"
+            variant="secondary"
+            large
+            onPress={() => setWeeklyOpen(false)}
+          />
+        }
+      >
+        {weekly.map((event) => (
+          <Pressable
+            key={event.id}
+            style={styles.weeklyRow}
+            onPress={() => {
+              setWeeklyOpen(false);
+              openEvent(event);
+            }}
+          >
+            <View style={styles.flex}>
+              <Text style={styles.weeklyRowTitle} numberOfLines={1}>{event.title}</Text>
+              <Text style={styles.weeklyRowMeta} numberOfLines={1}>
+                {event.venue_name ?? event.city ?? ''}
+              </Text>
+            </View>
+            <Text style={styles.weeklyGlyph}>›</Text>
+          </Pressable>
+        ))}
+
+        {weekly.length === 0 ? (
+          <Body muted>Na najbližší týždeň zatiaľ nič nemáme.</Body>
+        ) : null}
+      </BottomSheet>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
+  pressed: { opacity: 0.92 },
 
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
+    alignItems: 'center',
     gap: spacing.md,
+    paddingHorizontal: spacing.gutter,
+    paddingTop: spacing.md,
   },
-  headerActions: { flexDirection: 'row', gap: spacing.sm },
-  greeting: { ...typography.title, color: colors.text, marginTop: 2 },
+  city: { ...typography.mono, color: colors.accent },
+  title: { ...typography.screenTitle, color: colors.text, marginTop: 4 },
+  headerActions: { flexDirection: 'row', gap: spacing.md },
 
-  controls: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.md },
-  categoryRow: { flexDirection: 'row', gap: spacing.sm, paddingRight: spacing.lg },
-  circlesRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  circlesLabel: { flex: 1 },
-  swipeCta: {
+  switchRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.gutter,
+    marginTop: spacing.xl,
+  },
+  switch: {
+    flex: 1,
+    height: 42,
+    borderRadius: radius.chip,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceElevated,
+  },
+  switchActive: { backgroundColor: colors.accent },
+  switchLabel: { ...typography.chip, fontSize: 14, color: colors.textSecondary },
+  switchLabelActive: { color: '#FFFFFF' },
+
+  chipScroll: { flexGrow: 0, marginTop: spacing.lg },
+  chipRow: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.gutter },
+  chip: {
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderRadius: radius.chip,
+    backgroundColor: colors.surfaceElevated,
+  },
+  chipActive: { backgroundColor: colors.accent },
+  chipLabel: { ...typography.chip, fontSize: 14, color: colors.textSecondary },
+  chipLabelActive: { color: '#FFFFFF' },
+
+  locationGate: { paddingHorizontal: spacing.gutter, marginTop: spacing.lg },
+
+  list: { padding: spacing.gutter, paddingBottom: spacing.xxxl, flexGrow: 1 },
+  cardWrapper: { marginBottom: spacing.xl },
+
+  circles: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  circlesLabel: { ...typography.meta, color: colors.textSecondary, flex: 1 },
+
+  railHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
   },
-  swipeCtaLabel: { ...typography.bodyStrong, color: colors.text },
+  section: { ...typography.heading, color: colors.text },
+  railMono: { ...typography.monoSm, color: colors.textMuted },
+  rail: { gap: spacing.md, paddingBottom: spacing.xl },
 
-
-  noticeWrapper: { paddingHorizontal: spacing.lg },
-
-  mapLoading: {
-    position: 'absolute',
-    top: spacing.lg,
-    alignSelf: 'center',
-    backgroundColor: colors.overlay,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-  },
-  mapLoadingText: { ...typography.caption, color: colors.text },
-
-  mapCard: { position: 'absolute', bottom: spacing.lg, left: spacing.lg, right: spacing.lg },
-  mapEmpty: {
-    position: 'absolute',
-    bottom: spacing.lg,
-    left: spacing.lg,
-    right: spacing.lg,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+  banner: {
+    borderRadius: radius.card,
     padding: spacing.xl,
     gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  bannerTitle: { ...typography.heading, color: '#FFFFFF' },
+  bannerBody: { ...typography.body, color: 'rgba(255,255,255,0.88)' },
+
+  weekly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.xl,
+    borderRadius: radius.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  mapEmptyTitle: { ...typography.heading, color: colors.text },
-  mapEmptyBody: { marginBottom: spacing.md },
+  weeklyTitle: { ...typography.subheading, color: colors.text },
+  weeklyBody: { ...typography.metaSm, color: colors.textTertiary, marginTop: 3 },
+  weeklyGlyph: { ...typography.heading, color: colors.textTertiary },
 
-  feedContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
-  rail: { gap: spacing.md, paddingRight: spacing.lg },
-  feedItem: { marginBottom: spacing.lg },
-  forYouHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  weeklyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surfaceInput,
+    borderRadius: radius.block,
+    padding: spacing.lg,
+  },
+  weeklyRowTitle: { ...typography.rowTitle, color: colors.text },
+  weeklyRowMeta: { ...typography.metaSm, color: colors.textTertiary, marginTop: 2 },
+
+  mapWrapper: { flex: 1, marginTop: spacing.lg },
+  map: { flex: 1 },
+  mapCard: {
+    position: 'absolute',
+    left: spacing.gutter,
+    right: spacing.gutter,
+    bottom: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.card,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  mapThumb: {
+    width: 54,
+    height: 54,
+    borderRadius: radius.md,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapThumbGlyph: { fontSize: 20, color: colors.accent },
+  mapTitle: { ...typography.rowTitle, color: colors.text },
+  mapMeta: { ...typography.metaSm, color: colors.textTertiary, marginTop: 2 },
+  mapGoing: { ...typography.metaSm, color: colors.accent, marginTop: 2 },
+  mapButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    borderRadius: radius.chip,
+    backgroundColor: colors.accent,
+  },
+  mapButtonLabel: { ...typography.chip, color: '#FFFFFF' },
 });

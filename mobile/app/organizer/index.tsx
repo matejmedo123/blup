@@ -1,48 +1,54 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { useAuth } from '@/auth/AuthProvider';
 import {
   getMyOrganizations, getOrganizationEvents, getOrganizerBalance,
+  createPersonalOrganization,
 } from '@/api/organizations';
+import { getMyEvents } from '@/api/events';
+import { createBoostCheckout, getBoostPackages, waitForBoost, type BoostPackage } from '@/api/boost';
+import { createPromoCode, getPromoCodes } from '@/api/promo';
+import { isConfigured } from '@/lib/env';
+import { isStripeModuleAvailable, STRIPE_UNAVAILABLE_MESSAGE, useStripeBridge } from '@/payments/stripe';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatMoney } from '@/lib/format';
+import { BottomSheet, SheetRow } from '@/components/BottomSheet';
+import { useToast } from '@/components/Toast';
 import {
-  Avatar, Badge, Body, EmptyState, ErrorState, LoadingState, Mono, Notice, Screen, SectionHeader,
+  Body, Button, ErrorState, IconButton, LoadingState, Notice,
 } from '@/components/ui';
-import { colors, radius, shadow, spacing, typography } from '@/theme';
+import { categoryFamilies, colors, familyFor, radius, spacing, typography } from '@/theme';
 
 /**
- * Days between a sale and the money becoming withdrawable. Mirrors the
- * `available_at` default in 20260101000600_ticketing_and_payments.sql — the
- * database stays the source of truth, this is only the copy shown to a human.
+ * Organizátor.
+ *
+ * Three stat tiles, the event creator's entry point, your events with their
+ * numbers, and the promo tools. Boosting opens a sheet that goes through the
+ * real payment gateway — the boost only starts once the webhook confirms it.
  */
-const SETTLEMENT_DAYS = 7;
+export default function OrganizerScreen() {
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const { initPaymentSheet, presentPaymentSheet } = useStripeBridge();
 
-const VERIFICATION_LABEL: Record<string, string> = {
-  verified: '✓ OVERENÁ',
-  pending: 'ČAKÁ NA OVERENIE',
-  rejected: 'ZAMIETNUTÁ',
-  unverified: 'NEOVERENÁ',
-};
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [boostFor, setBoostFor] = useState<{ id: string; title: string } | null>(null);
+  const [promoFor, setPromoFor] = useState<{ id: string; title: string } | null>(null);
+  const [promoCode, setPromoCode] = useState<string | null>(null);
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: 'majiteľ',
-  admin: 'admin',
-  event_manager: 'event manažér',
-  finance: 'financie',
-};
+  const organizations = useQuery({
+    queryKey: ['organizations', 'mine'],
+    queryFn: getMyOrganizations,
+  });
 
-/** Organizer dashboard: events, sales, balance, verification and the scanner. */
-export default function OrganizerDashboard() {
-  const [activeId, setActiveId] = useState<string | null>(null);
-
-  const organizations = useQuery({ queryKey: ['organizations', 'mine'], queryFn: getMyOrganizations });
-
-  const organization =
-    (organizations.data ?? []).find((org) => org.id === activeId) ?? organizations.data?.[0];
+  const organization = organizations.data?.[0];
 
   const balance = useQuery({
     queryKey: ['organization', organization?.id, 'balance'],
@@ -50,310 +56,492 @@ export default function OrganizerDashboard() {
     enabled: Boolean(organization?.id),
   });
 
-  const events = useQuery({
+  const orgEvents = useQuery({
     queryKey: ['organization', organization?.id, 'events'],
     queryFn: () => getOrganizationEvents(organization!.id),
     enabled: Boolean(organization?.id),
   });
 
-  if (organizations.isLoading) return <Screen><LoadingState /></Screen>;
+  const myEvents = useQuery({ queryKey: ['events', 'mine'], queryFn: getMyEvents });
+
+  const packages = useQuery({ queryKey: ['boost', 'packages'], queryFn: getBoostPackages });
+
+  // Reach and RSVP come from the events themselves; revenue from the ledger.
+  const stats = useMemo(() => {
+    const events = orgEvents.data ?? [];
+    return {
+      views: events.reduce((sum, event) => sum + (event.view_count ?? 0), 0),
+      rsvp: events.reduce((sum, event) => sum + (event.attendee_count ?? 0), 0),
+    };
+  }, [orgEvents.data]);
+
+  const becomeOrganizer = async () => {
+    if (!profile) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await createPersonalOrganization({
+        id: profile.id,
+        display_name: profile.display_name,
+        username: profile.username,
+        email: profile.email,
+        city: profile.city,
+      });
+      await organizations.refetch();
+      toast.show('Profil organizátora je založený');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Buying a boost. The server prices it and returns a PaymentIntent; the
+   * native sheet takes the money; then we wait for the webhook, because the
+   * sheet succeeding only means the card was accepted.
+   */
+  const buyBoost = async (pack: BoostPackage) => {
+    if (!boostFor) return;
+
+    setError(null);
+    setBusy(true);
+    try {
+      const session = await createBoostCheckout(boostFor.id, pack.code);
+
+      if (!session.payment_intent_client_secret) {
+        throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+      }
+
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: 'BLUP',
+        paymentIntentClientSecret: session.payment_intent_client_secret,
+        applePay: { merchantCountryCode: 'SK' },
+        googlePay: { merchantCountryCode: 'SK', testEnv: __DEV__ },
+        returnURL: 'blup://stripe-redirect',
+        allowsDelayedPaymentMethods: false,
+      });
+      if (initError) throw new Error(initError.message);
+
+      const { error: sheetError } = await presentPaymentSheet();
+      if (sheetError) {
+        if (sheetError.code === 'Canceled') {
+          setBusy(false);
+          return;
+        }
+        throw new Error(sheetError.message);
+      }
+
+      const outcome = await waitForBoost(session.boost_id);
+
+      if (outcome === 'succeeded') {
+        toast.show('Boost beží — event je zvýraznený');
+      } else if (outcome === 'pending') {
+        toast.show('Platba prebieha, boost sa zapne o chvíľu');
+      } else {
+        throw new Error('Platba neprešla. Boost sa nespustil.');
+      }
+
+      setBoostFor(null);
+      await queryClient.invalidateQueries({ queryKey: ['events'] });
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Generates a code the way the handoff does: BLUPxxx, −20 %, first 50. */
+  const generatePromo = async () => {
+    if (!promoFor) return;
+
+    setError(null);
+    setBusy(true);
+    try {
+      const code = `BLUP${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+      await createPromoCode({
+        code,
+        kind: 'percent',
+        value: 20,
+        eventId: promoFor.id,
+        maxUses: 50,
+      });
+
+      setPromoCode(code);
+      await queryClient.invalidateQueries({ queryKey: ['promo-codes'] });
+      toast.show(`Kód ${code} je aktívny`);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (organizations.isLoading) {
+    return <SafeAreaView style={styles.screen} edges={['top']}><LoadingState /></SafeAreaView>;
+  }
 
   if (organizations.isError) {
     return (
-      <Screen>
+      <SafeAreaView style={styles.screen} edges={['top']}>
         <ErrorState
           message={messageFor(organizations.error)}
           onRetry={() => void organizations.refetch()}
         />
-      </Screen>
+      </SafeAreaView>
     );
   }
 
-  if (!organization) {
-    return (
-      <Screen>
-        <EmptyState
-          emoji="🏢"
-          title="Zatiaľ nemáš organizáciu"
-          body="Vytvor organizáciu, ak chceš robiť platené eventy, sledovať predaj a dostávať výplaty. Na eventy zdarma ju nepotrebuješ."
-          actionLabel="Vytvoriť organizáciu"
-          onAction={() => router.push('/organizer/new')}
-        />
-      </Screen>
-    );
-  }
-
-  const isVerified = organization.verification_status === 'verified';
+  const events = organization ? (orgEvents.data ?? []) : [];
+  const personalEvents = myEvents.data ?? [];
   const currency = balance.data?.currency;
 
   return (
-    <Screen scroll contentStyle={styles.content}>
-      {/* --- org switcher --------------------------------------------------- */}
-      {(organizations.data ?? []).length > 1 ? (
-        <View style={styles.switcher}>
-          {(organizations.data ?? []).map((org) => (
-            <Pressable
-              key={org.id}
-              onPress={() => setActiveId(org.id)}
-              style={[styles.switcherItem, org.id === organization.id && styles.switcherItemActive]}
-            >
-              <Text
-                style={[
-                  styles.switcherLabel,
-                  org.id === organization.id && styles.switcherLabelActive,
-                ]}
-              >
-                {org.name}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-
-      {/* --- header --------------------------------------------------------- */}
+    <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <Avatar url={organization.logo_url} name={organization.name} size={56} />
-        <View style={styles.flex}>
-          <Text style={styles.name} numberOfLines={1}>{organization.name}</Text>
-          <Mono style={styles.handle}>
-            @{organization.slug} · {ROLE_LABEL[organization.my_role] ?? organization.my_role}
-          </Mono>
+        <IconButton glyph="‹" size={40} onPress={() => router.back()} />
+        <Text style={styles.screenTitle}>Organizátor</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {error ? <Notice tone="danger" title="Nepodarilo sa" body={error} /> : null}
+
+        {/* --- stats --------------------------------------------------------- */}
+        <View style={styles.statRow}>
+          <StatTile label="ZOBRAZENIA" value={String(stats.views)} note="za všetky eventy" />
+          <StatTile label="RSVP" value={String(stats.rsvp)} note="prihlásených" />
+          <StatTile
+            label="VÝNOS"
+            value={formatMoney(balance.data?.balance_cents ?? 0, currency)}
+            note="po Blup fee"
+          />
         </View>
-        <Badge
-          tone={isVerified ? 'success' : organization.verification_status === 'pending' ? 'warning' : 'neutral'}
-          label={VERIFICATION_LABEL[organization.verification_status] ?? organization.verification_status}
-        />
-      </View>
 
-      {!isVerified ? (
-        <Notice
-          tone="warning"
-          title="Na predaj vstupeniek potrebuješ overenie"
-          body="BLUP overuje organizátorov skôr, než začnú tiecť peniaze. Chráni to kupujúcich a vďaka tomu ti vieme posielať výplaty."
-          actionLabel={organization.verification_status === 'pending' ? 'Zobraziť žiadosť' : 'Požiadať o overenie'}
-          onAction={() => router.push('/organizer/verification')}
-        />
-      ) : null}
+        {/* --- create -------------------------------------------------------- */}
+        <Pressable
+          style={({ pressed }) => [styles.createCard, pressed && styles.pressed]}
+          onPress={() => router.push('/organizer/create')}
+        >
+          <View style={styles.flex}>
+            <Text style={styles.createTitle}>Nový event</Text>
+            <Text style={styles.createBody}>
+              Názov, miesto, čas, kategória a vstupné. Po zverejnení je hneď na mape aj vo feede.
+            </Text>
+          </View>
+          <Text style={styles.createGlyph}>＋</Text>
+        </Pressable>
 
-      {/* --- money ---------------------------------------------------------- */}
-      <SectionHeader title="Zostatok" action="Výplaty" onAction={() => router.push('/organizer/payouts')} />
+        {!organization ? (
+          <Notice
+            tone="warning"
+            title="Chceš predávať vstupenky?"
+            body="Eventy zdarma vieš robiť hneď. Na vstupné potrebuješ profil organizátora — založíme ti ho z tvojho profilu."
+            actionLabel={busy ? 'Zakladám…' : 'Založiť to za mňa'}
+            onAction={becomeOrganizer}
+          />
+        ) : organization.verification_status !== 'verified' ? (
+          <Notice
+            tone="warning"
+            title="Na výplaty potrebuješ overenie"
+            body="Vstupné si vieš nastaviť už teraz. Peniaze vieme vyplatiť až overenému subjektu — je to zákonná požiadavka."
+            actionLabel="Požiadať o overenie"
+            onAction={() => router.push('/organizer/verification')}
+          />
+        ) : null}
 
-      <LinearGradient
-        colors={['#1E3A8A', '#2B6BFF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.balanceCard}
+        {/* --- my events ------------------------------------------------------ */}
+        <Text style={styles.section}>Moje eventy</Text>
+
+        {personalEvents.length === 0 ? (
+          <View style={styles.empty}>
+            <Body muted>Zatiaľ si nič nezverejnil. Prvý event zaberie minútu.</Body>
+          </View>
+        ) : (
+          personalEvents.map((event) => {
+            const family = categoryFamilies[familyFor(event.category)];
+            const orgRow = events.find((item) => item.id === event.id);
+
+            return (
+              <View key={event.id} style={styles.eventCard}>
+                <Pressable
+                  style={styles.eventTop}
+                  onPress={() => router.push(`/event/${event.id}`)}
+                >
+                  <View style={[styles.dot, { backgroundColor: family.color }]} />
+                  <View style={styles.flex}>
+                    <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
+                    <Text style={styles.eventMeta}>
+                      {formatEventDate(event.start_at)}
+                      {orgRow ? ` · ${orgRow.attendee_count} ide` : ''}
+                      {orgRow?.view_count ? ` · ${orgRow.view_count} zobrazení` : ''}
+                    </Text>
+                  </View>
+                  <Text style={styles.eventPrice}>
+                    {event.is_free ? 'Zdarma' : formatMoney(event.price_cents, event.currency)}
+                  </Text>
+                </Pressable>
+
+                <View style={styles.eventActions}>
+                  <Pressable
+                    style={styles.eventAction}
+                    onPress={() => router.push(`/organizer/analytics/${event.id}`)}
+                  >
+                    <Text style={styles.eventActionLabel}>Štatistiky</Text>
+                  </Pressable>
+
+                  {!event.is_free ? (
+                    <Pressable
+                      style={styles.eventAction}
+                      onPress={() => router.push(`/organizer/tickets/${event.id}`)}
+                    >
+                      <Text style={styles.eventActionLabel}>Vstupenky</Text>
+                    </Pressable>
+                  ) : null}
+
+                  <Pressable
+                    style={styles.eventAction}
+                    onPress={() => {
+                      setPromoCode(null);
+                      setPromoFor({ id: event.id, title: event.title });
+                    }}
+                  >
+                    <Text style={styles.eventActionLabel}>Promo kód</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setBoostFor({ id: event.id, title: event.title })}
+                    style={styles.boostAction}
+                  >
+                    <LinearGradient
+                      colors={[colors.orange, colors.pink]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.boostGradient}
+                    >
+                      <Text style={styles.boostLabel}>Boostnúť</Text>
+                    </LinearGradient>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })
+        )}
+
+        {/* --- money ---------------------------------------------------------- */}
+        {organization ? (
+          <>
+            <Text style={styles.section}>Peniaze</Text>
+            <View style={styles.moneyRow}>
+              <Button
+                title="Zostatok a výplaty"
+                variant="secondary"
+                onPress={() => router.push('/organizer/payouts')}
+                style={styles.flex}
+              />
+              <Button
+                title="Skener"
+                variant="secondary"
+                onPress={() => router.push('/organizer/scan')}
+                style={styles.flex}
+              />
+            </View>
+          </>
+        ) : null}
+      </ScrollView>
+
+      {/* --- boost sheet ------------------------------------------------------ */}
+      <BottomSheet
+        visible={Boolean(boostFor)}
+        onClose={() => setBoostFor(null)}
+        title="Boostnúť event"
+        subtitle={boostFor?.title}
+        footer={
+          <Body muted style={styles.sheetNote}>
+            Boost sa spustí až keď platbu potvrdí banka. V zozname bude event označený ako
+            sponzorovaný — promo, ktoré sa netají tým, že je promo.
+          </Body>
+        }
       >
-        <Mono style={styles.balanceLabel}>K VÝBERU</Mono>
-        <Text style={styles.balanceValue}>
-          {formatMoney(balance.data?.available_cents ?? 0, currency)}
-        </Text>
-        <Mono style={styles.balanceHint}>
-          čaká na uvoľnenie {formatMoney(balance.data?.pending_cents ?? 0, currency)}
-        </Mono>
-      </LinearGradient>
+        {!isStripeModuleAvailable ? (
+          <Notice
+            tone="warning"
+            title="Platby potrebujú development build"
+            body={STRIPE_UNAVAILABLE_MESSAGE}
+          />
+        ) : !isConfigured.stripe ? (
+          <Notice
+            tone="warning"
+            title="Platby nie sú nakonfigurované"
+            body="Tento build nemá Stripe kľúč, takže platobný formulár sa nedá otvoriť."
+          />
+        ) : null}
 
-      <View style={styles.tileRow}>
-        <StatTile label="Hrubý predaj" value={formatMoney(balance.data?.gross_sales_cents ?? 0, currency)} />
-        <StatTile label="Poplatok BLUP" value={formatMoney(balance.data?.platform_fee_cents ?? 0, currency)} />
-      </View>
-      <View style={styles.tileRow}>
-        <StatTile label="Vyplatené" value={formatMoney(balance.data?.paid_out_cents ?? 0, currency)} />
-        <StatTile label="Celkový zostatok" value={formatMoney(balance.data?.balance_cents ?? 0, currency)} />
-      </View>
-
-      <Text style={styles.feeNote}>
-        BLUP si berie {(organization.platform_fee_bps / 100).toFixed(2)} % z každej predanej
-        vstupenky. Peniaze sa uvoľnia {SETTLEMENT_DAYS} dní po predaji, potom si ich môžeš vybrať.
-      </Text>
-
-      {/* --- tools ---------------------------------------------------------- */}
-      <SectionHeader title="Nástroje" />
-      <View style={styles.tiles}>
-        <ToolTile
-          glyph="◫"
-          label="Skenovať vstupenky"
-          detail="pri vstupe"
-          onPress={() => router.push('/organizer/scan')}
-        />
-        <ToolTile
-          glyph="€"
-          label="Zostatok a výplaty"
-          detail="história prevodov"
-          onPress={() => router.push('/organizer/payouts')}
-        />
-      </View>
-
-      {/* --- events --------------------------------------------------------- */}
-      <SectionHeader title="Vaše eventy" />
-      {(events.data ?? []).length === 0 ? (
-        <Body muted>
-          Pod touto organizáciou zatiaľ nič nie je zverejnené. Vytvor event a nastav túto
-          organizáciu ako usporiadateľa.
-        </Body>
-      ) : (
-        (events.data ?? []).map((event) => (
+        {(packages.data ?? []).map((pack) => (
           <Pressable
-            key={event.id}
-            style={({ pressed }) => [styles.eventRow, pressed && styles.eventRowPressed]}
-            onPress={() => router.push(`/organizer/analytics/${event.id}`)}
+            key={pack.code}
+            disabled={busy || !isConfigured.stripe || !isStripeModuleAvailable}
+            onPress={() => buyBoost(pack)}
+            style={({ pressed }) => [styles.package, pressed && styles.pressed]}
           >
             <View style={styles.flex}>
-              <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
-              <Mono style={styles.eventMeta}>{formatEventDate(event.start_at)}</Mono>
-              <Mono style={styles.eventMeta}>
-                {event.attendee_count} ide
-                {event.is_free ? '' : ` · ${event.tickets_sold} vstupeniek predaných`}
-              </Mono>
+              <Text style={styles.packageName}>{pack.name}</Text>
+              <Text style={styles.packageMeta}>
+                +{Math.round(pack.weight * 100)} bodov vo výbere · {pack.hours} h
+              </Text>
             </View>
-
-            {!event.is_free ? (
-              <>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push(`/organizer/tickets/${event.id}`)}
-                  style={({ pressed }) => [styles.eventAction, pressed && styles.eventRowPressed]}
-                >
-                  <Text style={styles.eventActionLabel}>Vstupenky</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push(`/organizer/promo/${event.id}`)}
-                  style={({ pressed }) => [styles.eventAction, pressed && styles.eventRowPressed]}
-                >
-                  <Text style={styles.eventActionLabel}>Promo</Text>
-                </Pressable>
-              </>
-            ) : null}
-
-            <Text style={styles.chevron}>›</Text>
+            <Text style={styles.packagePrice}>
+              {formatMoney(pack.price_cents, pack.currency)}
+            </Text>
           </Pressable>
-        ))
-      )}
-    </Screen>
+        ))}
+      </BottomSheet>
+
+      {/* --- promo sheet ------------------------------------------------------ */}
+      <BottomSheet
+        visible={Boolean(promoFor)}
+        onClose={() => setPromoFor(null)}
+        title="Promo kód"
+        subtitle={promoFor?.title}
+        footer={
+          <View style={styles.sheetActions}>
+            <Button
+              title="Vygenerovať kód"
+              onPress={generatePromo}
+              loading={busy}
+              large
+              style={styles.flex}
+            />
+          </View>
+        }
+      >
+        <SheetRow label="Zľava" value="−20 %" />
+        <SheetRow label="Platí pre" value="prvých 50 ľudí" />
+        <SheetRow label="Zľavu platí" value="organizátor" tone="muted" />
+
+        {promoCode ? (
+          <Notice
+            tone="success"
+            title={`Aktívny kód: ${promoCode}`}
+            body="−20 % pre prvých 50 ľudí. Kód vieš vypnúť v detaile promo kódov."
+            actionLabel="Spravovať kódy"
+            onAction={() => {
+              const id = promoFor?.id;
+              setPromoFor(null);
+              if (id) router.push(`/organizer/promo/${id}`);
+            }}
+          />
+        ) : null}
+      </BottomSheet>
+    </SafeAreaView>
   );
 }
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <View style={styles.tile}>
-      <Mono style={styles.tileLabel}>{label}</Mono>
-      <Text style={styles.tileValue}>{value}</Text>
+    <View style={styles.statTile}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+      <Text style={styles.statNote}>{note}</Text>
     </View>
   );
 }
 
-function ToolTile({
-  glyph, label, detail, onPress,
-}: {
-  glyph: string;
-  label: string;
-  detail: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.toolTile, pressed && styles.eventRowPressed]}
-    >
-      <View style={styles.toolIcon}>
-        <Text style={styles.toolGlyph}>{glyph}</Text>
-      </View>
-      <Text style={styles.toolLabel}>{label}</Text>
-      <Mono style={styles.tileLabel}>{detail}</Mono>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  content: { gap: 0 },
+  screen: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
+  pressed: { opacity: 0.9 },
 
-  switcher: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, flexWrap: 'wrap' },
-  switcherItem: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  switcherItemActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-  switcherLabel: { ...typography.chip, color: colors.textSecondary },
-  switcherLabelActive: { color: colors.accentText },
-
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
-  name: { ...typography.heading, color: colors.text },
-  handle: { color: colors.textTertiary },
-
-  balanceCard: {
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.xs,
-    marginBottom: spacing.md,
-    ...shadow.card,
-  },
-  balanceLabel: { color: 'rgba(255, 255, 255, 0.72)' },
-  balanceValue: { ...typography.title, color: '#FFFFFF' },
-  balanceHint: { color: 'rgba(255, 255, 255, 0.72)' },
-
-  tileRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
-  tile: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  tileLabel: { color: colors.textTertiary },
-  tileValue: { ...typography.subheading, color: colors.text },
-  feeNote: { ...typography.caption, color: colors.textTertiary, marginTop: spacing.xs },
-
-  tiles: { flexDirection: 'row', gap: spacing.md },
-  toolTile: {
-    flex: 1,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.xs,
-  },
-  toolIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
-  },
-  toolGlyph: { fontSize: 17, color: colors.textSecondary },
-  toolLabel: { ...typography.bodyStrong, color: colors.text },
-
-  eventRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.lg,
+    paddingHorizontal: spacing.gutter,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  screenTitle: { ...typography.screenTitle, color: colors.text },
+  content: { paddingHorizontal: spacing.gutter, paddingBottom: spacing.xxxl },
+
+  statRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xl },
+  statTile: {
+    flex: 1,
     backgroundColor: colors.surface,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.sm,
+    padding: spacing.lg,
+    gap: spacing.xs,
   },
-  eventRowPressed: { backgroundColor: colors.surfacePressed },
-  eventTitle: { ...typography.bodyStrong, color: colors.text },
-  eventMeta: { color: colors.textTertiary, marginTop: 2 },
+  statLabel: { ...typography.monoSm, color: colors.textMuted },
+  statValue: { ...typography.heading, color: colors.text },
+  statNote: { ...typography.monoSm, color: colors.cyan },
+
+  createCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  createTitle: { ...typography.subheading, color: colors.text },
+  createBody: { ...typography.metaSm, color: colors.textTertiary, marginTop: 3 },
+  createGlyph: { fontSize: 26, color: colors.accent },
+
+  section: { ...typography.heading, color: colors.text, marginTop: spacing.xl, marginBottom: spacing.md },
+
+  empty: {
+    padding: spacing.xl,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+  },
+
+  eventCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    gap: spacing.md,
+  },
+  eventTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  eventTitle: { ...typography.rowTitle, color: colors.text },
+  eventMeta: { ...typography.metaSm, color: colors.textTertiary, marginTop: 2 },
+  eventPrice: { ...typography.meta, color: colors.cyan },
+
+  eventActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   eventAction: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 9,
+    borderRadius: radius.chip,
+    backgroundColor: colors.surfaceElevated,
   },
-  eventActionLabel: { ...typography.chip, color: colors.accentText },
-  chevron: { ...typography.heading, color: colors.textTertiary },
+  eventActionLabel: { ...typography.chip, color: colors.textSecondary },
+  boostAction: { borderRadius: radius.chip, overflow: 'hidden' },
+  boostGradient: { paddingHorizontal: spacing.lg, paddingVertical: 9 },
+  boostLabel: { ...typography.chip, color: '#FFFFFF' },
+
+  moneyRow: { flexDirection: 'row', gap: spacing.md },
+
+  package: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    backgroundColor: colors.surfaceInput,
+    borderRadius: radius.block,
+    padding: spacing.lg,
+  },
+  packageName: { ...typography.rowTitle, color: colors.text },
+  packageMeta: { ...typography.metaSm, color: colors.textTertiary, marginTop: 2 },
+  packagePrice: { ...typography.subheading, color: colors.orange },
+
+  sheetNote: { ...typography.caption },
+  sheetActions: { flexDirection: 'row', gap: spacing.md },
 });

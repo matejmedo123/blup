@@ -7,13 +7,17 @@ import { getNotifications, markAllRead } from '@/api/notifications';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
-import {
-  Body, Caption, EmptyState, ErrorState, LoadingState, Mono, Screen,
-} from '@/components/ui';
+import { EmptyState, ErrorState, LoadingState, Screen } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { AppNotification, NotificationType } from '@/types/models';
 
-/** Monochrome glyphs, matching the icon tiles in the design. */
+/**
+ * Notifikácie.
+ *
+ * The handoff's list: a monochrome glyph tile, title, body and a relative time.
+ * The newest unread row is "hot" — accent border, filled blue tile — so the
+ * thing that just happened is obvious at a glance.
+ */
 const ICONS: Record<NotificationType, string> = {
   new_follower: '⇄',
   friend_request: '⇄',
@@ -31,9 +35,11 @@ const ICONS: Record<NotificationType, string> = {
   weekly_recommendations: '✦',
   new_comment: '❝',
   event_full: '★',
+  new_message: '✉',
+  badge_earned: '★',
+  level_up: '▲',
 };
 
-/** Activity — notifications, live over realtime. */
 export default function ActivityScreen() {
   const queryClient = useQueryClient();
 
@@ -42,7 +48,6 @@ export default function ActivityScreen() {
     queryFn: () => getNotifications(80),
   });
 
-  // Live updates: a new follower or RSVP lands here without pulling to refresh.
   useEffect(() => {
     const channel = supabase
       .channel('activity-notifications')
@@ -60,11 +65,10 @@ export default function ActivityScreen() {
     };
   }, [queryClient]);
 
-  // Opening the tab marks everything read.
+  // Opening the screen marks everything read.
   useEffect(() => {
     if (!data || data.length === 0) return;
-    const hasUnread = data.some((notification) => !notification.read_at);
-    if (!hasUnread) return;
+    if (!data.some((notification) => !notification.read_at)) return;
 
     markAllRead()
       .then(() => queryClient.invalidateQueries({ queryKey: ['notifications', 'unread'] }))
@@ -72,17 +76,26 @@ export default function ActivityScreen() {
   }, [data, queryClient]);
 
   const open = (notification: AppNotification) => {
+    const conversationId = (notification.data as { conversation_id?: string } | null)
+      ?.conversation_id;
+
+    if (conversationId) {
+      router.push(`/chat/${conversationId}`);
+      return;
+    }
     if (notification.event_id) {
       router.push(`/event/${notification.event_id}`);
+      return;
+    }
+    if (notification.type === 'badge_earned' || notification.type === 'level_up') {
+      router.push('/badges');
       return;
     }
     if (notification.actor_id) {
       router.push(`/user/${notification.actor_id}`);
       return;
     }
-    if (notification.type === 'payout_update') {
-      router.push('/organizer');
-    }
+    if (notification.type === 'payout_update') router.push('/organizer');
   };
 
   if (isLoading) return <Screen><LoadingState label="Načítavam notifikácie…" /></Screen>;
@@ -95,12 +108,13 @@ export default function ActivityScreen() {
     );
   }
 
+  const items = data ?? [];
+  const hotId = items.find((notification) => !notification.read_at)?.id;
+
   return (
     <Screen contentStyle={styles.container}>
-      <Text style={styles.title}>Notifikácie</Text>
-
       <FlatList
-        data={data ?? []}
+        data={items}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
@@ -111,35 +125,40 @@ export default function ActivityScreen() {
             tintColor={colors.accent}
           />
         }
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => open(item)}
-            style={({ pressed }) => [
-              styles.row,
-              !item.read_at && styles.rowUnread,
-              pressed && styles.rowPressed,
-            ]}
-          >
-            <View style={[styles.icon, !item.read_at && styles.iconUnread]}>
-              <Text style={[styles.iconText, !item.read_at && styles.iconTextUnread]}>
-                {ICONS[item.type] ?? '◉'}
-              </Text>
-            </View>
+        renderItem={({ item }) => {
+          const hot = item.id === hotId;
 
-            <View style={styles.rowBody}>
-              <Text style={styles.rowTitle}>{item.title}</Text>
-              {item.body ? <Body muted numberOfLines={2}>{item.body}</Body> : null}
+          return (
+            <Pressable
+              onPress={() => open(item)}
+              style={({ pressed }) => [
+                styles.row,
+                hot && styles.rowHot,
+                pressed && styles.rowPressed,
+              ]}
+            >
+              <View style={[styles.icon, hot && styles.iconHot]}>
+                <Text style={[styles.iconGlyph, hot && styles.iconGlyphHot]}>
+                  {ICONS[item.type] ?? '◉'}
+                </Text>
+              </View>
 
-            </View>
+              <View style={styles.flex}>
+                <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+                {item.body ? (
+                  <Text style={styles.body} numberOfLines={2}>{item.body}</Text>
+                ) : null}
+              </View>
 
-            <Mono style={styles.time}>{formatRelative(item.created_at)}</Mono>
-          </Pressable>
-        )}
+              <Text style={styles.time}>{formatRelative(item.created_at)}</Text>
+            </Pressable>
+          );
+        }}
         ListEmptyComponent={
           <EmptyState
             emoji="🔔"
             title="Zatiaľ nič"
-            body="Nové sledovania, RSVP, potvrdenia vstupeniek a pripomienky eventov sa objavia tu."
+            body="Nové sledovania, potvrdené vstupenky, pripomienky eventov a odznaky sa objavia tu."
           />
         }
       />
@@ -148,38 +167,37 @@ export default function ActivityScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { paddingTop: spacing.md },
-  title: { ...typography.title, color: colors.text, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
-  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl, flexGrow: 1 },
+  container: { padding: 0 },
+  flex: { flex: 1 },
+  list: { padding: spacing.gutter, paddingBottom: spacing.xxxl, flexGrow: 1 },
 
   row: {
     flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.lg,
+    gap: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.card,
     alignItems: 'flex-start',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.md,
   },
-  rowUnread: { borderColor: colors.accent, backgroundColor: colors.backgroundElevated },
+  rowHot: { backgroundColor: 'rgba(0,128,255,0.1)', borderColor: colors.accentBorder },
   rowPressed: { backgroundColor: colors.surfacePressed },
 
   icon: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.md,
+    width: 42,
+    height: 42,
+    borderRadius: radius.block,
     backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconUnread: { backgroundColor: colors.accent },
-  iconText: { fontSize: 19, color: colors.textSecondary },
-  iconTextUnread: { color: '#FFFFFF' },
+  iconHot: { backgroundColor: colors.accent },
+  iconGlyph: { fontSize: 17, color: colors.textTertiary },
+  iconGlyphHot: { color: '#FFFFFF' },
 
-  rowBody: { flex: 1, gap: 2 },
-  rowTitle: { ...typography.bodyStrong, color: colors.text },
-  time: { color: colors.textTertiary },
-
+  title: { ...typography.rowTitleSm, color: colors.text },
+  body: { ...typography.metaSm, color: colors.textTertiary, marginTop: 3 },
+  time: { ...typography.monoSm, color: colors.textMuted },
 });

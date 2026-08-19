@@ -72,7 +72,7 @@ export default function TicketsScreen() {
             title="Zatiaľ žiadne vstupenky"
             body="Keď si kúpiš vstupenku, pristane tu aj s QR kódom, ktorý ukážeš pri vstupe — funguje aj offline."
             actionLabel="Nájdi si, kam ísť"
-            onAction={() => router.replace('/(tabs)/explore')}
+            onAction={() => router.replace('/search')}
           />
         }
       />

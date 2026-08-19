@@ -14,9 +14,10 @@ export default function OnboardingLayout() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name="profile" options={{ title: 'Tvoj profil' }} />
-      <Stack.Screen name="interests" options={{ title: 'Čo ťa baví?' }} />
-      <Stack.Screen name="location" options={{ title: 'Čo je okolo teba' }} />
+      {/* The shell draws its own header, so the navigator adds none. */}
+      <Stack.Screen name="profile" options={{ headerShown: false }} />
+      <Stack.Screen name="interests" options={{ headerShown: false }} />
+      <Stack.Screen name="location" options={{ headerShown: false }} />
     </Stack>
   );
 }

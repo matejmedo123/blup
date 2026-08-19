@@ -12,6 +12,7 @@ import { messageFor } from '@/lib/errors';
 import {
   Body, Button, Chip, ErrorState, LoadingState, Mono, Notice, Screen, Segmented,
 } from '@/components/ui';
+import { OnboardingShell } from '@/components/OnboardingShell';
 import {
   colors, coverGradientFor, interestGroupFor, radius, shadow, spacing, typography,
 } from '@/theme';
@@ -98,11 +99,19 @@ export default function OnboardingInterestsScreen() {
   };
 
   return (
-    <Screen scroll contentStyle={styles.content}>
-      <Mono style={styles.intro}>krok 2 z 3</Mono>
-      <Body muted style={styles.introBody}>
-        Podľa nich ti BLUP vyberá, čo uvidíš. Kedykoľvek ich vieš zmeniť.
-      </Body>
+    <OnboardingShell
+      step={1}
+      title="Čo ťa baví?"
+      subtitle={`Vyber aspoň ${MIN_INTERESTS}. AI podľa nich vyberá tvoje eventy — kedykoľvek ich vieš zmeniť.`}
+      ctaLabel={
+        selected.size >= MIN_INTERESTS
+          ? `Pokračovať s ${selected.size}`
+          : `Vyber ešte ${MIN_INTERESTS - selected.size}`
+      }
+      onCta={submit}
+      ctaLoading={saving}
+      ctaDisabled={selected.size < MIN_INTERESTS}
+    >
 
       <Segmented
         options={[
@@ -184,19 +193,7 @@ export default function OnboardingInterestsScreen() {
         </View>
       )) : null}
 
-      <View style={styles.footer}>
-        <Button
-          title={
-            selected.size >= MIN_INTERESTS
-              ? `Pokračovať s ${selected.size}`
-              : `Vyber ešte ${MIN_INTERESTS - selected.size}`
-          }
-          onPress={submit}
-          loading={saving}
-          disabled={selected.size < MIN_INTERESTS}
-        />
-      </View>
-    </Screen>
+    </OnboardingShell>
   );
 }
 

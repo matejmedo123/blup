@@ -6,7 +6,8 @@ import { useAuth } from '@/auth/AuthProvider';
 import { isUsernameAvailable, updateProfile } from '@/api/profiles';
 import { pickImage, uploadAvatar } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
-import { Avatar, Button, Caption, Input, Mono, Notice, Screen } from '@/components/ui';
+import { Avatar, Button, Caption, Input, Notice } from '@/components/ui';
+import { OnboardingShell } from '@/components/OnboardingShell';
 import { colors, spacing } from '@/theme';
 
 /** Step 1 of 3 — name, handle and a real profile photo. */
@@ -86,9 +87,14 @@ export default function OnboardingProfileScreen() {
   };
 
   return (
-    <Screen scroll>
-      <Mono style={styles.intro}>krok 1 z 3 · takto ťa uvidia ostatní</Mono>
-
+    <OnboardingShell
+      step={0}
+      title="Kto si?"
+      subtitle="Meno a fotka. Takto ťa uvidia ostatní, keď si niekam blupnete spolu."
+      ctaLabel="Pokračovať"
+      onCta={submit}
+      ctaLoading={saving}
+    >
       {error ? <Notice tone="danger" title="Niečo sa pokazilo" body={error} /> : null}
 
       <View style={styles.avatarSection}>
@@ -144,8 +150,7 @@ export default function OnboardingProfileScreen() {
         editable={!saving}
       />
 
-      <Button title="Pokračovať" onPress={submit} loading={saving} />
-    </Screen>
+    </OnboardingShell>
   );
 }
 

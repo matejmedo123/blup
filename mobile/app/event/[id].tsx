@@ -31,7 +31,9 @@ import {
   Avatar, Badge, Body, Button, Caption, Chip, Divider, ErrorState, IconButton, InfoBox, Input,
   LoadingState, Mono, Notice, SectionHeader,
 } from '@/components/ui';
-import { colors, labelFor, radius, spacing, typography } from '@/theme';
+import {
+  categoryFamilies, colors, familyFor, labelFor, radius, spacing, typography,
+} from '@/theme';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -288,17 +290,28 @@ export default function EventDetailScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       {/* --- hero ----------------------------------------------------------- */}
-      <GradientCover uri={data.cover_image_url} seed={data.id} height={330} showPlaceholderLabel={false}>
+      <GradientCover
+        uri={data.cover_image_url}
+        category={data.category}
+        height={300}
+        showPlaceholderLabel={false}
+        overlay
+      >
         <View style={styles.heroTop}>
           <IconButton glyph="‹" tone="overlay" onPress={() => router.back()} />
-          <Pressable onPress={handleSave} style={styles.savePill}>
-            <Text style={styles.savePillLabel}>{data.is_saved ? '★' : '☆'}  Blup</Text>
+          <Pressable
+            onPress={handleSave}
+            style={[styles.savePill, data.is_saved && styles.savePillActive]}
+          >
+            <Text style={styles.savePillLabel}>
+              {data.is_saved ? '★  Blupnuté' : '☆  Blup'}
+            </Text>
           </Pressable>
         </View>
 
         <View style={styles.heroBottom}>
           <View style={styles.heroChips}>
-            <Chip label={labelFor(data.category)} onCover />
+            <Chip label={categoryFamilies[familyFor(data.category)].label} onCover />
             {data.attendee_count > 20 ? <Chip label="Frčí" onCover /> : null}
           </View>
           <Text style={styles.heroTitle}>{data.title}</Text>
@@ -809,13 +822,14 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: radius.md,
   },
-  savePillLabel: { ...typography.bodyStrong, color: colors.text },
+  savePillActive: { backgroundColor: colors.accent },
+  savePillLabel: { ...typography.chip, color: colors.text },
   heroBottom: { padding: spacing.lg, gap: spacing.sm },
   heroChips: { flexDirection: 'row', gap: spacing.sm },
-  heroTitle: { ...typography.title, color: '#FFFFFF' },
+  heroTitle: { ...typography.eventTitle, color: '#FFFFFF' },
 
   body: {
-    padding: spacing.lg,
+    padding: spacing.gutter,
     marginTop: -spacing.xl,
     backgroundColor: colors.background,
     borderTopLeftRadius: radius.xxl,

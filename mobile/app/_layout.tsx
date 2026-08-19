@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
 import { StripeBridge } from '@/payments/stripe';
+import { ToastProvider } from '@/components/Toast';
 
 import { AuthProvider } from '@/auth/AuthProvider';
 import { handleAuthDeepLink } from '@/auth/api';
@@ -98,12 +99,14 @@ export default function RootLayout() {
       <Stack.Screen name="tickets/index" options={{ title: 'Moje vstupenky' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />
       <Stack.Screen name="premium" options={{ title: 'BLUP Premium' }} />
-      <Stack.Screen name="activity" options={{ title: 'Aktivita' }} />
+      <Stack.Screen name="activity" options={{ title: 'Notifikácie' }} />
+      <Stack.Screen name="search" options={{ headerShown: false }} />
       <Stack.Screen name="badges" options={{ title: 'Odznaky' }} />
       <Stack.Screen name="chat/[id]" options={{ title: '' }} />
       <Stack.Screen name="event/photos/[id]" options={{ title: 'Fotky eventu' }} />
-      <Stack.Screen name="community/index" options={{ title: 'Komunity' }} />
+      <Stack.Screen name="community/index" options={{ headerShown: false }} />
       <Stack.Screen name="community/new" options={{ title: 'Nová komunita' }} />
+      <Stack.Screen name="community/micro" options={{ title: 'Micro-eventy' }} />
       <Stack.Screen name="community/[id]" options={{ title: '' }} />
       <Stack.Screen name="organizer" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
@@ -134,6 +137,7 @@ export default function RootLayout() {
             },
           }}
         >
+          <ToastProvider>
           <AuthProvider>
             <StatusBar style="light" />
             {/* StripeBridge is a passthrough when the key or the native
@@ -144,7 +148,8 @@ export default function RootLayout() {
             >
               {content}
             </StripeBridge>
-          </AuthProvider>
+            </AuthProvider>
+        </ToastProvider>
         </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -1,83 +1,166 @@
 /**
  * BLUP design tokens.
  *
- * Dark, blue-tinted, one vivid blue for action and a teal for the social layer.
- * Covers are generated gradients with a diagonal stripe texture rather than
- * stock photography, so an event without a picture still looks intentional.
- *
- * Nothing in a component should hardcode a colour, radius or font — it all
- * comes from here.
+ * These values come from design_handoff_blup_app/README.md and are meant to be
+ * reproduced exactly — colours, type scale, spacing, radius and shadows are
+ * final in the handoff, so this file is the single place they live and nothing
+ * downstream should hard-code a hex.
  */
 
 export const colors = {
-  // surfaces — near-black with a cool cast
-  background: '#08090D',
-  backgroundElevated: '#0C0E14',
-  surface: '#12161F',
-  surfaceElevated: '#181D28',
-  surfacePressed: '#202634',
-  overlay: 'rgba(8, 9, 13, 0.78)',
-  scrim: 'rgba(8, 9, 13, 0.55)',
+  // --- surfaces -------------------------------------------------------------
+  page: '#06080B',            // plane behind the phone
+  background: '#0A0D12',      // bg-app
+  backgroundElevated: '#0F141B',
+  surface: '#12171F',         // bg-card
+  surfaceInput: '#0F141B',    // bg-input
+  surfaceElevated: '#151A22', // bg-elev-1 — icon buttons, inactive chips
+  surfaceElevated2: '#1B2130',// bg-elev-2 — secondary buttons, price badges
+  surfacePressed: '#252D3D',  // bg-elev-3 — hover/pressed on secondary
+  map: '#0C1017',
 
-  // text
-  text: '#FFFFFF',
-  textSecondary: '#9BA3B4',
-  textTertiary: '#5F6675',
-  textInverse: '#08090D',
+  // --- text -----------------------------------------------------------------
+  text: '#F2F5F8',
+  textSecondary: '#C6CFDB',
+  textTertiary: '#9AA6B6',
+  textQuaternary: '#7E8A9C',
+  textMuted: '#5B6675',
+  textDisabled: '#4C5666',
+  textInverse: '#06080B',
 
-  // brand
-  accent: '#2B6BFF',
-  accentPressed: '#1E56D6',
-  accentSoft: 'rgba(43, 107, 255, 0.16)',
-  accentText: '#5A94FF',
-  accentGlow: 'rgba(43, 107, 255, 0.45)',
+  // --- accents --------------------------------------------------------------
+  accent: '#0080FF',
+  accentHover: '#1A8CFF',
+  accentText: '#0080FF',
+  accentSoft: 'rgba(0, 128, 255, 0.12)',
+  accentSofter: 'rgba(0, 128, 255, 0.16)',
+  accentBorder: 'rgba(0, 128, 255, 0.4)',
 
-  // secondary accent — social / connect
-  teal: '#4FD1C5',
-  tealSoft: 'rgba(79, 209, 197, 0.14)',
+  cyan: '#22D3EE',
+  cyanSoft: 'rgba(34, 211, 238, 0.18)',
+  pink: '#FF4D8D',
+  pinkSoft: 'rgba(255, 77, 141, 0.16)',
+  purple: '#A855F7',
+  orange: '#FF8A3D',
+  green: '#22C55E',
 
-  // semantic
+  // --- semantic (mapped onto the palette above) ------------------------------
   success: '#22C55E',
-  successSoft: 'rgba(34, 197, 94, 0.14)',
-  warning: '#FBBF24',
-  warningSoft: 'rgba(251, 191, 36, 0.14)',
-  danger: '#FF4D6D',
-  dangerSoft: 'rgba(255, 77, 109, 0.14)',
+  successSoft: 'rgba(34, 197, 94, 0.16)',
+  warning: '#FF8A3D',
+  warningSoft: 'rgba(255, 138, 61, 0.16)',
+  danger: '#FF4D8D',
+  dangerSoft: 'rgba(255, 77, 141, 0.16)',
+  info: '#22D3EE',
 
-  // lines
+  /** `teal` is the old name for the handoff's cyan; kept so both read alike. */
+  teal: '#22D3EE',
+  tealSoft: 'rgba(34, 211, 238, 0.18)',
+
+  // --- lines and overlays ----------------------------------------------------
   border: 'rgba(255, 255, 255, 0.07)',
-  borderStrong: 'rgba(255, 255, 255, 0.14)',
+  borderAccent: 'rgba(0, 128, 255, 0.4)',
+  overlay: 'rgba(6, 8, 11, 0.5)',       // glass badge on a photo
+  overlayModal: 'rgba(4, 6, 9, 0.66)',  // behind a bottom sheet
+  chipOnCover: 'rgba(6, 8, 11, 0.5)',
 
-  // chips sitting on top of a cover image
-  chipOnCover: 'rgba(10, 10, 14, 0.55)',
-
-  // map
-  mapMarker: '#2B6BFF',
+  // --- map ------------------------------------------------------------------
+  mapMarker: '#0080FF',
   mapMarkerPaid: '#A855F7',
-  mapUser: '#4FD1C5',
+  mapUser: '#0080FF',
 } as const;
 
-/** Onboarding / hero background: navy fading into black. */
-export const heroGradient = ['#16294A', '#0B1220', '#08090D'] as const;
+/** Onboarding / hero background: `linear-gradient(180deg, #0A2B54, #0A0D12 62%)`. */
+export const heroGradient = ['#0A2B54', '#0A0D12', '#0A0D12'] as const;
+
+// ---------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------
 
 /**
- * Cover gradients. An event with no photo gets one deterministically from its
- * id, so the same event always looks the same everywhere in the app.
+ * The five visual families from the handoff. Every event resolves to one of
+ * them, which decides its cover gradient and glyph.
  */
-export const coverGradients: readonly (readonly [string, string])[] = [
-  ['#F05CA8', '#A855F7'], // pink → purple
-  ['#2E7BF6', '#56C7F0'], // blue → cyan
-  ['#F97316', '#F0447A'], // orange → pink
-  ['#22C55E', '#4FD1C5'], // green → teal
-  ['#7C5CFF', '#2B6BFF'], // violet → blue
-  ['#FBBF24', '#F97316'], // amber → orange
-  ['#06B6D4', '#3B82F6'], // cyan → blue
-  ['#EC4899', '#F43F5E'], // magenta → rose
-] as const;
+export type CategoryFamily = 'music' | 'startup' | 'outdoor' | 'art' | 'spirit';
 
-/** Avatar backgrounds, also picked deterministically from the name/id. */
+export const categoryFamilies: Record<
+  CategoryFamily,
+  { label: string; glyph: string; gradient: readonly [string, string]; color: string }
+> = {
+  music:   { label: 'Hudba',        glyph: '♪', gradient: ['#FF4D8D', '#A855F7'], color: '#FF4D8D' },
+  startup: { label: 'Startupy',     glyph: '◆', gradient: ['#0080FF', '#22D3EE'], color: '#0080FF' },
+  outdoor: { label: 'Outdoor',      glyph: '▲', gradient: ['#22C55E', '#22D3EE'], color: '#22C55E' },
+  art:     { label: 'Umenie',       glyph: '◼', gradient: ['#FF8A3D', '#FF4D8D'], color: '#FF8A3D' },
+  spirit:  { label: 'Spiritualita', glyph: '◎', gradient: ['#A855F7', '#22D3EE'], color: '#A855F7' },
+};
+
+/**
+ * Database categories are finer-grained than the five visual families, so each
+ * one is mapped here. An unknown category falls back to `startup`, which is the
+ * neutral blue — never a random colour.
+ */
+const CATEGORY_TO_FAMILY: Record<string, CategoryFamily> = {
+  techno: 'music', house: 'music', hiphop: 'music', rock: 'music', jazz: 'music',
+  indie: 'music', festival: 'music', dance: 'music', karaoke: 'music', nightlife: 'music',
+  bars: 'music',
+
+  startups: 'startup', tech: 'startup', design: 'startup', networking: 'startup',
+  investing: 'startup', business: 'startup', gaming: 'startup', 'board-games': 'startup',
+  language: 'startup',
+
+  running: 'outdoor', cycling: 'outdoor', climbing: 'outdoor', football: 'outdoor',
+  basketball: 'outdoor', swimming: 'outdoor', hiking: 'outdoor', camping: 'outdoor',
+  skiing: 'outdoor', surfing: 'outdoor', sport: 'outdoor', volunteering: 'outdoor',
+
+  art: 'art', theatre: 'art', cinema: 'art', museum: 'art', photography: 'art',
+  books: 'art', culture: 'art', food: 'art', coffee: 'art', wine: 'art',
+  'craft-beer': 'art', cooking: 'art',
+
+  yoga: 'spirit', wellness: 'spirit', meditation: 'spirit', spirit: 'spirit',
+  spiritualita: 'spirit',
+};
+
+export function familyFor(category: string | null | undefined): CategoryFamily {
+  if (!category) return 'startup';
+  return CATEGORY_TO_FAMILY[category] ?? (category in categoryFamilies
+    ? (category as CategoryFamily)
+    : 'startup');
+}
+
+/** Cover gradient for an event — from its category, not from its id. */
+export function coverGradientFor(
+  category: string | null | undefined,
+): readonly [string, string] {
+  return categoryFamilies[familyFor(category)].gradient;
+}
+
+export function glyphFor(category: string | null | undefined): string {
+  return categoryFamilies[familyFor(category)].glyph;
+}
+
+/** The five filter chips on Domov, in handoff order. */
+export const categoryFilters: { key: CategoryFamily; label: string }[] = [
+  { key: 'music', label: 'Hudba' },
+  { key: 'startup', label: 'Startupy' },
+  { key: 'outdoor', label: 'Outdoor' },
+  { key: 'art', label: 'Umenie' },
+  { key: 'spirit', label: 'Spiritualita' },
+];
+
+/** DB categories belonging to a family — used to turn a chip into a query. */
+export function categoriesInFamily(family: CategoryFamily): string[] {
+  return Object.entries(CATEGORY_TO_FAMILY)
+    .filter(([, value]) => value === family)
+    .map(([key]) => key);
+}
+
+// ---------------------------------------------------------------------------
+// Avatars
+// ---------------------------------------------------------------------------
+
+/** Cyclic by index, per the handoff. Ink inside an avatar is the page colour. */
 export const avatarColors = [
-  '#2B6BFF', '#FF4D8D', '#22D3EE', '#A855F7', '#FB923C', '#22C55E', '#FBBF24', '#F43F5E',
+  '#0080FF', '#FF4D8D', '#22D3EE', '#A855F7', '#FF8A3D', '#22C55E',
 ] as const;
 
 /** Stable index from any string — same input, same colour, every render. */
@@ -90,72 +173,140 @@ export function hashIndex(seed: string | null | undefined, length: number): numb
   return Math.abs(hash) % length;
 }
 
-export function coverGradientFor(seed: string | null | undefined): readonly [string, string] {
-  return coverGradients[hashIndex(seed, coverGradients.length)];
-}
-
 export function avatarColorFor(seed: string | null | undefined): string {
   return avatarColors[hashIndex(seed, avatarColors.length)];
 }
 
+// ---------------------------------------------------------------------------
+// Metrics
+// ---------------------------------------------------------------------------
+
+/** Screen gutter is 18; onboarding uses 26. */
 export const spacing = {
   xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 32,
-  xxxl: 48,
+  sm: 6,
+  md: 10,
+  lg: 14,
+  xl: 18,
+  xxl: 22,
+  xxxl: 32,
+  huge: 44,
+  /** Horizontal screen margin. */
+  gutter: 18,
+  gutterWide: 26,
 } as const;
 
 export const radius = {
-  sm: 10,
-  md: 14,
-  lg: 20,
-  xl: 26,
-  xxl: 32,
+  chip: 13,
+  input: 15,
+  block: 14,
+  md: 16,
+  card: 20,
+  lg: 22,
+  cardLarge: 24,
+  xl: 24,
+  swipe: 28,
+  sheet: 28,
+  xxl: 28,
+  icon: 26,
   pill: 999,
+  sm: 12,
 } as const;
 
-/**
- * Nunito for everything readable, JetBrains Mono for the small technical
- * labels ("◎ Bratislava", "[ foto z eventu ]", "0 blupov").
- */
 export const fontFamily = {
   regular: 'Nunito_400Regular',
   medium: 'Nunito_600SemiBold',
   bold: 'Nunito_700Bold',
-  black: 'Nunito_800ExtraBold',
-  /** The logo weight. Heavier than the display face, used only by the wordmark. */
+  heavy: 'Nunito_800ExtraBold',
+  black: 'Nunito_900Black',
   logo: 'Nunito_900Black',
   mono: 'JetBrainsMono_400Regular',
-  monoBold: 'JetBrainsMono_700Bold',
+  monoBold: 'JetBrainsMono_600SemiBold',
 } as const;
 
+/**
+ * The handoff's type scale. Weight 900 is the workhorse for anything that
+ * carries a screen; 600 is body. Letter-spacing is negative on the big sizes.
+ */
 export const typography = {
-  logo: { fontFamily: fontFamily.logo, fontSize: 34, letterSpacing: -1.6 },
-  display: { fontFamily: fontFamily.black, fontSize: 34, letterSpacing: -0.8, lineHeight: 40 },
-  title: { fontFamily: fontFamily.black, fontSize: 28, letterSpacing: -0.6, lineHeight: 34 },
-  heading: { fontFamily: fontFamily.bold, fontSize: 21, letterSpacing: -0.3, lineHeight: 27 },
-  subheading: { fontFamily: fontFamily.bold, fontSize: 17, letterSpacing: -0.2 },
-  body: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 22 },
-  bodyStrong: { fontFamily: fontFamily.medium, fontSize: 15, lineHeight: 22 },
-  caption: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18 },
-  captionStrong: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18 },
-  button: { fontFamily: fontFamily.bold, fontSize: 16, letterSpacing: -0.2 },
-  chip: { fontFamily: fontFamily.medium, fontSize: 13 },
-  mono: { fontFamily: fontFamily.mono, fontSize: 12, letterSpacing: 0.4 },
-  monoStrong: { fontFamily: fontFamily.monoBold, fontSize: 12, letterSpacing: 0.4 },
-  label: { fontFamily: fontFamily.medium, fontSize: 10, letterSpacing: 1.2 },
+  logo:        { fontFamily: fontFamily.black,  fontSize: 34, letterSpacing: -1.4 },
+  onboardH1:   { fontFamily: fontFamily.black,  fontSize: 32, letterSpacing: -0.5, lineHeight: 37 },
+  onboardH2:   { fontFamily: fontFamily.black,  fontSize: 26, letterSpacing: -0.4, lineHeight: 31 },
+  display:     { fontFamily: fontFamily.black,  fontSize: 32, letterSpacing: -0.5, lineHeight: 37 },
+  screenTitle: { fontFamily: fontFamily.black,  fontSize: 24, letterSpacing: -0.5 },
+  title:       { fontFamily: fontFamily.black,  fontSize: 24, letterSpacing: -0.5 },
+  eventTitle:  { fontFamily: fontFamily.black,  fontSize: 27, letterSpacing: -0.6, lineHeight: 30 },
+  swipeTitle:  { fontFamily: fontFamily.black,  fontSize: 21, letterSpacing: -0.4 },
+  profileName: { fontFamily: fontFamily.black,  fontSize: 20 },
+  sheetTitle:  { fontFamily: fontFamily.black,  fontSize: 20, letterSpacing: -0.3 },
+  section:     { fontFamily: fontFamily.black,  fontSize: 17 },
+  heading:     { fontFamily: fontFamily.black,  fontSize: 19 },
+  subheading:  { fontFamily: fontFamily.black,  fontSize: 16 },
+  cardTitle:   { fontFamily: fontFamily.black,  fontSize: 18, letterSpacing: -0.3 },
+  rowTitle:    { fontFamily: fontFamily.heavy,  fontSize: 15 },
+  rowTitleSm:  { fontFamily: fontFamily.heavy,  fontSize: 14 },
+  body:        { fontFamily: fontFamily.medium, fontSize: 14, lineHeight: 22 },
+  bodyStrong:  { fontFamily: fontFamily.heavy,  fontSize: 14, lineHeight: 21 },
+  meta:        { fontFamily: fontFamily.bold,   fontSize: 13 },
+  metaSm:      { fontFamily: fontFamily.bold,   fontSize: 12 },
+  caption:     { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 19 },
+  captionStrong: { fontFamily: fontFamily.bold, fontSize: 13 },
+  chip:        { fontFamily: fontFamily.heavy,  fontSize: 13 },
+  micro:       { fontFamily: fontFamily.heavy,  fontSize: 11 },
+  button:      { fontFamily: fontFamily.heavy,  fontSize: 17 },
+  buttonSm:    { fontFamily: fontFamily.heavy,  fontSize: 15 },
+  tabLabel:    { fontFamily: fontFamily.heavy,  fontSize: 10 },
+  mono:        { fontFamily: fontFamily.monoBold, fontSize: 10, letterSpacing: 1.2 },
+  monoStrong:  { fontFamily: fontFamily.monoBold, fontSize: 12, letterSpacing: 1.2 },
+  monoSm:      { fontFamily: fontFamily.monoBold, fontSize: 9, letterSpacing: 1.1 },
+  monoLg:      { fontFamily: fontFamily.monoBold, fontSize: 11, letterSpacing: 1.4 },
+  label:       { fontFamily: fontFamily.monoBold, fontSize: 10, letterSpacing: 1.2 },
 } as const;
 
 export const shadow = {
+  /** Primary CTA. */
+  cta: {
+    shadowColor: '#0080FF',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.34,
+    shadowRadius: 28,
+    elevation: 12,
+  },
+  ctaLarge: {
+    shadowColor: '#0080FF',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.34,
+    shadowRadius: 34,
+    elevation: 14,
+  },
+  /** The BLUP circle on the swipe deck. */
+  glow: {
+    shadowColor: '#0080FF',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
+    elevation: 14,
+  },
+  pin: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  toast: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.5,
+    shadowRadius: 40,
+    elevation: 20,
+  },
   card: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.35,
     shadowRadius: 20,
-    elevation: 10,
+    elevation: 8,
   },
   floating: {
     shadowColor: '#000',
@@ -164,46 +315,30 @@ export const shadow = {
     shadowRadius: 28,
     elevation: 16,
   },
-  glow: {
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
-    elevation: 12,
-  },
 } as const;
 
-/** Category → emoji, used on markers and as the cover glyph. */
-export const categoryEmoji: Record<string, string> = {
-  techno: '🔊', house: '🏠', hiphop: '🎤', rock: '🎸', jazz: '🎷', indie: '🎧',
-  festival: '🎪', running: '🏃', cycling: '🚴', climbing: '🧗', football: '⚽',
-  basketball: '🏀', yoga: '🧘', swimming: '🏊', hiking: '🥾', camping: '⛺',
-  skiing: '🎿', surfing: '🏄', art: '🎨', theatre: '🎭', cinema: '🎬',
-  museum: '🏛️', photography: '📷', books: '📚', food: '🍜', coffee: '☕',
-  wine: '🍷', 'craft-beer': '🍺', cooking: '👨‍🍳', startups: '🚀', tech: '💻',
-  design: '✏️', networking: '🤝', investing: '📈', nightlife: '🌃', bars: '🍸',
-  karaoke: '🎙️', 'board-games': '🎲', gaming: '🎮', language: '🗣️',
-  volunteering: '💚', wellness: '🌿', meditation: '🕯️', dance: '💃', other: '✨',
-};
+/** Minimum touch target the handoff requires. */
+export const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 } as const;
+export const MIN_TARGET = 44;
 
-export function emojiFor(category: string): string {
-  return categoryEmoji[category] ?? '✨';
-}
+// ---------------------------------------------------------------------------
+// Slovak labels for database values
+// ---------------------------------------------------------------------------
 
-/** Slovak category labels for chips and filters. */
 export const categoryLabel: Record<string, string> = {
   techno: 'Techno', house: 'House', hiphop: 'Hip-hop', rock: 'Rock', jazz: 'Jazz',
   indie: 'Indie', festival: 'Festivaly', running: 'Beh', cycling: 'Cyklo',
   climbing: 'Lezenie', football: 'Futbal', basketball: 'Basket', yoga: 'Joga',
   swimming: 'Plávanie', hiking: 'Turistika', camping: 'Kemping', skiing: 'Lyže',
   surfing: 'Surf', art: 'Umenie', theatre: 'Divadlo', cinema: 'Kino',
-  museum: 'Múzeá', photography: 'Fotenie', books: 'Knihy', food: 'Jedlo',
+  museum: 'Múzeá', photography: 'Fotografia', books: 'Knihy', food: 'Gastro',
   coffee: 'Káva', wine: 'Víno', 'craft-beer': 'Pivo', cooking: 'Varenie',
   startups: 'Startupy', tech: 'Tech', design: 'Dizajn', networking: 'Networking',
   investing: 'Investície', nightlife: 'Nočný život', bars: 'Bary',
-  karaoke: 'Karaoke', 'board-games': 'Doskovky', gaming: 'Gaming',
+  karaoke: 'Karaoke', 'board-games': 'Board games', gaming: 'Gaming',
   language: 'Jazyky', volunteering: 'Dobrovoľníctvo', wellness: 'Wellness',
   meditation: 'Meditácia', dance: 'Tanec', other: 'Iné',
+  music: 'Hudba', startup: 'Startupy', outdoor: 'Outdoor', spirit: 'Spiritualita',
 };
 
 export function labelFor(category: string): string {
@@ -212,8 +347,7 @@ export function labelFor(category: string): string {
 
 /**
  * Interest *groups* (the `category` column on public.interests) — the headings
- * on the onboarding picker. Distinct from `categoryLabel`, which labels an
- * event's category.
+ * on the onboarding picker.
  */
 export const interestGroupLabel: Record<string, string> = {
   music: 'Hudba',
@@ -230,4 +364,13 @@ export const interestGroupLabel: Record<string, string> = {
 
 export function interestGroupFor(category: string): string {
   return interestGroupLabel[category] ?? category;
+}
+
+/** Category → emoji, still used by the map markers. */
+export const categoryEmoji: Record<string, string> = {
+  music: '🎵', startup: '💡', outdoor: '🌿', art: '🎨', spirit: '🧘',
+};
+
+export function emojiFor(category: string): string {
+  return categoryEmoji[familyFor(category)] ?? '📍';
 }

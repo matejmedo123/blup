@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
@@ -7,8 +7,9 @@ import { getUnreadMessageCount } from '@/api/messages';
 import { colors, radius, typography } from '@/theme';
 
 /**
- * Tab icons are drawn as glyphs on a pill that fills with the accent colour
- * when active, matching the design's bottom bar.
+ * The tab bar from the handoff: height 88 with `8px 8px 26px` padding, a
+ * translucent app-coloured background and a subtle top border. Each tab is a
+ * 54-tall pill that fills with `rgba(0,128,255,.1)` when active.
  */
 function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
   return (
@@ -19,8 +20,6 @@ function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
 }
 
 export default function TabsLayout() {
-  // The badge on the messages tab counts unread messages; notifications live
-  // behind the bell in the home header.
   const { data: unread } = useQuery({
     queryKey: ['messages', 'unread'],
     queryFn: getUnreadMessageCount,
@@ -32,46 +31,54 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.backgroundElevated,
+          backgroundColor: Platform.OS === 'web' ? colors.background : 'rgba(10, 13, 18, 0.92)',
           borderTopColor: colors.border,
+          borderTopWidth: 1,
           height: 88,
-          paddingTop: 10,
+          paddingTop: 8,
+          paddingHorizontal: 8,
+          paddingBottom: 26,
+          elevation: 0,
         },
-        tabBarActiveTintColor: colors.accentText,
-        tabBarInactiveTintColor: colors.textTertiary,
-        tabBarLabelStyle: { fontSize: 11, fontFamily: typography.captionStrong.fontFamily },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textQuaternary,
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontFamily: typography.tabLabel.fontFamily,
+          marginTop: -4,
+        },
         tabBarBadgeStyle: {
           backgroundColor: colors.accent,
           fontSize: 10,
-          fontFamily: typography.captionStrong.fontFamily,
+          fontFamily: typography.tabLabel.fontFamily,
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Objav',
+          title: 'Domov',
           tabBarIcon: ({ focused }) => <TabIcon glyph="◉" focused={focused} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="discover"
         options={{
-          title: 'Komunita',
+          title: 'Objav',
           tabBarIcon: ({ focused }) => <TabIcon glyph="◈" focused={focused} />,
         }}
       />
       <Tabs.Screen
-        name="create"
+        name="feed"
         options={{
-          title: 'Vytvoriť',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="≡" focused={focused} />,
+          title: 'Feed',
+          tabBarIcon: ({ focused }) => <TabIcon glyph="☰" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="messages"
         options={{
-          title: 'Správy',
+          title: 'Chat',
           tabBarIcon: ({ focused }) => <TabIcon glyph="✉" focused={focused} />,
           tabBarBadge: unread && unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
         }}
@@ -89,13 +96,13 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabIcon: {
-    width: 54,
+    width: 58,
     height: 34,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabIconActive: { backgroundColor: colors.accentSoft },
-  tabGlyph: { fontSize: 19, color: colors.textTertiary },
-  tabGlyphActive: { color: colors.accentText },
+  tabIconActive: { backgroundColor: 'rgba(0, 128, 255, 0.1)' },
+  tabGlyph: { fontSize: 18, color: colors.textQuaternary },
+  tabGlyphActive: { color: colors.accent },
 });

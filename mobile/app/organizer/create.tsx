@@ -9,6 +9,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { createEvent } from '@/api/events';
 import { createPersonalOrganization, getMyOrganizations } from '@/api/organizations';
+import { getMyCommunities } from '@/api/communities';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong } from '@/lib/format';
@@ -48,6 +49,7 @@ export default function CreateEventScreen() {
   const [isFree, setIsFree] = useState(true);
   const [price, setPrice] = useState('');
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [communityId, setCommunityId] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
 
@@ -70,6 +72,12 @@ export default function CreateEventScreen() {
   });
 
   const organizations = organizationsQuery.data;
+
+  // Communities you belong to can host the event as a micro-event.
+  const communitiesQuery = useQuery({
+    queryKey: ['communities', 'mine'],
+    queryFn: getMyCommunities,
+  });
 
   const verifiedOrgs = useMemo(
     () => (organizations ?? []).filter((org) => org.verification_status === 'verified'),
@@ -215,7 +223,8 @@ export default function CreateEventScreen() {
         isFree,
         priceCents: isFree ? 0 : Math.round(Number(price.replace(',', '.')) * 100),
         coverImageUrl: coverUrl,
-        organizationId: isFree ? organizationId : organizationId,
+        organizationId,
+        communityId,
         status: 'published',
       });
 
@@ -356,6 +365,31 @@ export default function CreateEventScreen() {
         placeholder="Námestie SNP 25, Bratislava"
         editable={!saving}
       />
+
+      {/* --- micro-event ----------------------------------------------------- */}
+      {(communitiesQuery.data ?? []).length > 0 ? (
+        <>
+          <SectionHeader title="Hostí to komunita?" />
+          <Caption style={styles.orgHint}>
+            Micro-event sa zobrazí členom komunity a v sekcii Micro-eventy.
+          </Caption>
+          <View style={styles.chips}>
+            <Chip
+              label="Nie, samostatný"
+              selected={communityId === null}
+              onPress={() => setCommunityId(null)}
+            />
+            {(communitiesQuery.data ?? []).map((community) => (
+              <Chip
+                key={community.id}
+                label={community.name}
+                selected={communityId === community.id}
+                onPress={() => setCommunityId(community.id)}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
 
       {/* --- tickets -------------------------------------------------------- */}
       <SectionHeader title="Vstupenky" />

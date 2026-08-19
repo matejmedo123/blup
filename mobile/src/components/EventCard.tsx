@@ -1,18 +1,19 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, labelFor, radius, shadow, spacing, typography } from '@/theme';
+import { colors, familyFor, categoryFamilies, radius, spacing, typography } from '@/theme';
 import { formatCount, formatDistance, formatEventDate, formatPrice } from '@/lib/format';
 import type { EventFeedItem } from '@/types/models';
 import { GradientCover } from './GradientCover';
-import { AvatarStack, Chip, PricePill } from './ui';
+import { AvatarStack } from './ui';
 
 /**
- * The event card — the visual centre of BLUP.
+ * The large event card from the handoff.
  *
- * Cover, category chips over it, a save star, then a compact meta line
- * ("Dnes · 21:00 · 0.8 km · Nivy Tower") and a footer that pairs social proof
- * with the price.
+ * Hero 168 with the category gradient and hatching; two glass badges top-left
+ * (category, tag); a 38px blup star top-right; the mono photo placeholder
+ * bottom-left. Body: title 18/900, then "Dnes · 21:00 · 0.8 km · Nivy Tower",
+ * then three 26px avatars with "{n} ide" in accent and the price badge.
  */
 export function EventCard({
   event, onPress, onSave, size = 'large', showScore, attendees = [],
@@ -25,13 +26,22 @@ export function EventCard({
   attendees?: { id: string; avatar_url?: string | null; name?: string | null }[];
 }) {
   const isCompact = size === 'compact';
+  const family = categoryFamilies[familyFor(event.category)];
   const distance = formatDistance(event.distance_m);
 
-  const meta = [
-    formatEventDate(event.start_at),
-    distance,
-    event.venue_name,
-  ].filter(Boolean).join(' · ');
+  const meta = [formatEventDate(event.start_at), distance, event.venue_name]
+    .filter(Boolean)
+    .join(' · ');
+
+  const tag = event.score_breakdown?.facts?.is_boosted
+    ? 'Sponzorované'
+    : event.friends_going > 2
+      ? 'Kruhy'
+      : event.attendee_count > 150
+        ? 'Trending'
+        : event.is_free
+          ? 'Zdarma'
+          : null;
 
   return (
     <Pressable
@@ -42,79 +52,93 @@ export function EventCard({
     >
       <GradientCover
         uri={event.cover_image_url}
-        seed={event.id}
-        height={isCompact ? 150 : 210}
+        category={event.category}
+        height={isCompact ? 96 : 168}
         showPlaceholderLabel={!isCompact}
       >
         <View style={styles.coverTop}>
-          <View style={styles.coverChips}>
-            <Chip label={labelFor(event.category)} onCover />
-            {event.friends_going > 0 ? <Chip label="Frčí" onCover /> : null}
-            {/* A promoted event says so. The ranker reports the boost in the
-                breakdown, so hiding it here would only hide it from the user. */}
-            {event.score_breakdown?.facts?.is_boosted ? <Chip label="Sponzorované" onCover /> : null}
+          <View style={styles.coverBadges}>
+            <GlassBadge label={family.label} />
+            {tag && !isCompact ? <GlassBadge label={tag} /> : null}
           </View>
 
-          {onSave ? (
+          {onSave && !isCompact ? (
             <Pressable
               onPress={onSave}
-              hitSlop={12}
+              hitSlop={10}
               accessibilityRole="button"
-              accessibilityLabel={event.is_saved ? 'Odstrániť z uložených' : 'Uložiť event'}
-              style={styles.saveButton}
+              accessibilityLabel={event.is_saved ? 'Odobrať blup' : 'Blupnúť'}
+              style={[styles.blupButton, event.is_saved && styles.blupButtonActive]}
             >
-              <Text style={[styles.saveIcon, event.is_saved && styles.saveIconActive]}>
-                {event.is_saved ? '★' : '☆'}
-              </Text>
+              <Text style={styles.blupIcon}>{event.is_saved ? '★' : '☆'}</Text>
             </Pressable>
           ) : null}
         </View>
 
         {showScore && event.score !== null ? (
           <View style={styles.scorePill}>
-            <Text style={styles.scoreText}>{Math.round(Number(event.score) * 100)} % zhoda</Text>
+            <Text style={styles.scoreText}>{Math.round(Number(event.score) * 100)} % ZHODA</Text>
           </View>
         ) : null}
       </GradientCover>
 
-      <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={2}>{event.title}</Text>
-        <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
+      <View style={[styles.body, isCompact && styles.bodyCompact]}>
+        <Text
+          style={[styles.title, isCompact && styles.titleCompact]}
+          numberOfLines={2}
+        >
+          {event.title}
+        </Text>
+        <Text style={[styles.meta, isCompact && styles.metaCompact]} numberOfLines={1}>
+          {meta}
+        </Text>
 
         {event.explanation ? (
-          <Text style={styles.explanation} numberOfLines={2}>✨ {event.explanation}</Text>
+          <Text style={styles.reason} numberOfLines={2}>{event.explanation}</Text>
         ) : null}
 
-        <View style={styles.footer}>
-          <View style={styles.footerLeft}>
-            {attendees.length > 0 ? <AvatarStack people={attendees} size={28} max={3} /> : null}
-            <Text style={styles.going}>
-              {event.friends_going > 0
-                ? `${event.friends_going} z tvojich kruhov ide`
-                : `${formatCount(event.attendee_count)} ide`}
-            </Text>
-          </View>
+        {!isCompact ? (
+          <View style={styles.footer}>
+            <View style={styles.footerLeft}>
+              {attendees.length > 0 ? <AvatarStack people={attendees} size={26} max={3} /> : null}
+              <Text style={styles.going}>
+                {event.friends_going > 0
+                  ? `${event.friends_going} z tvojich kruhov ide`
+                  : `${formatCount(event.attendee_count)} ide`}
+              </Text>
+            </View>
 
-          <PricePill
-            label={event.is_free ? 'Zdarma' : formatPrice(event.price_cents, event.currency)}
-          />
-        </View>
+            <View style={styles.price}>
+              <Text style={styles.priceLabel}>
+                {event.is_free ? 'Zdarma' : formatPrice(event.price_cents, event.currency)}
+              </Text>
+            </View>
+          </View>
+        ) : null}
       </View>
     </Pressable>
+  );
+}
+
+/** The glass badge that sits on a photo. */
+function GlassBadge({ label }: { label: string }) {
+  return (
+    <View style={styles.glass}>
+      <Text style={styles.glassLabel}>{label}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
+    borderRadius: radius.cardLarge,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadow.card,
   },
-  cardCompact: { width: 270 },
-  pressed: { opacity: 0.92, transform: [{ scale: 0.995 }] },
+  cardCompact: { width: 190, borderRadius: radius.card },
+  pressed: { borderColor: colors.borderAccent },
 
   coverTop: {
     position: 'absolute',
@@ -126,46 +150,61 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     padding: spacing.md,
   },
-  coverChips: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', flex: 1 },
-  saveButton: {
+  coverBadges: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', flex: 1 },
+
+  glass: {
+    backgroundColor: colors.overlay,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 11,
+  },
+  glassLabel: { ...typography.micro, color: colors.text },
+
+  blupButton: {
     width: 38,
     height: 38,
-    borderRadius: radius.md,
-    backgroundColor: colors.chipOnCover,
+    borderRadius: radius.block,
+    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveIcon: { fontSize: 19, color: '#FFFFFF' },
-  saveIconActive: { color: colors.warning },
+  blupButtonActive: { backgroundColor: colors.accent },
+  blupIcon: { fontSize: 18, color: '#FFFFFF' },
 
   scorePill: {
     position: 'absolute',
     right: spacing.md,
     bottom: spacing.md,
-    backgroundColor: colors.chipOnCover,
-    paddingHorizontal: spacing.md,
+    backgroundColor: colors.overlay,
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,
   },
-  scoreText: { ...typography.mono, color: '#FFFFFF' },
+  scoreText: { ...typography.monoSm, color: '#FFFFFF' },
 
-  body: { padding: spacing.lg, gap: spacing.xs },
-  title: { ...typography.heading, color: colors.text },
-  meta: { ...typography.caption, color: colors.textSecondary },
-  explanation: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-    marginTop: spacing.xs,
-  },
+  body: { padding: spacing.lg, gap: spacing.sm },
+  bodyCompact: { padding: spacing.md, gap: 4 },
+  title: { ...typography.cardTitle, color: colors.text },
+  titleCompact: { ...typography.rowTitleSm },
+  meta: { ...typography.metaSm, color: colors.textTertiary },
+  metaCompact: { fontSize: 11 },
+  reason: { ...typography.metaSm, color: colors.cyan },
 
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
     gap: spacing.md,
   },
-  footerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
-  going: { ...typography.captionStrong, color: colors.accentText },
+  footerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
+  going: { ...typography.metaSm, color: colors.accentText, flexShrink: 1 },
+
+  price: {
+    backgroundColor: colors.surfaceElevated2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: 11,
+  },
+  priceLabel: { ...typography.micro, color: colors.text },
 });

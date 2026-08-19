@@ -38,7 +38,7 @@ export default function AttendingScreen() {
             title="V kalendári máš prázdno"
             body="Označ pri evente, že ideš, a objaví sa tu."
             actionLabel="Prezerať eventy"
-            onAction={() => router.replace('/(tabs)/explore')}
+            onAction={() => router.replace('/search')}
           />
         }
       />

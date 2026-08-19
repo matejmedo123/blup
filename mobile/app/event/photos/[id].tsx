@@ -140,7 +140,7 @@ export default function EventPhotosScreen() {
 
       <GradientCover
         uri={event.data?.cover_image_url}
-        seed={id ?? 'event'}
+        category={event.data?.category}
         height={200}
         style={styles.cover}
       >

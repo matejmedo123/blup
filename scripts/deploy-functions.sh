@@ -27,6 +27,7 @@ fi
 # name:verify_jwt
 FUNCTIONS=(
   "checkout-create:true"
+  "boost-create:true"
   "organizer-connect:true"
   "payout-request:true"
   "iap-apple-verify:true"

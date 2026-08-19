@@ -160,7 +160,7 @@ export default function CommunityScreen() {
           <View>
             <GradientCover
               uri={data.cover_url}
-              seed={data.id}
+              category={data.category}
               height={150}
               style={styles.cover}
               showPlaceholderLabel={false}

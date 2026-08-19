@@ -7,7 +7,8 @@ import { useLocation } from '@/hooks/useLocation';
 import { updateProfile } from '@/api/profiles';
 import { registerForPushNotifications } from '@/notifications/push';
 import { messageFor } from '@/lib/errors';
-import { Body, Button, Caption, Mono, Notice, Screen, Title } from '@/components/ui';
+import { Body, Button, Caption, Notice } from '@/components/ui';
+import { OnboardingShell } from '@/components/OnboardingShell';
 import { colors, spacing } from '@/theme';
 
 /** Step 3 of 3 — real GPS permission plus push, then into the app. */
@@ -37,13 +38,14 @@ export default function OnboardingLocationScreen() {
   };
 
   return (
-    <Screen scroll>
-      <Mono style={styles.step}>krok 3 z 3</Mono>
-      <Title>Ukáž mi, čo je okolo</Title>
-      <Body muted style={styles.intro}>
-        BLUP používa tvoju polohu, aby zoradil eventy podľa skutočnej vzdialenosti a vykreslil ťa
-        na mape. S nikým sa nezdieľa, kým si zdieľanie polohy sám nezapneš v nastaveniach.
-      </Body>
+    <OnboardingShell
+      step={2}
+      title="Kde si?"
+      subtitle="Podľa polohy ti zoradíme eventy podľa skutočnej vzdialenosti. S nikým sa nezdieľa, kým si to sám nezapneš."
+      ctaLabel={location.status === 'granted' ? 'Blup in, hotovo' : 'Pokračovať bez polohy'}
+      onCta={finish}
+      ctaLoading={finishing}
+    >
 
       {error ? <Notice tone="danger" title="Nepodarilo sa dokončiť" body={error} /> : null}
       {pushNote ? <Notice tone="warning" title="Notifikácie sú vypnuté" body={pushNote} /> : null}
@@ -80,27 +82,21 @@ export default function OnboardingLocationScreen() {
         />
       ) : null}
 
-      <View style={styles.actions}>
-        {location.status !== 'granted' ? (
+      {location.status !== 'granted' ? (
+        <View style={styles.actions}>
           <Button
-            title="Zapnúť polohu"
+            title="◎  Použiť moju polohu"
+            variant="secondary"
             onPress={() => void location.request()}
             loading={location.status === 'requesting'}
           />
-        ) : null}
-
-        <Button
-          title={location.status === 'granted' ? 'Poďme na to' : 'Pokračovať bez polohy'}
-          variant={location.status === 'granted' ? 'primary' : 'secondary'}
-          onPress={finish}
-          loading={finishing}
-        />
-      </View>
+        </View>
+      ) : null}
 
       <Caption style={styles.footnote}>
         Kedykoľvek to zmeníš v Ja → Nastavenia → Súkromie.
       </Caption>
-    </Screen>
+    </OnboardingShell>
   );
 }
 

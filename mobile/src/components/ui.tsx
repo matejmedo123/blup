@@ -7,7 +7,7 @@ import {
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
-import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
+import { avatarColorFor, colors, radius, spacing, typography, shadow } from '@/theme';
 import { initialsFor } from '@/lib/format';
 
 /** Screen shell: safe area + background, used by every route. */
@@ -99,7 +99,7 @@ export function Mono({
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'teal';
 
 export function Button({
-  title, onPress, variant = 'primary', loading, disabled, style, icon, compact, full,
+  title, onPress, variant = 'primary', loading, disabled, style, icon, compact, full, large,
 }: {
   title: string;
   onPress?: () => void;
@@ -110,6 +110,8 @@ export function Button({
   icon?: string;
   compact?: boolean;
   full?: boolean;
+  /** The 56px screen-bottom CTA. */
+  large?: boolean;
 }) {
   const isDisabled = disabled || loading;
 
@@ -121,6 +123,7 @@ export function Button({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.button,
+        large && styles.buttonLarge,
         compact && styles.buttonCompact,
         full && styles.buttonFull,
         variant === 'primary' && styles.buttonPrimary,
@@ -139,6 +142,7 @@ export function Button({
         <Text
           style={[
             styles.buttonLabel,
+            large && styles.buttonLabelLarge,
             variant === 'primary' && styles.buttonLabelPrimary,
             variant === 'danger' && styles.buttonLabelDanger,
             variant === 'teal' && styles.buttonLabelTeal,
@@ -324,18 +328,20 @@ export function PricePill({ label, style }: { label: string; style?: StyleProp<V
 }
 
 export function Avatar({
-  url, name, size = 40, ring,
+  url, name, size = 40, ring, square,
 }: {
   url?: string | null;
   name?: string | null;
   size?: number;
   ring?: boolean;
+  /** The handoff uses radius-16 rectangles for list rows, circles elsewhere. */
+  square?: boolean;
 }) {
   const base = {
     width: size,
     height: size,
-    borderRadius: size / 2,
-    ...(ring ? { borderWidth: 2, borderColor: colors.background } : {}),
+    borderRadius: square ? radius.md : size / 2,
+    ...(ring ? { borderWidth: 2, borderColor: colors.surface } : {}),
   };
 
   if (url) {
@@ -352,7 +358,11 @@ export function Avatar({
   // No photo: a vivid, stable colour from the name, like the mockups.
   return (
     <View style={[base, styles.avatarFallback, { backgroundColor: avatarColorFor(name) }]}>
-      <Text style={{ color: '#FFFFFF', fontSize: size * 0.34, fontFamily: typography.subheading.fontFamily }}>
+      <Text style={{
+        color: colors.textInverse,
+        fontSize: size * 0.34,
+        fontFamily: typography.rowTitle.fontFamily,
+      }}>
         {initialsFor(name)}
       </Text>
     </View>
@@ -370,7 +380,7 @@ export function AvatarStack({
   return (
     <View style={styles.avatarStack}>
       {people.slice(0, max).map((person, index) => (
-        <View key={person.id} style={{ marginLeft: index === 0 ? 0 : -size * 0.32 }}>
+        <View key={person.id} style={{ marginLeft: index === 0 ? 0 : -8 }}>
           <Avatar url={person.avatar_url} name={person.name} size={size} ring />
         </View>
       ))}
@@ -538,73 +548,73 @@ const styles = StyleSheet.create({
   muted: { color: colors.textSecondary },
 
   button: {
-    height: 54,
-    borderRadius: radius.lg,
+    height: 50,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    paddingHorizontal: spacing.xl,
   },
-  buttonCompact: { height: 40, paddingHorizontal: spacing.md, borderRadius: radius.md },
+  buttonCompact: { height: 40, paddingHorizontal: spacing.lg, borderRadius: radius.block },
+  /** The full-width primary CTA from the handoff: 56 tall, radius 18. */
+  buttonLarge: { height: 56, borderRadius: 18 },
   buttonFull: { alignSelf: 'stretch' },
-  buttonPrimary: { backgroundColor: colors.accent },
-  buttonSecondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  buttonPrimary: { backgroundColor: colors.accent, ...shadow.cta },
+  buttonSecondary: { backgroundColor: colors.surfaceElevated2 },
   buttonGhost: { backgroundColor: 'transparent' },
   buttonDanger: { backgroundColor: colors.dangerSoft },
   buttonTeal: { backgroundColor: colors.tealSoft },
-  buttonPressed: { opacity: 0.86, transform: [{ scale: 0.99 }] },
+  buttonPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
   buttonDisabled: { opacity: 0.4 },
-  buttonLabel: { ...typography.button, color: colors.text },
+  buttonLabel: { ...typography.buttonSm, color: colors.text },
+  buttonLabelLarge: { ...typography.button },
   buttonLabelPrimary: { color: '#FFFFFF' },
   buttonLabelDanger: { color: colors.danger },
   buttonLabelTeal: { color: colors.teal },
 
   iconButton: {
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.block,
   },
   iconButtonOverlay: { backgroundColor: colors.overlay, borderColor: 'transparent' },
-  iconButtonPressed: { backgroundColor: colors.surfacePressed },
-  iconGlyph: { fontSize: 17, color: colors.text },
+  iconButtonPressed: { backgroundColor: '#1D242F' },
+  iconGlyph: { fontSize: 17, color: colors.textSecondary },
   iconBadge: {
     position: 'absolute',
-    top: 9,
-    right: 10,
+    top: 6,
+    right: 6,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.danger,
+    backgroundColor: colors.pink,
   },
 
   segmented: { flexDirection: 'row', gap: spacing.sm },
   segment: {
     flex: 1,
-    height: 46,
-    borderRadius: radius.md,
+    height: 42,
+    borderRadius: radius.chip,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
   },
-  segmentActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  segmentLabel: { ...typography.bodyStrong, color: colors.textSecondary },
+  segmentActive: { backgroundColor: colors.accent },
+  segmentLabel: { ...typography.chip, fontSize: 14, color: colors.textSecondary },
   segmentLabelActive: { color: '#FFFFFF' },
 
   inputGroup: { marginBottom: spacing.lg },
   inputLabel: { ...typography.captionStrong, color: colors.textSecondary, marginBottom: spacing.sm },
   input: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    backgroundColor: colors.surfaceInput,
+    borderRadius: radius.input,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 15,
-    color: colors.text,
-    fontSize: 16,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
   },
   inputError: { borderColor: colors.danger },
   errorText: { ...typography.caption, color: colors.danger, marginTop: spacing.xs },
@@ -612,7 +622,7 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -633,17 +643,17 @@ const styles = StyleSheet.create({
   infoValue: { ...typography.subheading, color: colors.text },
 
   chip: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 9,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderRadius: radius.chip,
+    backgroundColor: colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chipOnCover: { backgroundColor: colors.chipOnCover, borderColor: 'transparent' },
-  chipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
+  chipSelected: { backgroundColor: colors.accent },
   chipPressed: { opacity: 0.82 },
-  chipLabel: { ...typography.chip, color: colors.textSecondary },
+  chipLabel: { ...typography.chip, fontSize: 14, color: colors.textSecondary },
   chipLabelSelected: { color: '#FFFFFF' },
 
   badge: {

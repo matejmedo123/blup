@@ -46,9 +46,23 @@ Deno.serve(async (req) => {
     const object = event.data.object;
     const metadata = (object.metadata ?? {}) as Record<string, string>;
     const orderId = metadata.order_id;
+    const boostId = metadata.boost_id;
 
     switch (event.type) {
       case 'payment_intent.succeeded': {
+        // A boost is bought with the same intent flow as a ticket; the metadata
+        // says which, and only the webhook activates either one.
+        if (boostId) {
+          const { error } = await db.rpc('activate_boost', {
+            p_boost_id: boostId,
+            p_provider: 'stripe',
+            p_provider_reference: String(object.id),
+            p_amount_cents: Number(object.amount_received ?? object.amount),
+          });
+          if (error) throw error;
+          break;
+        }
+
         if (!orderId) break;
         const { error } = await db.rpc('fulfill_order', {
           p_order_id: orderId,
@@ -62,8 +76,17 @@ Deno.serve(async (req) => {
 
       case 'payment_intent.payment_failed':
       case 'payment_intent.canceled': {
-        if (!orderId) break;
         const failure = (object.last_payment_error ?? {}) as Record<string, string>;
+
+        if (boostId) {
+          await db.rpc('fail_boost', {
+            p_boost_id: boostId,
+            p_reason: failure.message ?? event.type,
+          });
+          break;
+        }
+
+        if (!orderId) break;
         await db.rpc('fail_order', {
           p_order_id: orderId,
           p_reason: failure.message ?? event.type,

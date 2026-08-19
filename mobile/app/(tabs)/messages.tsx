@@ -60,7 +60,7 @@ export default function MessagesScreen() {
           <Mono accent>✉ správy</Mono>
           <Text style={styles.title}>Tvoje konverzácie</Text>
         </View>
-        <IconButton glyph="⌕" onPress={() => router.push('/(tabs)/explore')} />
+        <IconButton glyph="⌕" onPress={() => router.push('/search')} />
       </View>
 
       <FlatList
@@ -88,7 +88,7 @@ export default function MessagesScreen() {
             title="Zatiaľ žiadne správy"
             body="Napíš niekomu z profilu, alebo si otvor skupinový chat eventu, na ktorý ideš."
             actionLabel="Nájdi si ľudí"
-            onAction={() => router.push('/(tabs)/explore')}
+            onAction={() => router.push('/search')}
           />
         }
       />

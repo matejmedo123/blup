@@ -289,5 +289,103 @@ begin
   raise notice 'PASS an abandoned checkout releases the promo code';
 end $$;
 
+-- --- buying a boost: inert until the webhook confirms ------------------------
+do $$
+declare
+  v_event uuid;
+  v_boost public.event_boosts;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', 'f6666666-6666-6666-6666-666666666666', true);
+
+  select id into v_event from public.events
+   where creator_id = 'f6666666-6666-6666-6666-666666666666'
+     and start_at > now() limit 1;
+
+  -- Clear the boost 0018's test left behind so this starts from nothing.
+  reset role;
+  delete from public.event_boosts where event_id = v_event;
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', 'f6666666-6666-6666-6666-666666666666', true);
+
+  v_boost := public.create_boost_order(v_event, 'boost_48');
+
+  assert v_boost.amount_cents = 1200,
+    format('the package price comes from the catalogue, got %s', v_boost.amount_cents);
+  assert v_boost.weight = 0.15, format('the package weight applies, got %s', v_boost.weight);
+  assert v_boost.payment_status = 'requires_payment', 'a new boost starts unpaid';
+
+  -- Unpaid, so it must not promote anything yet.
+  assert public.boost_weight_for(v_event) = 0,
+    'an unpaid boost must not lift the score';
+
+  raise notice 'PASS a bought boost is inert until it is paid';
+end $$;
+
+-- --- the client cannot price its own boost ----------------------------------
+do $$
+declare v_event uuid;
+begin
+  select id into v_event from public.events
+   where creator_id = 'f6666666-6666-6666-6666-666666666666' and start_at > now() limit 1;
+
+  perform set_config('request.jwt.claim.sub', 'f6666666-6666-6666-6666-666666666666', true);
+
+  begin
+    perform public.create_boost_order(v_event, 'boost_free_lol');
+    raise exception 'TEST FAILED: an unknown boost package was accepted';
+  exception when raise_exception then
+    raise notice 'PASS an unknown boost package is refused';
+  end;
+
+  -- Somebody else's event cannot be promoted by you.
+  perform set_config('request.jwt.claim.sub', '06666666-0000-0000-0000-000000000001', true);
+  begin
+    perform public.create_boost_order(v_event, 'boost_48');
+    raise exception 'TEST FAILED: a stranger boosted an event';
+  exception when raise_exception then
+    raise notice 'PASS only the host or their organization can buy a boost';
+  end;
+end $$;
+
+-- --- the webhook activates it, and only for the right amount ----------------
+do $$
+declare
+  v_event uuid;
+  v_boost public.event_boosts;
+  v_again public.event_boosts;
+begin
+  reset role;
+  select id into v_event from public.events
+   where creator_id = 'f6666666-6666-6666-6666-666666666666' and start_at > now() limit 1;
+  select * into v_boost from public.event_boosts where event_id = v_event limit 1;
+
+  -- A wrong amount must not activate it.
+  begin
+    perform public.activate_boost(v_boost.id, 'stripe', 'pi_wrong', 100);
+    raise exception 'TEST FAILED: a mismatched amount activated the boost';
+  exception when raise_exception then
+    null;
+  end;
+
+  assert (select payment_status from public.event_boosts where id = v_boost.id)
+         <> 'succeeded',
+    'a mismatched amount must never mark the boost paid';
+  assert public.boost_weight_for(v_event) = 0, 'an unconfirmed boost must not promote';
+
+  update public.event_boosts set payment_status = 'processing' where id = v_boost.id;
+
+  v_boost := public.activate_boost(v_boost.id, 'stripe', 'pi_ok', 1200);
+  assert v_boost.payment_status = 'succeeded', 'the correct amount must activate the boost';
+  assert public.boost_weight_for(v_event) = 0.15,
+    format('a paid boost must promote, got %s', public.boost_weight_for(v_event));
+
+  -- A replayed webhook is not an error and does not extend the window.
+  v_again := public.activate_boost(v_boost.id, 'stripe', 'pi_ok', 1200);
+  assert v_again.ends_at = v_boost.ends_at, 'a replayed webhook must not extend the boost';
+
+  raise notice 'PASS the webhook activates a boost, and only for the right amount';
+end $$;
+
 reset role;
 rollback;

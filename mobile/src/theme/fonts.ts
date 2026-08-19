@@ -8,7 +8,7 @@ import {
 } from '@expo-google-fonts/nunito';
 import {
   JetBrainsMono_400Regular,
-  JetBrainsMono_700Bold,
+  JetBrainsMono_600SemiBold,
 } from '@expo-google-fonts/jetbrains-mono';
 
 /**
@@ -27,7 +27,7 @@ export function useAppFonts(): boolean {
     Nunito_800ExtraBold,
     Nunito_900Black,
     JetBrainsMono_400Regular,
-    JetBrainsMono_700Bold,
+    JetBrainsMono_600SemiBold,
   });
 
   // A font that fails to load must not brick the app — fall through to the

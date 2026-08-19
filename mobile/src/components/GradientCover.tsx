@@ -1,61 +1,71 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, coverGradientFor, spacing, typography } from '@/theme';
 
 /**
- * Event cover.
+ * The event cover.
  *
- * With a photo it shows the photo. Without one it draws a gradient chosen
- * deterministically from the event id, overlaid with diagonal stripes — so an
- * event with no picture still looks designed, and the same event always gets
- * the same colours across the feed, the card and the detail screen.
- *
- * `placeholderLabel` is the small monospace caption from the design
- * ("[ foto z eventu ]"), which makes it obvious the image is missing rather
+ * With a photo it shows the photo. Without one it draws the category's gradient
+ * overlaid with the handoff's 135° hatching, plus the mono placeholder label
+ * (`[ foto z eventu ]`) that makes it obvious a real picture is missing rather
  * than pretending a stock photo is the venue.
+ *
+ * The gradient comes from the event's *category*, not its id — the handoff
+ * assigns one gradient per category family, so two techno nights look related.
  */
 export function GradientCover({
   uri,
-  seed,
+  category,
   height,
   placeholderLabel = '[ foto z eventu ]',
   showPlaceholderLabel = true,
   children,
   style,
-  stripeOpacity = 0.09,
+  overlay = false,
 }: {
   uri?: string | null;
-  seed: string;
+  /** Event category — decides the gradient. */
+  category?: string | null;
   height?: number;
   placeholderLabel?: string;
   showPlaceholderLabel?: boolean;
   children?: React.ReactNode;
-  style?: object;
-  stripeOpacity?: number;
+  style?: StyleProp<ViewStyle>;
+  /** Darkens the bottom so a title sits legibly on top (event hero). */
+  overlay?: boolean;
 }) {
-  const [start, end] = coverGradientFor(seed);
+  const [start, end] = coverGradientFor(category);
 
   return (
     <View style={[styles.container, height ? { height } : null, style]}>
       {uri ? (
-        <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={180} />
+        <Image source={{ uri }} style={styles.fill} contentFit="cover" transition={180} />
       ) : (
         <>
           <LinearGradient
             colors={[start, end]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
+            style={styles.fill}
           />
-          <DiagonalStripes opacity={stripeOpacity} />
+          <Hatching />
           {showPlaceholderLabel ? (
             <Text style={styles.placeholder}>{placeholderLabel}</Text>
           ) : null}
         </>
       )}
+
+      {overlay ? (
+        <LinearGradient
+          colors={['rgba(6,8,11,0.45)', 'transparent', 'rgba(10,13,18,0.92)']}
+          locations={[0, 0.4, 1]}
+          style={styles.fill}
+          pointerEvents="none"
+        />
+      ) : null}
 
       {children}
     </View>
@@ -63,20 +73,15 @@ export function GradientCover({
 }
 
 /**
- * The diagonal texture. Drawn as rotated bars rather than an image so it scales
- * to any card size and costs nothing to load.
+ * `repeating-linear-gradient(135deg, rgba(255,255,255,.14) 0 2px, transparent
+ * 2px 12px)` — drawn as rotated bars, so it scales to any card and costs
+ * nothing to load.
  */
-function DiagonalStripes({ opacity }: { opacity: number }) {
+function Hatching() {
   return (
-    <View style={styles.stripes} pointerEvents="none">
-      {Array.from({ length: 22 }).map((_, index) => (
-        <View
-          key={index}
-          style={[
-            styles.stripe,
-            { left: index * 34 - 220, backgroundColor: `rgba(255,255,255,${opacity})` },
-          ]}
-        />
+    <View style={styles.hatching} pointerEvents="none">
+      {Array.from({ length: 34 }).map((_, index) => (
+        <View key={index} style={[styles.bar, { left: index * 17 - 260 }]} />
       ))}
     </View>
   );
@@ -88,17 +93,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     justifyContent: 'flex-end',
   },
-  stripes: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
-  stripe: {
+  fill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+
+  hatching: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  bar: {
     position: 'absolute',
-    top: -400,
-    width: 14,
-    height: 1200,
-    transform: [{ rotate: '35deg' }],
+    top: -420,
+    width: 2,
+    height: 1240,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    transform: [{ rotate: '45deg' }],
   },
+
   placeholder: {
-    ...typography.mono,
-    color: 'rgba(255,255,255,0.8)',
+    ...typography.monoSm,
+    color: 'rgba(255,255,255,0.72)',
     position: 'absolute',
     left: spacing.lg,
     bottom: spacing.md,
