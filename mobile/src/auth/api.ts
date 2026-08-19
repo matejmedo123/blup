@@ -122,10 +122,30 @@ export async function signInWithApple() {
 }
 
 /**
- * Google (and any other OAuth provider) via the system browser + PKCE.
- * Requires the provider to be enabled in the Supabase dashboard.
+ * Google (and any other OAuth provider) via PKCE.
+ *
+ * Native opens the system browser and waits for it to come back with a code.
+ * A browser cannot do that: `openAuthSessionAsync` becomes a pop-up, pop-ups
+ * are blocked by default when they are not opened directly inside a click, and
+ * a blocked sign-in window looks to the user like a button that does nothing.
+ * So on web the page navigates to the provider and comes back to
+ * /auth/callback, which exchanges the code.
+ *
+ * Requires the provider to be enabled in the Supabase dashboard, and the
+ * redirect URL to be on its allow-list.
  */
 export async function signInWithOAuth(provider: 'google' | 'apple' | 'facebook') {
+  if (Platform.OS === 'web') {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: REDIRECT_TO },
+    });
+    if (error) throw error;
+
+    // supabase-js is navigating the page; nothing after this runs.
+    return null;
+  }
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: { redirectTo: REDIRECT_TO, skipBrowserRedirect: true },

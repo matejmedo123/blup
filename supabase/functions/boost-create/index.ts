@@ -12,6 +12,7 @@
  */
 import {
   ApiError, adminClient, errorResponse, handleOptions, json, rateLimit, readJson, requireUser,
+  userClient,
 } from '../_shared/http.ts';
 import { stripe } from '../_shared/stripe.ts';
 import { env } from '../_shared/env.ts';
@@ -47,8 +48,11 @@ Deno.serve(async (req) => {
 
     const db = adminClient();
 
-    // 1. The database prices it and checks that this user may promote the event.
-    const { data: boost, error: boostError } = await db
+    // 1. The database prices it and checks that this user may promote the
+    //    event. create_boost_order() authorizes on auth.uid(), so it has to run
+    //    under the caller's own JWT — a service-role call presents as "no user"
+    //    and the function refuses it outright.
+    const { data: boost, error: boostError } = await userClient(req)
       .rpc('create_boost_order', {
         p_event: body.event_id,
         p_package: body.package_code,

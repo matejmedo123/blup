@@ -53,6 +53,11 @@ export const env = {
   emailFrom: () => optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.app>',
   emailReplyTo: () => optionalEnv('EMAIL_REPLY_TO'),
   appUrl: () => optionalEnv('APP_PUBLIC_URL') ?? 'https://blup.app',
+
+  // Web subscriptions. Apple's cut does not apply outside the App Store, so the
+  // web build sells Premium through Stripe at the same shelf price.
+  stripePremiumMonthly: () => requireEnv('STRIPE_PRICE_PREMIUM_MONTHLY', 'PREMIUM_PRICING_NOT_CONFIGURED'),
+  stripePremiumYearly: () => requireEnv('STRIPE_PRICE_PREMIUM_YEARLY', 'PREMIUM_PRICING_NOT_CONFIGURED'),
 };
 
 /** True when a provider has everything it needs — used for health reporting. */
@@ -62,4 +67,7 @@ export const configured = {
   appleIap: () => Boolean(optionalEnv('APPLE_SHARED_SECRET')),
   ai: () => Boolean(optionalEnv('AI_API_KEY')),
   email: () => Boolean(optionalEnv('RESEND_API_KEY')),
+  webPremium: () =>
+    Boolean(optionalEnv('STRIPE_SECRET_KEY')) &&
+    Boolean(optionalEnv('STRIPE_PRICE_PREMIUM_MONTHLY')),
 };

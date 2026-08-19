@@ -8,9 +8,52 @@
  * Returns booleans only — never a key, never a fragment of one.
  */
 import { errorResponse, handleOptions, json } from '../_shared/http.ts';
-import { configured, optionalEnv } from '../_shared/env.ts';
+import { configured, env, optionalEnv } from '../_shared/env.ts';
+import { stripe } from '../_shared/stripe.ts';
 
-Deno.serve((req) => {
+/**
+ * The web build shows a price before it sends anyone to Checkout, and the price
+ * it shows has to be the price that will be charged — so it is read from the
+ * same Stripe Price objects the session is built from, not from a constant that
+ * can drift.
+ *
+ * Cached for the lifetime of the function instance: prices change about never,
+ * and this endpoint is public and unauthenticated.
+ */
+let pricingCache: { at: number; value: unknown } | null = null;
+const PRICING_TTL_MS = 10 * 60 * 1000;
+
+async function premiumPricing(): Promise<unknown> {
+  if (!configured.webPremium()) return null;
+  if (pricingCache && Date.now() - pricingCache.at < PRICING_TTL_MS) return pricingCache.value;
+
+  try {
+    const [monthly, yearly] = await Promise.all([
+      stripe.retrievePrice(env.stripePremiumMonthly()),
+      stripe.retrievePrice(env.stripePremiumYearly()).catch(() => null),
+    ]);
+
+    const shape = (price: Awaited<ReturnType<typeof stripe.retrievePrice>> | null) =>
+      price
+        ? {
+            amount_cents: price.unit_amount,
+            currency: price.currency?.toUpperCase() ?? 'EUR',
+            interval: price.recurring?.interval ?? 'month',
+          }
+        : null;
+
+    const value = { monthly: shape(monthly), yearly: shape(yearly) };
+    pricingCache = { at: Date.now(), value };
+    return value;
+  } catch (error) {
+    // A health endpoint that 500s because Stripe is slow is worse than one that
+    // says "prices unknown" — the app falls back to hiding the amount.
+    console.error('premium pricing lookup failed:', error);
+    return null;
+  }
+}
+
+Deno.serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;
 
@@ -24,6 +67,9 @@ Deno.serve((req) => {
       premium: {
         apple_iap_configured: configured.appleIap(),
         bundle_id: optionalEnv('APPLE_BUNDLE_ID') ?? null,
+        // Web subscriptions: same product, no App Store commission.
+        web_configured: configured.webPremium(),
+        web_pricing: await premiumPricing(),
       },
       ai: {
         llm_configured: configured.ai(),

@@ -182,6 +182,25 @@ The SQL suite asserts the things that actually matter:
 
 ---
 
+## Platforms
+
+One codebase, three targets. The web build is a first-class target, not a
+preview — it is the one BLUP launches on, because outside the App Store there
+is no 15–30 % commission on Premium.
+
+```bash
+cd mobile
+npm run web          # dev server in a browser
+npm run build:web    # static export to mobile/dist
+```
+
+Everything native-only has a web sibling resolved by Metro (`*.web.tsx`):
+hosted Stripe Checkout instead of the payment sheet, the browser's
+`BarcodeDetector` instead of expo-camera, an `.ics` download instead of the OS
+calendar. Nothing renders a button that does nothing. See **WEB.md**.
+
+---
+
 ## Repository layout
 
 ```

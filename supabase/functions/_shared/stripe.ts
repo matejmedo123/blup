@@ -78,6 +78,32 @@ export interface StripePaymentIntent {
   metadata: Record<string, string>;
 }
 
+export interface StripeCheckoutSession {
+  id: string;
+  url: string;
+  status: string;
+  payment_status: string;
+  customer: string | null;
+  subscription: string | null;
+  metadata: Record<string, string>;
+}
+
+export interface StripeSubscription {
+  id: string;
+  status: string;
+  customer: string;
+  cancel_at_period_end: boolean;
+  current_period_end: number;
+  start_date: number;
+  items: { data: { price: { id: string; recurring?: { interval: string } } }[] };
+  metadata: Record<string, string>;
+}
+
+export interface StripeCustomer {
+  id: string;
+  email: string | null;
+}
+
 export interface StripeAccount {
   id: string;
   charges_enabled: boolean;
@@ -121,6 +147,117 @@ export const stripe = {
           }
         : {}),
     }, `pi_${params.orderId}`),
+
+  /**
+   * A hosted Checkout session — the web payment path.
+   *
+   * The browser is redirected to Stripe rather than collecting card details in
+   * our own page: it brings Apple Pay, Google Pay, Link and 3-D Secure with it,
+   * and keeps every card number off BLUP's origin entirely. The webhook remains
+   * the only thing that marks anything paid, exactly as on native.
+   */
+  createCheckoutSession: (params: {
+    mode: 'payment' | 'subscription';
+    successUrl: string;
+    cancelUrl: string;
+    customerId?: string | null;
+    customerEmail?: string | null;
+    clientReferenceId?: string;
+    metadata: Record<string, string>;
+    locale?: string;
+    /** mode: 'payment' */
+    amountCents?: number;
+    currency?: string;
+    productName?: string;
+    productDescription?: string;
+    quantity?: number;
+    applicationFeeCents?: number;
+    connectedAccountId?: string | null;
+    /** mode: 'subscription' */
+    priceId?: string;
+    trialDays?: number;
+    idempotencyKey?: string;
+  }) => {
+    const body: Record<string, unknown> = {
+      mode: params.mode,
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      client_reference_id: params.clientReferenceId,
+      metadata: params.metadata,
+      locale: params.locale ?? 'sk',
+      allow_promotion_codes: false,
+    };
+
+    // A returning customer keeps one Stripe customer record, so their cards and
+    // their subscription history stay together instead of forking per purchase.
+    if (params.customerId) body.customer = params.customerId;
+    else if (params.customerEmail) body.customer_email = params.customerEmail;
+
+    if (params.mode === 'payment') {
+      body.line_items = [{
+        quantity: 1,
+        price_data: {
+          currency: (params.currency ?? 'eur').toLowerCase(),
+          unit_amount: params.amountCents,
+          product_data: {
+            name: params.productName ?? 'Blup',
+            description: params.productDescription,
+          },
+        },
+      }];
+      body.payment_intent_data = {
+        metadata: params.metadata,
+        ...(params.connectedAccountId
+          ? {
+              application_fee_amount: params.applicationFeeCents ?? 0,
+              transfer_data: { destination: params.connectedAccountId },
+            }
+          : {}),
+      };
+    } else {
+      body.line_items = [{ price: params.priceId, quantity: 1 }];
+      body.subscription_data = {
+        metadata: params.metadata,
+        ...(params.trialDays ? { trial_period_days: params.trialDays } : {}),
+      };
+      body.customer_update = params.customerId ? { address: 'auto' } : undefined;
+    }
+
+    return stripeRequest<StripeCheckoutSession>(
+      '/checkout/sessions', 'POST', body, params.idempotencyKey,
+    );
+  },
+
+  retrievePrice: (id: string) =>
+    stripeRequest<{
+      id: string;
+      unit_amount: number | null;
+      currency: string;
+      recurring?: { interval: string; interval_count: number } | null;
+    }>(`/prices/${id}`, 'GET'),
+
+  retrieveCheckoutSession: (id: string) =>
+    stripeRequest<StripeCheckoutSession>(`/checkout/sessions/${id}`, 'GET'),
+
+  retrieveSubscription: (id: string) =>
+    stripeRequest<StripeSubscription>(`/subscriptions/${id}`, 'GET'),
+
+  createCustomer: (params: { email?: string | null; userId: string }) =>
+    stripeRequest<StripeCustomer>('/customers', 'POST', {
+      email: params.email ?? undefined,
+      metadata: { blup_user_id: params.userId },
+    }, `cus_${params.userId}`),
+
+  /**
+   * The Stripe-hosted page where a subscriber changes their card or cancels.
+   * Building that ourselves would mean re-implementing dunning, proration and
+   * tax display — and getting any of them subtly wrong.
+   */
+  createBillingPortalSession: (params: { customerId: string; returnUrl: string }) =>
+    stripeRequest<{ id: string; url: string }>('/billing_portal/sessions', 'POST', {
+      customer: params.customerId,
+      return_url: params.returnUrl,
+    }),
 
   /**
    * A boost is bought by BLUP, not by the organizer's connected account — the

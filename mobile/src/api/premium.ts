@@ -153,3 +153,66 @@ export async function restorePurchases(): Promise<PremiumStatus> {
   const receipt = await store.module.getReceiptIOS();
   return verifyAppleReceipt(receipt);
 }
+
+
+// --- web subscriptions -------------------------------------------------------
+
+/**
+ * Premium bought in a browser, told plainly.
+ *
+ * `managed_here` is the honest bit: a subscription bought through the App Store
+ * cannot be cancelled from a web page, and offering a cancel button that does
+ * nothing is worse than offering none.
+ */
+export interface WebPremiumStatus {
+  active: boolean;
+  platform: 'apple' | 'google' | 'stripe' | null;
+  product_id?: string;
+  status?: string;
+  expires_at?: string | null;
+  auto_renew?: boolean;
+  managed_here: boolean;
+  has_stripe_customer: boolean;
+}
+
+export async function getWebPremiumStatus(): Promise<WebPremiumStatus> {
+  const { data, error } = await supabase.rpc('web_premium_status');
+  if (error) throw error;
+  return data as WebPremiumStatus;
+}
+
+export interface WebPlanPrice {
+  amount_cents: number | null;
+  currency: string;
+  interval: string;
+}
+
+export interface WebPremiumPricing {
+  configured: boolean;
+  monthly: WebPlanPrice | null;
+  yearly: WebPlanPrice | null;
+}
+
+/**
+ * The price the web build shows before sending anyone to Checkout.
+ *
+ * Read from the server, which reads it from the same Stripe Price objects the
+ * session is built from — so what someone is quoted is what they are charged.
+ * If Stripe cannot be reached the amount is simply absent, and the screen says
+ * nothing rather than guessing.
+ */
+export async function getWebPremiumPricing(): Promise<WebPremiumPricing> {
+  try {
+    const status = await callFunction<{
+      premium?: { web_configured?: boolean; web_pricing?: { monthly: WebPlanPrice | null; yearly: WebPlanPrice | null } | null };
+    }>('config-status', undefined, { method: 'GET' });
+
+    return {
+      configured: Boolean(status.premium?.web_configured),
+      monthly: status.premium?.web_pricing?.monthly ?? null,
+      yearly: status.premium?.web_pricing?.yearly ?? null,
+    };
+  } catch {
+    return { configured: false, monthly: null, yearly: null };
+  }
+}

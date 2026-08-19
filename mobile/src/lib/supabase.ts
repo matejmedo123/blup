@@ -16,14 +16,35 @@ import { env, isConfigured } from './env';
  * threshold on Android, so AsyncStorage is used. The token is short-lived and
  * scoped by RLS; see SECURITY notes in ARCHITECTURE.md.
  */
+
+/**
+ * The web build pre-renders every route in Node, where there is no `window` and
+ * therefore no storage at all. AsyncStorage reaches for localStorage on web, so
+ * without this the whole export dies on "window is not defined".
+ *
+ * Returning nothing during pre-render is not a workaround, it is correct: a
+ * build machine has no session, and pretending otherwise would bake one
+ * person's logged-in HTML into a file served to everybody. The real session
+ * loads on hydration, in the browser, where storage exists.
+ */
+const isServerRender = typeof window === 'undefined';
+
+const sessionStorage = isServerRender
+  ? {
+      getItem: async () => null,
+      setItem: async () => {},
+      removeItem: async () => {},
+    }
+  : AsyncStorage;
+
 export const supabase: SupabaseClient = createClient(
   env.supabaseUrl || 'http://localhost-not-configured',
   env.supabaseAnonKey || 'not-configured',
   {
     auth: {
-      storage: AsyncStorage,
-      autoRefreshToken: true,
-      persistSession: true,
+      storage: sessionStorage,
+      autoRefreshToken: !isServerRender,
+      persistSession: !isServerRender,
       detectSessionInUrl: false,
       flowType: 'pkce',
     },
@@ -38,7 +59,7 @@ export const supabase: SupabaseClient = createClient(
 
 // Refreshing only matters while the app is visible; stopping in the background
 // avoids pointless network wake-ups and battery drain.
-if (isConfigured.supabase) {
+if (isConfigured.supabase && !isServerRender) {
   AppState.addEventListener('change', (state) => {
     if (state === 'active') {
       void supabase.auth.startAutoRefresh();

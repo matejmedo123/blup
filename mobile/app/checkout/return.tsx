@@ -1,0 +1,106 @@
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+
+import { waitForTickets } from '@/api/tickets';
+import { messageFor } from '@/lib/errors';
+import { Body, Button, Caption, LoadingState, Notice, Screen } from '@/components/ui';
+import { colors, spacing, typography } from '@/theme';
+
+/**
+ * Where Stripe sends the browser back to after a hosted Checkout.
+ *
+ * Landing here does not mean the money moved — Stripe redirects on its own
+ * schedule and the webhook may still be in flight. So this screen does exactly
+ * what the native flow does: waits for the ticket rows the webhook creates, and
+ * says so plainly while it waits.
+ *
+ * Native never reaches this route; it is registered anyway so a link shared
+ * from a browser opens somewhere sensible on a phone.
+ */
+export default function CheckoutReturnScreen() {
+  const { order } = useLocalSearchParams<{ order?: string }>();
+  const [state, setState] = useState<'waiting' | 'done' | 'pending' | 'failed'>('waiting');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!order) {
+      setState('pending');
+      return;
+    }
+
+    void (async () => {
+      try {
+        const result = await waitForTickets(order, { attempts: 20, intervalMs: 1200 });
+        if (cancelled) return;
+        setState(result.status === 'succeeded' ? 'done' : result.status === 'failed' ? 'failed' : 'pending');
+      } catch (caught) {
+        if (cancelled) return;
+        setError(messageFor(caught));
+        setState('pending');
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [order]);
+
+  if (state === 'waiting') {
+    return (
+      <Screen>
+        <LoadingState label="Potvrdzujem platbu s bankou…" />
+        <Caption style={styles.hint}>
+          Vstupenku vydáme, až keď platbu potvrdí banka. Toto je tá poctivá časť — trvá pár sekúnd.
+          Stránku môžeš pokojne nechať otvorenú.
+        </Caption>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen scroll>
+      <View style={styles.wrap}>
+        {state === 'done' ? (
+          <>
+            <Text style={styles.emoji}>🎫</Text>
+            <Text style={styles.title}>Si dnu</Text>
+            <Body muted style={styles.body}>
+              Vstupenka je potvrdená. Nájdeš ju tu aj v e-maile ako PDF s QR kódom — pri vstupe stačí
+              ukázať ktorýkoľvek z nich.
+            </Body>
+            <Button title="Zobraziť vstupenku" onPress={() => router.replace('/tickets')} />
+          </>
+        ) : state === 'failed' ? (
+          <>
+            <Text style={styles.emoji}>✕</Text>
+            <Text style={styles.title}>Platba neprešla</Text>
+            <Body muted style={styles.body}>
+              Nič sme ti nestrhli. Skús to znova, prípadne inou kartou.
+            </Body>
+            <Button title="Späť na eventy" variant="secondary" onPress={() => router.replace('/')} />
+          </>
+        ) : (
+          <>
+            <Text style={styles.emoji}>⏳</Text>
+            <Text style={styles.title}>Ešte to potvrdzujeme</Text>
+            <Body muted style={styles.body}>
+              Banka nám to zatiaľ nepotvrdila. Ak peniaze odišli, vstupenka sa objaví v sekcii
+              Moje vstupenky a príde ti aj e-mailom — netreba platiť znova.
+            </Body>
+            {error ? <Notice tone="warning" title="Detail" body={error} /> : null}
+            <Button title="Moje vstupenky" onPress={() => router.replace('/tickets')} />
+          </>
+        )}
+      </View>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.xxxl },
+  emoji: { fontSize: 56 },
+  title: { ...typography.title, color: colors.text, textAlign: 'center' },
+  body: { textAlign: 'center', marginBottom: spacing.lg },
+  hint: { textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xxl },
+});

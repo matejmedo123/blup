@@ -11,8 +11,60 @@
  * The signature check below is what authenticates the request.
  */
 import { adminClient, errorResponse, json } from '../_shared/http.ts';
-import { verifyStripeSignature } from '../_shared/stripe.ts';
+import { stripe, verifyStripeSignature } from '../_shared/stripe.ts';
 import { env } from '../_shared/env.ts';
+
+/**
+ * Writes a Stripe subscription into premium_subscriptions.
+ *
+ * Both platforms land in the same table, keyed by (platform, original
+ * transaction) — so an Apple subscription and a Stripe one are two rows and
+ * is_premium() sees whichever is still active. Nobody is charged twice, and
+ * somebody who subscribes on the web keeps Premium when they install the app.
+ *
+ * `cancel_at_period_end` is deliberately still `active`: the person paid for
+ * the rest of the period and should keep what they paid for until it runs out.
+ */
+async function syncSubscription(
+  db: ReturnType<typeof adminClient>,
+  subscriptionId: string,
+  userId: string,
+  known?: Record<string, unknown>,
+): Promise<void> {
+  const subscription = known?.id === subscriptionId
+    ? (known as unknown as Awaited<ReturnType<typeof stripe.retrieveSubscription>>)
+    : await stripe.retrieveSubscription(subscriptionId);
+
+  const STATUS: Record<string, string> = {
+    active: 'active',
+    trialing: 'trialing',
+    past_due: 'grace_period',
+    unpaid: 'grace_period',
+    incomplete: 'grace_period',
+    canceled: 'cancelled',
+    incomplete_expired: 'expired',
+    paused: 'expired',
+  };
+
+  const priceId = subscription.items?.data?.[0]?.price?.id ?? 'premium';
+  const periodEnd = Number(subscription.current_period_end ?? 0);
+
+  const { error } = await db.rpc('upsert_premium_subscription', {
+    p_user_id: userId,
+    p_platform: 'stripe',
+    p_product_id: priceId,
+    p_status: STATUS[subscription.status] ?? 'expired',
+    p_original_tx: subscription.id,
+    p_latest_tx: subscription.id,
+    p_purchased_at: new Date(Number(subscription.start_date ?? 0) * 1000).toISOString(),
+    p_expires_at: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+    p_auto_renew: !subscription.cancel_at_period_end,
+    p_environment: 'production',
+    p_raw: subscription as unknown as Record<string, unknown>,
+  });
+
+  if (error) throw error;
+}
 
 /**
  * Fire-and-forget call to the ticket-email function. Failure here is not
@@ -119,6 +171,44 @@ Deno.serve(async (req) => {
           p_order_id: orderId,
           p_reason: failure.message ?? event.type,
         });
+        break;
+      }
+
+      // --- web subscriptions (Premium sold outside the App Store) ----------
+      // A Checkout session in payment mode also fires payment_intent.succeeded,
+      // which the case above already handles; only the subscription mode needs
+      // anything here.
+      case 'checkout.session.completed': {
+        if (object.mode !== 'subscription') break;
+
+        const subscriptionId = String(object.subscription ?? '');
+        const customerId = String(object.customer ?? '');
+        if (!subscriptionId || !customerId) break;
+
+        // The session's client_reference_id is the user id we set when the
+        // session was created; the customer mapping is the fallback for a
+        // subscription that was changed from Stripe's own dashboard.
+        const userId = String(object.client_reference_id ?? '') ||
+          (await db.rpc('user_for_stripe_customer', { p_customer: customerId })).data;
+        if (!userId) break;
+
+        await db.rpc('link_stripe_customer', { p_user_id: userId, p_customer: customerId });
+        await syncSubscription(db, subscriptionId, String(userId));
+        break;
+      }
+
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted': {
+        const customerId = String(object.customer ?? '');
+        if (!customerId) break;
+
+        const metadataUser = metadata.user_id;
+        const { data: mappedUser } = await db.rpc('user_for_stripe_customer', { p_customer: customerId });
+        const userId = metadataUser || mappedUser;
+        if (!userId) break;
+
+        await syncSubscription(db, String(object.id), String(userId), object);
         break;
       }
 

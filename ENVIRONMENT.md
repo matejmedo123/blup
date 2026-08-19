@@ -122,3 +122,17 @@ well as from the webhook, so a provider outage recovers on its own:
 ```
 */5 * * * *  POST /functions/v1/ticket-email   { "limit": 50 }
 ```
+
+## Web (Stripe subscriptions, no App Store commission)
+
+| Variable | Where | What it is |
+|---|---|---|
+| `STRIPE_PRICE_PREMIUM_MONTHLY` | server | Stripe Price id for monthly Premium on the web |
+| `STRIPE_PRICE_PREMIUM_YEARLY` | server | Stripe Price id for yearly Premium on the web |
+| `APP_PUBLIC_URL` | server | Origin Checkout returns to. Return paths are validated against it — an unvalidated redirect after a payment is a phishing kit. |
+| `EXPO_PUBLIC_WEB_URL` | client | Origin used in share cards (`og:url`, `og:image`) |
+
+The web build needs **no** `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` — the Checkout
+URL is issued by the server, so the browser never holds a Stripe key.
+
+See WEB.md for the full web story.

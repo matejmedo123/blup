@@ -34,12 +34,17 @@ export default function TabsLayout() {
           backgroundColor: Platform.OS === 'web' ? colors.background : 'rgba(10, 13, 18, 0.92)',
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 88,
+          height: Platform.OS === 'web' ? 64 : 88,
           paddingTop: 8,
           paddingHorizontal: 8,
-          paddingBottom: 26,
+          // A phone needs room for the home indicator; a browser does not.
+          paddingBottom: Platform.OS === 'web' ? 8 : 26,
           elevation: 0,
         },
+        // Keep the bar readable on a wide screen: five icons stretched across a
+        // desktop monitor look like a mistake, so each item keeps a phone-sized
+        // width and the row centres itself.
+        tabBarItemStyle: Platform.OS === 'web' ? { maxWidth: 152 } : undefined,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textQuaternary,
         tabBarLabelStyle: {

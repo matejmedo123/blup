@@ -32,6 +32,7 @@ FUNCTIONS=(
   "payout-request:true"
   "accounting-export:true"
   "ticket-email:true"
+  "web-checkout:true"
   "iap-apple-verify:true"
   "ai-recommendations:true"
   "stripe-webhook:false"

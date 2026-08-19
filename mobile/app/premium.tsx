@@ -3,8 +3,12 @@ import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  getPremiumStatus, getStore, PREMIUM_FEATURES, purchasePremium, restorePurchases,
+  getPremiumStatus, getStore, getWebPremiumPricing, getWebPremiumStatus, PREMIUM_FEATURES,
+  purchasePremium, restorePurchases,
 } from '@/api/premium';
+import {
+  canManageBilling, openBillingPortal, subscribePremium,
+} from '@/payments/checkout';
 import { messageFor } from '@/lib/errors';
 import {
   Badge, Body, Button, Caption, Divider, LoadingState, Notice, Screen, SectionHeader,
@@ -14,28 +18,81 @@ import { colors, radius, spacing, typography } from '@/theme';
 /**
  * Premium.
  *
- * On iOS this must go through StoreKit (Apple's rules for digital goods), so the
- * purchase button drives the native store and the receipt is verified by the
- * backend before anything unlocks. When the native module is absent the screen
- * says exactly that instead of showing a button that does nothing.
+ * On iOS this must go through StoreKit — Apple's rules for digital goods — so
+ * the purchase button drives the native store and the receipt is verified by
+ * the backend before anything unlocks.
+ *
+ * In a browser there is no such rule and no 15–30 % commission, so the same
+ * subscription is sold through Stripe at the same shelf price. Both write to
+ * one table, so somebody who subscribes on the web keeps Premium when they
+ * later install the app — and is never charged twice.
  */
+/**
+ * The amount, formatted — or nothing at all.
+ *
+ * Showing a guessed price next to a subscribe button is worse than showing
+ * none: whatever appears here is what the card is charged, so it comes from
+ * the server or it does not appear.
+ */
+function priceLabel(price?: { amount_cents: number | null; currency: string } | null): string | null {
+  if (!price || price.amount_cents == null) return null;
+  return new Intl.NumberFormat('sk-SK', {
+    style: 'currency',
+    currency: price.currency || 'EUR',
+  }).format(price.amount_cents / 100);
+}
+
 export default function PremiumScreen() {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const status = useQuery({ queryKey: ['premium', 'status'], queryFn: getPremiumStatus });
+  const web = useQuery({
+    queryKey: ['premium', 'web-status'],
+    queryFn: getWebPremiumStatus,
+    enabled: canManageBilling,
+  });
+  const pricing = useQuery({
+    queryKey: ['premium', 'web-pricing'],
+    queryFn: getWebPremiumPricing,
+    enabled: canManageBilling,
+    staleTime: 10 * 60 * 1000,
+  });
   const store = getStore();
+
+  // In a browser the store is Stripe, not Apple; the native-store warning below
+  // would be both wrong and confusing there.
+  const canBuy = canManageBilling ? true : store.available;
 
   const buy = async (plan: 'monthly' | 'yearly') => {
     setError(null);
     setBusy(plan);
     try {
+      if (canManageBilling) {
+        // Web: hand off to Stripe. The browser navigates away, so there is
+        // nothing to invalidate here — the subscription is written by the
+        // webhook and read fresh when the user comes back.
+        await subscribePremium(plan);
+        return;
+      }
       await purchasePremium(plan);
       await queryClient.invalidateQueries({ queryKey: ['premium'] });
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Stripe's own page for changing a card or cancelling. */
+  const manage = async () => {
+    setError(null);
+    setBusy('portal');
+    try {
+      await openBillingPortal();
+    } catch (caught) {
+      setError(messageFor(caught));
       setBusy(null);
     }
   };
@@ -92,7 +149,7 @@ export default function PremiumScreen() {
 
       <Divider />
 
-      {!store.available ? (
+      {!canManageBilling && !store.available ? (
         <Notice
           tone="warning"
           title={
@@ -109,12 +166,15 @@ export default function PremiumScreen() {
           <View style={styles.plans}>
             <View style={styles.plan}>
               <Text style={styles.planName}>Mesačne</Text>
+              {priceLabel(pricing.data?.monthly) ? (
+                <Text style={styles.planPrice}>{priceLabel(pricing.data?.monthly)}</Text>
+              ) : null}
               <Caption>Zrušíš kedykoľvek</Caption>
               <Button
                 title="Predplatiť"
                 onPress={() => buy('monthly')}
                 loading={busy === 'monthly'}
-                disabled={!store.available || busy !== null}
+                disabled={!canBuy || busy !== null}
                 style={styles.planButton}
               />
             </View>
@@ -122,29 +182,60 @@ export default function PremiumScreen() {
             <View style={[styles.plan, styles.planFeatured]}>
               <Badge tone="accent" label="NAJVÝHODNEJŠIE" />
               <Text style={styles.planName}>Ročne</Text>
+              {priceLabel(pricing.data?.yearly) ? (
+                <Text style={styles.planPrice}>{priceLabel(pricing.data?.yearly)}</Text>
+              ) : null}
               <Caption>Dva mesiace zadarmo</Caption>
               <Button
                 title="Predplatiť"
                 onPress={() => buy('yearly')}
                 loading={busy === 'yearly'}
-                disabled={!store.available || busy !== null}
+                disabled={!canBuy || busy !== null}
                 style={styles.planButton}
               />
             </View>
           </View>
 
-          <Button
-            title="Obnoviť nákupy"
-            variant="ghost"
-            onPress={restore}
-            loading={busy === 'restore'}
-            disabled={!store.available}
-          />
+          {canManageBilling ? (
+            <Caption style={styles.legal}>
+              Platba prebehne na zabezpečenej stránke Stripe. Zrušiť sa dá kedykoľvek — Premium ti
+              beží do konca zaplateného obdobia.
+            </Caption>
+          ) : (
+            <Button
+              title="Obnoviť nákupy"
+              variant="ghost"
+              onPress={restore}
+              loading={busy === 'restore'}
+              disabled={!store.available}
+            />
+          )}
         </>
       ) : null}
 
+      {/* Managing an existing subscription — only where it was actually bought. */}
+      {isPremium && canManageBilling ? (
+        web.data?.managed_here ? (
+          <Button
+            title="Spravovať predplatné"
+            variant="secondary"
+            loading={busy === 'portal'}
+            onPress={() => void manage()}
+          />
+        ) : (
+          <Notice
+            tone="accent"
+            title="Predplatné máš z App Store"
+            body="Zmeniť kartu alebo zrušiť sa dá len tam: Nastavenia → Apple ID → Predplatné. Odtiaľto do toho nevidíme."
+          />
+        )
+      ) : null}
+
       <Caption style={styles.legal}>
-        {Platform.OS === 'ios'
+        {canManageBilling
+          ? 'Účtuje sa cez Stripe. Faktúry, zmena karty aj zrušenie sú v „Spravovať predplatné“. ' +
+            'Premium sa odomkne, až keď platbu potvrdí banka.'
+          : Platform.OS === 'ios'
           ? 'Účtuje sa cez tvoje Apple ID. Spravuješ alebo rušíš v Nastavenia → Apple ID → Predplatné. ' +
             'Každý nákup overujeme u Apple na našich serveroch, až potom sa Premium odomkne.'
           : 'Účtuje sa cez Google Play. Spravuješ alebo rušíš v Play Store. ' +
@@ -175,6 +266,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   planFeatured: { borderColor: colors.accent },
+  planPrice: { ...typography.heading, color: colors.text },
   planName: { ...typography.subheading, color: colors.text },
   planButton: { marginTop: spacing.md },
 

@@ -6,11 +6,13 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getEvent } from '@/api/events';
 import {
-  createCheckout, markTicketPurchaseSignal, previewPromoCode, quoteOrder, waitForTickets,
-  type PromoPreview,
+  markTicketPurchaseSignal, previewPromoCode, quoteOrder, type PromoPreview,
 } from '@/api/tickets';
 import { isConfigured } from '@/lib/env';
-import { isStripeModuleAvailable, STRIPE_UNAVAILABLE_MESSAGE, useStripeBridge } from '@/payments/stripe';
+import { useStripeBridge } from '@/payments/stripe';
+import {
+  canTakePayment, payForTickets, requiresPublishableKey, unavailableMessage,
+} from '@/payments/checkout';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatPrice } from '@/lib/format';
 import {
@@ -97,49 +99,29 @@ export default function CheckoutScreen() {
     setStage('paying');
 
     try {
-      // 1. server computes amounts + creates the order
-      const session = await createCheckout(selected.id, quantity, promo?.valid ? promoCode : null);
-      setOrderId(session.order_id);
+      // The platform decides *where* the card is typed — the payment sheet on a
+      // phone, Stripe's hosted page in a browser. Neither decides what anything
+      // costs, and neither marks the order paid.
+      const result = await payForTickets(
+        selected.id,
+        quantity,
+        promo?.valid ? promoCode : null,
+        {
+          initPaymentSheet,
+          presentPaymentSheet,
+          merchantName: event.data?.organization?.name ?? 'BLUP',
+        },
+      );
 
-      // Free tickets skip the payment provider entirely.
-      if (!session.requires_payment) {
-        setStage('done');
-        void markTicketPurchaseSignal(id!);
+      if (result.orderId) setOrderId(result.orderId);
+
+      // On web the browser is already navigating to Stripe; leave the screen in
+      // its paying state rather than flashing a result nobody will read.
+      if (result.status === 'redirecting') return;
+
+      if (result.status === 'cancelled') {
+        setStage('select');
         return;
-      }
-
-      if (!session.payment_intent_client_secret) {
-        throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
-      }
-
-      // 2. native payment sheet (card, Apple Pay, Google Pay)
-      const { error: initError } = await initPaymentSheet({
-        merchantDisplayName: event.data?.organization?.name ?? 'BLUP',
-        paymentIntentClientSecret: session.payment_intent_client_secret,
-        applePay: { merchantCountryCode: 'SK' },
-        googlePay: { merchantCountryCode: 'SK', testEnv: __DEV__ },
-        returnURL: 'blup://stripe-redirect',
-        allowsDelayedPaymentMethods: false,
-      });
-
-      if (initError) throw new Error(initError.message);
-
-      const { error: sheetError } = await presentPaymentSheet();
-
-      if (sheetError) {
-        if (sheetError.code === 'Canceled') {
-          setStage('select');
-          return;
-        }
-        throw new Error(sheetError.message);
-      }
-
-      // 3. the webhook is the source of truth — wait for the ticket to exist
-      setStage('confirming');
-      const result = await waitForTickets(session.order_id);
-
-      if (result.status === 'failed') {
-        throw new Error('Platba neprešla. Nič sme ti nestrhli.');
       }
 
       void markTicketPurchaseSignal(id!);
@@ -221,13 +203,13 @@ export default function CheckoutScreen() {
 
       {error ? <Notice tone="danger" title="Problém s platbou" body={error} /> : null}
 
-      {!isStripeModuleAvailable ? (
+      {!canTakePayment() ? (
         <Notice
           tone="warning"
           title="Platby kartou potrebujú development build"
-          body={STRIPE_UNAVAILABLE_MESSAGE}
+          body={unavailableMessage}
         />
-      ) : !isConfigured.stripe ? (
+      ) : requiresPublishableKey && !isConfigured.stripe ? (
         <Notice
           tone="warning"
           title="Platby nie sú nakonfigurované"
@@ -372,7 +354,10 @@ export default function CheckoutScreen() {
           title={payable === 0 ? 'Získať vstupenku' : `Zaplatiť ${formatMoney(payable, currency)}`}
           onPress={pay}
           loading={stage === 'paying'}
-          disabled={!selected || (payable > 0 && (!isConfigured.stripe || !isStripeModuleAvailable))}
+          disabled={
+            !selected ||
+            (payable > 0 && (!canTakePayment() || (requiresPublishableKey && !isConfigured.stripe)))
+          }
           style={styles.payButton}
         />
 

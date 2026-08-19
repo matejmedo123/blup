@@ -80,10 +80,32 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         ]
       : undefined,
   },
-  // The web build is a convenience target: it runs the whole app in a browser
-  // so it can be tried without a device. react-native-maps and the payment
-  // SDKs are native-only, and those screens say so explicitly on web.
-  web: { bundler: 'metro', output: 'single', favicon: './assets/favicon.png' },
+  /**
+   * The web build is a first-class target, not a preview — it is the one BLUP
+   * launches on, because outside the App Store there is no 15–30 % commission
+   * on Premium.
+   *
+   * Everything native-only has a web sibling: hosted Stripe Checkout instead of
+   * the payment sheet, the browser's BarcodeDetector instead of expo-camera,
+   * an .ics download instead of the OS calendar, a Blob download instead of the
+   * share sheet. Nothing renders a button that does nothing.
+   */
+  web: {
+    bundler: 'metro',
+    // 'static' rather than 'single': every route is pre-rendered to its own
+    // HTML file, so an event link pasted into a chat shows a real card and a
+    // search engine sees a page instead of an empty <div>. The app still
+    // hydrates into the same SPA afterwards.
+    output: 'static',
+    favicon: './assets/favicon.png',
+    name: 'Blup — eventy okolo teba',
+    shortName: 'Blup',
+    lang: 'sk',
+    themeColor: '#0A0D12',
+    backgroundColor: '#0A0D12',
+    description:
+      'Nájdi, čo sa dnes deje okolo teba, kúp si lístok na jednom mieste a choď tam s ľuďmi, ktorých poznáš.',
+  },
   plugins: [
     'expo-router',
     [

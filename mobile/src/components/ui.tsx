@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
   type TextInputProps, type ViewStyle, type StyleProp, type TextStyle,
   type ScrollViewProps,
 } from 'react-native';
@@ -29,7 +29,11 @@ export function Screen({
   const body = scroll ? (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[{ padding: spacing.lg, paddingBottom: spacing.xxxl }, contentStyle]}
+      contentContainerStyle={[
+        { padding: spacing.lg, paddingBottom: spacing.xxxl },
+        styles.webColumn,
+        contentStyle,
+      ]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}
@@ -37,7 +41,7 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.flex, contentStyle]}>{children}</View>
+    <View style={[styles.flex, styles.webColumn, contentStyle]}>{children}</View>
   );
 
   return <SafeAreaView style={[styles.screen, style]} edges={edges}>{body}</SafeAreaView>;
@@ -536,7 +540,18 @@ export function Switch({
   );
 }
 
+/**
+ * On a phone the layout *is* the window. In a desktop browser it is not, and a
+ * 1900-pixel-wide column of phone UI reads as broken rather than spacious — so
+ * the web build keeps the same column and centres it. One rule here rather than
+ * a breakpoint in every screen.
+ */
+const WEB_MAX_WIDTH = 760;
+
 const styles = StyleSheet.create({
+  webColumn: Platform.OS === 'web'
+    ? { width: '100%', maxWidth: WEB_MAX_WIDTH, marginHorizontal: 'auto' }
+    : {},
   flex: { flex: 1 },
   screen: { flex: 1, backgroundColor: colors.background },
 
