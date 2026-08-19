@@ -126,12 +126,14 @@ export const fontFamily = {
   medium: 'Nunito_600SemiBold',
   bold: 'Nunito_700Bold',
   black: 'Nunito_800ExtraBold',
+  /** The logo weight. Heavier than the display face, used only by the wordmark. */
+  logo: 'Nunito_900Black',
   mono: 'JetBrainsMono_400Regular',
   monoBold: 'JetBrainsMono_700Bold',
 } as const;
 
 export const typography = {
-  logo: { fontFamily: fontFamily.black, fontSize: 34, letterSpacing: -1 },
+  logo: { fontFamily: fontFamily.logo, fontSize: 34, letterSpacing: -1.6 },
   display: { fontFamily: fontFamily.black, fontSize: 34, letterSpacing: -0.8, lineHeight: 40 },
   title: { fontFamily: fontFamily.black, fontSize: 28, letterSpacing: -0.6, lineHeight: 34 },
   heading: { fontFamily: fontFamily.bold, fontSize: 21, letterSpacing: -0.3, lineHeight: 27 },

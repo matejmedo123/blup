@@ -49,7 +49,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: process.env.EXPO_PUBLIC_ANDROID_PACKAGE ?? 'com.blup.app',
     adaptiveIcon: {
-      backgroundColor: '#07070A',
+      backgroundColor: '#2B6BFF',
       foregroundImage: './assets/android-icon-foreground.png',
       backgroundImage: './assets/android-icon-background.png',
       monochromeImage: './assets/android-icon-monochrome.png',
@@ -91,7 +91,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         image: './assets/splash-icon.png',
         resizeMode: 'contain',
-        backgroundColor: '#07070A',
+        backgroundColor: '#08090D',
       },
     ],
     'expo-secure-store',

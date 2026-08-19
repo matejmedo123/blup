@@ -1,26 +1,91 @@
 import React from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { BlupMark } from './BlupMark';
 import { colors, heroGradient, spacing, typography } from '@/theme';
 
 /**
- * The BLUP wordmark: "Blup" in extra-bold with the dot in accent blue.
- * One component so the logo is identical on every screen that shows it.
+ * The BLUP logo.
+ *
+ * A wordmark, exactly as supplied: "Blup." set in a heavy rounded face with the
+ * full stop in the same colour as the letters. No icon, no coloured dot — the
+ * period is part of the word, not decoration.
+ *
+ * `color` overrides the ink so the same component works on a dark screen, on a
+ * gradient, and inverted on a light surface.
  */
 export function Wordmark({
-  size = 48, style, withMark = true,
+  size = 48,
+  color = colors.text,
+  style,
+  textStyle,
 }: {
   size?: number;
+  color?: string;
   style?: StyleProp<ViewStyle>;
-  withMark?: boolean;
+  textStyle?: StyleProp<TextStyle>;
 }) {
   return (
     <View style={[styles.row, style]}>
-      {withMark ? <BlupMark size={size * 0.95} style={styles.mark} /> : null}
-      <Text style={[styles.word, { fontSize: size, lineHeight: size * 1.15 }]}>Blup</Text>
-      <Text style={[styles.dot, { fontSize: size, lineHeight: size * 1.15 }]}>.</Text>
+      <Text
+        accessibilityRole="header"
+        accessibilityLabel="Blup"
+        style={[
+          styles.word,
+          {
+            fontSize: size,
+            lineHeight: size * 1.18,
+            // Tracking has to tighten as the mark grows or the letters drift
+            // apart from the reference at large sizes.
+            letterSpacing: -size * 0.045,
+            color,
+          },
+          textStyle,
+        ]}
+      >
+        Blup.
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * The square lockup for places a wordmark does not fit — the app icon, an
+ * avatar-sized slot. It is the same face and the same period, cropped to the
+ * initial; a derivation of the wordmark rather than a second logo.
+ */
+export function BlupMonogram({
+  size = 48,
+  color = '#FFFFFF',
+  background = colors.accent,
+  style,
+}: {
+  size?: number;
+  color?: string;
+  background?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View
+      style={[
+        styles.monogram,
+        { width: size, height: size, borderRadius: size * 0.28, backgroundColor: background },
+        style,
+      ]}
+    >
+      <Text
+        style={[
+          styles.word,
+          {
+            fontSize: size * 0.58,
+            lineHeight: size * 0.7,
+            letterSpacing: -size * 0.03,
+            color,
+          },
+        ]}
+      >
+        B.
+      </Text>
     </View>
   );
 }
@@ -45,9 +110,9 @@ export function Tagline({ children }: { children: React.ReactNode }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-end' },
-  mark: { marginRight: 8, marginBottom: 2 },
-  word: { ...typography.logo, color: colors.text },
-  dot: { ...typography.logo, color: colors.accent },
+  word: { ...typography.logo },
+
+  monogram: { alignItems: 'center', justifyContent: 'center' },
 
   hero: { flex: 1 },
   bloom: {
