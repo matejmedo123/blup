@@ -2,6 +2,10 @@
 
 From a clone to an app on a phone, then to the stores.
 
+> **Launching the web version?** Follow **[SPUSTENIE.md](SPUSTENIE.md)** instead
+> — it is the step-by-step for the browser launch, in Slovak, and it is the one
+> that is kept current. This file covers the native builds and the stores.
+
 ---
 
 ## 1. Backend
@@ -14,7 +18,7 @@ npx supabase link --project-ref <your-project-ref>
 
 npx supabase db push                              # migrations
 npx supabase secrets set --env-file supabase/.env # server secrets
-./scripts/deploy-functions.sh                     # all 9 Edge Functions
+./scripts/deploy-functions.sh                     # all 16 Edge Functions
 ```
 
 The deploy script uses `--no-verify-jwt` for `stripe-webhook`,

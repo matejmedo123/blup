@@ -1,5 +1,8 @@
 # BLUP
 
+> **Nasadzuješ to na web?** Celý postup krok za krokom je v
+> **[SPUSTENIE.md](SPUSTENIE.md)**.
+
 **What's your next Blup?**
 
 A geolocated event discovery platform: see what is happening around you right now,
