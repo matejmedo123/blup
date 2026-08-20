@@ -3,7 +3,9 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { getMyTickets } from '@/api/tickets';
+import { SignInInvite } from '@/components/SignInInvite';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatPrice } from '@/lib/format';
 import { ticketStatusLabel } from '@/lib/labels';
@@ -19,10 +21,25 @@ const TONE: Record<TicketStatus, 'success' | 'neutral' | 'danger' | 'warning'> =
 };
 
 export default function TicketsScreen() {
+  const { isGuest } = useAuth();
+
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['tickets', 'mine'],
     queryFn: getMyTickets,
+    enabled: !isGuest,
   });
+
+  // "Zatiaľ žiadne vstupenky" would suggest the tickets are somewhere else in
+  // this account. There is no account.
+  if (isGuest) {
+    return (
+      <SignInInvite
+        glyph="🎫"
+        title="Vstupenky nájdeš po prihlásení"
+        body="Kúpené vstupenky sa viažu na účet — nájdeš ich tu aj v e-maile, a QR kód funguje aj bez signálu."
+      />
+    );
+  }
 
   if (isLoading) return <Screen><LoadingState label="Načítavam tvoje vstupenky…" /></Screen>;
 

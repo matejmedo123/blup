@@ -1,9 +1,33 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 
+import { useAuth } from '@/auth/AuthProvider';
+import { SignInInvite } from '@/components/SignInInvite';
 import { colors } from '@/theme';
 
 export default function OrganizerLayout() {
+  const { isGuest, initializing } = useAuth();
+
+  if (initializing) return null;
+
+  // A dashboard of zeroes reads as "you have an organizer account and it is
+  // empty", which is not true of somebody who has no account at all.
+  if (isGuest) {
+    return (
+      <SignInInvite
+        glyph="◆"
+        title="Organizátor potrebuje účet"
+        body="Vytvor si účet a za pár minút máš event vonku — aj s predajom vstupeniek."
+        perks={[
+          'Vytvor event a zverejni ho na mape',
+          'Predávaj vstupenky s 4 % províziou a 1 € archívnym poplatkom',
+          'Sleduj predaj v čase, odbavuj ľudí QR skenerom',
+          'Výplaty na účet a export pre účtovníka',
+        ]}
+      />
+    );
+  }
+
   return (
     <Stack
       screenOptions={{

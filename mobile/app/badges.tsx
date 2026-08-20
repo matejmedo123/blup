@@ -3,7 +3,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { getBadgeProgress, getGamification, levelProgress, levelTitle, xpToNextLevel } from '@/api/gamification';
+import { SignInInvite } from '@/components/SignInInvite';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 import { Body, ErrorState, LoadingState, Mono, Screen, SectionHeader } from '@/components/ui';
@@ -22,8 +24,30 @@ const METRIC_LABEL: Record<string, string> = {
 
 /** Odznaky — the whole catalogue, with what you have and what is still ahead. */
 export default function BadgesScreen() {
-  const state = useQuery({ queryKey: ['gamification', 'me'], queryFn: () => getGamification() });
-  const badges = useQuery({ queryKey: ['badges', 'progress'], queryFn: getBadgeProgress });
+  const { isGuest } = useAuth();
+
+  const state = useQuery({
+    queryKey: ['gamification', 'me'],
+    queryFn: () => getGamification(),
+    enabled: !isGuest,
+  });
+  const badges = useQuery({
+    queryKey: ['badges', 'progress'],
+    queryFn: getBadgeProgress,
+    enabled: !isGuest,
+  });
+
+  // Without this a guest is told their session expired, which is a confusing
+  // way to say "you never had one".
+  if (isGuest) {
+    return (
+      <SignInInvite
+        glyph="🏅"
+        title="Odznaky sa zbierajú na účet"
+        body="Séria dní, levely a odznaky rátajú, kde si naozaj bol. Bez účtu ich niet kam zapísať."
+      />
+    );
+  }
 
   if (state.isLoading || badges.isLoading) return <Screen><LoadingState /></Screen>;
 

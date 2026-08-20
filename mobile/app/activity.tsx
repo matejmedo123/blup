@@ -3,7 +3,9 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { getNotifications, markAllRead } from '@/api/notifications';
+import { SignInInvite } from '@/components/SignInInvite';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
@@ -42,10 +44,12 @@ const ICONS: Record<NotificationType, string> = {
 
 export default function ActivityScreen() {
   const queryClient = useQueryClient();
+  const { isGuest } = useAuth();
 
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['notifications', 'list'],
     queryFn: () => getNotifications(80),
+    enabled: !isGuest,
   });
 
   useEffect(() => {
@@ -110,6 +114,18 @@ export default function ActivityScreen() {
 
   const items = data ?? [];
   const hotId = items.find((notification) => !notification.read_at)?.id;
+
+  // Notifications are about things that happened to *you*. A guest has none —
+  // and "Zatiaľ nič" would imply they might, later, without signing up.
+  if (isGuest) {
+    return (
+      <SignInInvite
+        glyph="🔔"
+        title="Notifikácie sú pre prihlásených"
+        body="Potvrdené vstupenky, pripomienky eventov, nové sledovania a odznaky chodia na účet."
+      />
+    );
+  }
 
   return (
     <Screen contentStyle={styles.container}>

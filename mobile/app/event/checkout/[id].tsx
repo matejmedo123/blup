@@ -8,6 +8,7 @@ import { getEvent } from '@/api/events';
 import {
   markTicketPurchaseSignal, previewPromoCode, quoteOrder, type PromoPreview,
 } from '@/api/tickets';
+import { useRequireAuth } from '@/auth/useRequireAuth';
 import { isConfigured } from '@/lib/env';
 import { useStripeBridge } from '@/payments/stripe';
 import {
@@ -45,6 +46,7 @@ function promoReason(reason?: string): string {
  */
 export default function CheckoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { requireAuth } = useRequireAuth();
   const { initPaymentSheet, presentPaymentSheet } = useStripeBridge();
 
   const [ticketTypeId, setTicketTypeId] = useState<string | null>(null);
@@ -94,6 +96,13 @@ export default function CheckoutScreen() {
 
   const pay = async () => {
     if (!selected) return;
+
+    // A guest may look at the prices — that is part of deciding to come. The
+    // account is asked for here, at the last step, where it is actually needed:
+    // a ticket has to belong to somebody.
+    if (!requireAuth('Vstupenka musí patriť účtu — pošleme ti ju e-mailom aj do appky.', () => {})) {
+      return;
+    }
 
     setError(null);
     setStage('paying');
