@@ -217,7 +217,7 @@ export default function PremiumScreen() {
       {isPremium && canManageBilling ? (
         web.data?.managed_here ? (
           <Button
-            title="Spravovať predplatné"
+            title="Predplatné"
             variant="secondary"
             loading={busy === 'portal'}
             onPress={() => void manage()}

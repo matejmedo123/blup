@@ -347,3 +347,44 @@ Retries back off 2/4/8/16 minutes and stop after five attempts, so a permanently
 bad address stops burning quota. A deployment with no `RESEND_API_KEY` records
 deliveries as `skipped` rather than failing them — an integration that has not
 been wired up is not an error to retry.
+
+
+---
+
+## Baskets
+
+One order has always meant one ticket type. A basket needs several, and still
+one payment, so `checkouts` was added as the payment envelope:
+
+```
+cart_items  --create_checkout-->  checkout ── order (Early bird x2)
+                                          └── order (Standard  x3)
+                                   one Stripe Checkout session
+                                          |
+                              webhook -> fulfill_checkout()
+                                          |
+                              fulfill_order() per order, as before
+```
+
+Nothing about the money model changed. Each order keeps its own commission,
+archive fee and ledger entries, so accounting, refunds, analytics and the CSV
+export all work with no idea that a basket existed. The single-line native path
+is untouched — those orders simply have `checkout_id` null.
+
+Details worth knowing:
+
+* **Reservations hold stock.** `held_quantity()` counts live basket lines plus
+  orders that are `processing` or not-yet-expired `requires_payment`. An order
+  that never reached a provider expires with the basket it came from; one that is
+  `processing` is left alone, because its fate belongs to the webhook and not to
+  a timer.
+* **20 tickets per order.** In `platform_settings`, enforced in `cart_add` and
+  again in `create_order`.
+* **A promo code discounts the basket**, once. It is evaluated against the basket
+  subtotal, split across the lines by largest remainder so the parts sum exactly,
+  and `used_count` goes up by one.
+* **References stay unique.** Orders inside a basket carry `pi_123#1`,
+  `pi_123#2`, … so `(provider, provider_reference)` remains a unique index and
+  `charge.refunded` still finds every order that charge paid for.
+* **A free basket takes no card.** If the total is zero, `web-checkout` fulfils
+  it directly through `manual` and never touches Stripe.

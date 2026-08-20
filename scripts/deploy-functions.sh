@@ -39,6 +39,7 @@ FUNCTIONS=(
   "iap-apple-notifications:false"
   "push-dispatch:false"
   "weekly-digest:false"
+  "cart-sweep:false"
   "config-status:false"
 )
 

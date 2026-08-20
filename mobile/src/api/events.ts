@@ -38,6 +38,30 @@ export async function getNearbyEvents(params: NearbyParams): Promise<EventFeedIt
   return (data ?? []) as EventFeedItem[];
 }
 
+/**
+ * The feed the home screen and the deck show.
+ *
+ * With coordinates it is the geo query; without them (permission denied, or a
+ * browser that never asked) it degrades to the plain upcoming list instead of
+ * returning nothing — a visitor who says no to location still came to see what
+ * is on, and an empty screen would be a lie about the city.
+ */
+export async function getFeedEvents(params: NearbyParams): Promise<EventFeedItem[]> {
+  if (params.latitude !== undefined && params.longitude !== undefined) {
+    return getNearbyEvents(params);
+  }
+
+  return searchEvents({
+    from: params.from,
+    to: params.to,
+    categories: params.categories,
+    freeOnly: params.freeOnly,
+    sort: 'start_at',
+    limit: params.limit,
+    offset: params.offset,
+  });
+}
+
 export interface SearchParams extends Partial<Coordinates> {
   query?: string;
   radiusM?: number;

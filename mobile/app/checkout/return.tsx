@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { waitForTickets } from '@/api/tickets';
+import { waitForCheckout, waitForTickets } from '@/api/tickets';
+import { track } from '@/marketing/tags';
 import { messageFor } from '@/lib/errors';
 import { Body, Button, Caption, LoadingState, Notice, Screen } from '@/components/ui';
 import { colors, spacing, typography } from '@/theme';
@@ -19,23 +20,44 @@ import { colors, spacing, typography } from '@/theme';
  * from a browser opens somewhere sensible on a phone.
  */
 export default function CheckoutReturnScreen() {
-  const { order } = useLocalSearchParams<{ order?: string }>();
+  // A single ticket comes back as ?order=…, a basket as ?checkout=…. Both wait
+  // for the same thing: the webhook, which is still the only thing that turns
+  // money into a ticket.
+  const { order, checkout } = useLocalSearchParams<{ order?: string; checkout?: string }>();
   const [state, setState] = useState<'waiting' | 'done' | 'pending' | 'failed'>('waiting');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    if (!order) {
+    if (!order && !checkout) {
       setState('pending');
       return;
     }
 
     void (async () => {
       try {
-        const result = await waitForTickets(order, { attempts: 20, intervalMs: 1200 });
+        const result = checkout
+          ? await waitForCheckout(checkout, { attempts: 20, intervalMs: 1200 })
+          : await waitForTickets(order!, { attempts: 20, intervalMs: 1200 });
         if (cancelled) return;
         setState(result.status === 'succeeded' ? 'done' : result.status === 'failed' ? 'failed' : 'pending');
+
+        // The conversion is reported once the *webhook* has issued the tickets,
+        // not when Stripe redirected the browser here. A redirect is not a
+        // payment, and a conversion counted on one is a number nobody can trust.
+        if (result.status === 'succeeded') {
+          track('purchase', {
+            valueCents: result.tickets.reduce(
+              (sum, ticket) => sum + (ticket.price_cents ?? 0), 0,
+            ),
+            currency: result.tickets[0]?.currency ?? 'EUR',
+            items: result.tickets.map((ticket) => ({
+              id: ticket.ticket_type_id ?? ticket.event_id,
+              quantity: 1,
+            })),
+          });
+        }
       } catch (caught) {
         if (cancelled) return;
         setError(messageFor(caught));
@@ -44,7 +66,7 @@ export default function CheckoutReturnScreen() {
     })();
 
     return () => { cancelled = true; };
-  }, [order]);
+  }, [order, checkout]);
 
   if (state === 'waiting') {
     return (
@@ -69,7 +91,7 @@ export default function CheckoutReturnScreen() {
               Vstupenka je potvrdená. Nájdeš ju tu aj v e-maile ako PDF s QR kódom — pri vstupe stačí
               ukázať ktorýkoľvek z nich.
             </Body>
-            <Button title="Zobraziť vstupenku" onPress={() => router.replace('/tickets')} />
+            <Button title="Vstupenky" onPress={() => router.replace('/tickets')} />
           </>
         ) : state === 'failed' ? (
           <>

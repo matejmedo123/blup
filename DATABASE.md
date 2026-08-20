@@ -254,3 +254,69 @@ Creates a throwaway cluster, applies the local auth shim
   accounting export's totals and authorization
 
 Assertions run inside a transaction and roll back, so the suite is repeatable.
+
+
+---
+
+## Basket and grouped checkout (migration 0025)
+
+`cart_items` is a **reservation**, not a wish list. A line holds its tickets
+against every other shopper for `platform_settings.cart_hold_minutes` (15) and
+stops holding them the moment it expires — availability is computed from live
+rows only, so nothing has to sweep for the arithmetic to be right.
+
+| Object | What it is |
+| --- | --- |
+| `cart_items` | one line per ticket type, per person, with `expires_at` |
+| `checkouts` | the payment envelope: one payment, one or more orders |
+| `orders.checkout_id` | null for the single-ticket path, set for a basket |
+| `held_quantity(type, exclude_user)` | live basket lines + orders on their way to a provider |
+| `ticket_type_availability(type)` | total, sold, held, and what is genuinely left |
+| `cart_add / cart_set_quantity / cart_remove / cart_clear / cart_view` | the basket, all scoped to `auth.uid()` |
+| `create_checkout(buyer, promo)` | basket -> one order per ticket type, under one checkout |
+| `fulfill_checkout(...)` / `fail_checkout(...)` | what the webhook calls for a basket |
+| `release_expired_holds()` | housekeeping only; correctness never depends on it |
+
+Two rules the database owns, not the browser:
+
+* **20 tickets per order** (`platform_settings.max_tickets_per_order`), enforced
+  in `cart_add` *and* in `create_order`.
+* **One basket, one event** — a single payment settles to a single organizer.
+
+A basket promo code is evaluated once against the basket subtotal and split
+across the lines by largest remainder, so the parts add up to the whole to the
+cent and the code's use counter goes up once, not once per line.
+
+Each order inside a basket keeps its own provider reference (`pi_123#1`,
+`pi_123#2`, ...) so the unique index on `(provider, provider_reference)` stays
+meaningful and a refunded charge can still find every order it paid for.
+
+## Marketing and sales (migration 0026)
+
+| Object | What it is |
+| --- | --- |
+| `marketing_settings` | Meta / Google identifiers, admin-only, CHECK-validated |
+| `marketing_tags()` | the public subset the page needs, readable by `anon` |
+| `set_marketing_settings(...)` | full-admin write, audited |
+| `event_sales_series(event, days)` | the daily sales curve for one event |
+| `admin_events(query, status, ...)` | every event on the platform, searchable |
+| `admin_log_event_edit(event, fields, reason)` | the paper trail when an admin edits somebody else's listing |
+
+The marketing table stores **identifiers, never markup**. A "paste your script
+tag" box would be stored XSS with every visitor's session behind it.
+
+## Function privileges (migration 0024)
+
+Earlier migrations tried to lock the money functions down with
+`revoke execute ... from authenticated`. That does nothing: PostgreSQL grants
+EXECUTE to `PUBLIC` on every new function, and `authenticated` inherits it.
+Until 0024, `fulfill_order`, `ticket_email_payload`, `refund_order`,
+`upsert_premium_subscription`, `activate_boost`, `link_stripe_customer` and
+`notify_user` were all callable with the anon key that ships in the client
+bundle.
+
+0024 revokes from `PUBLIC` — the actual source of the grant — and hands EXECUTE
+back to `service_role` explicitly. The migration asserts the result and fails if
+any of them is still reachable; `supabase/tests/test_11_function_privileges.sql`
+asserts it again on every run, in both directions: what must be closed, and what
+the app must still be able to call.

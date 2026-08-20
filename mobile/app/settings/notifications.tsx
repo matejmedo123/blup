@@ -86,7 +86,7 @@ export default function NotificationSettingsScreen() {
       <Body muted style={{ marginTop: 24, marginBottom: 12 }}>
         Nechodí ti nič? Zaregistruj toto zariadenie znova.
       </Body>
-      <Button title="Zaregistrovať toto zariadenie" variant="secondary" onPress={enablePush} />
+      <Button title="Zaregistrovať zariadenie" variant="secondary" onPress={enablePush} />
     </Screen>
   );
 }

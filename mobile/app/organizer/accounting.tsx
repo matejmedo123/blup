@@ -207,13 +207,13 @@ export default function AccountingScreen() {
       </Caption>
 
       <Button
-        title="Predajný denník (po objednávkach)"
+        title="Predajný denník"
         variant="secondary"
         loading={busy === 'orders'}
         onPress={() => void exportCsv('orders')}
       />
       <Button
-        title="Kniha pohybov (so zostatkom)"
+        title="Kniha pohybov"
         variant="secondary"
         loading={busy === 'ledger'}
         onPress={() => void exportCsv('ledger')}

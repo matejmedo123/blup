@@ -47,6 +47,7 @@ export default function AdminDashboard() {
       </View>
       <Row label="Účtovníctvo platformy" onPress={() => router.push('/admin/accounting')} />
       <Row label="Poplatky a sadzby" onPress={() => router.push('/admin/fees')} />
+      <Row label="Marketing a reklamné kódy" onPress={() => router.push('/admin/marketing')} />
 
       <SectionHeader title="Fronty" />
       <Row
@@ -57,6 +58,7 @@ export default function AdminDashboard() {
       <Row label="Otvorené nahlásenia" badge={data.open_reports} onPress={() => router.push('/admin/reports')} />
       <Row label="Čakajúce výplaty" badge={data.pending_payouts} onPress={() => router.push('/admin/payouts')} />
       <Row label="Používatelia" onPress={() => router.push('/admin/users')} />
+      <Row label="Všetky eventy" onPress={() => router.push('/admin/events')} />
     </Screen>
   );
 }

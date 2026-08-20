@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { SignInInvite } from '@/components/SignInInvite';
 import { getFollowCounts, getInterestsFor, updateProfile } from '@/api/profiles';
 import { getMyEvents, getSavedEvents, getAttendingEvents, toFeedItem } from '@/api/events';
 import { getMyTickets } from '@/api/tickets';
@@ -27,7 +28,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * number is read from the database; nothing here is decorative.
  */
 export default function ProfileScreen() {
-  const { profile, signOut, refreshProfile, loadingProfile, isAdmin } = useAuth();
+  const { profile, signOut, refreshProfile, loadingProfile, isAdmin, isGuest } = useAuth();
   const toast = useToast();
 
   const [premiumOpen, setPremiumOpen] = React.useState(false);
@@ -52,6 +53,22 @@ export default function ProfileScreen() {
   const premium = useQuery({ queryKey: ['premium', 'status'], queryFn: getPremiumStatus });
   const game = useQuery({ queryKey: ['gamification', 'me'], queryFn: () => getGamification() });
   const badges = useQuery({ queryKey: ['badges', 'progress'], queryFn: getBadgeProgress });
+
+  if (isGuest) {
+    return (
+      <SignInInvite
+        glyph="☺"
+        title="Toto je tvoje miesto"
+        body="Profil, uložené eventy, vstupenky, odznaky a nastavenia — všetko sa viaže na účet."
+        perks={[
+          'Uložené eventy a agenda na jednom mieste',
+          'Vstupenky s QR kódom aj offline',
+          'XP, levely a odznaky za to, kam naozaj chodíš',
+          'Ľudia zo spoločných eventov ťa nájdu',
+        ]}
+      />
+    );
+  }
 
   if (loadingProfile && !profile) {
     return <SafeAreaView style={styles.screen} edges={['top']}><LoadingState /></SafeAreaView>;

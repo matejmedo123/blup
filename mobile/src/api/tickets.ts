@@ -151,6 +151,44 @@ export async function waitForTickets(
   return { status: 'pending', tickets: [] };
 }
 
+/**
+ * Same wait, for a basket. A checkout is `paid` only once every order inside it
+ * has been fulfilled, so watching the envelope is enough.
+ */
+export async function waitForCheckout(
+  checkoutId: string,
+  { attempts = 12, intervalMs = 1000 }: { attempts?: number; intervalMs?: number } = {},
+): Promise<{ status: 'succeeded' | 'pending' | 'failed'; tickets: Ticket[] }> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const { data: checkout } = await supabase
+      .from('checkouts')
+      .select('status')
+      .eq('id', checkoutId)
+      .maybeSingle();
+
+    if (checkout?.status === 'paid') {
+      const { data: orders } = await supabase
+        .from('orders').select('id').eq('checkout_id', checkoutId);
+
+      const ids = (orders ?? []).map((order) => order.id as string);
+      const { data: tickets } = ids.length
+        ? await supabase.from('tickets').select('*').in('order_id', ids)
+        : { data: [] };
+
+      return { status: 'succeeded', tickets: (tickets ?? []) as Ticket[] };
+    }
+
+    if (checkout?.status === 'failed' || checkout?.status === 'cancelled'
+        || checkout?.status === 'expired') {
+      return { status: 'failed', tickets: [] };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return { status: 'pending', tickets: [] };
+}
+
 export async function getMyTickets(): Promise<TicketWithEvent[]> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert, FlatList, Pressable, ScrollView, Share, StyleSheet, Text, View,
+  Alert, FlatList, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -12,8 +12,11 @@ import {
   addComment, cancelRsvp, getComments, getEvent, getEventAttendees, getFollowedAttendees,
   rsvpToEvent, saveEvent, toggleLike, unsaveEvent,
 } from '@/api/events';
+import { addToCart, getCart } from '@/api/cart';
+import { track } from '@/marketing/tags';
 import { getPeopleRecommendations, describeMatch } from '@/api/ai';
 import { shareEvent } from '@/lib/share';
+import { useRequireAuth } from '@/auth/useRequireAuth';
 import { recordSignal } from '@/api/signals';
 import { reportContent } from '@/api/admin';
 import { addEventToCalendar, openDirections } from '@/maps/calendar';
@@ -36,9 +39,16 @@ import {
   categoryFamilies, colors, familyFor, labelFor, radius, spacing, typography,
 } from '@/theme';
 
+/**
+ * The basket is a web feature: on the phone the buy button opens the native
+ * PaymentSheet, which prices one ticket type at a time.
+ */
+const HAS_CART = Platform.OS === 'web';
+
 export default function EventDetailScreen() {
+  const { requireAuth } = useRequireAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { profile } = useAuth();
+  const { profile, isGuest } = useAuth();
   const location = useLocation();
   const queryClient = useQueryClient();
 
@@ -54,6 +64,42 @@ export default function EventDetailScreen() {
     queryFn: () => getEvent(id!),
     enabled: Boolean(id),
   });
+
+  // The basket, so the ticket rows can say "in your basket" and the button can
+  // become "go to basket" instead of adding a second time.
+  const cart = useQuery({
+    queryKey: ['cart', null],
+    queryFn: () => getCart(null),
+    enabled: HAS_CART && !isGuest,
+  });
+
+  const inCart = (ticketTypeId: string): number =>
+    cart.data?.lines.find((line) => line.ticket_type_id === ticketTypeId)?.quantity ?? 0;
+
+  const cartCount = cart.data?.event?.id === id ? (cart.data?.quantity ?? 0) : 0;
+
+  const addTicket = async (ticketTypeId: string) => {
+    if (!requireAuth('Rezervácia drží vstupenky 15 minút — musí vedieť komu.', () => {})) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const updated = await addToCart(ticketTypeId, 1);
+      queryClient.setQueryData(['cart', null], updated);
+      setNotice('Pridané do košíka. Držíme ti ich 15 minút.');
+
+      const line = updated.lines.find((entry) => entry.ticket_type_id === ticketTypeId);
+      track('add_to_cart', {
+        valueCents: line?.unit_price_cents ?? 0,
+        currency: updated.currency,
+        contentName: updated.event?.title,
+        items: [{ id: ticketTypeId, name: line?.name, quantity: 1 }],
+      });
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const attendees = useQuery({
     queryKey: ['event', id, 'attendees'],
@@ -97,6 +143,18 @@ export default function EventDetailScreen() {
     enabled: Boolean(id),
   });
 
+  // One ViewContent per event opened, not per re-render.
+  const viewedTitle = event.data?.title;
+  useEffect(() => {
+    if (!id || !viewedTitle) return;
+    track('view_event', {
+      contentName: viewedTitle,
+      valueCents: event.data?.price_cents ?? 0,
+      items: [{ id }],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, viewedTitle]);
+
   // Live attendee counts while the screen is open.
   useEffect(() => {
     if (!id) return;
@@ -121,7 +179,15 @@ export default function EventDetailScreen() {
 
   const data = event.data;
 
-  const handleRsvp = async (status: 'going' | 'interested') => {
+  const handleRsvp = (status: 'going' | 'interested') =>
+    requireAuth(
+      status === 'going'
+        ? 'Aby sme vedeli, že ideš, a organizátor s tebou rátal.'
+        : 'Uložíme si, že ťa to zaujíma, a dáme ti vedieť pred eventom.',
+      () => void rsvp(status),
+    );
+
+  const rsvp = async (status: 'going' | 'interested') => {
     setError(null);
     setBusy(true);
     try {
@@ -138,7 +204,10 @@ export default function EventDetailScreen() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () =>
+    requireAuth('Uložené eventy sú v tvojom profile, takže potrebuješ účet.', () => void save());
+
+  const save = async () => {
     setError(null);
     try {
       if (data?.is_saved) await unsaveEvent(id!);
@@ -149,7 +218,10 @@ export default function EventDetailScreen() {
     }
   };
 
-  const handleLike = async () => {
+  const handleLike = () =>
+    requireAuth('Páči sa mi to je pripnuté k účtu.', () => void like());
+
+  const like = async () => {
     if (!data) return;
     try {
       await toggleLike(id!, !data.is_liked);
@@ -376,7 +448,10 @@ export default function EventDetailScreen() {
         {data.my_rsvp === 'going' || data.my_rsvp === 'checked_in' || isOwner ? (
           <Pressable
             style={({ pressed }) => [styles.chatCard, pressed && styles.chatCardPressed]}
-            onPress={openGroupChat}
+            onPress={() =>
+              requireAuth('Do chatu eventu treba účet — inak nikto nevie, kto píše.', () =>
+                void openGroupChat())
+            }
           >
             <View style={styles.chatIcon}><Text style={styles.chatGlyph}>✉</Text></View>
             <View style={styles.flex}>
@@ -402,18 +477,30 @@ export default function EventDetailScreen() {
                     {ticket.description ? <Caption>{ticket.description}</Caption> : null}
                     <Caption style={soldOut ? styles.soldOut : undefined}>
                       {soldOut ? 'Vypredané' : `zostáva ${remaining}`}
+                      {inCart(ticket.id) > 0 ? ` · ${inCart(ticket.id)} v košíku` : ''}
                     </Caption>
                   </View>
                   <Text style={styles.ticketPrice}>
                     {formatPrice(ticket.price_cents, ticket.currency)}
                   </Text>
+                  {HAS_CART && !soldOut ? (
+                    <Button
+                      title="Pridať"
+                      variant="secondary"
+                      compact
+                      disabled={busy}
+                      onPress={() => void addTicket(ticket.id)}
+                    />
+                  ) : null}
                 </View>
               );
             })}
 
             <Button
-              title="Kúpiť lístok"
-              onPress={() => router.push(`/event/checkout/${data.id}`)}
+              title={cartCount > 0 ? `Do košíka (${cartCount})` : 'Kúpiť'}
+              onPress={() =>
+                router.push(cartCount > 0 ? '/cart' : `/event/checkout/${data.id}`)
+              }
               disabled={data.ticket_types.every((t) => t.quantity_sold >= t.quantity_total)}
               style={styles.ticketButton}
             />

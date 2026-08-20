@@ -208,3 +208,71 @@ renders.
   not been built.
 - **Native-quality maps at scale.** The tile provider is a courtesy tier (see
   above).
+
+
+---
+
+## Guest browsing
+
+Opening blup.sk signs nobody in. A visitor sees the same feed a member sees,
+can open an event, search, look at profiles and communities, and read what is on
+tonight. The account is asked for at the moment it is actually needed — going,
+saving, writing, buying — through one sheet (`useRequireAuth`) that says why.
+
+Concretely:
+
+* `app/index.tsx` no longer redirects to sign-in.
+* `useAuth()` exposes `isGuest`, and the queries that need an account
+  (`notifications`, `following`, AI recommendations) are `enabled: !isGuest`.
+* The nearby feed degrades rather than emptying: with coordinates it is the geo
+  query, without them (permission refused, or a browser that never asked) it is
+  the plain upcoming list. A visitor who says no to location still came to see
+  what is on.
+* The desktop sidebar shows a guest card instead of a profile row, and hides the
+  items that only lead to a wall.
+
+## Košík (web only)
+
+The basket is a web feature. On a phone the buy button opens the native
+PaymentSheet, which prices one ticket type at a time; there is no half-built
+basket screen behind a button that cannot pay for it.
+
+* `/cart` — the basket, with a live countdown driven by the server's `expires_at`
+* Event detail grows a **Pridať** button per ticket type, and the main button
+  becomes **Do košíka (n)** once something is in it
+* The sidebar shows a **Košík** item with a badge while the basket is not empty
+* Reservations are real: 15 minutes, held against every other shopper, released
+  automatically. Maximum 20 tickets per order.
+* Payment is one Stripe Checkout session for the whole basket
+
+## Meta and Google tags
+
+`src/marketing/tags.web.tsx` loads whatever an admin configured in
+**Admin → Marketing**, and nothing else.
+
+* The admin supplies an **identifier**, never a script. The loaders are in the
+  app's own code; the database only holds `1234567890123456`, `AW-123456789`,
+  `G-ABCD123456`, each validated by a CHECK constraint. A "custom code" box on a
+  page that also holds session tokens is a stored-XSS hole, and the account that
+  can write to it is exactly the one an attacker wants.
+* **Nothing loads before consent** when `consent_required` is on (the default).
+  Events fired before consent are dropped, not queued — a queue that flushes on
+  acceptance is consent-washing. Refusing takes exactly as many clicks as
+  accepting.
+* The events carry an event id, a quantity and a value. No email, no name, no
+  user id.
+* `purchase` fires when the **webhook** has issued the tickets, not when Stripe
+  redirected the browser back. A conversion counted on a redirect is a number
+  nobody can trust.
+
+## The ticket PDF
+
+`supabase/functions/_shared/pdf.ts` lays out an A5 ticket: the wordmark on a
+dark band, the event, a rounded panel holding the QR and its code, a perforation,
+then the stub — holder, ticket type, price (with the archive fee stated
+separately), order reference, issue date — and the **seller's** legal identity:
+name, IČO, DIČ, address, contact.
+
+That last part matters. The contract is between the buyer and the organizer;
+BLUP is where it happened. A ticket that names only the platform is wrong about
+who owes a refund when an event does not take place.

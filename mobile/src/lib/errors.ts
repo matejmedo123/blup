@@ -29,6 +29,16 @@ const MESSAGES: Record<string, string> = {
   SALES_NOT_STARTED: 'Predaj vstupeniek sa ešte nezačal.',
   TICKET_TYPE_INACTIVE: 'Táto vstupenka už nie je v predaji.',
   AMOUNT_MISMATCH: 'Suma platby nesedela s objednávkou. Nič sme ti nestrhli.',
+  EVENT_ALREADY_OVER: 'Tento event už prebehol.',
+
+  // basket
+  CART_EMPTY: 'Košík je prázdny.',
+  CART_OTHER_EVENT:
+    'V košíku máš vstupenky na iný event. Doplať ich alebo košík vyprázdni — jedna objednávka patrí jednému eventu.',
+  CART_LIMIT_REACHED: 'Na jednu objednávku ide najviac 20 vstupeniek.',
+  RESERVATION_EXPIRED: 'Rezervácia vypršala a vstupenky sa vrátili do predaja.',
+  CHECKOUT_NOT_FOUND: 'Táto objednávka už neexistuje.',
+  AUTH_REQUIRED: 'Na toto sa treba prihlásiť.',
 
   // payouts
   INSUFFICIENT_AVAILABLE_BALANCE: 'To je viac, než máš k dispozícii.',

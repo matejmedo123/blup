@@ -14,6 +14,12 @@ interface AuthState {
   /** True while the profile row is being (re)loaded. */
   loadingProfile: boolean;
   isAuthenticated: boolean;
+  /**
+   * Nobody is signed in. Not an error state: a visitor can browse events,
+   * open one, search and look at profiles without an account. The account is
+   * asked for at the moment it is actually needed — buying, going, writing.
+   */
+  isGuest: boolean;
   isAdmin: boolean;
   needsOnboarding: boolean;
   backendConfigured: boolean;
@@ -105,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       initializing,
       loadingProfile,
       isAuthenticated: Boolean(session?.user),
+      isGuest: !session?.user,
       isAdmin: profile?.app_role === 'admin' || profile?.app_role === 'moderator',
       // A signed-in user without a completed profile goes through onboarding.
       needsOnboarding: Boolean(session?.user) && profile !== null && !profile.onboarding_completed,

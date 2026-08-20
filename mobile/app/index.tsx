@@ -10,9 +10,14 @@ import { colors, spacing, typography } from '@/theme';
 /**
  * Entry point: decides where a launch lands.
  *   no backend  → setup instructions
- *   no session  → sign in
- *   no profile  → onboarding
+ *   no profile  → onboarding (signed in, but never finished setting up)
  *   otherwise   → the app
+ *
+ * Not being signed in is deliberately *not* a redirect. Somebody who opens
+ * blup.app should see what is happening in the city tonight, not a login form:
+ * an events app that demands an account before showing a single event has
+ * nothing to show for itself. The account is asked for at the moment it is
+ * needed — going, buying, writing — and not a second earlier.
  */
 export default function Index() {
   const { initializing, isAuthenticated, needsOnboarding, profile, loadingProfile, backendConfigured } =
@@ -37,7 +42,6 @@ export default function Index() {
     );
   }
 
-  if (!isAuthenticated) return <Redirect href="/(auth)/sign-in" />;
   if (needsOnboarding) return <Redirect href="/(onboarding)/profile" />;
 
   return <Redirect href="/(tabs)" />;

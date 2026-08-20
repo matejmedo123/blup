@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { useRequireAuth } from '@/auth/useRequireAuth';
 import { getFeed, togglePostLike, type CommunityPost } from '@/api/communities';
 import { getFollowing } from '@/api/profiles';
 import { pickImage, uploadCommunityImage } from '@/storage/uploads';
@@ -28,7 +29,8 @@ import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
  * and the event's rating on the right.
  */
 export default function FeedScreen() {
-  const { profile } = useAuth();
+  const { requireAuth } = useRequireAuth();
+  const { profile, isGuest } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -46,6 +48,7 @@ export default function FeedScreen() {
   });
 
   const like = async (post: CommunityPost) => {
+    if (!requireAuth('Páči sa mi to je pripnuté k účtu.', () => {})) return;
     try {
       await togglePostLike(post.id, Boolean(post.liked_by_me));
       await queryClient.invalidateQueries({ queryKey: ['feed'] });
@@ -152,7 +155,12 @@ export default function FeedScreen() {
               />
             ) : null}
 
-            <Pressable style={styles.composerRow} onPress={() => setComposerOpen(true)}>
+            <Pressable
+              style={styles.composerRow}
+              onPress={() =>
+                requireAuth('Aby ostatní vedeli, kto moment zdieľa.', () => setComposerOpen(true))
+              }
+            >
               <Avatar url={profile?.avatar_url} name={profile?.display_name} size={38} />
               <Text style={styles.composerHint}>Zdieľaj moment z eventu…</Text>
               <Text style={styles.composerGlyph}>＋</Text>

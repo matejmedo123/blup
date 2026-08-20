@@ -208,3 +208,118 @@ export async function updatePlatformSettings(
   if (error) throw error;
   return data as PlatformSettings;
 }
+
+// --- events -----------------------------------------------------------------
+
+/**
+ * Every event on the platform, searchable. Admins could always *edit* any event
+ * — the RLS policy has allowed it from the start — but there was no way to find
+ * one that was not already on screen.
+ */
+export interface AdminEvent {
+  id: string;
+  title: string;
+  status: string;
+  visibility: string;
+  start_at: string;
+  city: string | null;
+  venue_name: string | null;
+  category: string | null;
+  is_free: boolean;
+  price_cents: number;
+  attendee_count: number;
+  tickets_sold: number;
+  creator_id: string;
+  creator_name: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+  reports_open: number;
+  created_at: string;
+}
+
+export async function getAdminEvents(params: {
+  query?: string;
+  status?: string | null;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<AdminEvent[]> {
+  const { data, error } = await supabase.rpc('admin_events', {
+    p_query: params.query?.trim() || null,
+    p_status: params.status ?? null,
+    p_limit: params.limit ?? 40,
+    p_offset: params.offset ?? 0,
+  });
+
+  if (error) throw error;
+  return (data ?? []) as AdminEvent[];
+}
+
+/**
+ * Records that an admin edited somebody else's event, and why. Called after the
+ * update lands so the log never claims a change the database refused.
+ */
+export async function logAdminEventEdit(
+  eventId: string,
+  fields: string[],
+  reason: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('admin_log_event_edit', {
+    p_event_id: eventId,
+    p_fields: fields,
+    p_reason: reason,
+  });
+  if (error) throw error;
+}
+
+// --- marketing ---------------------------------------------------------------
+
+/**
+ * Ad platform tags.
+ *
+ * Identifiers, not markup. A "paste your script tag" box would be stored XSS
+ * with every visitor's session behind it — so the shape of what an admin can
+ * save is fixed here and checked again by a CHECK constraint in the database.
+ */
+export interface MarketingSettings {
+  meta_enabled: boolean;
+  meta_pixel_id: string | null;
+  google_enabled: boolean;
+  google_ads_id: string | null;
+  google_ads_purchase_label: string | null;
+  google_analytics_id: string | null;
+  consent_required: boolean;
+  updated_at: string;
+}
+
+export async function getMarketingSettings(): Promise<MarketingSettings> {
+  const { data, error } = await supabase
+    .from('marketing_settings')
+    .select('meta_enabled, meta_pixel_id, google_enabled, google_ads_id, google_ads_purchase_label, google_analytics_id, consent_required, updated_at')
+    .single();
+
+  if (error) throw error;
+  return data as MarketingSettings;
+}
+
+export async function saveMarketingSettings(next: {
+  metaEnabled: boolean;
+  metaPixelId: string | null;
+  googleEnabled: boolean;
+  googleAdsId: string | null;
+  googleAdsLabel: string | null;
+  googleAnalyticsId: string | null;
+  consentRequired: boolean;
+}): Promise<MarketingSettings> {
+  const { data, error } = await supabase.rpc('set_marketing_settings', {
+    p_meta_enabled: next.metaEnabled,
+    p_meta_pixel_id: next.metaPixelId,
+    p_google_enabled: next.googleEnabled,
+    p_google_ads_id: next.googleAdsId,
+    p_google_ads_label: next.googleAdsLabel,
+    p_google_analytics: next.googleAnalyticsId,
+    p_consent_required: next.consentRequired,
+  });
+
+  if (error) throw error;
+  return data as MarketingSettings;
+}

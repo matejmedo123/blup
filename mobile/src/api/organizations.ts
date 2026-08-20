@@ -380,6 +380,32 @@ export async function getEventAnalytics(eventId: string): Promise<EventAnalytics
   return data as EventAnalytics;
 }
 
+/**
+ * The daily sales curve. The database fills in the quiet days, so the series is
+ * always exactly `days` long and the chart never has to guess at gaps.
+ */
+export interface SalesPoint {
+  day: string;
+  orders: number;
+  tickets: number;
+  gross_cents: number;
+  net_cents: number;
+  blup_cents: number;
+  cumulative_tickets: number;
+}
+
+export async function getEventSalesSeries(
+  eventId: string,
+  days = 30,
+): Promise<SalesPoint[]> {
+  const { data, error } = await supabase.rpc('event_sales_series', {
+    p_event_id: eventId,
+    p_days: days,
+  });
+  if (error) throw error;
+  return (data ?? []) as SalesPoint[];
+}
+
 export async function getEventOrders(eventId: string) {
   const { data, error } = await supabase
     .from('orders')

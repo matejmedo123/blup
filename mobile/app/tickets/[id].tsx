@@ -192,7 +192,7 @@ export default function TicketScreen() {
               onPress={() => void sendAgain(null)}
             />
             <Button
-              title="Poslať na inú adresu"
+              title="Iná adresa"
               variant="ghost"
               onPress={() => {
                 setEmailDraft(defaultEmail.data ?? '');

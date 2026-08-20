@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import { getUnreadMessageCount } from '@/api/messages';
+import { useAuth } from '@/auth/AuthProvider';
 import { DesktopShell } from '@/components/DesktopShell';
 import { useLayout } from '@/hooks/useLayout';
 import { colors, radius, typography } from '@/theme';
@@ -23,11 +24,15 @@ function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
 
 export default function TabsLayout() {
   const layout = useLayout();
+  const { isGuest } = useAuth();
 
   const { data: unread } = useQuery({
     queryKey: ['messages', 'unread'],
     queryFn: getUnreadMessageCount,
     refetchInterval: 60_000,
+    // Nobody signed in has no unread anything; asking would just 401 once a
+    // minute forever.
+    enabled: !isGuest,
   });
 
   const tabs = (

@@ -250,3 +250,53 @@ configured on this deployment yet”), never as a button that silently fails.
 ## Licence
 
 Not yet chosen — add one before publishing.
+
+
+---
+
+## What changed most recently
+
+**Guest browsing.** Opening the site signs nobody in. A visitor sees the real
+feed, opens events, searches and reads communities; the account is asked for at
+the moment it is needed — going, saving, writing, buying — by one sheet that
+says why. The feed also degrades honestly: with a location it is the geo query,
+without one it is the plain upcoming list rather than an empty city.
+
+**Košík (web).** Tickets in a basket are genuinely reserved for 15 minutes,
+held against every other shopper and released on their own. Maximum 20 tickets
+per order, enforced by the database in two places. A basket pays once: one
+Stripe Checkout session becomes one order per ticket type under one `checkout`
+row, and the webhook issues every ticket at once. A promo code discounts the
+basket, is counted once, and is split across the lines to the cent.
+
+**Sales curve.** `Organizátor → Štatistiky` now draws the daily line: tickets,
+your revenue, BLUP's cut, per day, over 7 / 30 / 90 days, with the busiest day
+called out and every day clickable. Drawn with plain views — no charting
+dependency to render twenty rectangles.
+
+**Editing.** An organizer can fix anything they got wrong: name, description,
+category, date, duration, place, capacity, listing. An admin can find and edit
+any event on the platform (`Admin → Všetky eventy`) and is asked why — the
+reason goes to the audit log. Being able to fix any event and being able to do it
+quietly are not the same power.
+
+**Marketing.** `Admin → Marketing` takes a Meta pixel id, a Google Ads id and
+conversion label, and a GA4 id. **Identifiers, not markup** — the loaders live
+in the app's code, so the worst a bad value can do is fail to load a pixel.
+Nothing loads before consent, and `purchase` is reported when the webhook has
+issued the tickets, not when Stripe redirected the browser.
+
+**The ticket PDF** was redrawn: wordmark, event, a panel holding the QR, a
+perforation, and a stub carrying the holder, type, price with the archive fee
+stated separately, order reference, issue date — and the seller's legal identity
+(name, IČO, DIČ, address, contact), because the contract is with the organizer
+and BLUP is only where it happened.
+
+**A real security hole, found and closed.** Earlier migrations locked the money
+functions down with `revoke execute … from authenticated`, which does nothing:
+PostgreSQL grants EXECUTE to `PUBLIC`, and `authenticated` inherits it. Anyone
+with an account and the anon key from the client bundle could call
+`fulfill_order` (free tickets), `ticket_email_payload` (anyone's QR secret),
+`upsert_premium_subscription` (free Premium), `refund_order`, `activate_boost`,
+`link_stripe_customer` and `notify_user`. Migration 0024 revokes from `PUBLIC`
+and asserts the result; `test_11` asserts it on every run.

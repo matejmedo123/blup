@@ -171,6 +171,17 @@ export const stripe = {
     productName?: string;
     productDescription?: string;
     quantity?: number;
+    /**
+     * A basket. When present it replaces the single synthetic line, so the
+     * Stripe page itemises what is being bought instead of showing one lump
+     * sum — and the sum of the lines is what gets charged.
+     */
+    lineItems?: {
+      name: string;
+      description?: string;
+      unitAmountCents: number;
+      quantity: number;
+    }[];
     applicationFeeCents?: number;
     connectedAccountId?: string | null;
     /** mode: 'subscription' */
@@ -194,17 +205,28 @@ export const stripe = {
     else if (params.customerEmail) body.customer_email = params.customerEmail;
 
     if (params.mode === 'payment') {
-      body.line_items = [{
-        quantity: 1,
-        price_data: {
-          currency: (params.currency ?? 'eur').toLowerCase(),
-          unit_amount: params.amountCents,
-          product_data: {
-            name: params.productName ?? 'Blup',
-            description: params.productDescription,
-          },
-        },
-      }];
+      const currency = (params.currency ?? 'eur').toLowerCase();
+
+      body.line_items = params.lineItems?.length
+        ? params.lineItems.map((item) => ({
+            quantity: item.quantity,
+            price_data: {
+              currency,
+              unit_amount: item.unitAmountCents,
+              product_data: { name: item.name, description: item.description },
+            },
+          }))
+        : [{
+            quantity: 1,
+            price_data: {
+              currency,
+              unit_amount: params.amountCents,
+              product_data: {
+                name: params.productName ?? 'Blup',
+                description: params.productDescription,
+              },
+            },
+          }];
       body.payment_intent_data = {
         metadata: params.metadata,
         ...(params.connectedAccountId

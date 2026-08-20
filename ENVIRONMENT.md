@@ -148,3 +148,25 @@ See WEB.md for the full web story.
 
 Generate once with `node scripts/generate-vapid-keys.mjs`. Rotating the public
 key invalidates every existing subscription.
+
+
+## Scheduled jobs
+
+| Function | Cadence | Auth |
+| --- | --- | --- |
+| `cart-sweep` | every 1–5 minutes | service-role key in `Authorization` |
+| `ticket-email` | every minute (plus a nudge from the webhook) | service-role key |
+| `weekly-digest` | weekly | service-role key |
+| `push-dispatch` | every minute | service-role key |
+
+`cart-sweep` is housekeeping only. An expired reservation stops holding stock
+the moment it expires, whether or not anything has swept it — the sweep exists
+to keep dead rows out of the tables and to move never-paid orders to
+`cancelled`.
+
+## No new secrets
+
+The basket, the sales curve, the admin event desk and the ad tags all run on
+credentials that already exist. Meta and Google tags are configured **in the
+app**, by an admin, at `Admin → Marketing` — they are public identifiers that
+ship in the page, so they belong in the database rather than in the build.

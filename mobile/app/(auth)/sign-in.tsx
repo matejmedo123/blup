@@ -112,7 +112,7 @@ export default function SignInScreen() {
 
             {Platform.OS === 'ios' ? (
               <Button
-                title="Pokračovať cez Apple"
+                title="Cez Apple"
                 icon=""
                 variant="secondary"
                 onPress={() => oauth('apple')}
@@ -122,7 +122,7 @@ export default function SignInScreen() {
             ) : null}
 
             <Button
-              title="Pokračovať cez Google"
+              title="Cez Google"
               variant="secondary"
               onPress={() => oauth('google')}
               loading={oauthLoading === 'google'}

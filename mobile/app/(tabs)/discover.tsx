@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useLocation } from '@/hooks/useLocation';
-import { getNearbyEvents, saveEvent, unsaveEvent } from '@/api/events';
+import { getFeedEvents, saveEvent, unsaveEvent } from '@/api/events';
+import { useRequireAuth } from '@/auth/useRequireAuth';
 import { recordSignal } from '@/api/signals';
 import { messageFor } from '@/lib/errors';
 import { SwipeDeck, type SwipeDirection } from '@/components/SwipeDeck';
@@ -22,6 +23,7 @@ import type { EventFeedItem } from '@/types/models';
  * is a behavioural signal for the ranker, so the deck teaches the feed.
  */
 export default function DiscoverScreen() {
+  const { requireAuth } = useRequireAuth();
   const location = useLocation();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -32,7 +34,7 @@ export default function DiscoverScreen() {
   const nearby = useQuery({
     queryKey: ['events', 'deck', location.coords, session],
     queryFn: () =>
-      getNearbyEvents({
+      getFeedEvents({
         latitude: location.coords?.latitude,
         longitude: location.coords?.longitude,
         radiusM: 50000,
@@ -63,6 +65,8 @@ export default function DiscoverScreen() {
       }
 
       if (direction === 'right') {
+        // Swiping right keeps the event, which needs somewhere to keep it.
+        if (!requireAuth('Blupnuté eventy sa ukladajú k tvojmu účtu.', () => {})) return;
         try {
           await saveEvent(event.id);
           await recordSignal(event.id, 'swipe_right');
@@ -76,7 +80,7 @@ export default function DiscoverScreen() {
 
       await recordSignal(event.id, 'swipe_left');
     },
-    [queryClient, toast],
+    [queryClient, toast, requireAuth],
   );
 
   if (nearby.isLoading) {

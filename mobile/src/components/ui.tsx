@@ -116,6 +116,17 @@ export function Mono({
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'teal';
 
+/**
+ * A button fills the width it is given, up to a point.
+ *
+ * On a phone that point is wider than the screen, so a primary action still
+ * spans the column the way a thumb expects. On a laptop it stops at a readable
+ * size instead of stretching a two-word label across a thousand pixels, which
+ * reads as a mistake rather than as emphasis.
+ *
+ * `full` opts out for the rare case that genuinely wants edge-to-edge — a
+ * sticky bottom bar, a button sharing a row with a price.
+ */
 export function Button({
   title, onPress, variant = 'primary', loading, disabled, style, icon, compact, full, large,
 }: {
@@ -127,6 +138,7 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   icon?: string;
   compact?: boolean;
+  /** Ignore the width cap and fill the container. */
   full?: boolean;
   /** The 56px screen-bottom CTA. */
   large?: boolean;
@@ -616,11 +628,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     paddingHorizontal: spacing.xl,
+    // Wider than any phone's content column, so nothing changes on a phone —
+    // and narrow enough that a desktop button looks like a button.
+    maxWidth: 360,
   },
   buttonCompact: { height: 40, paddingHorizontal: spacing.lg, borderRadius: radius.block },
   /** The full-width primary CTA from the handoff: 56 tall, radius 18. */
   buttonLarge: { height: 56, borderRadius: 18 },
-  buttonFull: { alignSelf: 'stretch' },
+  buttonFull: { alignSelf: 'stretch', maxWidth: undefined },
   buttonPrimary: { backgroundColor: colors.accent, ...shadow.cta },
   buttonSecondary: { backgroundColor: colors.surfaceElevated2 },
   buttonGhost: { backgroundColor: 'transparent' },

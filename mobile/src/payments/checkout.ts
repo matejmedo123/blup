@@ -80,6 +80,16 @@ export async function payForTickets(
 }
 
 /** Premium. Native buys it through the App Store; web through Stripe. */
+/**
+ * The basket is a web feature. On native the buy button prices a single ticket
+ * type through the PaymentSheet, which is the flow the App Store review and the
+ * Apple Pay sheet expect; there is no half-built basket screen behind a button
+ * that cannot pay for it.
+ */
+export async function payForCart(_promoCode: string | null): Promise<PayResult> {
+  throw new Error('CART_IS_WEB_ONLY');
+}
+
 export async function subscribePremium(_plan: 'monthly' | 'yearly'): Promise<PayResult> {
   throw new Error('USE_IAP_ON_NATIVE');
 }

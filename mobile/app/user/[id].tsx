@@ -220,7 +220,7 @@ export default function UserProfileScreen() {
       )}
 
       {!isMe ? (
-        <Button title="Nahlásiť tento profil" variant="ghost" onPress={report} style={styles.report} />
+        <Button title="Nahlásiť profil" variant="ghost" onPress={report} style={styles.report} />
       ) : null}
     </Screen>
   );

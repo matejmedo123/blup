@@ -41,17 +41,33 @@ interface Payload {
   currency: string;
   total_cents: number;
   archive_fee_cents: number;
+  archive_fee_payer: 'buyer' | 'organizer';
+  purchased_at: string;
   buyer_name: string;
   organizer: string;
   event: {
     id: string; title: string; start_at: string; end_at: string | null;
-    venue_name: string | null; address: string | null; category: string | null;
+    venue_name: string | null; address: string | null; city: string | null;
+    category: string | null;
+  };
+  /** The legal identity of whoever sold the ticket — not BLUP. */
+  seller: {
+    name: string;
+    registration_number: string | null;
+    vat_number: string | null;
+    address: string | null;
+    email: string | null;
   };
   tickets: { id: string; code: string; qr_secret: string; type: string; price_cents: number }[];
 }
 
 const money = (cents: number, currency: string) =>
   new Intl.NumberFormat('sk-SK', { style: 'currency', currency }).format(cents / 100);
+
+const dayLabel = (iso: string) =>
+  new Intl.DateTimeFormat('sk-SK', {
+    day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'Europe/Bratislava',
+  }).format(new Date(iso));
 
 const whenLabel = (iso: string) =>
   new Intl.DateTimeFormat('sk-SK', {
@@ -159,16 +175,35 @@ function renderText(payload: Payload): string {
 }
 
 function buildPdf(payload: Payload): Uint8Array {
+  // The archive fee is stated per ticket, and only when the buyer is the one
+  // who paid it — printing a fee on a ticket that the organizer absorbed would
+  // be telling the holder they paid something they did not.
+  const feePerTicket = payload.archive_fee_payer === 'buyer' && payload.tickets.length > 0
+    ? Math.round(payload.archive_fee_cents / payload.tickets.length)
+    : 0;
+
   const pages: TicketPdfInput[] = payload.tickets.map((ticket, i) => ({
     eventTitle: payload.event.title,
     whenLabel: whenLabel(payload.event.start_at),
-    venue: [payload.event.venue_name, payload.event.address].filter(Boolean).join(', '),
+    venue: payload.event.venue_name ?? payload.event.city ?? '',
+    address: payload.event.address ?? undefined,
     ticketType: ticket.type,
     holder: payload.buyer_name,
     code: ticket.code,
     qrPayload: `blup://t/${ticket.code}/${ticket.qr_secret}`,
-    priceLabel: money(ticket.price_cents, payload.currency),
+    priceLabel: money(ticket.price_cents + feePerTicket, payload.currency),
+    feeLabel: feePerTicket > 0
+      ? `Z toho archivny poplatok ${money(feePerTicket, payload.currency)}. Cena je vratane DPH.`
+      : undefined,
     orderReference: payload.order_reference,
+    issuedLabel: dayLabel(payload.purchased_at ?? new Date().toISOString()),
+    seller: {
+      name: payload.seller?.name ?? payload.organizer,
+      registrationNumber: payload.seller?.registration_number ?? null,
+      vatNumber: payload.seller?.vat_number ?? null,
+      address: payload.seller?.address ?? null,
+      email: payload.seller?.email ?? null,
+    },
     index: i + 1,
     total: payload.tickets.length,
   }));

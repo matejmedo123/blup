@@ -60,7 +60,7 @@ export default function AdminReportsScreen() {
           {report.details ? <Body muted>{String(report.details)}</Body> : null}
 
           <Button
-            title="Otvoriť nahlásený obsah"
+            title="Otvoriť obsah"
             variant="ghost"
             compact
             onPress={() => {

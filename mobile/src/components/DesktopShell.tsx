@@ -2,9 +2,12 @@ import React from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, usePathname, router } from 'expo-router';
 
+import { useQuery } from '@tanstack/react-query';
+
 import { useAuth } from '@/auth/AuthProvider';
+import { getCart } from '@/api/cart';
 import { SIDEBAR_WIDTH } from '@/hooks/useLayout';
-import { Avatar } from '@/components/ui';
+import { Avatar, Button } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -80,23 +83,39 @@ export function DesktopShell({
   unread?: number;
 }) {
   const pathname = usePathname();
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin, isGuest } = useAuth();
+
+  // The basket badge is the only nav item that carries a number the visitor is
+  // on a clock for, so it refetches on focus rather than sitting stale.
+  const cart = useQuery({
+    queryKey: ['cart', null],
+    queryFn: () => getCart(null),
+    enabled: !isGuest,
+    refetchOnWindowFocus: true,
+  });
 
   const primary: NavItem[] = [
     { href: '/', label: 'Domov', glyph: '◉' },
     { href: '/discover', label: 'Objav', glyph: '◈' },
     { href: '/feed', label: 'Feed', glyph: '☰' },
     { href: '/messages', label: 'Chat', glyph: '✉', badge: unread },
-    { href: '/(tabs)/profile', label: 'Ja', glyph: '☺' },
+    { href: '/(tabs)/profile', label: isGuest ? 'Účet' : 'Ja', glyph: '☺' },
   ];
 
-  const secondary: NavItem[] = [
-    { href: '/community', label: 'Komunity', glyph: '◇' },
-    { href: '/tickets', label: 'Vstupenky', glyph: '🎫' },
-    { href: '/activity', label: 'Aktivita', glyph: '🔔' },
-    { href: '/organizer', label: 'Organizátor', glyph: '◆' },
-    ...(isAdmin ? [{ href: '/admin', label: 'Admin', glyph: '⚙' }] : []),
-  ];
+  // A guest sees the parts that work without an account. Listing "Vstupenky"
+  // to somebody who cannot have any is a menu item that only leads to a wall.
+  const secondary: NavItem[] = isGuest
+    ? [{ href: '/community', label: 'Komunity', glyph: '◇' }]
+    : [
+        { href: '/community', label: 'Komunity', glyph: '◇' },
+        ...((cart.data?.quantity ?? 0) > 0
+          ? [{ href: '/cart', label: 'Košík', glyph: '⛒', badge: cart.data!.quantity }]
+          : []),
+        { href: '/tickets', label: 'Vstupenky', glyph: '🎫' },
+        { href: '/activity', label: 'Aktivita', glyph: '🔔' },
+        { href: '/organizer', label: 'Organizátor', glyph: '◆' },
+        ...(isAdmin ? [{ href: '/admin', label: 'Admin', glyph: '⚙' }] : []),
+      ];
 
   // `/` must match exactly or every route would light it up.
   const isActive = (href: string) =>
@@ -132,21 +151,31 @@ export function DesktopShell({
           </View>
         </ScrollView>
 
-        <Pressable
-          onPress={() => router.push('/settings')}
-          accessibilityRole="link"
-          style={(state) => [styles.me, isHovered(state) && styles.linkHovered]}
-        >
-          <Avatar name={profile?.display_name ?? profile?.username ?? '·'} url={profile?.avatar_url} size={32} />
-          <View style={styles.meText}>
-            <Text style={styles.meName} numberOfLines={1}>
-              {profile?.display_name ?? 'Ja'}
+        {isGuest ? (
+          <View style={styles.guest}>
+            <Text style={styles.guestTitle}>Prezeráš ako hosť</Text>
+            <Text style={styles.guestBody}>
+              Účet potrebuješ, až keď si budeš chcieť kúpiť lístok alebo niekomu napísať.
             </Text>
-            <Text style={styles.meHandle} numberOfLines={1}>
-              {profile?.username ? `@${profile.username}` : 'Nastavenia'}
-            </Text>
+            <Button title="Prihlásiť sa" compact onPress={() => router.push('/(auth)/sign-in')} />
           </View>
-        </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => router.push('/settings')}
+            accessibilityRole="link"
+            style={(state) => [styles.me, isHovered(state) && styles.linkHovered]}
+          >
+            <Avatar name={profile?.display_name ?? profile?.username ?? '·'} url={profile?.avatar_url} size={32} />
+            <View style={styles.meText}>
+              <Text style={styles.meName} numberOfLines={1}>
+                {profile?.display_name ?? 'Ja'}
+              </Text>
+              <Text style={styles.meHandle} numberOfLines={1}>
+                {profile?.username ? `@${profile.username}` : 'Nastavenia'}
+              </Text>
+            </View>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.content}>{children}</View>
@@ -214,6 +243,18 @@ const styles = StyleSheet.create({
   meText: { flex: 1 },
   meName: { ...typography.bodyStrong, fontSize: 13.5, color: colors.text },
   meHandle: { ...typography.caption, fontSize: 11.5, color: colors.textQuaternary },
+
+  guest: {
+    margin: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.block,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderAccent,
+    gap: spacing.sm,
+  },
+  guestTitle: { ...typography.bodyStrong, fontSize: 13.5, color: colors.text },
+  guestBody: { ...typography.caption, fontSize: 11.5, color: colors.textQuaternary, lineHeight: 16 },
 
   content: { flex: 1, minWidth: 0 },
 });

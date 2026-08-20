@@ -1,9 +1,10 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
-import { getEventAnalytics, getEventOrders } from '@/api/organizations';
+import { getEventAnalytics, getEventOrders, getEventSalesSeries } from '@/api/organizations';
+import { SalesChart } from '@/components/SalesChart';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatRelative } from '@/lib/format';
 import {
@@ -24,6 +25,14 @@ export default function EventAnalyticsScreen() {
   const orders = useQuery({
     queryKey: ['analytics', id, 'orders'],
     queryFn: () => getEventOrders(id!),
+    enabled: Boolean(id),
+  });
+
+  const [days, setDays] = useState(30);
+
+  const series = useQuery({
+    queryKey: ['analytics', id, 'series', days],
+    queryFn: () => getEventSalesSeries(id!, days),
     enabled: Boolean(id),
   });
 
@@ -59,6 +68,28 @@ export default function EventAnalyticsScreen() {
         <Tile label="Predané vstupenky" value={String(data.tickets_sold)} />
         <Tile label="Odbavení" value={String(data.checked_in)} />
       </View>
+
+      {/* --- the curve ----------------------------------------------------- */}
+      <SectionHeader title="Predaj v čase" />
+      <View style={styles.rangeRow}>
+        {[7, 30, 90].map((option) => (
+          <Pressable
+            key={option}
+            onPress={() => setDays(option)}
+            style={[styles.range, days === option && styles.rangeOn]}
+          >
+            <Text style={[styles.rangeLabel, days === option && styles.rangeLabelOn]}>
+              {option} dní
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {series.isLoading ? (
+        <LoadingState label="Počítam predaj…" />
+      ) : series.data ? (
+        <SalesChart data={series.data} currency={data.currency} />
+      ) : null}
 
       <SectionHeader title="Peniaze" />
       <View style={styles.money}>
@@ -130,6 +161,17 @@ function MoneyRow({ label, value, strong }: { label: string; value: string; stro
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+
+  rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  range: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    borderRadius: radius.chip,
+    backgroundColor: colors.surfaceElevated,
+  },
+  rangeOn: { backgroundColor: colors.accent },
+  rangeLabel: { ...typography.chip, fontSize: 12, color: colors.textSecondary },
+  rangeLabelOn: { color: '#FFFFFF' },
   title: { ...typography.heading, color: colors.text },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },

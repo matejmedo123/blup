@@ -85,7 +85,7 @@ export default function OnboardingLocationScreen() {
       {location.status !== 'granted' ? (
         <View style={styles.actions}>
           <Button
-            title="◎  Použiť moju polohu"
+            title="◎  Moja poloha"
             variant="secondary"
             onPress={() => void location.request()}
             loading={location.status === 'requesting'}

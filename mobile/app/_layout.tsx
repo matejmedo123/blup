@@ -13,6 +13,8 @@ import { StripeBridge } from '@/payments/stripe';
 import { ToastProvider } from '@/components/Toast';
 
 import { AuthProvider } from '@/auth/AuthProvider';
+import { AuthGateProvider } from '@/auth/useRequireAuth';
+import { MarketingTags } from '@/marketing/tags';
 import { handleAuthDeepLink } from '@/auth/api';
 import { env, isConfigured } from '@/lib/env';
 import { registerServiceWorker } from '@/lib/pwa';
@@ -103,6 +105,7 @@ export default function RootLayout() {
       <Stack.Screen name="event/edit/[id]" options={{ title: 'Upraviť event' }} />
       <Stack.Screen name="event/attendees/[id]" options={{ title: 'Kto ide' }} />
       <Stack.Screen name="user/[id]" options={{ title: '' }} />
+      <Stack.Screen name="cart" options={{ title: 'Košík' }} />
       <Stack.Screen name="tickets/index" options={{ title: 'Moje vstupenky' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />
       <Stack.Screen name="premium" options={{ title: 'BLUP Premium' }} />
@@ -153,7 +156,12 @@ export default function RootLayout() {
               publishableKey={isConfigured.stripe ? env.stripePublishableKey : ''}
               merchantIdentifier={env.appleMerchantId || undefined}
             >
-              {content}
+              {/* Guests browse freely; the gate only appears when they try to
+                  do something an account is actually needed for. */}
+              <AuthGateProvider>{content}</AuthGateProvider>
+              {/* Ad platform tags, and the consent bar they wait behind.
+                  A no-op on native, where there is no pixel to load. */}
+              <MarketingTags />
             </StripeBridge>
             </AuthProvider>
         </ToastProvider>

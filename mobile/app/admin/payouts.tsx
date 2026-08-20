@@ -75,13 +75,13 @@ export default function AdminPayoutsScreen() {
             {status === 'pending' || status === 'processing' ? (
               <View style={styles.actions}>
                 <Button
-                  title="Označiť ako vyplatené"
+                  title="Vyplatené"
                   loading={busy === payout.id}
                   onPress={() => update(payout.id as string, 'paid')}
                   style={styles.flex}
                 />
                 <Button
-                  title="Označiť ako zlyhané"
+                  title="Zlyhalo"
                   variant="danger"
                   disabled={busy !== null}
                   onPress={() => update(payout.id as string, 'failed')}

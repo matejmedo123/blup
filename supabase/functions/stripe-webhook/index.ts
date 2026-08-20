@@ -120,6 +120,8 @@ Deno.serve(async (req) => {
     const metadata = (object.metadata ?? {}) as Record<string, string>;
     const orderId = metadata.order_id;
     const boostId = metadata.boost_id;
+    // A basket pays once for several orders; the checkout is the envelope.
+    const checkoutId = metadata.checkout_id;
 
     switch (event.type) {
       case 'payment_intent.succeeded': {
@@ -133,6 +135,19 @@ Deno.serve(async (req) => {
             p_amount_cents: Number(object.amount_received ?? object.amount),
           });
           if (error) throw error;
+          break;
+        }
+
+        if (checkoutId) {
+          const { error } = await db.rpc('fulfill_checkout', {
+            p_checkout_id: checkoutId,
+            p_provider: 'stripe',
+            p_provider_reference: String(object.id),
+            p_amount_cents: Number(object.amount_received ?? object.amount),
+          });
+          if (error) throw error;
+
+          void triggerTicketEmail();
           break;
         }
 
@@ -161,6 +176,14 @@ Deno.serve(async (req) => {
         if (boostId) {
           await db.rpc('fail_boost', {
             p_boost_id: boostId,
+            p_reason: failure.message ?? event.type,
+          });
+          break;
+        }
+
+        if (checkoutId) {
+          await db.rpc('fail_checkout', {
+            p_checkout_id: checkoutId,
             p_reason: failure.message ?? event.type,
           });
           break;
@@ -217,13 +240,15 @@ Deno.serve(async (req) => {
         const paymentIntentId = String(object.payment_intent ?? '');
         if (!paymentIntentId) break;
 
-        const { data: order } = await db
+        // A single-line order carries the intent id as-is; the orders inside a
+        // basket carry `pi_123#1`, `pi_123#2`, … so one refunded charge refunds
+        // every order that charge paid for.
+        const { data: orders } = await db
           .from('orders')
           .select('id')
-          .eq('provider_reference', paymentIntentId)
-          .maybeSingle();
+          .or(`provider_reference.eq.${paymentIntentId},provider_reference.like.${paymentIntentId}#%`);
 
-        if (order) {
+        for (const order of orders ?? []) {
           await db.rpc('refund_order', { p_order_id: order.id, p_reason: 'Stripe refund' });
         }
         break;

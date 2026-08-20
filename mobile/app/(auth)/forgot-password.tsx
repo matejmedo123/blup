@@ -40,7 +40,7 @@ export default function ForgotPasswordScreen() {
           title="Pozri si schránku"
           body={`Poslali sme odkaz na obnovu na ${email.trim()}. Otvor ho na tomto zariadení a vrátiš sa späť do BLUPu.`}
         />
-        <Button title="Späť na prihlásenie" variant="secondary" onPress={() => router.replace('/(auth)/sign-in')} />
+        <Button title="Späť na login" variant="secondary" onPress={() => router.replace('/(auth)/sign-in')} />
       </Screen>
     );
   }

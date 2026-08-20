@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
-import { getNearbyEvents, saveEvent, unsaveEvent } from '@/api/events';
+import { getFeedEvents, saveEvent, unsaveEvent } from '@/api/events';
 import { getFollowing } from '@/api/profiles';
 import { getAIRecommendations } from '@/api/ai';
 import { getUnreadCount } from '@/api/notifications';
@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { EventCard } from '@/components/EventCard';
 import { useLayout } from '@/hooks/useLayout';
+import { useRequireAuth } from '@/auth/useRequireAuth';
 import { EventMap } from '@/components/EventMap';
 import { useToast } from '@/components/Toast';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -42,8 +43,9 @@ type View_ = 'list' | 'map';
  * an empty database shows the empty state, not a demo event.
  */
 export default function HomeScreen() {
+  const { requireAuth } = useRequireAuth();
   const layout = useLayout();
-  const { profile } = useAuth();
+  const { profile, isGuest } = useAuth();
   const location = useLocation({ watch: true });
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -60,14 +62,16 @@ export default function HomeScreen() {
   const nearby = useQuery({
     queryKey: ['events', 'nearby', coords?.latitude, coords?.longitude, categories],
     queryFn: () =>
-      getNearbyEvents({
+      getFeedEvents({
         latitude: coords?.latitude,
         longitude: coords?.longitude,
         radiusM: 50000,
         categories,
         limit: 60,
       }),
-    enabled: Boolean(coords),
+    // No `enabled`: browsing needs neither an account nor a location. A guest
+    // sees the same events a member does, and a visitor who refused location
+    // gets the upcoming list rather than an empty city.
   });
 
   const circles = useQuery({
@@ -80,7 +84,9 @@ export default function HomeScreen() {
     queryKey: ['ai', 'recommendations', coords?.latitude, coords?.longitude],
     queryFn: () =>
       getAIRecommendations({ coords, limit: 8 }),
-    enabled: Boolean(coords),
+    // The recommender runs under the caller's session; a guest gets the plain
+    // nearby feed instead, which is the honest fallback rather than a 401.
+    enabled: Boolean(coords) && !isGuest,
   });
 
   const recommended = recommendations.data?.events ?? [];
@@ -88,11 +94,14 @@ export default function HomeScreen() {
   const { data: unreadNotifications } = useQuery({
     queryKey: ['notifications', 'unread'],
     queryFn: getUnreadCount,
+    enabled: !isGuest,
     refetchInterval: 60_000,
   });
 
   // Records that the account was open today, which is what drives the streak.
+  // A guest has no streak to keep, and no account for this to be about.
   useEffect(() => {
+    if (isGuest) return;
     touchActivity()
       .then((result) => {
         if (result?.xp_awarded) {
@@ -100,7 +109,7 @@ export default function HomeScreen() {
         }
       })
       .catch(() => undefined);
-  }, [queryClient]);
+  }, [queryClient, isGuest]);
 
   // Realtime: an event created by anyone shows up without a refresh.
   useEffect(() => {
@@ -127,6 +136,8 @@ export default function HomeScreen() {
 
   const toggleSave = useCallback(
     async (event: EventFeedItem) => {
+      // Browsing needs no account; keeping something does.
+      if (!requireAuth('Uložené eventy nájdeš v profile — na to treba účet.', () => {})) return;
       setError(null);
       try {
         if (event.is_saved) {
@@ -142,7 +153,7 @@ export default function HomeScreen() {
         setError(messageFor(caught));
       }
     },
-    [queryClient, toast],
+    [queryClient, toast, requireAuth],
   );
 
   const openEvent = (event: EventFeedItem) => {
@@ -170,17 +181,32 @@ export default function HomeScreen() {
       {/* --- header --------------------------------------------------------- */}
       <View style={styles.header}>
         <View style={styles.flex}>
-          <Text style={styles.city}>◎ {(location.city ?? 'Zisťujem polohu').toUpperCase()}</Text>
+          {/* Once the events are on screen, "Zisťujem polohu" is no longer true
+              — the position is known, only its name is not. */}
+          <Text style={styles.city}>
+            ◎ {(location.city ?? (coords ? 'V tvojom okolí' : 'Zisťujem polohu')).toUpperCase()}
+          </Text>
           <Text style={styles.title}>Dnes okolo teba</Text>
         </View>
 
         <View style={styles.headerActions}>
-          <IconButton
-            glyph="◔"
-            size={42}
-            badge={(unreadNotifications ?? 0) > 0}
-            onPress={() => router.push('/activity')}
-          />
+          {isGuest ? (
+            // The only thing a guest is nudged towards, once, in the corner —
+            // not a banner over the events they came to look at.
+            <Button
+              title="Prihlásiť sa"
+              variant="secondary"
+              compact
+              onPress={() => router.push('/(auth)/sign-in')}
+            />
+          ) : (
+            <IconButton
+              glyph="◔"
+              size={42}
+              badge={(unreadNotifications ?? 0) > 0}
+              onPress={() => router.push('/activity')}
+            />
+          )}
           <IconButton glyph="⌕" size={42} onPress={() => router.push('/search')} />
         </View>
       </View>
@@ -405,8 +431,11 @@ export default function HomeScreen() {
               emoji="🌍"
               title="Zatiaľ sa tu nič nedeje"
               body="V tvojom okolí zatiaľ nikto nič nevytvoril. Môžeš byť prvý — trvá to minútu."
-              actionLabel="Vytvor prvý BLUP"
-              onAction={() => router.push('/organizer/create')}
+              actionLabel="Vytvor BLUP"
+              onAction={() => {
+                if (!requireAuth('Na vytvorenie eventu treba účet.', () => {})) return;
+                router.push('/organizer/create');
+              }}
             />
           }
         />

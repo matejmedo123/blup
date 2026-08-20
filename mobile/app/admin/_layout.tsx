@@ -30,6 +30,8 @@ export default function AdminLayout() {
       <Stack.Screen name="payouts" options={{ title: 'Výplaty' }} />
       <Stack.Screen name="accounting" options={{ title: 'Účtovníctvo platformy' }} />
       <Stack.Screen name="fees" options={{ title: 'Poplatky' }} />
+      <Stack.Screen name="marketing" options={{ title: 'Marketing' }} />
+      <Stack.Screen name="events" options={{ title: 'Eventy' }} />
     </Stack>
   );
 }

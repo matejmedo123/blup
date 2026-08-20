@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getConversations } from '@/api/messages';
 import { ChatThread } from '../chat/[id]';
 import { useLayout } from '@/hooks/useLayout';
+import { SignInInvite } from '@/components/SignInInvite';
 import { useAuth } from '@/auth/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
@@ -19,7 +20,7 @@ import type { ConversationSummary } from '@/types/models';
 /** Správy — the inbox: direct chats and the group chat of every event you go to. */
 export default function MessagesScreen() {
   const queryClient = useQueryClient();
-  const { profile } = useAuth();
+  const { profile, isGuest } = useAuth();
   const layout = useLayout();
 
   // On a wide window the thread opens beside the list instead of replacing it:
@@ -50,6 +51,22 @@ export default function MessagesScreen() {
       void supabase.removeChannel(channel);
     };
   }, [queryClient]);
+
+  // A stranger has no messages to show — and no way to have any.
+  if (isGuest) {
+    return (
+      <SignInInvite
+        glyph="✉"
+        title="Správy sú pre prihlásených"
+        body="Chat eventu, skupiny a súkromné správy fungujú, až keď vieme, kto píše."
+        perks={[
+          'Dohodni sa s ostatnými, kto ide kedy a odkiaľ',
+          'Napíš komukoľvek, koho stretneš na evente',
+          'Chat každého eventu, na ktorý ideš',
+        ]}
+      />
+    );
+  }
 
   if (isLoading) return <Screen><LoadingState label="Načítavam správy…" /></Screen>;
 

@@ -47,7 +47,7 @@ export default function VerifyEmailScreen() {
       />
 
       <Button
-        title="Späť na prihlásenie"
+        title="Späť na login"
         variant="ghost"
         loading={loading}
         onPress={() => router.replace('/(auth)/sign-in')}

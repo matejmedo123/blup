@@ -288,3 +288,54 @@ supabase.channel('home-events')
 
 Published tables: `events`, `event_attendees`, `comments`, `notifications`,
 `tickets`, `orders`, `event_likes`. Subscriptions respect RLS.
+
+
+---
+
+## Basket (RPC, signed in)
+
+| Call | Returns |
+| --- | --- |
+| `cart_view(p_promo_code)` | the whole basket: lines, both fees, total, `seconds_left` |
+| `cart_add(p_ticket_type_id, p_quantity)` | the basket after adding; restarts the 15-minute hold |
+| `cart_set_quantity(p_ticket_type_id, p_quantity)` | 0 removes the line |
+| `cart_remove(p_ticket_type_id)` / `cart_clear()` | the basket after removing |
+| `ticket_type_availability(p_ticket_type_id)` | `total, sold, held, available` — also readable by `anon` |
+
+Errors worth handling: `CART_OTHER_EVENT`, `CART_LIMIT_REACHED`, `SOLD_OUT`,
+`SALES_ENDED`, `EVENT_ALREADY_OVER`, `AUTH_REQUIRED`.
+
+## Paying for a basket
+
+`POST /functions/v1/web-checkout` with `{ "kind": "cart", "promo_code": "..." }`.
+
+The browser sends nothing else — which tickets, how many and what they cost all
+come from the reservations already in the database. The response carries
+`checkout_id` and a `redirect_url` to Stripe's hosted Checkout; the webhook then
+calls `fulfill_checkout` and issues every ticket in the basket at once.
+
+The return page reads `?checkout=<id>` (a basket) or `?order=<id>` (a single
+ticket) and waits for the webhook either way. A redirect is not a payment.
+
+## Organizer
+
+| Call | Returns |
+| --- | --- |
+| `event_sales_series(p_event_id, p_days)` | one row per day: orders, tickets, gross, net, BLUP's cut, cumulative |
+
+Same authorization as `event_analytics`: host, organization member, or admin.
+
+## Admin
+
+| Call | Returns |
+| --- | --- |
+| `admin_events(p_query, p_status, p_limit, p_offset)` | every event, with open-report counts |
+| `admin_log_event_edit(p_event_id, p_fields, p_reason)` | records an edit to somebody else's event |
+| `marketing_tags()` | the ad tag ids the page should load (public) |
+| `set_marketing_settings(...)` | writes them; full admin only |
+
+## Maintenance
+
+`POST /functions/v1/cart-sweep` (service-role key only) calls
+`release_expired_holds()`. Schedule it every minute or five; nothing breaks if
+it does not run, because an expired reservation already holds nothing.

@@ -346,7 +346,7 @@ export default function OrganizerScreen() {
               />
             </View>
             <Button
-              title="Účtovníctvo a export"
+              title="Účtovníctvo"
               variant="secondary"
               onPress={() => router.push('/organizer/accounting')}
             />

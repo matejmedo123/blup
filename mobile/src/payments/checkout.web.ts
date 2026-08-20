@@ -27,6 +27,7 @@ export interface PayHandlers {
 
 interface WebCheckoutResponse {
   order_id?: string;
+  checkout_id?: string;
   boost_id?: string;
   redirect_url?: string;
   requires_payment?: boolean;
@@ -67,6 +68,27 @@ export async function payForTickets(
 
   go(session.redirect_url);
   return { status: 'redirecting', orderId: session.order_id };
+}
+
+/**
+ * Pays for the whole basket at once.
+ *
+ * The browser sends nothing but the promo code: which tickets, how many and
+ * what they cost comes from the reservations already held in the database.
+ */
+export async function payForCart(promoCode: string | null): Promise<PayResult> {
+  const session = await callFunction<WebCheckoutResponse>('web-checkout', {
+    kind: 'cart',
+    promo_code: promoCode,
+  });
+
+  if (session.requires_payment === false) {
+    return { status: 'succeeded', orderId: session.checkout_id };
+  }
+  if (!session.redirect_url) throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+
+  go(session.redirect_url);
+  return { status: 'redirecting', orderId: session.checkout_id };
 }
 
 export async function subscribePremium(plan: 'monthly' | 'yearly'): Promise<PayResult> {
