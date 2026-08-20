@@ -312,18 +312,32 @@ v tej sekunde, keď vyprší — nezáleží na tom, či medzitým niečo bežal
 
 ```bash
 cd mobile
-npx expo export --platform web --output-dir dist
-cd ..
-node scripts/make-host-config.mjs mobile/dist
+npm run build:web
 ```
 
-Prvý príkaz vyrobí statický priečinok `mobile/dist` — obyčajné HTML, JS a CSS,
-žiadny Node na serveri.
+Jeden príkaz, ktorý spraví tri veci: zmaže cache, vyexportuje web a dopíše
+konfiguráciu pre hosting.
 
-Druhý dopíše konfiguráciu pre hosting a **nepreskakuj ho**. Dynamické adresy sú
-na disku uložené ako `event/[id].html` aj so zátvorkami; bez presmerovania
-vráti hosting na `/event/9f2c…` chybu 404. Skript to odvodí priamo z toho, čo
-build vyrobil, a napíše `vercel.json`, `_redirects` aj `nginx.conf`.
+Výsledok je priečinok **`mobile/dist`** — 75 obyčajných HTML súborov plus JS,
+CSS a obrázky, dokopy asi 12 MB. Žiadny Node na serveri, žiadna databáza na
+hostingu. Presne toto nahráš.
+
+> **V ZIPe žiadne HTML nenájdeš, a je to správne.** HTML ešte neexistuje —
+> vzniká až týmto príkazom, a vzniká s **tvojimi** údajmi zapečenými dovnútra
+> (adresa tvojho Supabase projektu, tvoj verejný kľúč, tvoja doména). Build
+> spravený niekým iným by ukazoval na cudziu databázu a nefungoval by.
+
+Časť s konfiguráciou hostingu **nepreskakuj**. Dynamické adresy sú na disku
+uložené ako `event/[id].html` aj so zátvorkami; bez presmerovania vráti hosting
+na `/event/9f2c…` chybu 404. Skript to odvodí priamo z toho, čo build vyrobil,
+a napíše `vercel.json`, `_redirects` aj `nginx.conf`.
+
+Skontrolovať sa to dá lokálne, ale **nie** cez `serve -s` — prepínač `-s`
+prepisuje všetko na `index.html` a presne ten problém zamaskuje:
+
+```bash
+npm run serve:web        # bez -s, tak ako to servíruje ozajstný hosting
+```
 
 > **Po každej zmene `.env` zmaž cache**, inak sa do buildu dostanú staré
 > hodnoty a stráviš hodinu hľadaním chyby, ktorá tam nie je:
@@ -352,6 +366,23 @@ vlož vygenerovaný `nginx.conf` do bloku `server { }`.
 
 Nakoniec nasmeruj doménu na hosting a **skontroluj, že beží cez HTTPS**. Bez
 neho nefunguje geolokácia, upozornenia ani service worker.
+
+### Vlastná doména — čo prepísať
+
+Povedzme, že máš `blup.space`. Na štyroch miestach musí byť tá istá adresa,
+inak sa platba nevráti tam, kam má:
+
+| Kde | Čo |
+| --- | --- |
+| `supabase/.env` | `APP_PUBLIC_URL=https://blup.space` |
+| `supabase/.env` | `STRIPE_CONNECT_RETURN_URL` a `..._REFRESH_URL` na `https://blup.space/organizer/payouts` |
+| `mobile/.env` | `EXPO_PUBLIC_WEB_URL=https://blup.space` |
+| Supabase → Authentication | Site URL `https://blup.space`, redirect adresy `https://blup.space/auth/callback` a `/auth/reset-password` |
+
+Po zmene `supabase/.env` znova `npx supabase secrets set --env-file supabase/.env`,
+po zmene `mobile/.env` znova `npm run build:web`. Doména samotná sa nastavuje
+v hostingu (Vercel: Settings → Domains) a u registrátora sa nasmerujú DNS
+záznamy, ktoré ti hosting ukáže.
 
 ---
 
