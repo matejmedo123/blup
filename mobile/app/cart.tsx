@@ -12,6 +12,7 @@ import { track } from '@/marketing/tags';
 import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
 import { SignInInvite } from '@/components/SignInInvite';
+import { useLayout } from '@/hooks/useLayout';
 import {
   Button, Caption, Divider, EmptyState, Input, LoadingState, Mono, Notice, Screen,
   SectionHeader,
@@ -32,6 +33,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  */
 export default function CartScreen() {
   const { isGuest } = useAuth();
+  const layout = useLayout();
   const queryClient = useQueryClient();
 
   const [promoInput, setPromoInput] = useState('');
@@ -157,6 +159,62 @@ export default function CartScreen() {
   const seconds = secondsLeft % 60;
   const urgent = secondsLeft > 0 && secondsLeft <= 120;
 
+  // On a desktop the basket is a two-column page: what you are buying on the
+  // left, what it costs and the button on the right, where it stays in view
+  // instead of sitting a scroll below the last ticket type.
+  const summary = (
+    <View style={layout.isWide ? styles.aside : undefined}>
+      <View style={styles.summary}>
+        <Row
+          label={`Vstupenky (${data?.quantity ?? 0})`}
+          value={formatMoney(data?.subtotal_cents ?? 0, data?.currency)}
+        />
+        {(data?.discount_cents ?? 0) > 0 ? (
+          <Row label="Zľava" value={`− ${formatMoney(data!.discount_cents, data?.currency)}`} />
+        ) : null}
+        {(data?.archive_fee_cents ?? 0) > 0 ? (
+          <Row
+            label={`Archívny poplatok (${data?.quantity ?? 0}×)`}
+            value={formatMoney(data!.archive_fee_cents, data?.currency)}
+          />
+        ) : null}
+        <Divider />
+        <Row label="Spolu" value={formatMoney(data?.total_cents ?? 0, data?.currency)} strong />
+      </View>
+
+      <Caption style={styles.note}>
+        Archívny poplatok pokrýva uchovanie vstupenky a jej overenie pri vstupe. Provízia BLUP sa
+        strháva organizátorovi — teba sa netýka.
+      </Caption>
+
+      <Button
+        title={`Zaplatiť ${formatMoney(data?.total_cents ?? 0, data?.currency)}`}
+        onPress={() => void pay()}
+        loading={paying}
+        large
+        full
+      />
+
+      <Button
+        title="Vyprázdniť"
+        variant="ghost"
+        onPress={async () => {
+          try {
+            queryClient.setQueryData(['cart', promo], await clearCart());
+          } catch (caught) {
+            setError(messageFor(caught));
+          }
+        }}
+      />
+
+      {Platform.OS === 'web' ? (
+        <Caption style={styles.note}>
+          Platbu spracúva Stripe. Číslo karty sa na BLUP nikdy nedostane.
+        </Caption>
+      ) : null}
+    </View>
+  );
+
   return (
     <Screen scroll>
       {error ? <Notice tone="danger" title="Toto sa nepodarilo" body={error} /> : null}
@@ -171,6 +229,9 @@ export default function CartScreen() {
           <Caption>Po vypršaní sa vrátia do predaja. Zmena v košíku rezerváciu obnoví.</Caption>
         </View>
       </View>
+
+      <View style={layout.isWide ? styles.columns : undefined}>
+        <View style={layout.isWide ? styles.main : undefined}>
 
       {data?.event ? (
         <>
@@ -227,55 +288,10 @@ export default function CartScreen() {
         <Caption style={styles.promoError}>Kód sa nedal použiť.</Caption>
       ) : null}
 
-      {/* --- money --------------------------------------------------------- */}
-      <View style={styles.summary}>
-        <Row
-          label={`Vstupenky (${data?.quantity ?? 0})`}
-          value={formatMoney(data?.subtotal_cents ?? 0, data?.currency)}
-        />
-        {(data?.discount_cents ?? 0) > 0 ? (
-          <Row label="Zľava" value={`− ${formatMoney(data!.discount_cents, data?.currency)}`} />
-        ) : null}
-        {(data?.archive_fee_cents ?? 0) > 0 ? (
-          <Row
-            label={`Archívny poplatok (${data?.quantity ?? 0}×)`}
-            value={formatMoney(data!.archive_fee_cents, data?.currency)}
-          />
-        ) : null}
-        <Divider />
-        <Row label="Spolu" value={formatMoney(data?.total_cents ?? 0, data?.currency)} strong />
+        </View>
+
+        {summary}
       </View>
-
-      <Caption style={styles.note}>
-        Archívny poplatok pokrýva uchovanie vstupenky a jej overenie pri vstupe. Provízia BLUP sa
-        strháva organizátorovi — teba sa netýka.
-      </Caption>
-
-      <Button
-        title={`Zaplatiť ${formatMoney(data?.total_cents ?? 0, data?.currency)}`}
-        onPress={() => void pay()}
-        loading={paying}
-        large
-        full
-      />
-
-      <Button
-        title="Vyprázdniť"
-        variant="ghost"
-        onPress={async () => {
-          try {
-            queryClient.setQueryData(['cart', promo], await clearCart());
-          } catch (caught) {
-            setError(messageFor(caught));
-          }
-        }}
-      />
-
-      {Platform.OS === 'web' ? (
-        <Caption style={styles.note}>
-          Platbu spracúva Stripe. Číslo karty sa na BLUP nikdy nedostane.
-        </Caption>
-      ) : null}
     </Screen>
   );
 }
@@ -344,6 +360,16 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+
+  columns: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xxl },
+  main: { flex: 1, minWidth: 0 },
+  aside: {
+    width: 320,
+    gap: spacing.sm,
+    // Sticky rather than fixed: it scrolls with short baskets and pins itself
+    // once the list of ticket types is longer than the window.
+    ...(Platform.OS === 'web' ? ({ position: 'sticky', top: spacing.xxl } as object) : null),
+  },
 
   clock: {
     flexDirection: 'row',

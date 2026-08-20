@@ -8,7 +8,6 @@ import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatPrice } from '@/lib/format';
 import {
   Badge, Button, Caption, EmptyState, ErrorState, Input, LoadingState, Notice, Screen,
-  SectionHeader,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -53,8 +52,6 @@ export default function AdminEventsScreen() {
 
   return (
     <Screen>
-      <SectionHeader title="Eventy" />
-
       <Input
         label=""
         value={query}

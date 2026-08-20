@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getEventAnalytics, getEventOrders, getEventSalesSeries } from '@/api/organizations';
 import { SalesChart } from '@/components/SalesChart';
+import { useLayout } from '@/hooks/useLayout';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatRelative } from '@/lib/format';
 import {
@@ -15,6 +16,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 /** Per-event analytics: views, saves, RSVPs, sales, BLUP fee and organizer net. */
 export default function EventAnalyticsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const layout = useLayout();
 
   const analytics = useQuery({
     queryKey: ['analytics', id],
@@ -54,7 +56,7 @@ export default function EventAnalyticsScreen() {
       <Text style={styles.title}>{data.title}</Text>
 
       <SectionHeader title="Dosah" />
-      <View style={styles.grid}>
+      <View style={[styles.grid, layout.isWide && styles.gridWide]}>
         <Tile label="Zobrazenia" value={String(data.views)} />
         <Tile label="Unikátni návštevníci" value={String(data.unique_viewers)} />
         <Tile label="Uloženia" value={String(data.saves)} />
@@ -62,7 +64,7 @@ export default function EventAnalyticsScreen() {
       </View>
 
       <SectionHeader title="Účasť" />
-      <View style={styles.grid}>
+      <View style={[styles.grid, layout.isWide && styles.gridWide]}>
         <Tile label="Idú" value={String(data.rsvp_going)} />
         <Tile label="Zaujíma ich to" value={String(data.rsvp_interested)} />
         <Tile label="Predané vstupenky" value={String(data.tickets_sold)} />
@@ -175,9 +177,12 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, color: colors.text },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  // Two tiles stretched across a monitor is a lot of felt for four numbers.
+  gridWide: { flexWrap: 'nowrap' },
   tile: {
     flexGrow: 1,
-    minWidth: '45%',
+    flexBasis: 0,
+    minWidth: 140,
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.lg,

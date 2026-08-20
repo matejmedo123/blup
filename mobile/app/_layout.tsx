@@ -14,6 +14,7 @@ import { ToastProvider } from '@/components/Toast';
 
 import { AuthProvider } from '@/auth/AuthProvider';
 import { AuthGateProvider } from '@/auth/useRequireAuth';
+import { AppFrame } from '@/components/AppFrame';
 import { MarketingTags } from '@/marketing/tags';
 import { handleAuthDeepLink } from '@/auth/api';
 import { env, isConfigured } from '@/lib/env';
@@ -158,7 +159,11 @@ export default function RootLayout() {
             >
               {/* Guests browse freely; the gate only appears when they try to
                   do something an account is actually needed for. */}
-              <AuthGateProvider>{content}</AuthGateProvider>
+              {/* On a desktop the sidebar frames every screen, not only the
+                  five tabs; AppFrame is a passthrough on phones. */}
+              <AuthGateProvider>
+                <AppFrame>{content}</AppFrame>
+              </AuthGateProvider>
               {/* Ad platform tags, and the consent bar they wait behind.
                   A no-op on native, where there is no pixel to load. */}
               <MarketingTags />

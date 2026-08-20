@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getUnreadMessageCount } from '@/api/messages';
 import { useAuth } from '@/auth/AuthProvider';
-import { DesktopShell } from '@/components/DesktopShell';
 import { useLayout } from '@/hooks/useLayout';
 import { colors, radius, typography } from '@/theme';
 
@@ -111,7 +110,9 @@ export default function TabsLayout() {
   // thumb to reach the bottom of the window, and a bar pinned there covers
   // content for no benefit. The screens themselves are untouched.
   if (layout.isDesktop) {
-    return <DesktopShell unread={unread ?? 0}>{tabs}</DesktopShell>;
+    // The sidebar is drawn by AppFrame at the root now, so every screen keeps
+    // it — not just these five. Here the desktop only drops the tab bar.
+    return tabs;
   }
 
   return tabs;

@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { getCart } from '@/api/cart';
+import { getUnreadMessageCount } from '@/api/messages';
 import { SIDEBAR_WIDTH } from '@/hooks/useLayout';
 import { Avatar, Button } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -75,15 +76,18 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function DesktopShell({
-  children,
-  unread = 0,
-}: {
-  children: React.ReactNode;
-  unread?: number;
-}) {
+export function DesktopShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { profile, isAdmin, isGuest } = useAuth();
+
+  // The shell frames every screen, not just the tabs, so the badges belong to
+  // it rather than to whichever layout happens to be mounted underneath.
+  const { data: unread = 0 } = useQuery({
+    queryKey: ['messages', 'unread'],
+    queryFn: getUnreadMessageCount,
+    refetchInterval: 60_000,
+    enabled: !isGuest,
+  });
 
   // The basket badge is the only nav item that carries a number the visitor is
   // on a clock for, so it refetches on focus rather than sitting stale.
