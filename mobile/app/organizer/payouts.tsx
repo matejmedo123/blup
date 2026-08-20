@@ -108,9 +108,16 @@ export default function PayoutsScreen() {
     try {
       const result = await requestPayout(organization.id, cents);
       setAmount('');
+      const STATUS: Record<string, string> = {
+        pending: 'čaká na spracovanie',
+        processing: 'sa spracúva',
+        paid: 'je vyplatená',
+        failed: 'zlyhala',
+        cancelled: 'bola zrušená',
+      };
       setNotice(
         result.note ??
-          `Payout of ${formatMoney(result.amount_cents, result.currency)} is ${result.status}.`,
+          `Výplata ${formatMoney(result.amount_cents, result.currency)} ${STATUS[result.status] ?? result.status}.`,
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['organization', organization.id, 'balance'] }),
@@ -136,7 +143,7 @@ export default function PayoutsScreen() {
           {formatMoney(balance.data?.available_cents ?? 0, currency)}
         </Text>
         <Caption>
-          {formatMoney(balance.data?.pending_cents ?? 0, currency)} still settling
+          {formatMoney(balance.data?.pending_cents ?? 0, currency)} ešte dozrieva
         </Caption>
       </View>
 

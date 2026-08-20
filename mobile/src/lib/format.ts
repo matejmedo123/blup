@@ -7,17 +7,39 @@ const locale = { locale: sk };
 /** Money is stored in minor units; never format a float. */
 export function formatPrice(cents: number, currency = 'EUR'): string {
   if (cents === 0) return 'Zdarma';
+
+  // A price badge drops the cents when there are none — "15 €" reads better on
+  // a card than "15,00 €" — but the symbol still goes after the number, the way
+  // Slovak writes it.
   const amount = cents / 100;
-  const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', CZK: 'Kč', PLN: 'zł' };
-  const symbol = symbols[currency] ?? currency;
-  const value = Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2);
-  return currency === 'CZK' || currency === 'PLN' ? `${value} ${symbol}` : `${symbol}${value}`;
+  try {
+    return new Intl.NumberFormat('sk-SK', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(Number.isInteger(amount) ? 0 : 2)} ${currency}`;
+  }
 }
 
 export function formatMoney(cents: number, currency = 'EUR'): string {
-  const amount = (cents / 100).toFixed(2);
-  const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' };
-  return `${symbols[currency] ?? `${currency} `}${amount}`;
+  // Slovak writes the amount first and the symbol after it, with a comma for
+  // the decimal: "12,50 €". Hand-assembling "€12.50" reads as a foreign app,
+  // which is exactly the wrong first impression for a product about your own
+  // city.
+  try {
+    return new Intl.NumberFormat('sk-SK', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(cents / 100);
+  } catch {
+    // An unknown currency code should not take a screen down.
+    return `${(cents / 100).toFixed(2)} ${currency}`;
+  }
 }
 
 /** "300 m od teba" / "1,2 km od teba" — the spec's distance language. */

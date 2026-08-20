@@ -105,7 +105,7 @@ export default function TicketTypesScreen() {
             <View style={styles.flex}>
               <Text style={styles.rowTitle}>{ticket.name}</Text>
               <Caption>
-                {ticket.quantity_sold}/{ticket.quantity_total} sold · max {ticket.max_per_order} per order
+                {ticket.quantity_sold}/{ticket.quantity_total} predaných · max {ticket.max_per_order} na objednávku
               </Caption>
             </View>
             <Text style={styles.price}>{formatPrice(ticket.price_cents, ticket.currency)}</Text>
