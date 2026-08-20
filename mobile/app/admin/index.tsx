@@ -92,7 +92,10 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   tile: {
     flexGrow: 1,
-    minWidth: '45%',
+    // A fixed floor rather than a percentage: two tiles stretched across a
+    // monitor is a lot of felt for two numbers, and the row reflows on its own
+    // from six-up on a wide window down to two-up on a phone.
+    minWidth: 168,
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.lg,
