@@ -18,6 +18,7 @@ import { recordSignal, queueImpression } from '@/api/signals';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { EventCard } from '@/components/EventCard';
+import { useLayout } from '@/hooks/useLayout';
 import { EventMap } from '@/components/EventMap';
 import { useToast } from '@/components/Toast';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -41,6 +42,7 @@ type View_ = 'list' | 'map';
  * an empty database shows the empty state, not a demo event.
  */
 export default function HomeScreen() {
+  const layout = useLayout();
   const { profile } = useAuth();
   const location = useLocation({ watch: true });
   const queryClient = useQueryClient();
@@ -184,7 +186,7 @@ export default function HomeScreen() {
       </View>
 
       {/* --- view switch ----------------------------------------------------- */}
-      <View style={styles.switchRow}>
+      <View style={[styles.switchRow, layout.isWide && styles.switchRowWide]}>
         {(['list', 'map'] as View_[]).map((option) => (
           <Pressable
             key={option}
@@ -199,6 +201,27 @@ export default function HomeScreen() {
       </View>
 
       {/* --- categories ------------------------------------------------------ */}
+      {layout.isWide ? (
+        <View style={styles.chipWrap}>
+          <Pressable
+            onPress={() => setFamily(null)}
+            style={[styles.chip, family === null && styles.chipActive]}
+          >
+            <Text style={[styles.chipLabel, family === null && styles.chipLabelActive]}>Všetko</Text>
+          </Pressable>
+          {categoryFilters.map((filter) => (
+            <Pressable
+              key={filter.key}
+              onPress={() => setFamily(family === filter.key ? null : filter.key)}
+              style={[styles.chip, family === filter.key && styles.chipActive]}
+            >
+              <Text style={[styles.chipLabel, family === filter.key && styles.chipLabelActive]}>
+                {filter.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -224,6 +247,7 @@ export default function HomeScreen() {
           </Pressable>
         ))}
       </ScrollView>
+      )}
 
       {error ? <Notice tone="danger" title="Toto sa nepodarilo" body={error} /> : null}
 
@@ -274,9 +298,15 @@ export default function HomeScreen() {
         <ErrorState message={messageFor(nearby.error)} onRetry={() => void nearby.refetch()} />
       ) : (
         <FlatList
+          // Changing numColumns needs a fresh list instance; without the key
+          // React Native keeps the old cell layout and the grid comes out
+          // half-collapsed after a window resize.
+          key={`events-${layout.columns}`}
+          numColumns={layout.columns}
+          columnWrapperStyle={layout.columns > 1 ? styles.column : undefined}
           data={events}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, layout.isWide && styles.listWide]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -302,7 +332,7 @@ export default function HomeScreen() {
             ) : null
           }
           renderItem={({ item }) => (
-            <View style={styles.cardWrapper}>
+            <View style={[styles.cardWrapper, layout.columns > 1 && styles.cardCell]}>
               <EventCard
                 event={item}
                 onPress={() => openEvent(item)}
@@ -459,6 +489,14 @@ const styles = StyleSheet.create({
   switchLabelActive: { color: '#FFFFFF' },
 
   chipScroll: { flexGrow: 0, marginTop: spacing.lg },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.xxl,
+  },
+  switchRowWide: { maxWidth: 320, marginHorizontal: spacing.xxl },
   chipRow: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.gutter },
   chip: {
     paddingHorizontal: 15,
@@ -474,6 +512,11 @@ const styles = StyleSheet.create({
 
   list: { padding: spacing.gutter, paddingBottom: spacing.xxxl, flexGrow: 1 },
   cardWrapper: { marginBottom: spacing.xl },
+  // In a grid the card owns its column and the row owns the gutter between
+  // columns, so a card never has to know how many neighbours it has.
+  cardCell: { flex: 1, minWidth: 0 },
+  column: { gap: spacing.lg },
+  listWide: { paddingHorizontal: spacing.xxl },
 
   circles: {
     flexDirection: 'row',

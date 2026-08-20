@@ -1,9 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getConversations } from '@/api/messages';
+import { ChatThread } from '../chat/[id]';
+import { useLayout } from '@/hooks/useLayout';
 import { useAuth } from '@/auth/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
@@ -18,6 +20,12 @@ import type { ConversationSummary } from '@/types/models';
 export default function MessagesScreen() {
   const queryClient = useQueryClient();
   const { profile } = useAuth();
+  const layout = useLayout();
+
+  // On a wide window the thread opens beside the list instead of replacing it:
+  // navigating away from the inbox to read one message and back again is a step
+  // backwards when there is room for both.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['conversations'],
@@ -53,8 +61,12 @@ export default function MessagesScreen() {
     );
   }
 
-  return (
-    <Screen contentStyle={styles.container}>
+  const conversations = data ?? [];
+  const splitView = layout.isDesktop;
+  const selected = splitView ? (openId ?? conversations[0]?.id ?? null) : null;
+
+  const inbox = (
+    <>
       <View style={styles.header}>
         <View style={styles.flex}>
           <Mono accent>✉ správy</Mono>
@@ -64,7 +76,7 @@ export default function MessagesScreen() {
       </View>
 
       <FlatList
-        data={data ?? []}
+        data={conversations}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
@@ -79,7 +91,8 @@ export default function MessagesScreen() {
           <ConversationRow
             conversation={item}
             isMine={item.last_sender_id === profile?.id}
-            onPress={() => router.push(`/chat/${item.id}`)}
+            selected={splitView && item.id === selected}
+            onPress={() => (splitView ? setOpenId(item.id) : router.push(`/chat/${item.id}`))}
           />
         )}
         ListEmptyComponent={
@@ -92,16 +105,40 @@ export default function MessagesScreen() {
           />
         }
       />
-    </Screen>
+    </>
   );
+
+  if (splitView) {
+    return (
+      <View style={styles.split}>
+        <View style={styles.splitList}>{inbox}</View>
+        <View style={styles.splitThread}>
+          {selected ? (
+            <ChatThread key={selected} id={selected} embedded />
+          ) : (
+            <View style={styles.splitEmpty}>
+              <EmptyState
+                emoji="💬"
+                title="Vyber si konverzáciu"
+                body="Vľavo sú všetky. Otvorí sa tu vedľa, nemusíš nikam odchádzať."
+              />
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  return <Screen contentStyle={styles.container}>{inbox}</Screen>;
 }
 
 function ConversationRow({
-  conversation, isMine, onPress,
+  conversation, isMine, onPress, selected = false,
 }: {
   conversation: ConversationSummary;
   isMine: boolean;
   onPress: () => void;
+  selected?: boolean;
 }) {
   const isEvent = conversation.kind === 'event';
   const unread = conversation.unread_count > 0;
@@ -114,7 +151,12 @@ function ConversationRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.row, unread && styles.rowUnread, pressed && styles.rowPressed]}
+      style={({ pressed }) => [
+        styles.row,
+        unread && styles.rowUnread,
+        selected && styles.rowSelected,
+        pressed && styles.rowPressed,
+      ]}
     >
       {isEvent ? (
         <View style={styles.eventAvatar}>
@@ -163,6 +205,17 @@ function ConversationRow({
 }
 
 const styles = StyleSheet.create({
+  split: { flex: 1, flexDirection: 'row', backgroundColor: colors.background },
+  splitList: {
+    width: 348,
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+    paddingTop: spacing.xl,
+    paddingHorizontal: spacing.lg,
+  },
+  splitThread: { flex: 1, minWidth: 0 },
+  splitEmpty: { flex: 1, justifyContent: 'center' },
+  rowSelected: { backgroundColor: colors.surfaceElevated2 },
   container: { paddingTop: spacing.md },
   flex: { flex: 1 },
 

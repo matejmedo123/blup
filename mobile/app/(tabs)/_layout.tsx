@@ -4,6 +4,8 @@ import { Tabs } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import { getUnreadMessageCount } from '@/api/messages';
+import { DesktopShell } from '@/components/DesktopShell';
+import { useLayout } from '@/hooks/useLayout';
 import { colors, radius, typography } from '@/theme';
 
 /**
@@ -20,17 +22,19 @@ function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  const layout = useLayout();
+
   const { data: unread } = useQuery({
     queryKey: ['messages', 'unread'],
     queryFn: getUnreadMessageCount,
     refetchInterval: 60_000,
   });
 
-  return (
+  const tabs = (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
+        tabBarStyle: layout.isDesktop ? { display: 'none' } : {
           backgroundColor: Platform.OS === 'web' ? colors.background : 'rgba(10, 13, 18, 0.92)',
           borderTopColor: colors.border,
           borderTopWidth: 1,
@@ -97,6 +101,15 @@ export default function TabsLayout() {
       />
     </Tabs>
   );
+
+  // On a desktop the same five destinations move into a sidebar: there is no
+  // thumb to reach the bottom of the window, and a bar pinned there covers
+  // content for no benefit. The screens themselves are untouched.
+  if (layout.isDesktop) {
+    return <DesktopShell unread={unread ?? 0}>{tabs}</DesktopShell>;
+  }
+
+  return tabs;
 }
 
 const styles = StyleSheet.create({

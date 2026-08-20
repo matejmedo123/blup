@@ -71,9 +71,37 @@ export default function Root({ children }: PropsWithChildren) {
  */
 const SHELL_CSS = `
   html, body { background-color: #0A0D12; color-scheme: dark; }
-  body { overscroll-behavior-y: none; -webkit-font-smoothing: antialiased; }
+  body {
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    /* Stop the grey flash on tap that makes a web app feel like a web page. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Safari zooms the page when a focused input's text is under 16px. The app's
+     inputs are 15px by design, so the minimum is enforced here for touch
+     devices only — on a desktop the zoom never happens and the smaller size is
+     the intended one. */
+  @media (hover: none) and (pointer: coarse) {
+    input, textarea, select { font-size: 16px !important; }
+  }
+
+  /* Reach under the notch and above the home indicator on an installed PWA. */
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
   /* Keyboard focus must stay visible in a browser, where it is the only way
      some people navigate at all. */
   :focus-visible { outline: 2px solid #0080FF; outline-offset: 2px; }
   ::selection { background: #0080FF; color: #fff; }
+
+  /* A pointer gets a real scrollbar; a touch screen never sees one. */
+  @media (hover: hover) {
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #252D3D; border-radius: 999px; border: 3px solid #0A0D12; }
+    ::-webkit-scrollbar-thumb:hover { background: #37415A; }
+  }
 `;

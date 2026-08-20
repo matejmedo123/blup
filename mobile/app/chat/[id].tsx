@@ -28,8 +28,19 @@ import type { Message } from '@/types/models';
  * pushed when it opens and whenever a new message lands, so the inbox badge
  * clears the moment you actually look.
  */
+/**
+ * The route: reads the id from the URL and renders the thread.
+ *
+ * The thread itself is a component rather than a screen so the desktop inbox
+ * can show it beside the conversation list — on a wide window, navigating away
+ * from the list to read one message is a step backwards.
+ */
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <ChatThread id={id} />;
+}
+
+export function ChatThread({ id, embedded = false }: { id?: string; embedded?: boolean }) {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
@@ -74,8 +85,11 @@ export default function ChatScreen() {
     : (otherProfile?.display_name ?? otherProfile?.username ?? 'Konverzácia');
 
   useEffect(() => {
+    // Embedded in the desktop inbox there is no header to name — setting the
+    // title there would rewrite the *inbox* header from inside a panel.
+    if (embedded) return;
     navigation.setOptions({ title: heading });
-  }, [navigation, heading]);
+  }, [navigation, heading, embedded]);
 
   const markRead = useCallback(() => {
     if (!id) return;

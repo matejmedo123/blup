@@ -9,6 +9,7 @@ import { Image } from 'expo-image';
 
 import { avatarColorFor, colors, radius, spacing, typography, shadow } from '@/theme';
 import { initialsFor } from '@/lib/format';
+import { CONTENT_MAX, useLayout } from '@/hooks/useLayout';
 
 /** Screen shell: safe area + background, used by every route. */
 export function Screen({
@@ -26,14 +27,27 @@ export function Screen({
   contentStyle?: StyleProp<ViewStyle>;
   refreshControl?: ScrollViewProps['refreshControl'];
 }) {
+  const layout = useLayout();
+
+  // A phone's layout is the window. A desktop's is not: the column widens for
+  // the card grids but still stops well short of the monitor, because a line of
+  // text 1600 pixels wide is unreadable however much room there is.
+  const column = Platform.OS === 'web'
+    ? {
+        width: '100%' as const,
+        maxWidth: layout.isDesktop ? CONTENT_MAX : layout.isWide ? 860 : 760,
+        marginHorizontal: 'auto' as const,
+      }
+    : null;
+
+  const pad = layout.isWide
+    ? { padding: spacing.xxl, paddingBottom: spacing.huge }
+    : { padding: spacing.lg, paddingBottom: spacing.xxxl };
+
   const body = scroll ? (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[
-        { padding: spacing.lg, paddingBottom: spacing.xxxl },
-        styles.webColumn,
-        contentStyle,
-      ]}
+      contentContainerStyle={[pad, column, contentStyle]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}
@@ -41,7 +55,7 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.flex, styles.webColumn, contentStyle]}>{children}</View>
+    <View style={[styles.flex, column, contentStyle]}>{children}</View>
   );
 
   return <SafeAreaView style={[styles.screen, style]} edges={edges}>{body}</SafeAreaView>;
@@ -232,6 +246,47 @@ export function Input({
       />
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       {!error && hint ? <Text style={styles.hintText}>{hint}</Text> : null}
+    </View>
+  );
+}
+
+/**
+ * Lays children out in as many columns as the window can honestly hold: one on
+ * a phone, two on a laptop, three on a wide monitor. Gaps come from the grid
+ * rather than each card's own margin, so a card looks the same wherever it is
+ * used.
+ *
+ * Deliberately not a FlatList: these lists are tens of items, not thousands,
+ * and virtualisation inside a page-level ScrollView measures wrong on web.
+ */
+export function CardGrid({
+  children, minWidth, style,
+}: {
+  children: React.ReactNode;
+  /** Narrowest a card may get before the grid drops a column. */
+  minWidth?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const layout = useLayout();
+  const items = React.Children.toArray(children).filter(Boolean);
+
+  if (!layout.isWide || items.length === 0) {
+    return <View style={[styles.gridStack, style]}>{items}</View>;
+  }
+
+  const columns = layout.columns;
+  const basis = `${100 / columns}%` as `${number}%`;
+
+  return (
+    <View style={[styles.grid, style]}>
+      {items.map((child, index) => (
+        <View
+          key={index}
+          style={[styles.gridCell, { flexBasis: basis, maxWidth: basis, minWidth: minWidth ?? 280 }]}
+        >
+          {child}
+        </View>
+      ))}
     </View>
   );
 }
@@ -540,18 +595,10 @@ export function Switch({
   );
 }
 
-/**
- * On a phone the layout *is* the window. In a desktop browser it is not, and a
- * 1900-pixel-wide column of phone UI reads as broken rather than spacious — so
- * the web build keeps the same column and centres it. One rule here rather than
- * a breakpoint in every screen.
- */
-const WEB_MAX_WIDTH = 760;
-
 const styles = StyleSheet.create({
-  webColumn: Platform.OS === 'web'
-    ? { width: '100%', maxWidth: WEB_MAX_WIDTH, marginHorizontal: 'auto' }
-    : {},
+  gridStack: { gap: spacing.md },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.sm },
+  gridCell: { paddingHorizontal: spacing.sm, paddingBottom: spacing.lg },
   flex: { flex: 1 },
   screen: { flex: 1, backgroundColor: colors.background },
 
