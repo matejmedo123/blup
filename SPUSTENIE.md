@@ -506,6 +506,9 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 
 ---
 
+Máš vlastnú doménu? Celý postup pre DNS, hosting a e-mail je v
+**[DOMENA.md](DOMENA.md)** — písaný pre doménu vedenú vo Websupporte.
+
 Podrobnosti k jednotlivým oblastiam: **PAYMENTS.md** (peniaze),
 **WEB.md** (webová verzia), **DATABASE.md** (schéma), **API.md** (funkcie),
 **ENVIRONMENT.md** (premenné).
