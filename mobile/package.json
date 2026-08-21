@@ -72,7 +72,7 @@
     "web": "expo start --web",
     "web:clear": "expo start --web --clear",
     "build:web": "rm -rf .expo node_modules/.cache && expo export --platform web --output-dir dist && node ../scripts/make-host-config.mjs dist",
-    "serve:web": "npx serve dist -l 4321"
+    "serve:web": "node ../scripts/serve-web.mjs dist 4321"
   },
   "private": true
 }

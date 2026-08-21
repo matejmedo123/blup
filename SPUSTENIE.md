@@ -332,12 +332,21 @@ uložené ako `event/[id].html` aj so zátvorkami; bez presmerovania vráti host
 na `/event/9f2c…` chybu 404. Skript to odvodí priamo z toho, čo build vyrobil,
 a napíše `vercel.json`, `_redirects` aj `nginx.conf`.
 
-Skontrolovať sa to dá lokálne, ale **nie** cez `serve -s` — prepínač `-s`
-prepisuje všetko na `index.html` a presne ten problém zamaskuje:
+Skontrolovať sa to dá lokálne:
 
 ```bash
-npm run serve:web        # bez -s, tak ako to servíruje ozajstný hosting
+npm run serve:web        # http://localhost:4321
 ```
+
+Tento príkaz **nespúšťa** `npx serve`. Oba jeho režimy totiž klamú, každý inak:
+`serve -s dist` prepíše každý požiadavok na `index.html`, takže dynamická
+adresa vyzerá, že funguje, aj keď hosting na ňu nie je nastavený — a rozsype sa
+až po nasadení. `serve dist` zas nepresmeruje nič, takže `/event/<id>` vráti
+404, hoci na ostrom hostingu by fungovala.
+
+`scripts/serve-web.mjs` číta ten istý `_redirects`, ktorý si práve vygeneroval,
+a aplikuje ho v rovnakom poradí ako Netlify či Vercel: najprv skutočný súbor,
+potom presmerovania, potom 404. Čo vidíš doma, to dostaneš aj vonku.
 
 > **Po každej zmene `.env` zmaž cache**, inak sa do buildu dostanú staré
 > hodnoty a stráviš hodinu hľadaním chyby, ktorá tam nie je:
