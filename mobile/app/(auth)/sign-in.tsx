@@ -169,7 +169,9 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
+    // Baseline, not centre: the question and the link are different sizes, and
+    // centring their boxes left the link sitting a couple of pixels low.
+    alignItems: 'baseline',
     marginTop: 'auto',
     paddingTop: spacing.xxl,
   },

@@ -13,7 +13,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 export function DateTimeField({
   value,
   onChange,
-  label = 'Starts',
+  label = 'Začiatok',
 }: {
   value: Date;
   onChange: (next: Date) => void;

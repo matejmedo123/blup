@@ -5,11 +5,13 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getAdminEvents, setEventStatus, type AdminEvent } from '@/api/admin';
 import { messageFor } from '@/lib/errors';
+import { eventStatusLabel } from '@/lib/labels';
 import { formatEventDate, formatPrice } from '@/lib/format';
 import {
   Badge, Button, Caption, EmptyState, ErrorState, Input, LoadingState, Notice, Screen,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
+import type { EventStatus } from '@/types/models';
 
 const FILTERS: { key: string | null; label: string }[] = [
   { key: null, label: 'Všetko' },
@@ -107,7 +109,7 @@ export default function AdminEventsScreen() {
                     <Badge tone="danger" label={`${item.reports_open} nahlásení`} />
                   ) : null}
                   {item.status !== 'published' ? (
-                    <Badge tone="neutral" label={item.status} />
+                    <Badge tone="neutral" label={eventStatusLabel[item.status as EventStatus] ?? item.status} />
                   ) : null}
                 </View>
 

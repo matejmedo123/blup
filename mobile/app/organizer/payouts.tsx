@@ -7,6 +7,7 @@ import {
   getLedger, getMyOrganizations, getOrganizerBalance, getPayouts, refreshPayoutStatus,
   requestPayout, startPayoutOnboarding,
 } from '@/api/organizations';
+import { payoutStatusLabel } from '@/lib/labels';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatRelative } from '@/lib/format';
 import {
@@ -170,7 +171,7 @@ export default function PayoutsScreen() {
 
       <SectionHeader title="Výber" />
       <Input
-        label={`Amount (${currency})`}
+        label={`Suma (${currency})`}
         value={amount}
         onChangeText={setAmount}
         placeholder="0.00"
@@ -202,7 +203,7 @@ export default function PayoutsScreen() {
                 <Caption style={styles.failure}>{payout.failure_reason}</Caption>
               ) : null}
             </View>
-            <Badge tone={TONE[payout.status]} label={payout.status} />
+            <Badge tone={TONE[payout.status]} label={payoutStatusLabel[payout.status]} />
           </View>
         ))
       )}

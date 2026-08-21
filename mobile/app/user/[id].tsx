@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   badgeEmoji: { fontSize: 14 },
 
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   eventItem: { marginBottom: spacing.lg },
   report: { marginTop: spacing.xl },
 });

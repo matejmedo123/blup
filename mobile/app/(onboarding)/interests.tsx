@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: spacing.md,
   },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
 
   modeSwitch: { marginBottom: spacing.lg },
   deck: { alignItems: 'center', gap: spacing.md, marginBottom: spacing.xl },

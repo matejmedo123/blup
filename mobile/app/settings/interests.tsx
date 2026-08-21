@@ -92,5 +92,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: spacing.md,
   },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
 });

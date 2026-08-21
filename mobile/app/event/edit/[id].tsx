@@ -352,5 +352,5 @@ export default function EditEventScreen() {
 
 const styles = StyleSheet.create({
   textarea: { height: 110, textAlignVertical: 'top', paddingTop: spacing.md },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
 });

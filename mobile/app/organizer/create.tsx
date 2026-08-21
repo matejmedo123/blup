@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   coverActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginBottom: spacing.lg },
 
   textarea: { height: 110, textAlignVertical: 'top', paddingTop: spacing.md },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.lg },
 
 
   mapHint: { marginBottom: spacing.sm },

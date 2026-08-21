@@ -4,11 +4,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { listPayouts, updatePayoutStatus } from '@/api/admin';
 import { messageFor } from '@/lib/errors';
+import { payoutStatusLabel } from '@/lib/labels';
 import { formatMoney, formatRelative } from '@/lib/format';
 import {
   Badge, Button, Caption, EmptyState, LoadingState, Notice, Screen,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
+import type { PayoutStatus } from '@/types/models';
 
 /**
  * Payout queue. Marking one failed writes a reversing ledger entry, so the
@@ -62,14 +64,14 @@ export default function AdminPayoutsScreen() {
               </Text>
               <Badge
                 tone={status === 'paid' ? 'success' : status === 'failed' ? 'danger' : 'warning'}
-                label={status}
+                label={payoutStatusLabel[status as PayoutStatus] ?? status}
               />
             </View>
 
             <Caption>{organization?.name ?? 'Organizácia'}</Caption>
-            <Caption>Requested {formatRelative(payout.requested_at as string)}</Caption>
+            <Caption>Požiadané {formatRelative(payout.requested_at as string)}</Caption>
             {payout.provider_transfer_id ? (
-              <Caption>Transfer {String(payout.provider_transfer_id)}</Caption>
+              <Caption>Prevod {String(payout.provider_transfer_id)}</Caption>
             ) : null}
 
             {status === 'pending' || status === 'processing' ? (

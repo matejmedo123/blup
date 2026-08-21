@@ -631,11 +631,25 @@ const styles = StyleSheet.create({
     // Wider than any phone's content column, so nothing changes on a phone —
     // and narrow enough that a desktop button looks like a button.
     maxWidth: 360,
+    // Centred, because the cap above makes the button narrower than what it
+    // sits in: left-aligned it drifted away from the centred inputs, headings
+    // and links around it and read as a mistake. `width: 100%` has to come with
+    // it — `alignSelf: center` alone makes a flex child shrink to its label,
+    // which turned the sign-in CTA into a 116px pill.
+    alignSelf: 'center',
+    width: '100%',
+    // Breathing room, so two stacked buttons are two buttons rather than one
+    // block split by a hairline. Halved on each so the gap between them is
+    // spacing.md and the gap to anything else stays spacing.sm.
+    marginVertical: spacing.sm,
   },
   buttonCompact: { height: 40, paddingHorizontal: spacing.lg, borderRadius: radius.block },
   /** The full-width primary CTA from the handoff: 56 tall, radius 18. */
   buttonLarge: { height: 56, borderRadius: 18 },
   buttonFull: { alignSelf: 'stretch', maxWidth: undefined },
+  // In a row the parent decides the gaps; the vertical margin would only push
+  // the row apart from its neighbours.
+  buttonInRow: { marginVertical: 0 },
   buttonPrimary: { backgroundColor: colors.accent, ...shadow.cta },
   buttonSecondary: { backgroundColor: colors.surfaceElevated2 },
   buttonGhost: { backgroundColor: 'transparent' },

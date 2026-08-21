@@ -15,7 +15,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 export function DateTimeField({
   value,
   onChange,
-  label = 'Starts',
+  label = 'Začiatok',
   minimumDate,
 }: {
   value: Date;

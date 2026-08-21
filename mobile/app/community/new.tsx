@@ -141,6 +141,6 @@ export default function NewCommunityScreen() {
 const styles = StyleSheet.create({
   intro: { marginBottom: spacing.lg },
   textarea: { height: 90, textAlignVertical: 'top', paddingTop: spacing.md },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.md },
   submit: { marginTop: spacing.lg },
 });

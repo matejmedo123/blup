@@ -114,7 +114,11 @@ const styles = StyleSheet.create({
 
   monogram: { alignItems: 'center', justifyContent: 'center' },
 
-  hero: { flex: 1 },
+  // The bloom below bleeds 60px past each edge on purpose. On the web nothing
+  // clipped it, so the document came out 120px wider than the window and the
+  // sign-in page scrolled sideways on a phone. A decorative bleed has to be
+  // clipped by the thing it bleeds out of.
+  hero: { flex: 1, overflow: 'hidden' },
   bloom: {
     position: 'absolute',
     top: -140,
