@@ -13,6 +13,17 @@ const MESSAGES: Record<string, string> = {
   'Email not confirmed': 'Najprv si potvrď e-mail — odkaz máš v schránke.',
   'User already registered': 'Na tento e-mail už účet existuje. Skús sa prihlásiť.',
   UNAUTHENTICATED: 'Tvoja relácia vypršala. Prihlás sa znova.',
+  // GoTrue answers in English; a Slovak app should not hand that to a person.
+  'Error sending confirmation email':
+    'Potvrdzovací e-mail sa nepodarilo odoslať, takže účet nevznikol. Skús to o chvíľu znova — ak to pretrváva, ozvi sa nám.',
+  'Signup requires a valid password': 'Heslo musí mať aspoň 8 znakov.',
+  'Password should be at least 6 characters': 'Heslo musí mať aspoň 8 znakov.',
+  'Email rate limit exceeded': 'Priveľa pokusov o odoslanie e-mailu. Skús to o pár minút.',
+  'For security purposes, you can only request this after':
+    'Priveľa pokusov po sebe. Skús to o chvíľu.',
+  'User not found': 'Taký účet neexistuje.',
+  'New password should be different from the old password':
+    'Nové heslo musí byť iné ako to staré.',
 
   // events
   EVENT_AT_CAPACITY: 'Tento event je plný.',

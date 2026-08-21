@@ -479,6 +479,32 @@ Skús presne toto poradie. Ak prejde, funguje ti celý reťazec.
 | Geolokácia nefunguje | stránka nebeží cez HTTPS |
 | „Na predaj vstupeniek potrebuješ overenie“ | organizácia nie je `verified` |
 | Vstupenky sa v košíku samy strácajú | tak to má byť — rezervácia platí 15 minút |
+| „Potvrdzovací e-mail sa nepodarilo odoslať" pri registrácii | Supabase nemá kam poslať potvrdenie. Na ostrom projekte to funguje samo; lokálne treba bežiaci `supabase start` aj so schránkou (inbucket), alebo v **Authentication → Providers → Email** dočasne vypnúť potvrdzovanie |
+
+---
+
+## 16. Otestuj nasadenie automaticky
+
+Dva skripty, ktoré sa dajú pustiť proti čomukoľvek — lokálnemu buildu aj
+ostrému webu.
+
+```bash
+# funkčný test: hosť, registrácia, uloženie, košík, organizátor, admin
+node scripts/smoke-web.mjs https://blup.space
+
+# bezpečnostné sondy: čo sa NESMIE dať s kľúčom z prehliadača
+./scripts/probe-security.sh https://<project-ref>.supabase.co <anon-key>
+```
+
+Prvý prejde 22 krokov v skutočnom prehliadači a skontroluje aj to, či rozpis v
+účtovníctve sedí na cent. Druhý sa prihlási ako bežný používateľ a skúsi si
+vydať vstupenku bez platby, prečítať cudzí QR kód, dať si Premium zadarmo a
+povýšiť sa na admina — a overí, že **nič z toho nejde**, ale že hosť si stále
+vie prezerať eventy.
+
+Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
+
+---
 
 Podrobnosti k jednotlivým oblastiam: **PAYMENTS.md** (peniaze),
 **WEB.md** (webová verzia), **DATABASE.md** (schéma), **API.md** (funkcie),

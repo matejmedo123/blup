@@ -175,7 +175,19 @@ export default function EventDetailScreen() {
     };
   }, [id, queryClient]);
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['event', id] });
+  /**
+   * Refreshes this screen *and* every list the change could appear in.
+   *
+   * Invalidating only `['event', id]` was a real bug: unsaving an event here
+   * left it sitting in Uložené until a hard refresh, because that list is
+   * keyed `['events', 'saved']` and nothing told it anything had happened.
+   * The `['events']` prefix covers saved, "idem na", the home feed, the deck
+   * and the organizer's own list in one call.
+   */
+  const refresh = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['event', id] }),
+    queryClient.invalidateQueries({ queryKey: ['events'] }),
+  ]);
 
   const data = event.data;
 
