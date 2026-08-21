@@ -1,125 +1,211 @@
-# Spustenie BLUPu na webe — krok za krokom
+# BLUP na blup.sk — od nuly po predanú vstupenku
 
-Od stiahnutého ZIPu po stránku, na ktorej si niekto kúpi vstupenku.
+Jeden návod, dvanásť fáz. Po každej je **kontrola** — konkrétny príkaz alebo
+vec, ktorú musíš vidieť. Ak kontrola neprejde, nepokračuj: chyba sa o tri kroky
+neskôr hľadá desaťkrát ťažšie.
 
-Počítaj s **2 – 3 hodinami** pri prvom raze, z toho väčšina je čakanie na
-overenie domény a účtov. Nič z toho nevyžaduje Mac ani Apple developer účet —
-web je celá aplikácia, nie doplnok k appke.
+Počítaj s **3 – 4 hodinami čistého času**, rozloženými do dvoch–troch dní. Väčšina
+čakania je na cudzie strany: overenie Stripe účtu (1 – 2 dni) a rozšírenie DNS
+(minúty až hodiny).
 
-Príkazy sa spúšťajú z koreňa repozitára, ak nie je napísané inak.
+Nepotrebuješ Mac, Apple developer účet ani server. Web je celá aplikácia.
+
+> Príkazy spúšťaj z koreňa rozbaleného projektu, ak nie je napísané inak.
 
 ---
 
-## 0. Čo budeš potrebovať
+## Čo budeš potrebovať
 
-| Vec | Na čo | Cena |
+| Vec | Načo | Cena |
 | --- | --- | --- |
-| **Node.js 20+** | build a nástroje | zdarma |
-| **Supabase** účet | databáza, prihlasovanie, úložisko, serverové funkcie | zdarma na štart |
-| **Stripe** účet | platby za vstupenky a Premium | 1,4 % + 0,25 € z transakcie |
-| **Resend** účet | odosielanie vstupeniek e-mailom | zdarma do 3 000 e-mailov/mesiac |
-| **Doména** | `blup.sk` alebo čokoľvek iné | ~10 €/rok |
-| **Hosting** | Vercel, Netlify alebo vlastný server | zdarma na štart |
+| **Node.js 20+** | build | zdarma |
+| **Supabase** | databáza, prihlasovanie, serverové funkcie | 0 € do 500 MB |
+| **Stripe** | platby | 1,4 % + 0,25 € z platby |
+| **Resend** | odosielanie vstupeniek | 0 € do 3 000 e-mailov |
+| **blup.sk** | máš vo Websupporte | ~1 €/mesiac |
+| **Vercel** alebo Websupport hosting | kam sa nahrá web | 0 € / ~3 € |
 
-Overenie Stripe účtu (identita, bankový účet) trvá typicky **1 – 2 dni**. Kým
-prebehne, všetko sa dá skúšať v testovacom režime s testovacími kartami.
-
-```bash
-node --version     # musí byť v20 alebo vyššie
-```
+Reálne to vyjde na **2 – 4 € mesačne**, kým nezačneš rásť.
 
 ---
 
-## 1. Príprava projektu
+## Fáza 0 · Príprava (10 minút)
 
 ```bash
-unzip blup-web.zip && cd blup
+node --version          # musí byť v20 alebo vyššie
+unzip blup-final.zip && cd blup
 cd mobile && npm install && cd ..
+cp mobile/.env.example mobile/.env
+cp supabase/.env.example supabase/.env
 ```
 
-Skopíruj si oba vzory premenných — vyplníš ich v ďalších krokoch:
+Dva súbory s premennými, a rozdiel medzi nimi je zásadný:
 
-```bash
-cp mobile/.env.example mobile/.env      # verejné, ide to do prehliadača
-cp supabase/.env.example supabase/.env  # tajné, ostáva na serveri
-```
+- `mobile/.env` → **verejné.** Všetko odtiaľ skončí v prehliadači a vie si to
+  prečítať ktokoľvek. Patria sem len identifikátory.
+- `supabase/.env` → **tajné.** Nikdy neopustí server.
 
-> **Rozdiel medzi nimi je zásadný.** Všetko v `mobile/.env` si vie prečítať
-> ktokoľvek, kto otvorí stránku — patria tam len verejné identifikátory.
-> Tajné kľúče idú výhradne do `supabase/.env` a nikdy sa nedostanú do
-> prehliadača.
+**✓ Kontrola:** `ls -la mobile/.env supabase/.env` — oba existujú.
 
 ---
 
-## 2. Supabase: databáza
+## Fáza 1 · Databáza (20 minút)
 
-1. Založ projekt na [supabase.com](https://supabase.com) — región **Frankfurt**
-   alebo **Zürich**, ak cieliš na Slovensko.
-2. Zapíš si heslo k databáze, ktoré ti ukáže pri zakladaní. Už ho neuvidíš.
-3. Prepoj projekt a nahraj schému:
+1. Založ projekt na [supabase.com](https://supabase.com). Región **Frankfurt**
+   alebo **Zürich**.
+2. **Heslo k databáze si hneď ulož** — druhýkrát ti ho neukáže.
+3. Nahraj schému:
 
 ```bash
 npx supabase login
-npx supabase link --project-ref <project-ref>   # z URL dashboardu
+npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-`db push` aplikuje **27 migrácií**: tabuľky, indexy, prístupové pravidlá,
-platobné funkcie, účtovníctvo. Trvá to pár desiatok sekúnd.
+Aplikuje sa 27 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+účtovníctvo. Trvá to pol minúty.
 
-Do `mobile/.env` doplň z **Project Settings → API**:
-
-```bash
-EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
-```
-
-### Zapni rozšírenia pre plánované úlohy
-
-V **SQL Editore**:
+4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
 
 ```sql
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 ```
 
----
+5. Z **Project Settings → API** prepíš do `mobile/.env`:
 
-## 3. Over, že databáza naozaj sedí (voliteľné, ale odporúčam)
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
+```
+
+**✓ Kontrola:**
 
 ```bash
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú PostgreSQL databázu, aplikuje všetkých 27 migrácií od nuly a
-prejde testovacím balíkom — **135 tvrdení**: či sa peniaze rátajú na cent, či
-rezervácia drží vstupenky, či sa nikto nedostane k cudzím dátam a či platobné
-funkcie nie sú volateľné z prehliadača.
+Postaví dočasnú databázu, aplikuje všetkých 27 migrácií od nuly a prejde
+**135 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
+nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
-Ak toto prejde, schéma je v poriadku a prípadný neskorší problém je v
-konfigurácii, nie v databáze. To je pri hľadaní chyby veľmi užitočné vedieť.
+Ak toto prejde, schéma je v poriadku a každý neskorší problém je v konfigurácii.
+To je pri hľadaní chyby veľmi cenné vedieť.
 
 ---
 
-## 4. Stripe: platby
+## Fáza 2 · Doména a DNS (15 minút + čakanie)
 
-### 4.1 Kľúče
+### Najprv sa rozhodni, kde bude hosting
 
-**Developers → API keys**, zatiaľ v **Test mode**. Do `supabase/.env`:
+**Vercel** — odporúčam. Nasadenie jedným príkazom, HTTPS certifikát si vypýta a
+obnovuje sám, každé nasadenie má vlastnú adresu na náhľad pred spustením. Zdarma.
+
+**Websupport** — dá sa, a je otestované. Beží na Apache; `.htaccess`, ktorý ti
+build vygeneruje, bol vyskúšaný na skutočnom Apachi vrátane dynamických adries.
+Výhoda: všetko na jednom mieste. Nevýhoda: nasadzuješ ručne cez FTP a nemáš
+náhľad.
+
+**Nekupuj kvôli tomu VPS.** Nie je čo spravovať — je to priečinok so súbormi.
+
+### DNS vo Websupporte
+
+[admin.websupport.sk](https://admin.websupport.sk) → **Domény → blup.sk → DNS záznamy**.
+
+Ako to funguje, nech vieš, čo robíš:
+
+| Typ | Na čo |
+| --- | --- |
+| **A** / **CNAME** | kam ide prehliadač, keď napíše blup.sk |
+| **MX** | kam chodí pošta, ktorú ti **niekto pošle** |
+| **TXT** (SPF, DKIM) | kto smie **odosielať** poštu v mene blup.sk |
+
+Tri nezávislé veci. Web môže byť na Verceli, schránka vo Websupporte a vstupenky
+môže rozposielať Resend — naraz a bez konfliktu.
+
+**Pre Vercel** pridaj (presné hodnoty ti ukáže Vercel v *Settings → Domains*,
+použi tie — občas ich menia):
+
+| Typ | Názov | Hodnota |
+| --- | --- | --- |
+| A | `@` | `76.76.21.21` |
+| CNAME | `www` | `cname.vercel-dns.com` |
+
+**Pre Websupport hosting** sa A záznam nastaví sám pri založení hostingu.
+
+**✓ Kontrola:**
+
+```bash
+dig +short blup.sk
+dig +short www.blup.sk
+```
+
+Musí vrátiť IP adresu. Kým nevráti, nemá zmysel riešiť nič ďalšie.
+
+---
+
+## Fáza 3 · Prvý build a nasadenie (20 minút)
+
+```bash
+cd mobile
+npm run build:web
+```
+
+Jeden príkaz spraví tri veci: zmaže cache, vyexportuje web a dopíše konfiguráciu
+pre hosting. Vznikne priečinok **`mobile/dist`** — 75 obyčajných HTML súborov
+plus JS a CSS, dokopy asi 12 MB.
+
+> **V projekte žiadne HTML nenájdeš, a je to správne.** Vzniká až teraz a vzniká
+> s **tvojimi** údajmi zapečenými dovnútra — adresa tvojho Supabase projektu,
+> tvoj verejný kľúč. Build od niekoho iného by ukazoval na cudziu databázu.
+
+### Nasadenie na Vercel
+
+```bash
+npm i -g vercel
+cd dist && vercel --prod
+```
+
+Pri prvom spustení sa opýta na projekt. Potom pridaj doménu vo
+**Settings → Domains → blup.sk**.
+
+### Nasadenie na Websupport
+
+Obsah `mobile/dist` nahraj cez FTP (údaje v administrácii pod
+**Hosting → FTP prístupy**) do priečinka `web/`. Nahrávaj **obsah**, nie
+priečinok — v `web/` má priamo ležať `index.html`.
+
+**Nezabudni na `.htaccess`.** Je v `dist`, ale FTP klienti súbory začínajúce
+bodkou skrývajú. V FileZille: *Server → Vynútiť zobrazenie skrytých súborov*.
+Bez neho vráti `/event/<id>` chybu 404.
+
+V administrácii zapni **Let's Encrypt** a presmerovanie na HTTPS.
+
+**✓ Kontrola:** otvor `https://blup.sk` — musíš vidieť eventy (alebo prázdny
+stav, ak je databáza čistá) a v adresnom riadku zámok. Potom skús adresu
+`https://blup.sk/nonsense` — musí prísť stránka „nenašlo sa", nie chyba servera.
+
+---
+
+## Fáza 4 · Stripe (30 minút + 1–2 dni na overenie)
+
+Zatiaľ všetko v **Test mode**, prepínač je vpravo hore.
+
+### 4.1 Kľúč
+
+**Developers → API keys** → do `supabase/.env`:
 
 ```bash
 STRIPE_SECRET_KEY=sk_test_...
 ```
 
-`mobile/.env` nechaj bez Stripe kľúča — webová verzia žiadny nepotrebuje.
-Adresu platobnej brány vydáva server.
+Do `mobile/.env` Stripe kľúč **nepatrí** — webová verzia žiadny nepotrebuje,
+adresu platobnej brány vydáva server.
 
-### 4.2 Connect (výplaty organizátorom)
+### 4.2 Connect — výplaty organizátorom
 
 **Connect → Get started → Platform or marketplace.** Peniaze idú priamo na účet
-organizátora a BLUP si z platby stiahne svoj podiel; nezdržiavajú sa u teba.
-
-Do `supabase/.env`, s **tvojou** doménou:
+organizátora, BLUP si z platby stiahne svoj podiel. Nezdržiavajú sa u teba.
 
 ```bash
 STRIPE_CONNECT_RETURN_URL=https://blup.sk/organizer/payouts
@@ -135,16 +221,15 @@ STRIPE_PRICE_PREMIUM_MONTHLY=price_...
 STRIPE_PRICE_PREMIUM_YEARLY=price_...
 ```
 
-### 4.4 Webhook
+### 4.4 Webhook — najdôležitejšie nastavenie v celom návode
 
-Toto je najdôležitejšie nastavenie v celom návode. **Vstupenka vzniká výhradne
-z tejto správy** — nie z toho, že prehliadač povie „zaplatené“. Bez webhooku
-peniaze odídu a vstupenka nepríde.
+**Vstupenka vzniká výhradne z tejto správy.** Nie z toho, že prehliadač povie
+„zaplatené". Bez webhooku peniaze odídu a vstupenka nepríde.
 
 **Developers → Webhooks → Add endpoint**
 
 - URL: `https://<project-ref>.supabase.co/functions/v1/stripe-webhook`
-- Udalosti (presne tieto):
+- Udalosti — presne týchto jedenásť:
 
 ```
 payment_intent.succeeded
@@ -160,51 +245,86 @@ transfer.created
 transfer.paid
 ```
 
-Skopíruj **Signing secret** (`whsec_…`) do `supabase/.env`:
+Skopíruj **Signing secret**:
 
 ```bash
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
-Bez neho funkcia odmietne každý príchodzí požiadavok — čo je správne
-predvolené správanie, nie chyba.
+Bez neho funkcia odmietne každý príchodzí požiadavok. To je správne predvolené
+správanie, nie chyba.
+
+**✓ Kontrola:** v `supabase/.env` máš vyplnené štyri riadky —
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` a dve `price_`.
 
 ---
 
-## 5. Resend: vstupenky e-mailom
+## Fáza 5 · E-mail (20 minút + čakanie na DNS)
 
-1. Založ účet na [resend.com](https://resend.com).
-2. **Domains → Add domain**, doplň DNS záznamy (SPF, DKIM). Overenie trvá
-   minúty až hodiny.
-3. **API Keys → Create**.
+Sú to **dve rôzne veci** a toto sa mýli najčastejšie.
+
+### 5a. Schránka, do ktorej ti ľudia píšu
+
+`ahoj@blup.sk`. Websupport → **Hosting → E-mail → Pridať schránku.** MX záznamy
+si nastaví sám. Pár eur mesačne.
+
+Alternatívy: **Google Workspace** (~6 €/používateľ, kalendár a disk navyše)
+alebo **Zoho Mail** (zdarma pre jedného používateľa). Vtedy MX prepíšeš na tie ich.
+
+### 5b. Odosielanie vstupeniek
+
+Cez obyčajný SMTP by tisíce vstupeniek skončili v spame a poskytovateľ by ti to
+zastavil. Na to je [Resend](https://resend.com).
+
+1. Účet → **Domains → Add domain → `blup.sk`**
+2. Ukáže ti tri až štyri záznamy. Pridaj ich vo Websupporte presne tak, ako ich
+   vypíše:
+
+| Typ | Názov | Hodnota |
+| --- | --- | --- |
+| TXT | `resend._domainkey` | `p=MIGfMA0…` (dlhý reťazec) |
+| TXT | `@` alebo `send` | `v=spf1 include:amazonses.com ~all` |
+| MX | `send` | `feedback-smtp.eu-west-1.amazonses.com`, priorita 10 |
+
+3. Počkaj na zelené **Verified**.
+4. **API Keys → Create** → do `supabase/.env`:
 
 ```bash
 RESEND_API_KEY=re_...
 EMAIL_FROM=Blup <vstupenky@blup.sk>
-EMAIL_REPLY_TO=podpora@blup.sk
+EMAIL_REPLY_TO=ahoj@blup.sk
 ```
+
+> **Pasca: SPF smie byť pre doménu len jeden.**
+> Ak už máš `v=spf1 include:websupport.sk ~all` a Resend chce svoj,
+> **nepridávaj druhý riadok** — spoj ich:
+> ```
+> v=spf1 include:websupport.sk include:amazonses.com ~all
+> ```
+> Dva samostatné SPF záznamy sú horšie než žiadny: overenie zlyhá na oboch.
+> Ak ti Resend ponúkne subdoménu `send.blup.sk`, vezmi ju — má vlastný SPF a
+> problém úplne obíde.
 
 `EMAIL_FROM` **musí** byť na overenej doméne, inak Resend odmietne každé
 odoslanie.
 
-Bez kľúča appka nespadne: vstupenky sa vydajú a v aplikácii budú, len sa
-neodošlú a fronta si ich označí ako preskočené.
+**✓ Kontrola:** v Resende svieti pri `blup.sk` zelené **Verified**.
 
 ---
 
-## 6. Kľúče pre upozornenia v prehliadači
+## Fáza 6 · Upozornenia v prehliadači (5 minút)
 
 ```bash
 node scripts/generate-vapid-keys.mjs
 ```
 
-Vypíše dvojicu. Verejnú polovicu do **oboch** súborov, súkromnú len na server:
+Verejnú polovicu do **oboch** súborov, súkromnú len na server:
 
 ```bash
 # supabase/.env
 VAPID_PUBLIC_KEY=B...
 VAPID_PRIVATE_KEY=...
-VAPID_SUBJECT=mailto:podpora@blup.sk
+VAPID_SUBJECT=mailto:ahoj@blup.sk
 
 # mobile/.env
 EXPO_PUBLIC_VAPID_PUBLIC_KEY=B...
@@ -212,68 +332,63 @@ EXPO_PUBLIC_VAPID_PUBLIC_KEY=B...
 
 ---
 
-## 7. Adresa aplikácie
+## Fáza 7 · Adresa aplikácie a nasadenie servera (15 minút)
 
-Do `supabase/.env` doplň skutočnú doménu, bez lomky na konci:
+Doména musí byť na **štyroch miestach**. Keď trafíš tri zo štyroch, platba sa
+vráti niekam inam než na tvoju stránku.
 
 ```bash
+# supabase/.env
 APP_PUBLIC_URL=https://blup.sk
-```
+STRIPE_CONNECT_RETURN_URL=https://blup.sk/organizer/payouts
+STRIPE_CONNECT_REFRESH_URL=https://blup.sk/organizer/payouts
 
-Server prijme ako návrat z platby **len cesty na tejto adrese**. Preto zlá
-hodnota platbu rozbije namiesto toho, aby ticho presmerovala inam — a to je
-zámer: otvorené presmerovanie na stránke, ktorá práve zobrala peniaze, je
-phishingová súprava.
-
-Do `mobile/.env` tú istú doménu pre zdieľacie karty:
-
-```bash
+# mobile/.env
 EXPO_PUBLIC_WEB_URL=https://blup.sk
 ```
 
----
+Bez lomky na konci. Server prijme ako návrat z platby **len cesty na tejto
+adrese** — zlá hodnota preto platbu rozbije namiesto toho, aby ticho
+presmerovala inam. Otvorené presmerovanie na stránke, ktorá práve zobrala
+peniaze, je phishingová súprava.
 
-## 8. Nahraj tajné kľúče a serverové funkcie
+Nahraj tajné kľúče a serverové funkcie:
 
 ```bash
 npx supabase secrets set --env-file supabase/.env
 ./scripts/deploy-functions.sh
 ```
 
-Nasadí **16 funkcií**. Skript sám vie, ktoré musia bežať bez overenia tokenu
-(Stripe ani cron nevedia poslať prihlasovací token — overujú sa podpisom alebo
-servisným kľúčom).
+Nasadí 16 funkcií. Skript vie, ktoré musia bežať bez overenia tokenu — Stripe
+ani cron nevedia poslať prihlasovací token, overujú sa podpisom alebo servisným
+kľúčom.
 
-Kontrola, že to všetko vidí:
+**✓ Kontrola:**
 
 ```bash
 curl https://<project-ref>.supabase.co/functions/v1/config-status
 ```
 
-Vráti samé `true`/`false` — nikdy kľúč ani jeho časť. Čo je `false`, ešte
-nefunguje.
+Vráti samé `true`/`false` — nikdy kľúč ani jeho časť. Musíš vidieť `true` pri
+`stripe`, `stripeWebhook`, `email` a `webPush`. Čo je `false`, to ešte nefunguje.
 
 ---
 
-## 9. Prihlasovanie
+## Fáza 8 · Prihlasovanie a plánované úlohy (10 minút)
 
-**Authentication → URL Configuration**:
+Supabase → **Authentication → URL Configuration**:
 
 - **Site URL:** `https://blup.sk`
 - **Redirect URLs:** `https://blup.sk/auth/callback`,
   `https://blup.sk/auth/reset-password`
 
 Ak chceš prihlásenie cez Google alebo Apple, zapni ich v **Providers**.
-E-mailom to funguje hneď.
+E-mailom funguje hneď.
 
----
-
-## 10. Plánované úlohy
-
-V **SQL Editore**, s doplneným `<project-ref>` a servisným kľúčom:
+V **SQL Editore** (doplň `<project-ref>` a servisný kľúč):
 
 ```sql
--- vstupenky e-mailom (webhook ju aj tak hneď postrčí, toto je poistka)
+-- vstupenky e-mailom (webhook ju hneď postrčí, toto je poistka)
 select cron.schedule('blup-tickets', '* * * * *', $$
   select net.http_post(
     url := 'https://<project-ref>.supabase.co/functions/v1/ticket-email',
@@ -295,7 +410,7 @@ select cron.schedule('blup-push', '* * * * *', $$
     headers := '{"Authorization": "Bearer <service-role-key>"}'::jsonb);
 $$);
 
--- týždenný prehľad, v pondelok ráno
+-- týždenný prehľad, pondelok ráno
 select cron.schedule('blup-digest', '0 7 * * 1', $$
   select net.http_post(
     url := 'https://<project-ref>.supabase.co/functions/v1/weekly-digest',
@@ -303,101 +418,23 @@ select cron.schedule('blup-digest', '0 7 * * 1', $$
 $$);
 ```
 
-`cart-sweep` je len upratovanie. Vypršaná rezervácia prestáva držať vstupenky
-v tej sekunde, keď vyprší — nezáleží na tom, či medzitým niečo bežalo.
+`cart-sweep` je len upratovanie — vypršaná rezervácia prestáva držať vstupenky
+v tej sekunde, keď vyprší, nech beží čokoľvek.
+
+**✓ Kontrola:** `select jobname, schedule from cron.job;` — štyri riadky.
 
 ---
 
-## 11. Build webu
+## Fáza 9 · Prvý admin a organizácia (10 minút)
+
+1. Znova zbuilduj a nasaď (menil si `mobile/.env`):
 
 ```bash
-cd mobile
-npm run build:web
+cd mobile && npm run build:web && cd dist && vercel --prod
 ```
 
-Jeden príkaz, ktorý spraví tri veci: zmaže cache, vyexportuje web a dopíše
-konfiguráciu pre hosting.
-
-Výsledok je priečinok **`mobile/dist`** — 75 obyčajných HTML súborov plus JS,
-CSS a obrázky, dokopy asi 12 MB. Žiadny Node na serveri, žiadna databáza na
-hostingu. Presne toto nahráš.
-
-> **V ZIPe žiadne HTML nenájdeš, a je to správne.** HTML ešte neexistuje —
-> vzniká až týmto príkazom, a vzniká s **tvojimi** údajmi zapečenými dovnútra
-> (adresa tvojho Supabase projektu, tvoj verejný kľúč, tvoja doména). Build
-> spravený niekým iným by ukazoval na cudziu databázu a nefungoval by.
-
-Časť s konfiguráciou hostingu **nepreskakuj**. Dynamické adresy sú na disku
-uložené ako `event/[id].html` aj so zátvorkami; bez presmerovania vráti hosting
-na `/event/9f2c…` chybu 404. Skript to odvodí priamo z toho, čo build vyrobil,
-a napíše `vercel.json`, `_redirects` aj `nginx.conf`.
-
-Skontrolovať sa to dá lokálne:
-
-```bash
-npm run serve:web        # http://localhost:4321
-```
-
-Tento príkaz **nespúšťa** `npx serve`. Oba jeho režimy totiž klamú, každý inak:
-`serve -s dist` prepíše každý požiadavok na `index.html`, takže dynamická
-adresa vyzerá, že funguje, aj keď hosting na ňu nie je nastavený — a rozsype sa
-až po nasadení. `serve dist` zas nepresmeruje nič, takže `/event/<id>` vráti
-404, hoci na ostrom hostingu by fungovala.
-
-`scripts/serve-web.mjs` číta ten istý `_redirects`, ktorý si práve vygeneroval,
-a aplikuje ho v rovnakom poradí ako Netlify či Vercel: najprv skutočný súbor,
-potom presmerovania, potom 404. Čo vidíš doma, to dostaneš aj vonku.
-
-> **Po každej zmene `.env` zmaž cache**, inak sa do buildu dostanú staré
-> hodnoty a stráviš hodinu hľadaním chyby, ktorá tam nie je:
-> ```bash
-> cd mobile && rm -rf .expo node_modules/.cache
-> ```
-
-### Nasadenie
-
-**Vercel**
-
-```bash
-npm i -g vercel
-cd mobile/dist && vercel --prod
-```
-
-**Netlify**
-
-```bash
-npm i -g netlify-cli
-netlify deploy --prod --dir mobile/dist
-```
-
-**Vlastný server (nginx)** — nahraj obsah `mobile/dist` do webového koreňa a
-vlož vygenerovaný `nginx.conf` do bloku `server { }`.
-
-Nakoniec nasmeruj doménu na hosting a **skontroluj, že beží cez HTTPS**. Bez
-neho nefunguje geolokácia, upozornenia ani service worker.
-
-### Vlastná doména — čo prepísať
-
-Povedzme, že máš `blup.space`. Na štyroch miestach musí byť tá istá adresa,
-inak sa platba nevráti tam, kam má:
-
-| Kde | Čo |
-| --- | --- |
-| `supabase/.env` | `APP_PUBLIC_URL=https://blup.space` |
-| `supabase/.env` | `STRIPE_CONNECT_RETURN_URL` a `..._REFRESH_URL` na `https://blup.space/organizer/payouts` |
-| `mobile/.env` | `EXPO_PUBLIC_WEB_URL=https://blup.space` |
-| Supabase → Authentication | Site URL `https://blup.space`, redirect adresy `https://blup.space/auth/callback` a `/auth/reset-password` |
-
-Po zmene `supabase/.env` znova `npx supabase secrets set --env-file supabase/.env`,
-po zmene `mobile/.env` znova `npm run build:web`. Doména samotná sa nastavuje
-v hostingu (Vercel: Settings → Domains) a u registrátora sa nasmerujú DNS
-záznamy, ktoré ti hosting ukáže.
-
----
-
-## 12. Prvý admin
-
-Zaregistruj sa cez web normálne ako používateľ, potom v **SQL Editore**:
+2. Zaregistruj sa na `blup.sk` normálne ako používateľ.
+3. V **SQL Editore**:
 
 ```sql
 update public.profiles
@@ -405,110 +442,132 @@ set app_role = 'admin'
 where id = (select id from auth.users where email = 'tvoj@email.sk');
 ```
 
-Po obnovení stránky pribudne v bočnej navigácii **Admin**. Tam nastavíš sadzby,
-reklamné kódy a uvidíš účtovníctvo platformy.
+4. Obnov stránku — v bočnej navigácii pribudne **Admin**.
+5. **Organizátor → Vytvoriť organizáciu**, potom **Overenie** a vyplň právne
+   údaje. V testovacej fáze si ju over ručne:
+
+```sql
+update public.organizations set verification_status = 'verified';
+```
+
+Platené vstupenky smie predávať len overená organizácia.
+
+**✓ Kontrola:** v bočnej navigácii vidíš **Admin** aj **Organizátor**.
 
 ---
 
-## 13. Prvý predaj: otestuj to celé
+## Fáza 10 · Testovací predaj (20 minút)
 
-Skús presne toto poradie. Ak prejde, funguje ti celý reťazec.
+Toto je tá fáza, ktorá rozhodne, či to naozaj funguje. Choď presne v tomto poradí.
 
-1. **Otvor stránku v anonymnom okne.** Musíš vidieť eventy bez prihlásenia.
-   Ak vidíš „Zatiaľ sa tu nič nedeje“, databáza je prázdna — to je správne,
-   pokračuj bodom 2.
-2. **Vytvor organizáciu** — Organizátor → Vytvoriť organizáciu.
-3. **Over ju.** Platené vstupenky smie predávať len overená organizácia.
-   V teste to zapneš ručne:
-   ```sql
-   update public.organizations set verification_status = 'verified';
-   ```
-4. **Vytvor event** s dátumom v budúcnosti a pridaj mu typ vstupenky s cenou.
-5. **Prihlás sa ako niekto iný** (druhé anonymné okno), pridaj vstupenky do
-   košíka. Sleduj, či beží odpočet.
-6. **Zaplať testovacou kartou** `4242 4242 4242 4242`, ľubovoľný budúci dátum
-   a CVC.
-7. **Skontroluj, že vstupenka pribudla** v sekcii Vstupenky a prišla e-mailom.
-8. **Skontroluj peniaze** v Organizátor → Účtovníctvo: predaj, provízia,
-   archívny poplatok, čistý príjem. Súčet musí sedieť na cent.
-9. **Naskenuj QR kód** cez Organizátor → Skener. Druhé načítanie toho istého
-   kódu musí byť odmietnuté.
+1. **Anonymné okno** → `blup.sk`. Musíš vidieť eventy **bez prihlásenia**.
+2. **Vytvor event** s dátumom v budúcnosti.
+3. **Pridaj mu typ vstupenky** s cenou (Organizátor → Vstupenky).
+4. **Druhé anonymné okno**, iný účet → pridaj vstupenky do košíka. Sleduj, či
+   beží odpočet 15 minút.
+5. **Zaplať** testovacou kartou `4242 4242 4242 4242`, ľubovoľný budúci dátum,
+   ľubovoľné CVC.
+6. **Vstupenka musí pribudnúť** v sekcii Vstupenky **a prísť e-mailom**.
+7. **Účtovníctvo** (Organizátor → Účtovníctvo): predaj, provízia, archívny
+   poplatok, čistý príjem. Súčet musí sedieť na cent.
+8. **Naskenuj QR** cez Organizátor → Skener. **Druhé načítanie toho istého kódu
+   musí byť odmietnuté.**
 
-### Ďalšie testovacie karty
-
-| Číslo | Čo simuluje |
+| Karta | Čo simuluje |
 | --- | --- |
 | `4242 4242 4242 4242` | úspešná platba |
 | `4000 0000 0000 9995` | nedostatok prostriedkov |
 | `4000 0025 0000 3155` | vyžiada 3-D Secure |
 
+**✓ Kontrola:** prešli všetky body 1 – 8. Ak nie bod 6, choď rovno na webhook
+(Fáza 4.4) — v Stripe **Developers → Webhooks → Attempts** uvidíš, čo sa stalo.
+
 ---
 
-## 14. Prepnutie na ostro
+## Fáza 11 · Prepnutie naostro (20 minút)
 
-1. Dokonči overenie Stripe účtu (identita, banka).
-2. V Stripe prepni na **Live mode** a vytvor si tam znova: kľúč, Premium ceny
-   a **nový webhook** — testovací v ostrej prevádzke nefunguje.
-3. Prepíš v `supabase/.env` hodnoty na `sk_live_…`, `whsec_…` a `price_…`.
+1. Dokonči overenie Stripe účtu — identita a bankový účet.
+2. V Stripe prepni na **Live mode** a vytvor si tam **znova**: kľúč, Premium
+   ceny a **nový webhook**. Testovací v ostrej prevádzke nefunguje.
+3. Prepíš v `supabase/.env` na `sk_live_…`, `whsec_…`, `price_…`.
 4. `npx supabase secrets set --env-file supabase/.env`
-5. Znova build a nasadenie (krok 11).
-6. **Kúp si jednu vstupenku naozaj, vlastnou kartou.** Nič iné ti nepotvrdí,
-   že to funguje. Potom si ju refunduj v Stripe a skontroluj, že sa v aplikácii
+5. Znova build a nasadenie.
+6. **Kúp si jednu vstupenku naozaj, vlastnou kartou.** Nič iné ti nepotvrdí, že
+   to funguje. Potom si ju v Stripe refunduj a skontroluj, že sa v aplikácii
    označila ako vrátená.
 
-### Pred spustením ešte
+Pred spustením ešte:
 
-- V **Admin → Poplatky a sadzby** skontroluj províziu a archívny poplatok.
-- V **Admin → Marketing** doplň Meta pixel a Google Ads, ak ich máš.
-- Napíš obchodné podmienky a zásady ochrany údajov. Predávaš cudzie vstupenky
-  — musí byť jasné, že zmluva je medzi kupujúcim a organizátorom a peniaze pri
-  zrušení vracia organizátor. Vytlačené je to aj na samotnej vstupenke.
-
----
-
-## 15. Keď niečo nefunguje
-
-| Príznak | Príčina |
-| --- | --- |
-| `/event/<id>` vracia 404 | nespustil si `make-host-config.mjs`, alebo hosting nečíta `_redirects` |
-| Platba prejde, vstupenka nepríde | webhook: zlá URL, chýbajúci `STRIPE_WEBHOOK_SECRET`, alebo nezaškrtnuté udalosti. Pozri **Developers → Webhooks → Attempts** |
-| „Platby zatiaľ nie sú nakonfigurované“ | chýba `STRIPE_SECRET_KEY` v secrets; over cez `config-status` |
-| Po platbe zlé presmerovanie | `APP_PUBLIC_URL` nesedí s doménou alebo má lomku na konci |
-| E-mail nechodí | doména neoverená v Resend, alebo `EMAIL_FROM` je na inej doméne |
-| Prázdna biela stránka | build má staré `.env` — zmaž `.expo` a `node_modules/.cache` a buildni znova |
-| Geolokácia nefunguje | stránka nebeží cez HTTPS |
-| „Na predaj vstupeniek potrebuješ overenie“ | organizácia nie je `verified` |
-| Vstupenky sa v košíku samy strácajú | tak to má byť — rezervácia platí 15 minút |
-| „Potvrdzovací e-mail sa nepodarilo odoslať" pri registrácii | Supabase nemá kam poslať potvrdenie. Na ostrom projekte to funguje samo; lokálne treba bežiaci `supabase start` aj so schránkou (inbucket), alebo v **Authentication → Providers → Email** dočasne vypnúť potvrdzovanie |
+- **Admin → Poplatky a sadzby** — skontroluj províziu a archívny poplatok.
+- **Admin → Marketing** — doplň Meta pixel a Google Ads, ak ich máš.
+- **Obchodné podmienky a ochrana údajov.** Predávaš cudzie vstupenky, takže musí
+  byť jasné, že zmluva je medzi kupujúcim a organizátorom a peniaze pri zrušení
+  vracia organizátor. Vytlačené je to aj na samotnej vstupenke.
 
 ---
 
-## 16. Otestuj nasadenie automaticky
+## Fáza 12 · Automatické testy
 
-Dva skripty, ktoré sa dajú pustiť proti čomukoľvek — lokálnemu buildu aj
-ostrému webu.
+Dva skripty, ktoré vieš pustiť kedykoľvek — aj po každej ďalšej zmene.
 
 ```bash
-# funkčný test: hosť, registrácia, uloženie, košík, organizátor, admin
-node scripts/smoke-web.mjs https://blup.space
+# 22 krokov v skutočnom prehliadači
+node scripts/smoke-web.mjs https://blup.sk
 
-# bezpečnostné sondy: čo sa NESMIE dať s kľúčom z prehliadača
+# 19 bezpečnostných sond
 ./scripts/probe-security.sh https://<project-ref>.supabase.co <anon-key>
 ```
 
-Prvý prejde 22 krokov v skutočnom prehliadači a skontroluje aj to, či rozpis v
-účtovníctve sedí na cent. Druhý sa prihlási ako bežný používateľ a skúsi si
-vydať vstupenku bez platby, prečítať cudzí QR kód, dať si Premium zadarmo a
-povýšiť sa na admina — a overí, že **nič z toho nejde**, ale že hosť si stále
-vie prezerať eventy.
+Prvý prejde hosťa, registráciu, uloženie eventu, košík, organizátora aj admina —
+a skontroluje, či rozpis v účtovníctve sedí na cent.
+
+Druhý sa prihlási ako bežný používateľ a skúsi si vydať vstupenku bez platby,
+prečítať cudzí QR kód, dať si Premium zadarmo a povýšiť sa na admina. Overí, že
+**nič z toho nejde** — a zároveň, že hosť si stále vie prezerať eventy.
 
 Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 
+**✓ Kontrola:** `22 prešlo, 0 zlyhalo` a `19 prešlo, 0 zlyhalo`.
+
 ---
 
-Máš vlastnú doménu? Celý postup pre DNS, hosting a e-mail je v
-**[DOMENA.md](DOMENA.md)** — písaný pre doménu vedenú vo Websupporte.
+## Keď niečo nefunguje
 
-Podrobnosti k jednotlivým oblastiam: **PAYMENTS.md** (peniaze),
-**WEB.md** (webová verzia), **DATABASE.md** (schéma), **API.md** (funkcie),
+| Príznak | Príčina |
+| --- | --- |
+| `blup.sk` nejde | DNS sa ešte nepreplo — `dig +short blup.sk` a počkaj |
+| Ide `www.blup.sk`, nie `blup.sk` | chýba A záznam pre `@` |
+| `/event/<id>` vracia 404 | chýba `.htaccess` (FTP ho skryl) alebo `vercel.json` |
+| Certifikát neplatí | vo Websupporte nie je zapnutý Let's Encrypt |
+| Platba prejde, vstupenka nepríde | webhook: zlá URL, chýbajúci secret alebo nezaškrtnuté udalosti — pozri **Developers → Webhooks → Attempts** |
+| „Platby zatiaľ nie sú nakonfigurované" | chýba `STRIPE_SECRET_KEY`; over cez `config-status` |
+| Po platbe zlé presmerovanie | `APP_PUBLIC_URL` nesedí s doménou alebo má lomku na konci |
+| E-maily nechodia | doména nie je vo Verified, alebo `EMAIL_FROM` je na inej doméne |
+| E-maily padajú do spamu | dva SPF záznamy naraz — spoj ich do jedného |
+| „Potvrdzovací e-mail sa nepodarilo odoslať" | Supabase nemá kam poslať potvrdenie — na ostrom projekte to ide samo, lokálne vypni potvrdzovanie v **Authentication → Providers → Email** |
+| Prázdna biela stránka | build má staré `.env` — `rm -rf mobile/.expo mobile/node_modules/.cache` a znova |
+| Geolokácia nefunguje | stránka nebeží cez HTTPS |
+| „Na predaj vstupeniek potrebuješ overenie" | organizácia nie je `verified` |
+| Vstupenky sa v košíku samy strácajú | tak to má byť — rezervácia platí 15 minút |
+
+---
+
+## Čo to stojí mesačne
+
+| Položka | Koľko |
+| --- | --- |
+| Doména blup.sk | ~1 € (platíš ročne) |
+| Hosting Vercel | 0 € |
+| Hosting Websupport (namiesto Vercelu) | ~3 € |
+| Supabase | 0 € do 500 MB, potom 25 € |
+| Resend | 0 € do 3 000 e-mailov |
+| Schránka | ~1 € |
+| Stripe | bez paušálu, 1,4 % + 0,25 € z platby |
+
+**Reálne 2 – 4 € mesačne.** Stripe platíš len z toho, čo naozaj predáš.
+
+---
+
+Podrobnosti k jednotlivým oblastiam: **PAYMENTS.md** (peniaze), **WEB.md**
+(webová verzia), **DATABASE.md** (schéma), **API.md** (funkcie),
 **ENVIRONMENT.md** (premenné).
