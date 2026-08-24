@@ -12,6 +12,7 @@ import {
   markConversationRead, sendMessage, setConversationMuted,
 } from '@/api/messages';
 import { pickImage, signChatImage, uploadChatImage } from '@/storage/uploads';
+import { ImageLightbox } from '@/components/ImageLightbox';
 import { supabase } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { formatMessageTime, isSameDay, formatDayLabel } from '@/lib/format';
@@ -394,6 +395,7 @@ function MessageBubble({
  * for the hour it is valid instead of re-signing on every render.
  */
 function ChatImage({ path }: { path: string }) {
+  const [open, setOpen] = useState(false);
   const signed = useQuery({
     queryKey: ['chat-image', path],
     queryFn: () => signChatImage(path),
@@ -411,12 +413,21 @@ function ChatImage({ path }: { path: string }) {
   }
 
   return (
-    <Image
-      source={{ uri: signed.data }}
-      style={styles.attachment}
-      contentFit="cover"
-      transition={160}
-    />
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        accessibilityRole="imagebutton"
+        accessibilityLabel="Otvoriť fotku"
+      >
+        <Image
+          source={{ uri: signed.data }}
+          style={styles.attachment}
+          contentFit="cover"
+          transition={160}
+        />
+      </Pressable>
+      <ImageLightbox uri={open ? signed.data : null} onClose={() => setOpen(false)} />
+    </>
   );
 }
 

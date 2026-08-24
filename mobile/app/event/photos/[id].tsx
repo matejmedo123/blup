@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { getEvent, getEventImages, setEventCover } from '@/api/events';
+import { ImageLightbox } from '@/components/ImageLightbox';
 import {
   deleteEventGalleryImage, pickImage, uploadEventGalleryImage,
 } from '@/storage/uploads';
@@ -25,6 +26,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * from that path, so nobody can write into someone else's event folder.
  */
 export default function EventPhotosScreen() {
+  const [viewing, setViewing] = useState<string | null>(null);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
@@ -187,7 +189,15 @@ export default function EventPhotosScreen() {
 
             return (
               <View key={image.id} style={[styles.tile, isCover && styles.tileCover]}>
-                <Image source={{ uri: image.url }} style={styles.tileImage} contentFit="cover" />
+                {/* The tile is a column — image, then the owner's buttons — so
+                    the tap target is the image itself, not the whole tile. */}
+                <Pressable
+                  onPress={() => setViewing(image.url)}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel="Otvoriť fotku"
+                >
+                  <Image source={{ uri: image.url }} style={styles.tileImage} contentFit="cover" />
+                </Pressable>
 
                 {isCover ? (
                   <View style={styles.coverBadge}>
@@ -227,6 +237,8 @@ export default function EventPhotosScreen() {
           načítala rýchlo aj na mobilných dátach.
         </Body>
       ) : null}
+    
+      <ImageLightbox uri={viewing} onClose={() => setViewing(null)} />
     </Screen>
   );
 }
