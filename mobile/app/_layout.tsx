@@ -15,6 +15,7 @@ import { ToastProvider } from '@/components/Toast';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { AuthGateProvider } from '@/auth/useRequireAuth';
 import { AppFrame } from '@/components/AppFrame';
+import { StartupGate } from '@/components/StartupGate';
 import { MarketingTags } from '@/marketing/tags';
 import { handleAuthDeepLink } from '@/auth/api';
 import { env, isConfigured } from '@/lib/env';
@@ -97,7 +98,6 @@ export default function RootLayout() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -162,7 +162,9 @@ export default function RootLayout() {
               {/* On a desktop the sidebar frames every screen, not only the
                   five tabs; AppFrame is a passthrough on phones. */}
               <AuthGateProvider>
-                <AppFrame>{content}</AppFrame>
+                <StartupGate>
+                  <AppFrame>{content}</AppFrame>
+                </StartupGate>
               </AuthGateProvider>
               {/* Ad platform tags, and the consent bar they wait behind.
                   A no-op on native, where there is no pixel to load. */}

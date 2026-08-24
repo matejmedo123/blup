@@ -1,5 +1,5 @@
 import React from 'react';
-import { Redirect } from 'expo-router';
+import { Redirect, useSegments } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -8,20 +8,26 @@ import { Wordmark } from '@/components/Wordmark';
 import { colors, spacing, typography } from '@/theme';
 
 /**
- * Entry point: decides where a launch lands.
- *   no backend  → setup instructions
- *   no profile  → onboarding (signed in, but never finished setting up)
- *   otherwise   → the app
+ * Decides whether a launch may proceed into the app.
+ *
+ * This used to live in `app/index.tsx`, which was a mistake on web: that file
+ * and `app/(tabs)/index.tsx` both claim `/`, so its `<Redirect href="/(tabs)"/>`
+ * resolved straight back to `/` — groups are invisible in a URL — and the
+ * router gave up with a blank screen. The gate belongs in the layout, where it
+ * can run for every route without owning one.
  *
  * Not being signed in is deliberately *not* a redirect. Somebody who opens
- * blup.app should see what is happening in the city tonight, not a login form:
- * an events app that demands an account before showing a single event has
- * nothing to show for itself. The account is asked for at the moment it is
- * needed — going, buying, writing — and not a second earlier.
+ * blup.sk should see what is happening in the city tonight, not a login form.
  */
-export default function Index() {
+
+/** Screens that must render even when the gate would otherwise redirect. */
+const ALWAYS_ALLOWED = new Set(['(auth)', '(onboarding)', 'auth']);
+
+export function StartupGate({ children }: { children: React.ReactNode }) {
   const { initializing, isAuthenticated, needsOnboarding, profile, loadingProfile, backendConfigured } =
     useAuth();
+  const segments = useSegments();
+  const first = String(segments[0] ?? '');
 
   if (!backendConfigured) {
     return (
@@ -42,9 +48,13 @@ export default function Index() {
     );
   }
 
-  if (needsOnboarding) return <Redirect href="/(onboarding)/profile" />;
+  // Onboarding and auth screens are exactly where an unfinished profile is
+  // supposed to be, so redirecting away from them would loop forever.
+  if (needsOnboarding && !ALWAYS_ALLOWED.has(first)) {
+    return <Redirect href="/(onboarding)/profile" />;
+  }
 
-  return <Redirect href="/(tabs)" />;
+  return <>{children}</>;
 }
 
 const styles = StyleSheet.create({

@@ -149,7 +149,7 @@ export default function CartScreen() {
           title="Košík je prázdny"
           body="Vyber si event a pridaj vstupenky. Držíme ti ich 15 minút."
           actionLabel="Nájsť event"
-          onAction={() => router.replace('/(tabs)')}
+          onAction={() => router.replace('/')}
         />
       </Screen>
     );

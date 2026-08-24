@@ -338,7 +338,7 @@ export default function EditEventScreen() {
             async () => {
               try {
                 await deleteEvent(id!);
-                router.replace('/(tabs)');
+                router.replace('/');
               } catch (caught) {
                 setError(messageFor(caught));
               }

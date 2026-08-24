@@ -29,7 +29,7 @@ export default function OnboardingLocationScreen() {
 
       await updateProfile({ onboarding_completed: true });
       await refreshProfile();
-      router.replace('/(tabs)');
+      router.replace('/');
     } catch (caught) {
       setError(messageFor(caught));
     } finally {

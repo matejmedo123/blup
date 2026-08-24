@@ -23,7 +23,7 @@
  *   dist/.htaccess      the same for Apache / LiteSpeed — which is what most
  *                       Slovak shared hosting (Websupport included) runs
  */
-import { readdirSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const dist = process.argv[2] ?? 'mobile/dist';
@@ -100,6 +100,33 @@ writeFileSync(join(dist, '.htaccess'),
   `  ExpiresByType text/css "access plus 1 year"\n` +
   `</IfModule>\n`);
 
+
+/**
+ * Expo's export puts an EMPTY react-helmet <title data-rh="true"></title> at the
+ * very top of <head>, before the real one from app/+html.tsx. A browser honours
+ * the FIRST <title> it meets, so every page came out titled with the bare
+ * hostname ("blup.sk"), and link-preview crawlers — which never run our JS —
+ * read that same empty string. Dropping the placeholder lets the real title win.
+ */
+function dropEmptyHelmetTitle(dir) {
+  let touched = 0;
+  const walk = (d) => {
+    for (const entry of readdirSync(d)) {
+      const full = join(d, entry);
+      if (statSync(full).isDirectory()) { walk(full); continue; }
+      if (!entry.endsWith('.html')) continue;
+      const html = readFileSync(full, 'utf8');
+      const stripped = html.replace(/<title data-rh="true">\s*<\/title>/g, '');
+      if (stripped !== html) { writeFileSync(full, stripped); touched++; }
+    }
+  };
+  walk(dir);
+  return touched;
+}
+
+const retitled = dropEmptyHelmetTitle(dist);
+
 console.log(`${routes.length} dynamic routes:`);
 for (const r of routes) console.log(`  ${r.source.padEnd(34)} -> ${r.file}`);
-console.log(`\nwrote vercel.json, _redirects, nginx.conf and .htaccess into ${dist}`);
+console.log(`\nremoved the empty helmet <title> from ${retitled} pages`);
+console.log(`wrote vercel.json, _redirects, nginx.conf and .htaccess into ${dist}`);

@@ -123,7 +123,7 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
 
   // `/` must match exactly or every route would light it up.
   const isActive = (href: string) =>
-    href === '/' ? pathname === '/' : pathname.startsWith(href.replace('/(tabs)', ''));
+    href === '/' ? pathname === '/' : pathname.startsWith(href.replace('/', ''));
 
   return (
     <View style={styles.shell}>

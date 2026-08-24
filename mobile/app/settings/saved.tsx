@@ -38,7 +38,7 @@ export default function SavedEventsScreen() {
             title="Zatiaľ nič uložené"
             body="Potiahni doprava na úvodnej obrazovke alebo klikni na hviezdičku pri ktoromkoľvek evente."
             actionLabel="Nájdi si niečo"
-            onAction={() => router.replace('/(tabs)')}
+            onAction={() => router.replace('/')}
           />
         }
       />
