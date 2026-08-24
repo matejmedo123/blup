@@ -106,6 +106,7 @@ export default function RootLayout() {
       <Stack.Screen name="event/edit/[id]" options={{ title: 'Upraviť event' }} />
       <Stack.Screen name="event/attendees/[id]" options={{ title: 'Kto ide' }} />
       <Stack.Screen name="user/[id]" options={{ title: '' }} />
+      <Stack.Screen name="org/[id]" options={{ title: '' }} />
       <Stack.Screen name="cart" options={{ title: 'Košík' }} />
       <Stack.Screen name="tickets/index" options={{ title: 'Moje vstupenky' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />

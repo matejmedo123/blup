@@ -420,8 +420,24 @@ export default function EventDetailScreen() {
         </View>
 
         {/* --- host --------------------------------------------------------- */}
-        <Pressable style={styles.host} onPress={() => router.push(`/user/${data.creator_id}`)}>
-          <Avatar url={data.creator?.avatar_url} name={data.creator?.display_name} size={40} />
+        {/* An event belongs to an organization, not to a person. Where one hosts,
+            it is its name, its logo and its page — the founder's own name and
+            face stay out of it, and live only in the verification record and on
+            the ticket, where the law wants the legal entity anyway. */}
+        <Pressable
+          style={styles.host}
+          onPress={() =>
+            data.organization
+              ? router.push(`/org/${data.organization.id}`)
+              : router.push(`/user/${data.creator_id}`)
+          }
+        >
+          <Avatar
+            url={data.organization?.logo_url ?? data.creator?.avatar_url}
+            name={data.organization?.name ?? data.creator?.display_name}
+            size={40}
+            square={Boolean(data.organization)}
+          />
           <View style={styles.flex}>
             <Caption>Organizuje</Caption>
             <Text style={styles.hostName}>

@@ -351,6 +351,14 @@ export default function OrganizerScreen() {
         {/* --- money ---------------------------------------------------------- */}
         {organization ? (
           <>
+            <Text style={styles.section}>Tvoja značka</Text>
+            <Button
+              title="Verejný profil a logo"
+              variant="secondary"
+              full
+              onPress={() => router.push('/organizer/profile')}
+            />
+
             <Text style={styles.section}>Peniaze</Text>
             <View style={styles.moneyRow}>
               <Button
