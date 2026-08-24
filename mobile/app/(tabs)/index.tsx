@@ -485,7 +485,9 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
   pressed: { opacity: 0.92 },
 
   header: {

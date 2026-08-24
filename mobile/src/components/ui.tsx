@@ -611,7 +611,9 @@ const styles = StyleSheet.create({
   gridStack: { gap: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.sm },
   gridCell: { paddingHorizontal: spacing.sm, paddingBottom: spacing.lg },
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
   screen: { flex: 1, backgroundColor: colors.background },
 
   title: { ...typography.title, color: colors.text },
@@ -643,13 +645,26 @@ const styles = StyleSheet.create({
     // spacing.md and the gap to anything else stays spacing.sm.
     marginVertical: spacing.sm,
   },
-  buttonCompact: { height: 40, paddingHorizontal: spacing.lg, borderRadius: radius.block },
+  // A compact button is an inline control — "Navigovať" beside an address,
+  // "Odstrániť" beside a row label. It must size to its own text: inheriting
+  // the base `width: 100%` made it claim the whole row and squeeze its sibling
+  // to nothing, which on react-native-web wraps that sibling's text one
+  // character per line. flexShrink: 0 keeps the label itself off that fate.
+  buttonCompact: {
+    height: 40,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.block,
+    width: 'auto',
+    maxWidth: undefined,
+    alignSelf: 'auto',
+    flexShrink: 0,
+  },
   /** The full-width primary CTA from the handoff: 56 tall, radius 18. */
   buttonLarge: { height: 56, borderRadius: 18 },
   buttonFull: { alignSelf: 'stretch', maxWidth: undefined },
   // In a row the parent decides the gaps; the vertical margin would only push
   // the row apart from its neighbours.
-  buttonInRow: { marginVertical: 0 },
+  buttonInRow: { marginVertical: 0, width: 'auto', maxWidth: undefined, alignSelf: 'auto' },
   buttonPrimary: { backgroundColor: colors.accent, ...shadow.cta },
   buttonSecondary: { backgroundColor: colors.surfaceElevated2 },
   buttonGhost: { backgroundColor: 'transparent' },

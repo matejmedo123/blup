@@ -232,7 +232,9 @@ export default function EventPhotosScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
   intro: { marginBottom: spacing.md },
   cover: { borderRadius: radius.lg, marginBottom: spacing.md },
   coverHint: { color: 'rgba(255,255,255,0.85)', padding: spacing.md },

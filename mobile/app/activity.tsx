@@ -184,7 +184,9 @@ export default function ActivityScreen() {
 
 const styles = StyleSheet.create({
   container: { padding: 0 },
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
   list: { padding: spacing.gutter, paddingBottom: spacing.xxxl, flexGrow: 1 },
 
   row: {

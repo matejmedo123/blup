@@ -234,7 +234,9 @@ const styles = StyleSheet.create({
   splitEmpty: { flex: 1, justifyContent: 'center' },
   rowSelected: { backgroundColor: colors.surfaceElevated2 },
   container: { paddingTop: spacing.md },
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
 
   header: {
     flexDirection: 'row',

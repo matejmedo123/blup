@@ -128,7 +128,9 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
   content: { padding: spacing.xl },
   intro: { marginBottom: spacing.xl },
   legal: { textAlign: 'center', marginTop: spacing.lg, fontSize: 12 },

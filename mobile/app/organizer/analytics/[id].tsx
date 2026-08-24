@@ -162,7 +162,9 @@ function MoneyRow({ label, value, strong }: { label: string; value: string; stro
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
 
   rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   range: {

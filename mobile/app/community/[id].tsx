@@ -289,7 +289,9 @@ export default function CommunityScreen() {
 
 const styles = StyleSheet.create({
   container: { padding: 0 },
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
 
   list: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   cover: { borderRadius: radius.lg, marginBottom: spacing.md, justifyContent: 'flex-end' },

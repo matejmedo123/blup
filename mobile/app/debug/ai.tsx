@@ -162,7 +162,9 @@ export default function AiDebugScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  // minWidth 0 so a long label can shrink inside a row instead of pushing
+  // its neighbour out; react-native-web defaults flex items to min-width:auto.
+  flex: { flex: 1, minWidth: 0 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
