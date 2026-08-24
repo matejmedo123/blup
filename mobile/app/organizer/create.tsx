@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
@@ -7,7 +7,7 @@ import * as Crypto from 'expo-crypto';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
-import { createEvent } from '@/api/events';
+import { createEventWithTickets } from '@/api/events';
 import { createPersonalOrganization, getMyOrganizations } from '@/api/organizations';
 import { getMyCommunities } from '@/api/communities';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
@@ -35,6 +35,33 @@ const CATEGORIES = [
  * Free events: anyone. Paid events: only through a VERIFIED organization —
  * enforced by the database, and surfaced here so the rule is never a surprise.
  */
+const MAX_TICKET_TYPES = 8;
+
+/** One ticket-type row while it is still being typed, so values stay strings. */
+interface TicketDraft {
+  key: string;
+  name: string;
+  price: string;
+  quantity: string;
+}
+
+let ticketKeySeq = 0;
+const blankTicket = (): TicketDraft => ({
+  key: `t${++ticketKeySeq}`,
+  name: '',
+  price: '',
+  quantity: '',
+});
+
+const centsFrom = (value: string): number =>
+  Math.round(Number(value.replace(',', '.') || 0) * 100);
+
+/** The event's headline price: the cheapest ticket, or 0 while none is typed. */
+const cheapestCents = (tickets: TicketDraft[]): number => {
+  const priced = tickets.map((t) => centsFrom(t.price)).filter((c) => c > 0);
+  return priced.length === 0 ? 0 : Math.min(...priced);
+};
+
 export default function CreateEventScreen() {
   const { profile } = useAuth();
   const location = useLocation();
@@ -47,7 +74,36 @@ export default function CreateEventScreen() {
   const [address, setAddress] = useState('');
   const [capacity, setCapacity] = useState('');
   const [isFree, setIsFree] = useState(true);
-  const [price, setPrice] = useState('');
+  const [ticketTypes, setTicketTypes] = useState<TicketDraft[]>([blankTicket()]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const addTicket = () =>
+    setTicketTypes((current) =>
+      current.length >= MAX_TICKET_TYPES ? current : [...current, blankTicket()]);
+
+  const removeTicket = (key: string) =>
+    setTicketTypes((current) =>
+      current.length <= 1 ? current : current.filter((t) => t.key !== key));
+
+  const patchTicket = (key: string, patch: Partial<TicketDraft>) =>
+    setTicketTypes((current) =>
+      current.map((t) => (t.key === key ? { ...t, ...patch } : t)));
+
+  /**
+   * What the feed card will say. The event's own price is the cheapest ticket,
+   * so showing it here means the organizer sees the listing before publishing
+   * rather than discovering it afterwards.
+   */
+  const cheapestLabel = (() => {
+    const amounts = ticketTypes
+      .map((t) => Number(t.price.replace(',', '.')))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (amounts.length === 0) return null;
+    const min = Math.min(...amounts);
+    return amounts.length === 1
+      ? `${min.toFixed(2).replace('.', ',')} €`
+      : `od ${min.toFixed(2).replace('.', ',')} €`;
+  })();
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [communityId, setCommunityId] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
@@ -107,7 +163,7 @@ export default function CreateEventScreen() {
       start_at: startAt.toISOString(),
       end_at: new Date(startAt.getTime() + durationHours * 3600 * 1000).toISOString(),
       is_free: isFree,
-      price_cents: isFree ? 0 : Math.round(Number(price.replace(',', '.') || 0) * 100),
+      price_cents: isFree ? 0 : cheapestCents(ticketTypes),
       currency: 'EUR',
       capacity: capacity ? Number(capacity) : null,
       attendee_count: 0,
@@ -132,7 +188,7 @@ export default function CreateEventScreen() {
     }];
   }, [
     eventCoords, title, description, coverUrl, category, address, venueName,
-    location.city, startAt, durationHours, isFree, price, capacity, profile,
+    location.city, startAt, durationHours, isFree, ticketTypes, capacity, profile,
     organizationId,
   ]);
 
@@ -158,8 +214,31 @@ export default function CreateEventScreen() {
     if (startAt.getTime() < Date.now() - 60_000) return 'Vyber čas začiatku v budúcnosti.';
     if (!isFree) {
       if (!organizationId) return 'Platené eventy môže zverejniť iba overená organizácia.';
-      const amount = Number(price.replace(',', '.'));
-      if (!Number.isFinite(amount) || amount <= 0) return 'Nastav cenu vstupenky vyššiu ako nula.';
+
+      const errors: Record<string, string> = {};
+      ticketTypes.forEach((ticket, index) => {
+        if (ticket.name.trim().length < 2) {
+          errors[`ticket.${index}.name`] = 'Pomenuj tento typ.';
+        }
+        const amount = Number(ticket.price.replace(',', '.'));
+        if (!Number.isFinite(amount) || amount <= 0) {
+          errors[`ticket.${index}.price`] = 'Cena musí byť vyššia ako nula.';
+        }
+        const count = Number(ticket.quantity);
+        if (!Number.isInteger(count) || count < 1) {
+          errors[`ticket.${index}.quantity`] = 'Zadaj, koľko ich je.';
+        }
+      });
+
+      const names = ticketTypes.map((t) => t.name.trim().toLowerCase()).filter(Boolean);
+      if (new Set(names).size !== names.length) {
+        return 'Dva typy vstupeniek nemôžu mať rovnaký názov.';
+      }
+
+      setFieldErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        return 'Doplň, čo chýba pri vstupenkách.';
+      }
     }
     if (capacity && (!Number.isInteger(Number(capacity)) || Number(capacity) < 1)) {
       return 'Kapacita musí byť celé číslo.';
@@ -208,45 +287,45 @@ export default function CreateEventScreen() {
     try {
       const endAt = new Date(startAt.getTime() + durationHours * 3600 * 1000);
 
-      const event = await createEvent({
-        title,
-        description,
-        category,
-        latitude: eventCoords!.latitude,
-        longitude: eventCoords!.longitude,
-        address: address || null || undefined,
-        venueName: venueName || undefined,
-        city: location.city ?? undefined,
-        startAt,
-        endAt,
-        capacity: capacity ? Number(capacity) : null,
-        isFree,
-        priceCents: isFree ? 0 : Math.round(Number(price.replace(',', '.')) * 100),
-        coverImageUrl: coverUrl,
-        organizationId,
-        communityId,
-        status: 'published',
-      });
+      // The event and its ticket types are written in one transaction, so a
+      // paid event can never come out with nothing on sale.
+      const event = await createEventWithTickets(
+        {
+          title,
+          description,
+          category,
+          latitude: eventCoords!.latitude,
+          longitude: eventCoords!.longitude,
+          address: address || null || undefined,
+          venueName: venueName || undefined,
+          city: location.city ?? undefined,
+          startAt,
+          endAt,
+          capacity: capacity ? Number(capacity) : null,
+          isFree,
+          coverImageUrl: coverUrl,
+          organizationId,
+          communityId,
+          status: 'published',
+        },
+        isFree
+          ? []
+          : ticketTypes.map((ticket) => ({
+              name: ticket.name,
+              priceCents: centsFrom(ticket.price),
+              quantityTotal: Number(ticket.quantity),
+            })),
+      );
 
       // Reset so a second event does not inherit the first one's details.
       setTitle('');
       setDescription('');
       setCoverUrl(null);
-      setPrice('');
       setCapacity('');
+      setTicketTypes([blankTicket()]);
+      setFieldErrors({});
 
-      if (!isFree) {
-        Alert.alert(
-          'Event zverejnený',
-          'Teraz pridaj typy vstupeniek, aby si ľudia mohli kúpiť. Spravíš to v nástenke organizátora.',
-          [
-            { text: 'Neskôr', onPress: () => router.push(`/event/${event.id}`) },
-            { text: 'Pridať vstupenky', onPress: () => router.push(`/organizer/tickets/${event.id}`) },
-          ],
-        );
-      } else {
-        router.push(`/event/${event.id}`);
-      }
+      router.push(`/event/${event.id}`);
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -397,7 +476,7 @@ export default function CreateEventScreen() {
         value={isFree}
         onValueChange={(next) => {
           setIsFree(next);
-          if (next) setPrice('');
+          if (next) setFieldErrors({});
         }}
         label="Event zdarma"
         description="Eventy zdarma môže vytvoriť ktokoľvek. Na predaj vstupeniek potrebuješ overený účet organizátora."
@@ -426,15 +505,69 @@ export default function CreateEventScreen() {
               ))}
             </View>
 
-            <Input
-              label="Cena vstupenky (EUR)"
-              value={price}
-              onChangeText={setPrice}
-              placeholder="15"
-              keyboardType="decimal-pad"
-              hint="Po zverejnení môžeš pridať viac typov vstupeniek."
-              editable={!saving}
+            {ticketTypes.map((ticket, index) => (
+              <View key={ticket.key} style={styles.ticketCard}>
+                <View style={styles.ticketHead}>
+                  <Caption>{index === 0 ? 'Typ vstupenky' : `Typ vstupenky ${index + 1}`}</Caption>
+                  {ticketTypes.length > 1 ? (
+                    <Button
+                      title="Odstrániť"
+                      variant="ghost"
+                      compact
+                      onPress={() => removeTicket(ticket.key)}
+                      disabled={saving}
+                    />
+                  ) : null}
+                </View>
+
+                <Input
+                  label="Názov"
+                  value={ticket.name}
+                  onChangeText={(v) => patchTicket(ticket.key, { name: v })}
+                  placeholder="Napr. Early bird"
+                  error={fieldErrors[`ticket.${index}.name`]}
+                  editable={!saving}
+                />
+
+                <View style={styles.ticketRow}>
+                  <View style={styles.ticketCell}>
+                    <Input
+                      label="Cena (EUR)"
+                      value={ticket.price}
+                      onChangeText={(v) => patchTicket(ticket.key, { price: v })}
+                      placeholder="15"
+                      keyboardType="decimal-pad"
+                      error={fieldErrors[`ticket.${index}.price`]}
+                      editable={!saving}
+                    />
+                  </View>
+                  <View style={styles.ticketCell}>
+                    <Input
+                      label="Počet"
+                      value={ticket.quantity}
+                      onChangeText={(v) => patchTicket(ticket.key, { quantity: v })}
+                      placeholder="100"
+                      keyboardType="number-pad"
+                      error={fieldErrors[`ticket.${index}.quantity`]}
+                      editable={!saving}
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            <Button
+              title="Pridať ďalší typ"
+              variant="ghost"
+              onPress={addTicket}
+              disabled={saving || ticketTypes.length >= MAX_TICKET_TYPES}
             />
+
+            <Caption style={styles.ticketHint}>
+              {cheapestLabel
+                ? `V zozname sa event ukáže ako „${cheapestLabel}“.`
+                : 'Ľudia uvidia všetky typy pri kúpe. Ceny a počty vieš neskôr upraviť.'}
+            </Caption>
           </>
         )
       ) : null}
@@ -464,6 +597,26 @@ export default function CreateEventScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxxl },
+
+  ticketCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  ticketHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  ticketRow: { flexDirection: 'row', gap: spacing.sm },
+  // minWidth:0 or the two cells refuse to shrink and the labels wrap a
+  // character per line on a narrow phone.
+  ticketCell: { flex: 1, minWidth: 0 },
+  ticketHint: { marginTop: spacing.xs, marginBottom: spacing.md },
   title: { ...typography.title, color: colors.text },
   intro: { marginTop: spacing.xs, marginBottom: spacing.xl },
 

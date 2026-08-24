@@ -238,6 +238,64 @@ export async function createEvent(input: CreateEventInput): Promise<BlupEvent> {
   return data as BlupEvent;
 }
 
+/** One ticket type, as typed into the create form. */
+export interface NewTicketType {
+  name: string;
+  description?: string;
+  priceCents: number;
+  quantityTotal: number;
+  maxPerOrder?: number;
+}
+
+/**
+ * Creates an event together with everything it needs to sell.
+ *
+ * Ticket types used to be a second screen reached from an alert after the
+ * event already existed, so a dismissed alert left a paid event with nothing
+ * on sale. The database does both in one transaction and refuses the halfway
+ * states outright, which is why this goes through an RPC rather than two
+ * inserts from here.
+ */
+export async function createEventWithTickets(
+  input: CreateEventInput,
+  ticketTypes: NewTicketType[] = [],
+): Promise<BlupEvent> {
+  const { data, error } = await supabase.rpc('create_event_with_tickets', {
+    p_event: {
+      organization_id: input.organizationId ?? null,
+      community_id: input.communityId ?? null,
+      title: input.title.trim(),
+      description: input.description?.trim() || null,
+      category: input.category,
+      tags: input.tags ?? [],
+      latitude: input.latitude,
+      longitude: input.longitude,
+      address: input.address ?? null,
+      venue_name: input.venueName ?? null,
+      city: input.city ?? null,
+      country: input.country ?? null,
+      start_at: input.startAt.toISOString(),
+      end_at: input.endAt ? input.endAt.toISOString() : null,
+      capacity: input.capacity ?? null,
+      is_free: input.isFree,
+      currency: input.currency ?? 'EUR',
+      cover_image_url: input.coverImageUrl ?? null,
+      visibility: input.visibility ?? 'public',
+      status: input.status ?? 'published',
+    },
+    p_ticket_types: ticketTypes.map((t) => ({
+      name: t.name.trim(),
+      description: t.description?.trim() || null,
+      price_cents: t.priceCents,
+      quantity_total: t.quantityTotal,
+      max_per_order: t.maxPerOrder ?? null,
+    })),
+  });
+
+  if (error) throw error;
+  return data as BlupEvent;
+}
+
 export async function updateEvent(
   eventId: string,
   patch: Partial<CreateEventInput>,
