@@ -309,6 +309,7 @@ export default function HomeScreen() {
             userLocation={coords}
             selectedId={selectedId}
             onSelect={(event) => setSelectedId(event.id)}
+            onDeselect={() => setSelectedId(null)}
             style={styles.map}
           />
 
@@ -327,6 +328,18 @@ export default function HomeScreen() {
               <View style={styles.mapButton}>
                 <Text style={styles.mapButtonLabel}>Detail</Text>
               </View>
+              {/* The card covers the pins underneath it, so it needs a way out
+                  that is not "open the event". Its own Pressable, so the tap
+                  never reaches the card behind it. */}
+              <Pressable
+                onPress={() => setSelectedId(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Zavrieť"
+                hitSlop={10}
+                style={({ pressed }) => [styles.mapClose, pressed && styles.pressed]}
+              >
+                <Text style={styles.mapCloseGlyph}>×</Text>
+              </Pressable>
             </Pressable>
           ) : null}
         </View>
@@ -530,6 +543,19 @@ const styles = StyleSheet.create({
   switchActive: { backgroundColor: colors.accent },
   switchLabel: { ...typography.chip, fontSize: 14, color: colors.textSecondary },
   switchLabelActive: { color: '#FFFFFF' },
+
+  mapClose: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceElevated2,
+  },
+  mapCloseGlyph: { color: colors.textSecondary, fontSize: 17, lineHeight: 20 },
 
   chipRail: { position: 'relative' },
   chipScroll: { flexGrow: 0, marginTop: spacing.lg },

@@ -55,6 +55,7 @@ export function EventMap({
   userLocation,
   selectedId,
   onSelect,
+  onDeselect,
   onRegionChange,
   radiusM,
   style,
@@ -64,6 +65,8 @@ export function EventMap({
   userLocation?: Coordinates | null;
   selectedId?: string | null;
   onSelect?: (event: EventFeedItem) => void;
+  /** Tapping the map itself, away from any pin. */
+  onDeselect?: () => void;
   onRegionChange?: (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => void;
   radiusM?: number;
   style?: object;
@@ -189,6 +192,9 @@ export function EventMap({
     <View style={[styles.container, style]}>
       <div
         ref={hostRef}
+        // A tap that reaches the map itself is a tap away from every pin —
+        // pins stopPropagation — so it closes whatever card is open.
+        onClick={() => onDeselect?.()}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}

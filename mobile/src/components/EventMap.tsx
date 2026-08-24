@@ -15,12 +15,14 @@ import type { Coordinates, EventFeedItem } from '@/types/models';
  * a clustering dependency.
  */
 export function EventMap({
-  events, userLocation, selectedId, onSelect, onRegionChange, radiusM, style, interactive = true,
+  events, userLocation, selectedId, onSelect, onDeselect, onRegionChange, radiusM, style, interactive = true,
 }: {
   events: EventFeedItem[];
   userLocation?: Coordinates | null;
   selectedId?: string | null;
   onSelect?: (event: EventFeedItem) => void;
+  /** Tapping the map itself, away from any pin. */
+  onDeselect?: () => void;
   onRegionChange?: (region: Region) => void;
   radiusM?: number;
   style?: object;
@@ -71,6 +73,7 @@ export function EventMap({
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
         initialRegion={initialRegion}
+        onPress={() => onDeselect?.()}
         showsUserLocation={Boolean(userLocation)}
         showsMyLocationButton={interactive}
         showsCompass={false}
