@@ -360,17 +360,26 @@ export default function OrganizerScreen() {
                 style={styles.flex}
               />
               <Button
-                title="Skener"
+                title="Účtovníctvo"
                 variant="secondary"
-                onPress={() => router.push('/organizer/scan')}
+                onPress={() => router.push('/organizer/accounting')}
                 style={styles.flex}
               />
             </View>
-            <Button
-              title="Účtovníctvo"
-              variant="secondary"
-              onPress={() => router.push('/organizer/accounting')}
-            />
+
+            {/* The scanner is the door, not the money — and there is nothing to
+                scan until this organization can sell, so it waits for that. */}
+            {showRevenue ? (
+              <>
+                <Text style={styles.section}>Pri vstupe</Text>
+                <Button
+                  title="Skener vstupeniek"
+                  variant="secondary"
+                  full
+                  onPress={() => router.push('/organizer/scan')}
+                />
+              </>
+            ) : null}
           </>
         ) : null}
       </ScrollView>
