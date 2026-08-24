@@ -140,6 +140,12 @@ export default function CreateEventScreen() {
     [organizations],
   );
 
+  /** An organization that exists but cannot sell yet — waiting, or turned down. */
+  const pendingOrg = useMemo(
+    () => (organizations ?? []).find((org) => org.verification_status !== 'verified') ?? null,
+    [organizations],
+  );
+
   const eventCoords = coords ?? location.coords;
 
   // The map preview shows the draft exactly as it will be published. Building a
@@ -484,13 +490,34 @@ export default function CreateEventScreen() {
 
       {!isFree ? (
         verifiedOrgs.length === 0 ? (
-          <Notice
-            tone="warning"
-            title="Na predaj vstupeniek potrebuješ profil organizátora"
-            body="Vstupné si môže nastaviť ktokoľvek — stačí jedno klepnutie. Peniaze však vieme vyplatiť až overenému subjektu, to je zákonná požiadavka, nie naše pravidlo."
-            actionLabel={creatingOrg ? 'Zakladám…' : 'Založiť to za mňa'}
-            onAction={becomeOrganizer}
-          />
+          // Having no *verified* organization is not the same as having none.
+          // Offering to create a second one to somebody who is simply waiting
+          // for verification collided on the slug and failed.
+          pendingOrg ? (
+            <Notice
+              tone="warning"
+              title={
+                pendingOrg.verification_status === 'rejected'
+                  ? `Overenie ${pendingOrg.name} neprešlo`
+                  : `${pendingOrg.name} čaká na overenie`
+              }
+              body={
+                pendingOrg.verification_status === 'rejected'
+                  ? 'Pozri sa, čo treba doplniť, a pošli žiadosť znova. Dovtedy vieš zverejňovať eventy zdarma.'
+                  : 'Kým to prejde, môžeš zverejňovať eventy zdarma. Predaj vstupeniek sa odomkne hneď po overení.'
+              }
+              actionLabel="Otvoriť overenie"
+              onAction={() => router.push('/organizer/verification')}
+            />
+          ) : (
+            <Notice
+              tone="warning"
+              title="Na predaj vstupeniek potrebuješ profil organizátora"
+              body="Vstupné si môže nastaviť ktokoľvek — stačí jedno klepnutie. Peniaze však vieme vyplatiť až overenému subjektu, to je zákonná požiadavka, nie naše pravidlo."
+              actionLabel={creatingOrg ? 'Zakladám…' : 'Založiť to za mňa'}
+              onAction={becomeOrganizer}
+            />
+          )
         ) : (
           <>
             <Caption style={styles.orgHint}>Zverejniť ako</Caption>

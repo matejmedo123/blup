@@ -42,13 +42,13 @@ export async function updateProfile(patch: ProfileUpdate): Promise<Profile> {
   if (patch.username !== undefined) {
     const username = patch.username.trim().toLowerCase();
     if (!/^[a-z0-9_.]{3,24}$/.test(username)) {
-      throw new Error('Username must be 3–24 characters: letters, numbers, _ or .');
+      throw new Error('Meno musí mať 3–24 znakov: písmená, čísla, _ alebo bodka.');
     }
     patch.username = username;
   }
 
   if (patch.bio && patch.bio.length > 300) {
-    throw new Error('Bio is limited to 300 characters.');
+    throw new Error('O mne môže mať najviac 300 znakov.');
   }
 
   const { data, error } = await supabase
@@ -59,7 +59,7 @@ export async function updateProfile(patch: ProfileUpdate): Promise<Profile> {
     .single();
 
   if (error) {
-    if (error.code === '23505') throw new Error('That username is already taken.');
+    if (error.code === '23505') throw new Error('Toto používateľské meno už niekto má.');
     throw error;
   }
 
@@ -171,7 +171,7 @@ export async function followUser(targetId: string): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
   if (!userId) throw new Error('UNAUTHENTICATED');
-  if (userId === targetId) throw new Error('You cannot follow yourself.');
+  if (userId === targetId) throw new Error('Sám seba sledovať nemôžeš.');
 
   const { error } = await supabase
     .from('follows')

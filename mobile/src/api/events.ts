@@ -573,8 +573,8 @@ export async function addComment(eventId: string, body: string): Promise<Comment
   if (!userId) throw new Error('UNAUTHENTICATED');
 
   const trimmed = body.trim();
-  if (trimmed.length === 0) throw new Error('Write something first.');
-  if (trimmed.length > 1000) throw new Error('Comments are limited to 1000 characters.');
+  if (trimmed.length === 0) throw new Error('Najprv niečo napíš.');
+  if (trimmed.length > 1000) throw new Error('Komentár môže mať najviac 1000 znakov.');
 
   const { data, error } = await supabase
     .from('comments')

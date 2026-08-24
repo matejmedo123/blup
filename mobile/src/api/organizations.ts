@@ -37,6 +37,22 @@ export async function getOrganization(id: string): Promise<Organization | null> 
  * standing between a person and starting it, by creating a personal
  * organization from their existing profile.
  */
+/**
+ * The slug is already in use.
+ *
+ * A distinct type on purpose: the retry below used to sniff the message for
+ * /duplicate|unique/, which never matched the message actually thrown, so the
+ * retry was dead code and the raw English string reached the screen instead.
+ */
+export class SlugTakenError extends Error {
+  readonly slug: string;
+  constructor(slug: string) {
+    super('Tento odkaz už niekto používa.');
+    this.name = 'SlugTakenError';
+    this.slug = slug;
+  }
+}
+
 export async function createPersonalOrganization(profile: {
   id: string;
   display_name: string | null;
@@ -57,24 +73,29 @@ export async function createPersonalOrganization(profile: {
   // Slugs are unique; a personal one is namespaced and suffixed if taken.
   const candidate = base.length >= 3 ? base : `blup-${profile.id.slice(0, 8)}`;
 
-  try {
-    return await createOrganization({
-      name,
-      slug: candidate,
-      description: 'Osobný profil organizátora',
-      contactEmail: profile.email ?? undefined,
-      city: profile.city ?? undefined,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    if (!/duplicate|unique/i.test(message)) throw error;
+  // Somebody who already has an organization does not need a second one; the
+  // button that leads here appears when none is *verified*, which is not the
+  // same thing as none existing.
+  const existing = await getMyOrganizations();
+  if (existing.length > 0) return existing[0];
 
+  const common = {
+    name,
+    description: 'Osobný profil organizátora',
+    contactEmail: profile.email ?? undefined,
+    city: profile.city ?? undefined,
+  };
+
+  try {
+    return await createOrganization({ ...common, slug: candidate });
+  } catch (error) {
+    if (!(error instanceof SlugTakenError)) throw error;
+
+    // Someone else holds the obvious slug. Suffix it with part of the user id,
+    // which is unique by construction.
     return createOrganization({
-      name,
+      ...common,
       slug: `${candidate}-${profile.id.slice(0, 4)}`.slice(0, 40),
-      description: 'Osobný profil organizátora',
-      contactEmail: profile.email ?? undefined,
-      city: profile.city ?? undefined,
     });
   }
 }
@@ -115,7 +136,7 @@ export async function createOrganization(input: {
     .single();
 
   if (error) {
-    if (error.code === '23505') throw new Error('That handle is already taken.');
+    if (error.code === '23505') throw new SlugTakenError(slug);
     throw error;
   }
 
