@@ -67,13 +67,30 @@ export default function OrganizerScreen() {
   const packages = useQuery({ queryKey: ['boost', 'packages'], queryFn: getBoostPackages });
 
   // Reach and RSVP come from the events themselves; revenue from the ledger.
+  // Personal events count too — somebody running free events under their own
+  // name still has reach worth seeing.
   const stats = useMemo(() => {
-    const events = orgEvents.data ?? [];
+    const seen = new Map<string, { view_count?: number | null; attendee_count?: number | null }>();
+    for (const event of [...(orgEvents.data ?? []), ...(myEvents.data ?? [])]) {
+      seen.set(event.id, event);
+    }
+    const all = [...seen.values()];
     return {
-      views: events.reduce((sum, event) => sum + (event.view_count ?? 0), 0),
-      rsvp: events.reduce((sum, event) => sum + (event.attendee_count ?? 0), 0),
+      eventCount: all.length,
+      views: all.reduce((sum, event) => sum + (event.view_count ?? 0), 0),
+      rsvp: all.reduce((sum, event) => sum + (event.attendee_count ?? 0), 0),
     };
-  }, [orgEvents.data]);
+  }, [orgEvents.data, myEvents.data]);
+
+  /**
+   * Three zeroes tell a first-time organizer nothing except that something is
+   * broken, so the tiles wait until there is something to count. Revenue waits
+   * longer still: without a verified organization there is no ledger to read,
+   * and a 0,00 € beside it reads as "you earned nothing" rather than "you
+   * cannot sell yet".
+   */
+  const showStats = stats.eventCount > 0;
+  const showRevenue = Boolean(organization) && organization?.verification_status === 'verified';
 
   const becomeOrganizer = async () => {
     if (!profile) return;
@@ -207,15 +224,19 @@ export default function OrganizerScreen() {
         {error ? <Notice tone="danger" title="Nepodarilo sa" body={error} /> : null}
 
         {/* --- stats --------------------------------------------------------- */}
-        <View style={styles.statRow}>
-          <StatTile label="ZOBRAZENIA" value={String(stats.views)} note="za všetky eventy" />
-          <StatTile label="RSVP" value={String(stats.rsvp)} note="prihlásených" />
-          <StatTile
-            label="VÝNOS"
-            value={formatMoney(balance.data?.balance_cents ?? 0, currency)}
-            note="po Blup fee"
-          />
-        </View>
+        {showStats ? (
+          <View style={styles.statRow}>
+            <StatTile label="ZOBRAZENIA" value={String(stats.views)} note="za všetky eventy" />
+            <StatTile label="RSVP" value={String(stats.rsvp)} note="prihlásených" />
+            {showRevenue ? (
+              <StatTile
+                label="VÝNOS"
+                value={formatMoney(balance.data?.balance_cents ?? 0, currency)}
+                note="po Blup fee"
+              />
+            ) : null}
+          </View>
+        ) : null}
 
         {/* --- create -------------------------------------------------------- */}
         <Pressable
