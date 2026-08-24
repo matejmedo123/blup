@@ -152,8 +152,12 @@ npm run build:web
 ```
 
 Jeden príkaz spraví tri veci: zmaže cache, vyexportuje web a dopíše konfiguráciu
-pre hosting. Vznikne priečinok **`mobile/dist`** — 75 obyčajných HTML súborov
+pre hosting. Vznikne priečinok **`mobile/dist`** — 77 obyčajných HTML súborov
 plus JS a CSS, dokopy asi 12 MB.
+
+Do konfigurácie sa zapíšu aj pravidlá pre náhľady odkazov. Tie potrebujú adresu
+tvojho Supabase projektu, takže **`mobile/.env` musí byť vyplnený už teraz** —
+build ťa upozorní, ak nie je, a náhľady budú generické, kým to nespravíš.
 
 > **V projekte žiadne HTML nenájdeš, a je to správne.** Vzniká až teraz a vzniká
 > s **tvojimi** údajmi zapečenými dovnútra — adresa tvojho Supabase projektu,

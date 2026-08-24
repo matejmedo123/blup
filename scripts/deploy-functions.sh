@@ -41,6 +41,7 @@ FUNCTIONS=(
   "weekly-digest:false"
   "cart-sweep:false"
   "config-status:false"
+  "og:false"
 )
 
 deploy() {
