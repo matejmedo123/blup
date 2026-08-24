@@ -556,12 +556,26 @@ export default function CreateEventScreen() {
               </View>
             ))}
 
-            <Button
-              title="Pridať ďalší typ"
-              variant="ghost"
+            <Pressable
               onPress={addTicket}
               disabled={saving || ticketTypes.length >= MAX_TICKET_TYPES}
-            />
+              accessibilityRole="button"
+              accessibilityLabel="Pridať ďalší typ vstupenky"
+              style={({ pressed }) => [
+                styles.addTicket,
+                pressed && styles.addTicketPressed,
+                ticketTypes.length >= MAX_TICKET_TYPES && styles.addTicketDisabled,
+              ]}
+            >
+              <View style={styles.addTicketPlus}>
+                <Text style={styles.addTicketPlusGlyph}>+</Text>
+              </View>
+              <Body style={styles.addTicketLabel}>
+                {ticketTypes.length >= MAX_TICKET_TYPES
+                  ? `Viac ako ${MAX_TICKET_TYPES} typov už nie`
+                  : 'Pridať ďalší typ vstupenky'}
+              </Body>
+            </Pressable>
 
             <Caption style={styles.ticketHint}>
               {cheapestLabel
@@ -617,6 +631,38 @@ const styles = StyleSheet.create({
   // character per line on a narrow phone.
   ticketCell: { flex: 1, minWidth: 0 },
   ticketHint: { marginTop: spacing.xs, marginBottom: spacing.md },
+
+  // A dashed outline reads as "there is room for another one here", which a
+  // solid button does not — it would compete with "Zverejniť event".
+  addTicket: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  addTicketPressed: { backgroundColor: colors.surface },
+  addTicketDisabled: { opacity: 0.45 },
+  addTicketPlus: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTicketPlusGlyph: {
+    color: colors.accent,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '700',
+  },
+  addTicketLabel: { color: colors.textSecondary, flex: 1, minWidth: 0 },
   title: { ...typography.title, color: colors.text },
   intro: { marginTop: spacing.xs, marginBottom: spacing.xl },
 
