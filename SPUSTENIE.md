@@ -310,6 +310,39 @@ odoslanie.
 
 **✓ Kontrola:** v Resende svieti pri `blup.sk` zelené **Verified**.
 
+### 5c. Potvrdzovacie e-maily pri registrácii
+
+**Toto je tretia, samostatná vec — a bez nej ti registrácia nedobehne.**
+
+Supabase má vlastnú odosielaciu službu, ale tá je len na skúšanie: pošle
+**dva e-maily za hodinu** a na nových projektoch **iba na adresy členov tímu**.
+Registrácia teda zvonku vyzerá, že prešla, a potvrdenie nikdy nepríde.
+
+Nasmeruj Supabase na Resend, ktorý si už nastavil v 5b:
+
+**Authentication → Emails → SMTP Settings** → zapni **Enable Custom SMTP**:
+
+| Pole | Hodnota |
+| --- | --- |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` (doslova, nie tvoj e-mail) |
+| Password | ten istý `re_...` kľúč ako v `RESEND_API_KEY` |
+| Sender email | `vstupenky@blup.sk` (musí byť na overenej doméne) |
+| Sender name | `Blup` |
+
+Potom **Authentication → Rate Limits** → *Emails per hour* zdvihni z `2`
+napríklad na `100`. Kým tam sedí dvojka, tretia registrácia v hodine ticho odpadne.
+
+**✓ Kontrola:** zaregistruj sa na adresu, ktorá **nie je** tvoj Supabase účet.
+Do minúty musí prísť potvrdzovací e-mail. V **Authentication → Logs** vidíš pri
+každom pokuse, či odoslanie prešlo alebo prečo nie.
+
+> Kým toto nemáš hotové, vieš sa cez registráciu prehrýzť tak, že v
+> **Authentication → Providers → Email** vypneš **Confirm email**. Aplikácia s
+> tým počíta a pustí ťa rovno do aplikácie. **Pred Fázou 11 to zapni späť** —
+> bez potvrdenia ti ktokoľvek založí účet na cudziu adresu.
+
 ---
 
 ## Fáza 6 · Upozornenia v prehliadači (5 minút)
@@ -544,7 +577,9 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 | Po platbe zlé presmerovanie | `APP_PUBLIC_URL` nesedí s doménou alebo má lomku na konci |
 | E-maily nechodia | doména nie je vo Verified, alebo `EMAIL_FROM` je na inej doméne |
 | E-maily padajú do spamu | dva SPF záznamy naraz — spoj ich do jedného |
-| „Potvrdzovací e-mail sa nepodarilo odoslať" | Supabase nemá kam poslať potvrdenie — na ostrom projekte to ide samo, lokálne vypni potvrdzovanie v **Authentication → Providers → Email** |
+| Potvrdzovací e-mail po registrácii nechodí | Supabase posiela cez vlastnú službu len 2/hodinu a len členom tímu — nastav SMTP na Resend, **Fáza 5c** |
+| Potvrdenie prišlo raz a potom už nie | narazil si na *Emails per hour* — zdvihni limit v **Authentication → Rate Limits** |
+| Odkaz v potvrdení hlási neplatnú adresu | `Redirect URLs` v **Fáze 8** nesedia s doménou |
 | Prázdna biela stránka | build má staré `.env` — `rm -rf mobile/.expo mobile/node_modules/.cache` a znova |
 | Geolokácia nefunguje | stránka nebeží cez HTTPS |
 | „Na predaj vstupeniek potrebuješ overenie" | organizácia nie je `verified` |
