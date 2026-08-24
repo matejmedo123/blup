@@ -33,14 +33,20 @@ export default function ScanWebScreen() {
   const streamRef = useRef<MediaStream | null>(null);
   const lastScan = useRef<{ code: string; at: number } | null>(null);
 
-  const [cameraState, setCameraState] = useState<'idle' | 'starting' | 'live' | 'unsupported' | 'denied'>('idle');
+  const detectorSupported =
+    typeof window !== 'undefined' && 'BarcodeDetector' in window;
+
+  // Starting at 'unsupported' where the API is missing, rather than at 'idle',
+  // because 'idle' rendered "Zapni kameru" next to a button that was hidden for
+  // exactly the same reason — an instruction with nothing to carry it out.
+  // Safari has no BarcodeDetector, so this is what a doorman on an iPhone sees.
+  const [cameraState, setCameraState] = useState<'idle' | 'starting' | 'live' | 'unsupported' | 'denied'>(
+    detectorSupported ? 'starting' : 'unsupported',
+  );
   const [result, setResult] = useState<CheckInResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState('');
   const [busy, setBusy] = useState(false);
-
-  const detectorSupported =
-    typeof window !== 'undefined' && 'BarcodeDetector' in window;
 
   const submit = async (payload: string) => {
     const parsed = parseTicketQr(payload.trim());
@@ -115,7 +121,15 @@ export default function ScanWebScreen() {
     return () => { stopped = true; clearInterval(timer); };
   }, [cameraState, detectorSupported]);
 
-  useEffect(() => stopCamera, []);
+  // The door is not the place to press a button first: the camera comes up with
+  // the screen, so pointing the phone at a QR code is the whole interaction.
+  // The permission prompt is the browser's, and getUserMedia does not need a
+  // gesture to ask for it.
+  useEffect(() => {
+    if (detectorSupported) void startCamera();
+    return stopCamera;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Screen scroll>
@@ -137,14 +151,14 @@ export default function ScanWebScreen() {
           <Text style={styles.placeholderGlyph}>⌗</Text>
           <Body muted style={styles.center}>
             {cameraState === 'unsupported'
-              ? 'Tento prehliadač nevie čítať QR kódy. Funguje to v Chrome a Edge — alebo kód zadaj ručne nižšie.'
+              ? 'Safari na iPhone zatiaľ nevie čítať QR kódy priamo v stránke. Otvor blup.sk v Chrome, alebo zadaj kód z vstupenky ručne nižšie — funguje to rovnako.'
               : cameraState === 'denied'
                 ? 'Prístup ku kamere si zamietol. Povoľ ho v nastaveniach stránky, alebo zadaj kód ručne.'
-                : 'Zapni kameru a skenuj, alebo zadaj kód ručne.'}
+                : 'Zapínam kameru…'}
           </Body>
-          {detectorSupported && cameraState !== 'denied' ? (
+          {detectorSupported ? (
             <Button
-              title={cameraState === 'starting' ? 'Zapínam…' : 'Zapnúť kameru'}
+              title={cameraState === 'starting' ? 'Zapínam…' : 'Skúsiť kameru znova'}
               onPress={() => void startCamera()}
               loading={cameraState === 'starting'}
             />

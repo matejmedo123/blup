@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import * as WebBrowser from 'expo-web-browser';
 
 import {
   getLedger, getMyOrganizations, getOrganizerBalance, getPayouts, refreshPayoutStatus,
@@ -9,6 +8,7 @@ import {
 } from '@/api/organizations';
 import { payoutStatusLabel } from '@/lib/labels';
 import { messageFor } from '@/lib/errors';
+import { openExternal } from '@/lib/external';
 import { formatMoney, formatRelative } from '@/lib/format';
 import {
   Badge, Body, Button, Caption, Divider, EmptyState, Input, LoadingState, Notice, Screen,
@@ -76,7 +76,7 @@ export default function PayoutsScreen() {
     try {
       const result = await startPayoutOnboarding(organization.id);
       if (result.onboarding_url) {
-        await WebBrowser.openBrowserAsync(result.onboarding_url);
+        await openExternal(result.onboarding_url);
         // Re-read the capability flags once the user comes back.
         await refreshPayoutStatus(organization.id);
         await queryClient.invalidateQueries({ queryKey: ['organizations'] });
