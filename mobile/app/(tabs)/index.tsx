@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
+import { Wordmark } from '@/components/Wordmark';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -179,6 +180,20 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       {/* --- header --------------------------------------------------------- */}
+      {/* On a desktop the sidebar carries the wordmark; on a phone there was
+          nothing to say whose app this is. Small, above the fold, and a tap
+          takes you home from wherever the scroll got to. */}
+      {!layout.isWide ? (
+        <Pressable
+          onPress={() => router.push('/')}
+          accessibilityRole="button"
+          accessibilityLabel="Blup — domov"
+          style={styles.brandRow}
+        >
+          <Wordmark size={19} />
+        </Pressable>
+      ) : null}
+
       <View style={styles.header}>
         <View style={styles.flex}>
           {/* Once the events are on screen, "Zisťujem polohu" is no longer true
@@ -515,12 +530,18 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   pressed: { opacity: 0.92 },
 
+  brandRow: {
+    paddingHorizontal: spacing.gutter,
+    paddingTop: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.gutter,
-    paddingTop: spacing.md,
+    paddingTop: spacing.xs,
   },
   city: { ...typography.mono, color: colors.accent },
   title: { ...typography.screenTitle, color: colors.text, marginTop: 4 },
