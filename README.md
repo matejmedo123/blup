@@ -19,7 +19,7 @@ tells you exactly which credential it is missing.
 | Layer | Technology | Where |
 |---|---|---|
 | Mobile app | Expo SDK 57 · React Native 0.86 · React 19 · TypeScript · Expo Router | `mobile/` |
-| Database | PostgreSQL 16 (Supabase) · 14 versioned migrations · RLS on every table | `supabase/migrations/` |
+| Database | PostgreSQL 16 (Supabase) · 29 versioned migrations · RLS on every table | `supabase/migrations/` |
 | Backend API | Supabase Edge Functions (Deno) | `supabase/functions/` |
 | Auth | Supabase Auth — email/password, reset, Apple, Google | `mobile/src/auth/` |
 | Storage | Supabase Storage — avatars, event covers, private KYC documents | `mobile/src/storage/` |
@@ -157,7 +157,7 @@ because onboarding cannot work without it.
 
 ```bash
 npm run db:verify              # spins up a throwaway PostgreSQL 16 cluster,
-                               # applies all migrations, runs 45 assertions
+                               # applies all migrations, runs 135 assertions
 npm run typecheck              # tsc --noEmit over the whole app
 cd mobile && npx expo export --platform android   # proves the bundle builds
 ```
