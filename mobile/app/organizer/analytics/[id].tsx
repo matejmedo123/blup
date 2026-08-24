@@ -51,6 +51,10 @@ export default function EventAnalyticsScreen() {
   const data = analytics.data;
   const paidOrders = (orders.data ?? []).filter((order) => order.payment_status === 'succeeded');
 
+  // Set up to sell, or has sold before — the second so a finished event whose
+  // ticket types were deactivated still shows what it made.
+  const sells = data.sells_tickets || data.has_sales;
+
   return (
     <Screen scroll>
       <Text style={styles.title}>{data.title}</Text>
@@ -67,11 +71,15 @@ export default function EventAnalyticsScreen() {
       <View style={[styles.grid, layout.isWide && styles.gridWide]}>
         <Tile label="Idú" value={String(data.rsvp_going)} />
         <Tile label="Zaujíma ich to" value={String(data.rsvp_interested)} />
-        <Tile label="Predané vstupenky" value={String(data.tickets_sold)} />
-        <Tile label="Odbavení" value={String(data.checked_in)} />
+        {sells ? <Tile label="Predané vstupenky" value={String(data.tickets_sold)} /> : null}
+        {sells ? <Tile label="Odbavení" value={String(data.checked_in)} /> : null}
       </View>
 
       {/* --- the curve ----------------------------------------------------- */}
+      {/* A free event has nothing to plot and no money to report. A curve of
+          zeroes there is not an empty state, it is a screen that looks broken. */}
+      {sells ? (
+      <>
       <SectionHeader title="Predaj v čase" />
       <View style={styles.rangeRow}>
         {[7, 30, 90].map((option) => (
@@ -122,6 +130,8 @@ export default function EventAnalyticsScreen() {
       <Caption style={styles.conversion}>
         Z {data.views} zobrazení skončilo vstupenkou {data.conversion_rate} %.
       </Caption>
+      </>
+      ) : null}
 
       <SectionHeader title="Posledné objednávky" />
       {paidOrders.length === 0 ? (

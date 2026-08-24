@@ -330,6 +330,11 @@ export interface PremiumStatus {
 export interface EventAnalytics {
   event_id: string;
   title: string;
+  is_free: boolean;
+  /** Not free, and at least one active ticket type exists. */
+  sells_tickets: boolean;
+  /** Has sold before — keeps the money section for an event whose sale is over. */
+  has_sales: boolean;
   views: number;
   unique_viewers: number;
   saves: number;
