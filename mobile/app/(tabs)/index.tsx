@@ -248,6 +248,7 @@ export default function HomeScreen() {
           ))}
         </View>
       ) : (
+      <View style={styles.chipRail}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -273,6 +274,17 @@ export default function HomeScreen() {
           </Pressable>
         ))}
       </ScrollView>
+        {/* Fades the last chip out instead of slicing it, so the rail reads as
+            "there is more this way". pointerEvents none or it would swallow the
+            tap on the chip underneath it. */}
+        <LinearGradient
+          colors={['rgba(10,13,18,0)', colors.background]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          pointerEvents="none"
+          style={styles.chipFade}
+        />
+      </View>
       )}
 
       {error ? <Notice tone="danger" title="Toto sa nepodarilo" body={error} /> : null}
@@ -519,7 +531,15 @@ const styles = StyleSheet.create({
   switchLabel: { ...typography.chip, fontSize: 14, color: colors.textSecondary },
   switchLabelActive: { color: '#FFFFFF' },
 
+  chipRail: { position: 'relative' },
   chipScroll: { flexGrow: 0, marginTop: spacing.lg },
+  chipFade: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 32,
+  },
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -528,7 +548,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
   switchRowWide: { maxWidth: 320, marginHorizontal: spacing.xxl },
-  chipRow: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.gutter },
+  // The extra right padding keeps the last chip off the edge, so a rail that
+  // has more to show ends in a gap rather than in a chip sliced by the screen —
+  // which read as a broken layout rather than as "there is more, swipe".
+  chipRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingLeft: spacing.gutter,
+    paddingRight: spacing.gutter * 2,
+  },
   chip: {
     paddingHorizontal: 15,
     paddingVertical: 11,
