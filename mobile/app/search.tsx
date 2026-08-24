@@ -1,3 +1,4 @@
+import { eventHref } from '@/lib/format';
 import React, { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -140,7 +141,7 @@ export default function SearchScreen() {
 function ResultRow({ event }: { event: EventFeedItem }) {
   return (
     <Pressable
-      onPress={() => router.push(`/event/${event.id}`)}
+      onPress={() => router.push(eventHref(event))}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
       <GradientCover

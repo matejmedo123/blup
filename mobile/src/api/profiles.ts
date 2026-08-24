@@ -3,8 +3,19 @@ import type { EventFeedItem, Interest, Profile } from '@/types/models';
 
 /** Profile, interests and the follow graph. */
 
-export async function getProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Takes whatever the address bar holds: a uuid, @handle, or a bare handle.
+ * Handles are citext, so case does not matter.
+ */
+export async function getProfile(ref: string): Promise<Profile | null> {
+  const handle = ref.startsWith('@') ? ref.slice(1) : ref;
+  const query = UUID.test(ref)
+    ? supabase.from('profiles').select('*').eq('id', ref)
+    : supabase.from('profiles').select('*').eq('username', handle);
+
+  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return (data as Profile) ?? null;
 }

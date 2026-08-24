@@ -1,3 +1,4 @@
+import { eventHref } from '@/lib/format';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
@@ -159,7 +160,7 @@ export default function HomeScreen() {
 
   const openEvent = (event: EventFeedItem) => {
     void recordSignal(event.id, 'open_detail');
-    router.push(`/event/${event.id}`);
+    router.push(eventHref(event));
   };
 
   const events = nearby.data ?? [];

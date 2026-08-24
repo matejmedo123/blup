@@ -1,3 +1,4 @@
+import { eventHref } from '@/lib/format';
 import React from 'react';
 import { FlatList, View } from 'react-native';
 import { router } from 'expo-router';
@@ -29,7 +30,7 @@ export default function AttendingScreen() {
         contentContainerStyle={{ padding: spacing.lg, flexGrow: 1 }}
         renderItem={({ item }) => (
           <View style={{ marginBottom: spacing.lg }}>
-            <EventCard event={toFeedItem(item)} onPress={() => router.push(`/event/${item.id}`)} />
+            <EventCard event={toFeedItem(item)} onPress={() => router.push(eventHref(item))} />
           </View>
         )}
         ListEmptyComponent={

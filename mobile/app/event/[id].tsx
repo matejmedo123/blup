@@ -65,6 +65,16 @@ export default function EventDetailScreen() {
     enabled: Boolean(id),
   });
 
+  // The address someone copies from here should carry the event's name, even
+  // when they arrived through the old uuid form — which still resolves.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const slug = event.data?.slug;
+    if (!slug || id === slug) return;
+    window.history.replaceState(null, '', `/event/${slug}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.data?.slug]);
+
   // The basket, so the ticket rows can say "in your basket" and the button can
   // become "go to basket" instead of adding a second time.
   const cart = useQuery({

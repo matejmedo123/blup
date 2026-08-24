@@ -147,3 +147,21 @@ export function formatScore(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return `${Math.round(value * 100)}%`;
 }
+
+/**
+ * Where to send someone for an event.
+ *
+ * Prefers the readable slug and falls back to the uuid, which still resolves —
+ * so a row written before slugs existed, or a caller holding nothing but an id,
+ * still links somewhere real.
+ */
+export function eventHref(event: { id: string; slug?: string | null }): string {
+  return `/event/${event.slug || event.id}`;
+}
+
+/**
+ * Where to send someone for a profile. @handle if they have one, uuid if not.
+ */
+export function profileHref(profile: { id: string; username?: string | null }): string {
+  return `/user/${profile.username ? `@${profile.username}` : profile.id}`;
+}

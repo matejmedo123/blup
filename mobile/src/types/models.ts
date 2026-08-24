@@ -70,6 +70,8 @@ export interface Interest {
 /** Row shape returned by events_nearby / search_events / recommend_events. */
 export interface EventFeedItem {
   id: string;
+  /** Readable address; null only for a row written before slugs existed. */
+  slug: string | null;
   title: string;
   description: string | null;
   cover_image_url: string | null;
@@ -135,6 +137,8 @@ export interface ScoreBreakdown {
 
 export interface BlupEvent {
   id: string;
+  /** Readable address; null only for a row written before slugs existed. */
+  slug: string | null;
   creator_id: string;
   organization_id: string | null;
   title: string;

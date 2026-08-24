@@ -1,3 +1,4 @@
+import { eventHref } from '@/lib/format';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -286,7 +287,7 @@ export default function OrganizerScreen() {
               <View key={event.id} style={styles.eventCard}>
                 <Pressable
                   style={styles.eventTop}
-                  onPress={() => router.push(`/event/${event.id}`)}
+                  onPress={() => router.push(eventHref(event))}
                 >
                   <View style={[styles.dot, { backgroundColor: family.color }]} />
                   <View style={styles.flex}>

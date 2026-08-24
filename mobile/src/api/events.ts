@@ -105,7 +105,16 @@ export interface EventDetail extends BlupEvent {
   is_liked: boolean;
 }
 
-export async function getEvent(eventId: string): Promise<EventDetail> {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The address bar carries either a slug or the uuid we used to hand out.
+ * Both have to work: a link someone pasted into a chat last month must not
+ * start 404-ing because the addresses got readable.
+ */
+export async function getEvent(ref: string): Promise<EventDetail> {
+  const column = UUID.test(ref) ? 'id' : 'slug';
+
   const [{ data: event, error }, { data: userData }] = await Promise.all([
     supabase
       .from('events')
@@ -116,12 +125,15 @@ export async function getEvent(eventId: string): Promise<EventDetail> {
          gallery:event_images (id, url, sort_order),
          ticket_types (*)`,
       )
-      .eq('id', eventId)
+      .eq(column, ref)
       .single(),
     supabase.auth.getUser(),
   ]);
 
   if (error) throw error;
+
+  // Everything below keys off the real id, whichever form the address used.
+  const eventId = (event as { id: string }).id;
 
   const userId = userData?.user?.id;
   let myRsvp: AttendeeStatus | null = null;

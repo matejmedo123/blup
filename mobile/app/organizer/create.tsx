@@ -1,3 +1,4 @@
+import { eventHref } from '@/lib/format';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -156,6 +157,8 @@ export default function CreateEventScreen() {
 
     return [{
       id: 'draft',
+      // A draft has no address yet; the trigger writes one on insert.
+      slug: null,
       title: title.trim() || 'Tvoj event',
       description: description.trim() || null,
       cover_image_url: coverUrl,
@@ -331,7 +334,7 @@ export default function CreateEventScreen() {
       setTicketTypes([blankTicket()]);
       setFieldErrors({});
 
-      router.push(`/event/${event.id}`);
+      router.push(eventHref(event));
     } catch (caught) {
       setError(messageFor(caught));
     } finally {

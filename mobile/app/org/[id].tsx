@@ -1,3 +1,4 @@
+import { eventHref } from '@/lib/format';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -90,7 +91,7 @@ export default function OrganizationScreen() {
           <EventCard
             key={event.id}
             event={event as never}
-            onPress={() => router.push(`/event/${event.id}`)}
+            onPress={() => router.push(eventHref(event))}
           />
         ))
       )}
@@ -102,7 +103,7 @@ export default function OrganizationScreen() {
             <EventCard
               key={event.id}
               event={event as never}
-              onPress={() => router.push(`/event/${event.id}`)}
+              onPress={() => router.push(eventHref(event))}
             />
           ))}
         </>

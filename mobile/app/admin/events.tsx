@@ -1,3 +1,4 @@
+import { eventHref } from '@/lib/format';
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -131,7 +132,7 @@ export default function AdminEventsScreen() {
                   title="Otvoriť"
                   variant="ghost"
                   compact
-                  onPress={() => router.push(`/event/${item.id}`)}
+                  onPress={() => router.push(eventHref(item))}
                 />
                 <Button
                   title="Upraviť"

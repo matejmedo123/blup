@@ -1,3 +1,4 @@
+import { eventHref } from '@/lib/format';
 import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -60,7 +61,7 @@ export default function DiscoverScreen() {
 
       if (direction === 'up') {
         void recordSignal(event.id, 'open_detail');
-        router.push(`/event/${event.id}`);
+        router.push(eventHref(event));
         return;
       }
 
