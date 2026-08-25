@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text } from 'react-native';
+import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import {
   getMyOrganizations, getVerificationRequests, requestVerification,
 } from '@/api/organizations';
+import { acceptLegalDocument, getLegalDocument } from '@/api/legal';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 import {
   Badge, Body, Button, Caption, EmptyState, Input, LoadingState, Notice, Screen, SectionHeader,
+  Switch,
 } from '@/components/ui';
+import { colors, spacing } from '@/theme';
 
 /** Organizer verification request — reviewed by a BLUP admin. */
 export default function VerificationScreen() {
@@ -27,6 +32,7 @@ export default function VerificationScreen() {
   const [contactEmail, setContactEmail] = useState('');
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
@@ -42,6 +48,11 @@ export default function VerificationScreen() {
 
   const pending = (requests.data ?? []).find((request) => request.status === 'pending');
 
+  const agreement = useQuery({
+    queryKey: ['legal', 'organizer_agreement'],
+    queryFn: () => getLegalDocument('organizer_agreement'),
+  });
+
   const submit = async () => {
     setError(null);
 
@@ -50,8 +61,20 @@ export default function VerificationScreen() {
       return;
     }
 
+    if (!agreed) {
+      setError('Bez súhlasu so zmluvou žiadosť odoslať nevieme.');
+      return;
+    }
+
     setSaving(true);
     try {
+      // Accepted before the request exists, so a submitted request always has
+      // an agreement attached — never a verification sitting in the queue with
+      // nobody having agreed to anything.
+      if (agreement.data) {
+        await acceptLegalDocument(agreement.data.id, organization.id);
+      }
+
       await requestVerification({
         organizationId: organization.id,
         legalName,
@@ -108,7 +131,32 @@ export default function VerificationScreen() {
           <Input label="Kontaktný e-mail" value={contactEmail} onChangeText={setContactEmail} placeholder="legal@example.com" autoCapitalize="none" keyboardType="email-address" editable={!saving} />
           <Input label="Sídlo" value={address} onChangeText={setAddress} placeholder="Ulica, mesto, krajina" editable={!saving} />
 
-          <Button title="Odoslať na overenie" onPress={submit} loading={saving} />
+          <SectionHeader title="Zmluva" />
+          <Body muted style={styles.legalIntro}>
+            Odoslaním žiadosti prijímaš zmluvu o sprostredkovaní predaja vstupeniek.
+            Podpíšeme ju schválením overenia — obe strany budú mať uložené presné
+            znenie aj čas.
+          </Body>
+
+          <Pressable style={styles.legalLink} onPress={() => router.push('/legal/agreement')}>
+            <Text style={styles.legalLinkLabel}>
+              Prečítať zmluvu{agreement.data ? ` (verzia ${agreement.data.version})` : ''} →
+            </Text>
+          </Pressable>
+
+          <Switch
+            value={agreed}
+            onValueChange={setAgreed}
+            label="Súhlasím so zmluvou"
+            description="Potvrdzujem aj to, že údaje vyššie sú pravdivé a že mám právo event usporiadať."
+          />
+
+          <Button
+            title="Odoslať na overenie"
+            onPress={submit}
+            loading={saving}
+            disabled={!agreed}
+          />
         </>
       )}
 
@@ -126,3 +174,9 @@ export default function VerificationScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  legalIntro: { marginBottom: spacing.sm },
+  legalLink: { paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  legalLinkLabel: { color: colors.accent, fontWeight: '700' },
+});

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 
 import { signUpWithEmail } from '@/auth/api';
 import { messageFor } from '@/lib/errors';
-import { Body, Button, Input, Notice, Screen } from '@/components/ui';
-import { spacing } from '@/theme';
+import { Body, Button, Caption, Input, Notice, Screen } from '@/components/ui';
+import { colors, spacing } from '@/theme';
 
 export default function SignUpScreen() {
   const [displayName, setDisplayName] = useState('');
@@ -118,9 +118,20 @@ export default function SignUpScreen() {
 
           <Button title="Vytvoriť účet" onPress={submit} loading={loading} />
 
-          <Body muted style={styles.legal}>
-            Vytvorením účtu súhlasíš s podmienkami BLUPu a so zásadami ochrany súkromia.
-          </Body>
+          {/* Named and reachable before the account exists, not buried in
+              settings afterwards — consent to something unread is not consent. */}
+          <Caption style={styles.legal}>
+            Vytvorením účtu súhlasíš s{' '}
+            <Text style={styles.legalLink} onPress={() => router.push('/legal/terms')}>
+              obchodnými podmienkami
+            </Text>
+            {' '}a berieš na vedomie{' '}
+            <Text style={styles.legalLink} onPress={() => router.push('/legal/privacy')}>
+              spracúvanie osobných údajov
+            </Text>
+            .
+          </Caption>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -128,10 +139,11 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
+  legal: { textAlign: 'center', marginTop: spacing.md, lineHeight: 18 },
+  legalLink: { color: colors.accent, fontWeight: '700' },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },
   content: { padding: spacing.xl },
   intro: { marginBottom: spacing.xl },
-  legal: { textAlign: 'center', marginTop: spacing.lg, fontSize: 12 },
 });

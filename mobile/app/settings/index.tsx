@@ -41,6 +41,10 @@ export default function SettingsScreen() {
         </>
       ) : null}
 
+      <SectionHeader title="Právne" />
+      <Row label="Obchodné podmienky" onPress={() => router.push('/legal/terms')} />
+      <Row label="Ochrana osobných údajov" onPress={() => router.push('/legal/privacy')} />
+
       <Divider />
 
       <Button title="Odhlásiť sa" variant="danger" onPress={() => void signOut()} />
