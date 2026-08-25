@@ -1,5 +1,8 @@
-import React from 'react';
-import { StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  AccessibilityInfo, Animated, Easing, StyleSheet, Text, View,
+  type StyleProp, type TextStyle, type ViewStyle,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, heroGradient, spacing, typography } from '@/theme';
@@ -95,9 +98,50 @@ export function BlupMonogram({
  * with a soft accent bloom behind the content.
  */
 export function HeroBackground({ children }: { children: React.ReactNode }) {
+  const glow = useRef(new Animated.Value(0.42)).current;
+
+  // A slow breath rather than a blink: four seconds a cycle, opacity and scale
+  // only, so it costs the compositor nothing and never asks for a re-layout.
+  // Off entirely for anyone who has asked the system for less motion — a
+  // screen that pulses behind a password field is the wrong thing to insist on.
+  useEffect(() => {
+    let cancelled = false;
+    let loop: Animated.CompositeAnimation | null = null;
+
+    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+      if (cancelled || reduced) return;
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glow, {
+            toValue: 0.82, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true,
+          }),
+          Animated.timing(glow, {
+            toValue: 0.42, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true,
+          }),
+        ]),
+      );
+      loop.start();
+    }).catch(() => {
+      // An environment that cannot answer keeps the still bloom.
+    });
+
+    return () => { cancelled = true; loop?.stop(); };
+  }, [glow]);
+
   return (
     <LinearGradient colors={[...heroGradient]} style={styles.hero}>
-      <View style={styles.bloom} pointerEvents="none" />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.bloom,
+          {
+            opacity: glow,
+            transform: [{
+              scale: glow.interpolate({ inputRange: [0.42, 0.82], outputRange: [1, 1.12] }),
+            }],
+          },
+        ]}
+      />
       {children}
     </LinearGradient>
   );

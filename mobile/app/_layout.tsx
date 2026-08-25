@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -15,6 +16,7 @@ import { ToastProvider } from '@/components/Toast';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { AuthGateProvider } from '@/auth/useRequireAuth';
 import { AppFrame } from '@/components/AppFrame';
+import { RouteProgress } from '@/components/RouteProgress';
 import { StartupGate } from '@/components/StartupGate';
 import { MarketingTags } from '@/marketing/tags';
 import { handleAuthDeepLink } from '@/auth/api';
@@ -96,6 +98,13 @@ export default function RootLayout() {
         headerTitleStyle: { fontWeight: '700' },
         headerShadowVisible: false,
         contentStyle: { backgroundColor: colors.background },
+        // Without this the navigator cuts straight from one screen to the next,
+        // which reads as a slide deck rather than an app — and made a fast
+        // connection feel exactly as abrupt as a slow one. A phone slides,
+        // because that is the direction the gesture goes; the web fades, where
+        // there is no gesture and a slide only draws attention to itself.
+        animation: Platform.OS === 'web' ? 'fade' : 'slide_from_right',
+        animationDuration: 220,
       }}
     >
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -163,6 +172,7 @@ export default function RootLayout() {
               {/* On a desktop the sidebar frames every screen, not only the
                   five tabs; AppFrame is a passthrough on phones. */}
               <AuthGateProvider>
+                <RouteProgress />
                 <StartupGate>
                   <AppFrame>{content}</AppFrame>
                 </StartupGate>
