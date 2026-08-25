@@ -53,7 +53,21 @@ export async function getRankedEvents(params: {
 }): Promise<EventFeedItem[]> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
-  if (!userId) return [];
+
+  // A guest has no history to rank against, and used to get an empty section
+  // for it. What is on near you, soon, that people are going to is not a
+  // personal recommendation — but it is a real answer, and it is what the
+  // section is for.
+  if (!userId) {
+    const { data, error } = await supabase.rpc('discover_events', {
+      p_lat: params.coords?.latitude ?? null,
+      p_lon: params.coords?.longitude ?? null,
+      p_radius_m: params.radiusM ?? 50000,
+      p_limit: params.limit ?? 12,
+    });
+    if (error) throw error;
+    return (data ?? []) as EventFeedItem[];
+  }
 
   const { data, error } = await supabase.rpc('recommend_events', {
     p_user_id: userId,

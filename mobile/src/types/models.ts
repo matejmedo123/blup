@@ -114,6 +114,8 @@ export interface EventFeedItem {
 export interface ScoreBreakdown {
   engine: string;
   final_score: number;
+  /** Which component carried the score — see reasonLabel() for the wording. */
+  reason?: string;
   components: {
     interest_match: number;
     distance_score: number;

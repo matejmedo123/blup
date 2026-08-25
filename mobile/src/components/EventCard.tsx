@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, familyFor, categoryFamilies, radius, spacing, typography } from '@/theme';
 import { formatCount, formatDistance, formatEventDate, formatPrice } from '@/lib/format';
+import { reasonLabel } from '@/lib/labels';
 import type { EventFeedItem } from '@/types/models';
 import { GradientCover } from './GradientCover';
 import { AvatarStack } from './ui';
@@ -93,8 +94,14 @@ export function EventCard({
           {meta}
         </Text>
 
-        {event.explanation ? (
-          <Text style={styles.reason} numberOfLines={2}>{event.explanation}</Text>
+        {/* The LLM's sentence when there is one, the ranker's own reason when
+            there is not — the same score produced both, so they cannot
+            contradict each other, and the card is never silent about why it
+            is here. */}
+        {event.explanation || reasonLabel(event.score_breakdown?.reason) ? (
+          <Text style={styles.reason} numberOfLines={2}>
+            {event.explanation ?? reasonLabel(event.score_breakdown?.reason)}
+          </Text>
         ) : null}
 
         {!isCompact ? (

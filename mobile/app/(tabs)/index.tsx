@@ -384,20 +384,50 @@ export default function HomeScreen() {
             />
           }
           ListHeaderComponent={
-            (circles.data ?? []).length > 0 ? (
-              <Pressable style={styles.circles} onPress={() => router.push('/community')}>
-                <AvatarStack
-                  people={(circles.data ?? []).slice(0, 5).map((person) => ({
-                    id: person.id,
-                    avatar_url: person.avatar_url,
-                    name: person.display_name ?? person.username,
-                  }))}
-                  size={30}
-                  max={5}
-                />
-                <Text style={styles.circlesLabel}>Tvoje kruhy dnes niekam idú</Text>
-              </Pressable>
-            ) : null
+            <View>
+              {(circles.data ?? []).length > 0 ? (
+                <Pressable style={styles.circles} onPress={() => router.push('/community')}>
+                  <AvatarStack
+                    people={(circles.data ?? []).slice(0, 5).map((person) => ({
+                      id: person.id,
+                      avatar_url: person.avatar_url,
+                      name: person.display_name ?? person.username,
+                    }))}
+                    size={30}
+                    max={5}
+                  />
+                  <Text style={styles.circlesLabel}>Tvoje kruhy dnes niekam idú</Text>
+                </Pressable>
+              ) : null}
+
+              {/* Moved up out of the footer. It used to sit after every event
+                  card, so on a city with anything happening you had to scroll
+                  the whole list to reach it — which is why it read as missing. */}
+                  {/* --- for you --------------------------------------------- */}
+                  {recommended.length > 0 ? (
+                    <>
+                      <View style={styles.railHeader}>
+                        <Text style={styles.section}>Pre teba</Text>
+                        <Text style={styles.railMono}>AI ODPORÚČANIA</Text>
+                      </View>
+
+                      <FlatList
+                        horizontal
+                        data={recommended}
+                        keyExtractor={(item) => item.id}
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.rail}
+                        renderItem={({ item }) => (
+                          <EventCard
+                            event={item}
+                            size="compact"
+                            onPress={() => openEvent(item)}
+                          />
+                        )}
+                      />
+                    </>
+                  ) : null}
+            </View>
           }
           renderItem={({ item }) => (
             <View style={[styles.cardWrapper, layout.columns > 1 && styles.cardCell]}>
@@ -411,31 +441,6 @@ export default function HomeScreen() {
           ListFooterComponent={
             events.length > 0 ? (
               <View>
-                {/* --- for you --------------------------------------------- */}
-                {recommended.length > 0 ? (
-                  <>
-                    <View style={styles.railHeader}>
-                      <Text style={styles.section}>Pre teba</Text>
-                      <Text style={styles.railMono}>AI ODPORÚČANIA</Text>
-                    </View>
-
-                    <FlatList
-                      horizontal
-                      data={recommended}
-                      keyExtractor={(item) => item.id}
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.rail}
-                      renderItem={({ item }) => (
-                        <EventCard
-                          event={item}
-                          size="compact"
-                          onPress={() => openEvent(item)}
-                        />
-                      )}
-                    />
-                  </>
-                ) : null}
-
                 {/* --- banners --------------------------------------------- */}
                 <Pressable
                   onPress={() => router.push('/community')}

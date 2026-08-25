@@ -79,3 +79,27 @@ export const orgRoleLabel: Record<OrgRole, string> = {
 export function labelOf<T extends string>(map: Record<T, string>, value: string): string {
   return (map as Record<string, string>)[value] ?? value;
 }
+
+/**
+ * Why the ranker picked this one, in Slovak.
+ *
+ * The AI function writes a sentence when a key is configured; the ranker always
+ * emits a reason code, so a card can say why it is there whether or not anyone
+ * is paying an LLM. Both come from the same score, so they cannot disagree.
+ */
+const REASON_LABELS: Record<string, string> = {
+  friends: 'Idú tvoje kruhy',
+  follows: 'Od koho sleduješ',
+  interests: 'Podľa tvojich záujmov',
+  behaviour: 'Chodievaš na podobné',
+  nearby: 'Kúsok od teba',
+  soon: 'Už čoskoro',
+  popular: 'Chodí tam veľa ľudí',
+  promoted: 'Propagované',
+  discover: 'Objav niečo nové',
+};
+
+export function reasonLabel(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  return REASON_LABELS[reason] ?? null;
+}
