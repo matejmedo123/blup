@@ -263,6 +263,36 @@ export async function uploadOrganizationLogo(uri: string, organizationId: string
   });
 }
 
+/**
+ * A venue plan.
+ *
+ * Public, because a buyer picks a seat from it. Kept at 1600 rather than the
+ * 600 a logo gets: this is a drawing people zoom into to read a row label, and
+ * the sectors drawn on it are stored as fractions, so a legible plan and a
+ * blurry one place them identically — only the reading suffers.
+ *
+ * Returns the URL along with the dimensions, which the sector coordinates are
+ * relative to.
+ */
+export async function uploadVenuePlan(
+  uri: string,
+  organizationId: string,
+): Promise<{ url: string; width: number; height: number }> {
+  const compressed = await compress(uri, 1600);
+  const url = await uploadToBucket({
+    bucket: 'org-assets',
+    path: `${organizationId}/plans/${Date.now()}.jpg`,
+    uri: compressed.uri,
+  });
+
+  const size = await ImageManipulator.ImageManipulator.manipulate(compressed.uri)
+    .renderAsync()
+    .then((image) => ({ width: image.width, height: image.height }))
+    .catch(() => ({ width: 1600, height: 1200 }));
+
+  return { url, width: size.width, height: size.height };
+}
+
 /** Verification documents go to a PRIVATE bucket; only the org and admins can read them. */
 export async function uploadVerificationDocument(
   uri: string,

@@ -77,6 +77,10 @@ export default function CreateEventScreen() {
   const [capacity, setCapacity] = useState('');
   const [isFree, setIsFree] = useState(true);
   const [ticketTypes, setTicketTypes] = useState<TicketDraft[]>([blankTicket()]);
+  // How the event sells. Most sell without places at all; a hall with a
+  // seating plan is the exception, and building one is work — so it is a
+  // deliberate choice rather than something every organizer walks through.
+  const [saleMode, setSaleMode] = useState<'open' | 'places'>('open');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const addTicket = () =>
@@ -381,7 +385,10 @@ export default function CreateEventScreen() {
       setTicketTypes([blankTicket()]);
       setFieldErrors({});
 
-      router.push(eventHref(event));
+      // Straight into the plan when that is how it sells: the sectors are the
+      // rest of setting the event up, and leaving them for later means an event
+      // on sale with a seating mode and nowhere to sit.
+      router.push(saleMode === 'places' ? `/organizer/plan/${event.id}` : eventHref(event));
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -690,6 +697,25 @@ export default function CreateEventScreen() {
               {cheapestLabel
                 ? `V zozname sa event ukáže ako „${cheapestLabel}“.`
                 : 'Ľudia uvidia všetky typy pri kúpe. Ceny a počty vieš neskôr upraviť.'}
+            </Caption>
+
+            <Caption style={styles.fieldLabel}>Ako sa predáva</Caption>
+            <View style={styles.chips}>
+              <Chip
+                label="Bez miest"
+                selected={saleMode === 'open'}
+                onPress={() => setSaleMode('open')}
+              />
+              <Chip
+                label="Po sektoroch a miestach"
+                selected={saleMode === 'places'}
+                onPress={() => setSaleMode('places')}
+              />
+            </View>
+            <Caption style={styles.ticketHint}>
+              {saleMode === 'open'
+                ? 'Kúpiš vstupenku, miesto sa nerieši. Takto sa predáva väčšina eventov.'
+                : 'Po zverejnení ťa pustíme na plán sály, kde vyznačíš sektory — a v nich prípadne aj číslované rady.'}
             </Caption>
           </>
         )

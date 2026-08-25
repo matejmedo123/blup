@@ -188,6 +188,8 @@ export async function getEvent(ref: string): Promise<EventDetail> {
 }
 
 export interface CreateEventInput {
+  /** Set when the event sells by sector or seat. */
+  venueMapId?: string | null;
   title: string;
   description?: string;
   category: string;
@@ -327,6 +329,7 @@ export async function updateEvent(
   if (patch.capacity !== undefined) payload.capacity = patch.capacity;
   if (patch.coverImageUrl !== undefined) payload.cover_image_url = patch.coverImageUrl;
   if (patch.visibility !== undefined) payload.visibility = patch.visibility;
+  if (patch.venueMapId !== undefined) payload.venue_map_id = patch.venueMapId;
   if (patch.status !== undefined) payload.status = patch.status;
   if (patch.isFree !== undefined) {
     payload.is_free = patch.isFree;
