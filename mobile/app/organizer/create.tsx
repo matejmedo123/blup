@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
@@ -11,7 +11,7 @@ import { createEventWithTickets } from '@/api/events';
 import { createPersonalOrganization, getMyOrganizations } from '@/api/organizations';
 import { getMyCommunities } from '@/api/communities';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
-import { geocodeAddress } from '@/maps/geocode';
+import { geocodeAddress, suggestAddresses, type GeocodeHit } from '@/maps/geocode';
 import { messageFor } from '@/lib/errors';
 import { eventHref, formatEventDateLong, formatVatLine } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
@@ -112,6 +112,9 @@ export default function CreateEventScreen() {
   const [communityId, setCommunityId] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [coverMissing, setCoverMissing] = useState(false);
+  const [mapFocus, setMapFocus] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [suggestions, setSuggestions] = useState<GeocodeHit[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
   const [coverSize, setCoverSize] = useState<{ width: number; height: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [foundLabel, setFoundLabel] = useState<string | null>(null);
@@ -241,12 +244,54 @@ export default function CreateEventScreen() {
         return;
       }
       setCoords({ latitude: hit.latitude, longitude: hit.longitude });
+      setMapFocus({ latitude: hit.latitude, longitude: hit.longitude });
       setFoundLabel(hit.label);
+      setSuggestions([]);
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
       setLocating(false);
     }
+  };
+
+  /**
+   * Suggestions while typing. Nominatim asks for at most a request a second, so
+   * this waits until the typing stops rather than firing per keystroke, and the
+   * in-flight request is abandoned as soon as the text changes again.
+   */
+  useEffect(() => {
+    const query = address.trim();
+    if (!suggesting || query.length < 4) {
+      setSuggestions([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      suggestAddresses(query, { signal: controller.signal })
+        .then(setSuggestions)
+        .catch(() => {
+          // Typing faster than the geocoder answers is not an error worth
+          // showing anybody.
+        });
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [address, suggesting]);
+
+  /** Picks one of the suggestions: fills the field and moves the pin. */
+  const useSuggestion = (hit: GeocodeHit) => {
+    // The geocoder's label is the full postal chain down to the country. The
+    // first few parts are the address; the rest is noise in a form field.
+    setAddress(hit.label.split(',').slice(0, 3).join(',').trim());
+    setCoords({ latitude: hit.latitude, longitude: hit.longitude });
+    setMapFocus({ latitude: hit.latitude, longitude: hit.longitude });
+    setFoundLabel(hit.label);
+    setSuggestions([]);
+    setSuggesting(false);
   };
 
   const changeCover = async () => {
@@ -513,10 +558,12 @@ export default function CreateEventScreen() {
       </View>
 
       {multiDay ? (
-        <>
-          <Caption style={styles.fieldLabel}>Koniec</Caption>
-          <DateTimeField value={endAt} onChange={setEndAt} minimumDate={startAt} />
-        </>
+        <DateTimeField
+          label="Koniec"
+          value={endAt}
+          onChange={setEndAt}
+          minimumDate={startAt}
+        />
       ) : null}
 
       {/* --- where ---------------------------------------------------------- */}
@@ -529,6 +576,7 @@ export default function CreateEventScreen() {
         <EventMap
           events={draftPreview}
           userLocation={location.coords}
+          focus={mapFocus}
           style={styles.map}
           onRegionChange={(region) =>
             setCoords({ latitude: region.latitude, longitude: region.longitude })
@@ -549,11 +597,31 @@ export default function CreateEventScreen() {
       <Input
         label="Adresa"
         value={address}
-        onChangeText={(v) => { setAddress(v); setFoundLabel(null); }}
+        onChangeText={(v) => { setAddress(v); setFoundLabel(null); setSuggesting(true); }}
         placeholder="Námestie SNP 25, Bratislava"
         editable={!saving}
-        hint="Napíš adresu a daj ju nájsť — špendlík skočí, kam patrí."
+        returnKeyType="search"
+        onSubmitEditing={() => {
+          setSuggesting(false);
+          if (address.trim().length >= 4) void findAddress();
+        }}
+        hint="Píš a vyber z návrhov — alebo stlač Enter a špendlík skočí, kam patrí."
       />
+
+      {suggestions.length > 0 ? (
+        <View style={styles.suggestions}>
+          {suggestions.map((hit) => (
+            <Pressable
+              key={`${hit.latitude},${hit.longitude}`}
+              onPress={() => useSuggestion(hit)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.suggestion, pressed && styles.suggestionPressed]}
+            >
+              <Body numberOfLines={2}>{hit.label}</Body>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       <Button
         title={locating ? 'Hľadám…' : 'Nájsť adresu na mape'}
         variant="secondary"
@@ -786,6 +854,15 @@ const styles = StyleSheet.create({
   // having filled it in is a form that shouts at everyone.
   coverMissing: { borderWidth: 1, borderColor: colors.danger, borderRadius: radius.lg },
   coverHint: { marginTop: 2 },
+  suggestions: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  suggestion: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  suggestionPressed: { backgroundColor: colors.surfaceElevated },
   coverSize: { marginTop: spacing.xs, textAlign: 'center', alignSelf: 'center' },
   fieldLabel: { marginTop: spacing.md, marginBottom: spacing.xs },
   ticketHint: { marginTop: spacing.xs, marginBottom: spacing.md },

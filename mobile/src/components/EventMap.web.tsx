@@ -60,6 +60,7 @@ export function EventMap({
   radiusM,
   style,
   interactive = true,
+  focus,
 }: {
   events: EventFeedItem[];
   userLocation?: Coordinates | null;
@@ -71,6 +72,12 @@ export function EventMap({
   radiusM?: number;
   style?: object;
   interactive?: boolean;
+  /**
+   * Put the map here. Used when the address is geocoded: the pin has to
+   * visibly move to the street that was just found, otherwise "found it" is a
+   * sentence with nothing behind it.
+   */
+  focus?: Coordinates | null;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -94,6 +101,17 @@ export function EventMap({
     centred.current = true;
     setCentre(userLocation);
   }, [userLocation]);
+
+  // A new focus point moves the map there and zooms in to street level. Only
+  // when it actually changes — panning away afterwards is the user's business.
+  const focusKey = focus ? `${focus.latitude},${focus.longitude}` : null;
+  useEffect(() => {
+    if (!focus) return;
+    centred.current = true;
+    setCentre({ latitude: focus.latitude, longitude: focus.longitude });
+    setZoom((current) => Math.max(current, 16));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey]);
 
   useEffect(() => {
     if (size.height > 0) setZoom(zoomForRadius(radiusM, centre.latitude, size.height));

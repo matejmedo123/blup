@@ -620,6 +620,10 @@ export default function EventDetailScreen() {
           <EventMap
             events={[{ ...data, friends_going: 0, is_saved: false, is_attending: false } as never]}
             userLocation={location.coords}
+            // The map on an event page is about the event, not about where the
+            // reader happens to be standing — without this it centred on the
+            // viewer's own position and the event sat off-screen.
+            focus={{ latitude: data.latitude, longitude: data.longitude }}
             interactive={false}
             style={styles.map}
           />

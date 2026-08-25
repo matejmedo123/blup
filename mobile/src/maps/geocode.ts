@@ -70,3 +70,62 @@ export async function geocodeAddress(
     city: a.city ?? a.town ?? a.village ?? a.municipality ?? null,
   };
 }
+
+/**
+ * Address suggestions while somebody types.
+ *
+ * The comment above still holds — Nominatim asks for at most one request a
+ * second — so this is not called per keystroke. The caller debounces, and the
+ * request is abortable so a suggestion list never arrives for text that has
+ * already been replaced.
+ */
+export async function suggestAddresses(
+  query: string,
+  options: { countryCodes?: string; signal?: AbortSignal; limit?: number } = {},
+): Promise<GeocodeHit[]> {
+  const q = query.trim();
+  if (q.length < 4) return [];
+
+  const url = new URL(ENDPOINT);
+  url.searchParams.set('q', q);
+  url.searchParams.set('format', 'jsonv2');
+  url.searchParams.set('limit', String(options.limit ?? 5));
+  url.searchParams.set('addressdetails', '1');
+  url.searchParams.set('countrycodes', options.countryCodes ?? 'sk,cz,at,hu,pl');
+  url.searchParams.set('accept-language', 'sk');
+
+  const response = await fetch(url.toString(), {
+    signal: options.signal,
+    headers: {
+      'User-Agent': 'BLUP/1.0 (https://blup.sk)',
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) return [];
+
+  const results = (await response.json()) as Array<{
+    lat: string;
+    lon: string;
+    display_name?: string;
+    address?: Record<string, string>;
+  }>;
+
+  const hits: GeocodeHit[] = [];
+
+  for (const hit of results) {
+    const latitude = Number(hit.lat);
+    const longitude = Number(hit.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+
+    const a = hit.address ?? {};
+    hits.push({
+      latitude,
+      longitude,
+      label: hit.display_name ?? q,
+      city: a.city ?? a.town ?? a.village ?? a.municipality ?? null,
+    });
+  }
+
+  return hits;
+}

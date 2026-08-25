@@ -15,7 +15,8 @@ import type { Coordinates, EventFeedItem } from '@/types/models';
  * a clustering dependency.
  */
 export function EventMap({
-  events, userLocation, selectedId, onSelect, onDeselect, onRegionChange, radiusM, style, interactive = true,
+  events, userLocation, selectedId, onSelect, onDeselect, onRegionChange, radiusM, style,
+  interactive = true, focus,
 }: {
   events: EventFeedItem[];
   userLocation?: Coordinates | null;
@@ -27,6 +28,8 @@ export function EventMap({
   radiusM?: number;
   style?: object;
   interactive?: boolean;
+  /** Put the map here — used when a typed address has just been geocoded. */
+  focus?: Coordinates | null;
 }) {
   const mapRef = useRef<MapView>(null);
 
@@ -48,6 +51,22 @@ export function EventMap({
       longitudeDelta: span,
     };
   }, [userLocation, events, radiusM]);
+
+  // A geocoded address moves the map to it, at street level.
+  const focusKey = focus ? `${focus.latitude},${focus.longitude}` : null;
+  useEffect(() => {
+    if (!focus) return;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: focus.latitude,
+        longitude: focus.longitude,
+        latitudeDelta: 0.006,
+        longitudeDelta: 0.006,
+      },
+      400,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey]);
 
   // Recentre when the selection changes (tapping a card moves the map).
   useEffect(() => {
