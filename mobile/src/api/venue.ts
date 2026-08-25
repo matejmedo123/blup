@@ -77,6 +77,8 @@ export async function getVenueSections(venueMapId: string): Promise<Section[]> {
     price_cents: null,
     numbered: ((row.venue_seats as { count: number }[])?.[0]?.count ?? 0) > 0,
     available: 0,
+    rows: 0,
+    row_width: 0,
     seats: [],
   }));
 }

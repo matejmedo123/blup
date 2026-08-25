@@ -31,7 +31,7 @@ export default function SeatPickerScreen() {
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
 
-  const [open, setOpen] = useState<Section | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -67,6 +67,18 @@ export default function SeatPickerScreen() {
 
   const { map, sections } = seatMap.data;
 
+  // Held by id rather than by value: the section object is replaced on every
+  // refetch, and holding the old one would leave the dots showing the state
+  // from before the click that changed them.
+  const open = sections.find((section) => section.id === openId) ?? null;
+  const mySeats = open?.seats.filter((seat) => seat.mine) ?? [];
+
+  /** How many seats each row actually holds, for centring the short ones. */
+  const seatsPerRow = new Map<number, number>();
+  for (const seat of open?.seats ?? []) {
+    seatsPerRow.set(seat.row_index, (seatsPerRow.get(seat.row_index) ?? 0) + 1);
+  }
+
   // The plan is drawn at whatever width there is; the sectors are fractions of
   // it, so one scale factor positions all of them.
   const planWidth = Math.min(width - spacing.gutter * 2, 720);
@@ -81,7 +93,7 @@ export default function SeatPickerScreen() {
       setError(`${section.name} je vypredaný.`);
       return;
     }
-    if (section.numbered) { setOpen(section); return; }
+    if (section.numbered) { setOpenId(section.id); return; }
 
     if (!section.ticket_type_id) { setError('Tento sektor zatiaľ nie je v predaji.'); return; }
     setBusy(true);
@@ -161,6 +173,48 @@ export default function SeatPickerScreen() {
             </Pressable>
           );
         })}
+
+        {/* The seats of the open sector, as dots on the plan itself. Laid out
+            from the row index and the seat number against the widest row, so a
+            short row centres instead of stretching to fill the sector. */}
+        {open?.numbered ? open.seats.map((seat) => {
+          const across = Math.max(open.row_width, 1);
+          const down = Math.max(open.rows, 1);
+          const cellW = (open.width * planWidth) / across;
+          const cellH = (open.height * planHeight) / down;
+          const size = Math.max(9, Math.min(22, Math.min(cellW, cellH) - 3));
+          // A row shorter than the widest is centred rather than left-aligned:
+          // that is how a stand narrowing towards the front actually looks, and
+          // a ragged left edge reads as a mistake.
+          const inRow = seatsPerRow.get(seat.row_index) ?? across;
+          const indent = ((across - inRow) / 2) * cellW;
+
+          return (
+            <Pressable
+              key={seat.id}
+              disabled={busy || (!seat.free && !seat.mine)}
+              onPress={() => takeSeat(seat.id, seat.free)}
+              accessibilityRole="button"
+              accessibilityLabel={`Rad ${seat.row}, miesto ${seat.number}` +
+                (seat.mine ? ', tvoje' : seat.taken ? ', obsadené' : ', voľné')}
+              hitSlop={6}
+              style={[
+                styles.dot,
+                {
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                  left: open.x * planWidth + indent + (seat.number - 0.5) * cellW - size / 2,
+                  top: open.y * planHeight + (seat.row_index + 0.5) * cellH - size / 2,
+                },
+                seat.mine ? styles.dotMine
+                  : seat.taken ? styles.dotTaken
+                    : !seat.sellable ? styles.dotBlocked
+                      : styles.dotFree,
+              ]}
+            />
+          );
+        }) : null}
       </View>
 
       <SectionHeader title="Sektory" />
@@ -185,23 +239,26 @@ export default function SeatPickerScreen() {
         <>
           <SectionHeader title={`${open.name} · miesta`} />
           <Caption style={styles.legend}>
-            Klepni na voľné miesto a držíme ti ho 15 minút. Klepnutím na svoje ho pustíš.
+            Klepni na guličku na pláne. Držíme ti miesto 15 minút; klepnutím na svoje ho pustíš.
           </Caption>
-          <View style={styles.seats}>
-            {open.seats.map((seat) => (
-              <Pressable
-                key={seat.id}
-                disabled={busy || !seat.free}
-                onPress={() => takeSeat(seat.id, seat.free)}
-                style={[styles.seat, !seat.free && styles.seatTaken]}
-              >
-                <Text style={[styles.seatLabel, !seat.free && styles.seatLabelTaken]}>
-                  {seat.row}{seat.number}
-                </Text>
-              </Pressable>
-            ))}
+
+          <View style={styles.legendRow}>
+            <LegendDot style={styles.dotFree} label="voľné" />
+            <LegendDot style={styles.dotMine} label="tvoje" />
+            <LegendDot style={styles.dotTaken} label="obsadené" />
+            <LegendDot style={styles.dotBlocked} label="nepredáva sa" />
           </View>
-          <Button title="Zavrieť sektor" variant="ghost" onPress={() => setOpen(null)} />
+
+          {mySeats.length > 0 ? (
+            <View style={styles.mineBox}>
+              <Caption>Držíme ti</Caption>
+              <Text style={styles.mineList}>
+                {mySeats.map((s) => `rad ${s.row}, miesto ${s.number}`).join(' · ')}
+              </Text>
+            </View>
+          ) : null}
+
+          <Button title="Zavrieť sektor" variant="ghost" onPress={() => setOpenId(null)} />
         </>
       ) : null}
 
@@ -252,18 +309,31 @@ const styles = StyleSheet.create({
   price: { ...typography.bodyStrong, color: colors.accent },
 
   legend: { marginBottom: spacing.sm },
-  seats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
-  seat: {
-    minWidth: 44,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    borderRadius: radius.sm,
+  legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.md },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  legendSwatch: { width: 14, height: 14, borderRadius: 7 },
+
+  dot: { position: 'absolute', borderWidth: 1.5 },
+  dotFree: { backgroundColor: 'rgba(255,255,255,0.10)', borderColor: colors.textSecondary },
+  dotMine: { backgroundColor: colors.accent, borderColor: '#FFFFFF' },
+  dotTaken: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, opacity: 0.6 },
+  dotBlocked: { backgroundColor: 'transparent', borderColor: colors.border, opacity: 0.4 },
+
+  mineBox: {
+    padding: spacing.md,
+    borderRadius: radius.md,
     backgroundColor: colors.accentSoft,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  seatTaken: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, opacity: 0.55 },
-  seatLabel: { color: colors.accent, fontWeight: '700', fontSize: 13 },
-  seatLabelTaken: { color: colors.textSecondary, textDecorationLine: 'line-through' },
+  mineList: { color: colors.text, fontWeight: '700', marginTop: 2 },
 });
+
+/** One entry in the legend: the same dot style, at a readable size. */
+function LegendDot({ style, label }: { style: object; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendSwatch, style]} />
+      <Caption>{label}</Caption>
+    </View>
+  );
+}

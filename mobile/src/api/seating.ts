@@ -1,10 +1,23 @@
 import { supabase } from '@/lib/supabase';
 
-/** One seat in a numbered sector. */
+/**
+ * One seat in a numbered sector.
+ *
+ * Three states rather than a boolean, because a seat you are holding must not
+ * look like one you cannot have — on a plan drawn as dots, that difference is
+ * the entire feedback for the click.
+ */
 export interface Seat {
   id: string;
   row: string;
   number: number;
+  /** Which row it is in, counted from 0 — the dots are laid out from this. */
+  row_index: number;
+  sellable: boolean;
+  /** Held by you right now. Clicking again gives it back. */
+  mine: boolean;
+  /** Sold, or held by somebody else. */
+  taken: boolean;
   free: boolean;
 }
 
@@ -21,6 +34,9 @@ export interface Section {
   price_cents: number | null;
   numbered: boolean;
   available: number;
+  /** How many rows, and the widest of them — the dot grid is sized from these. */
+  rows: number;
+  row_width: number;
   seats: Seat[];
 }
 

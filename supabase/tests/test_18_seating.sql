@@ -160,4 +160,64 @@ begin
   raise notice 'PASS seats count against the basket like any other ticket';
 end $$;
 
+
+-- ============================================================================
+-- The three states a dot on the plan can be in
+-- ============================================================================
+do $$
+declare
+  buyer uuid := 'a1818181-0000-0000-0000-000000000002';
+  rival uuid := 'a1818181-0000-0000-0000-000000000003';
+  ev    uuid := 'd1818181-0000-0000-0000-000000000002';
+  mine  uuid := '91818181-0000-0000-0000-000000000004';
+  hers  uuid := '91818181-0000-0000-0000-000000000005';
+  seats jsonb;
+  seat  jsonb;
+begin
+  delete from public.cart_items where event_id = ev;
+  delete from public.tickets where event_id = ev;
+
+  perform set_config('request.jwt.claim.sub', buyer::text, true);
+  perform public.cart_hold_seat(mine);
+
+  perform set_config('request.jwt.claim.sub', rival::text, true);
+  perform public.cart_hold_seat(hers);
+
+  -- Read the map as the buyer: their own seat and the rival's must not look
+  -- the same, or clicking one looks like it failed.
+  perform set_config('request.jwt.claim.sub', buyer::text, true);
+  seats := (select s -> 'seats' from jsonb_array_elements(
+              public.seat_map_for_event(ev) -> 'sections') s
+            where s ->> 'name' = 'Sedenie A');
+
+  seat := (select x from jsonb_array_elements(seats) x where (x ->> 'id')::uuid = mine);
+  assert (seat ->> 'mine')::boolean, 'the seat I hold says it is mine';
+  assert not (seat ->> 'taken')::boolean, 'and is not shown as taken';
+  assert not (seat ->> 'free')::boolean, 'nor as free';
+
+  seat := (select x from jsonb_array_elements(seats) x where (x ->> 'id')::uuid = hers);
+  assert not (seat ->> 'mine')::boolean, 'somebody else''s is not mine';
+  assert (seat ->> 'taken')::boolean, 'and is taken';
+  raise notice 'PASS a seat I hold looks different from one somebody else holds';
+
+  -- The same map, read by the rival: the two swap over.
+  perform set_config('request.jwt.claim.sub', rival::text, true);
+  seats := (select s -> 'seats' from jsonb_array_elements(
+              public.seat_map_for_event(ev) -> 'sections') s
+            where s ->> 'name' = 'Sedenie A');
+
+  seat := (select x from jsonb_array_elements(seats) x where (x ->> 'id')::uuid = hers);
+  assert (seat ->> 'mine')::boolean, 'and for them, theirs is mine';
+  seat := (select x from jsonb_array_elements(seats) x where (x ->> 'id')::uuid = mine);
+  assert (seat ->> 'taken')::boolean, 'while mine is just taken';
+  raise notice 'PASS the map is answered per viewer, not once for everybody';
+
+  -- Row positions, which the dots are laid out from.
+  seat := (select x from jsonb_array_elements(seats) x where x ->> 'row' = 'A' and (x ->> 'number')::int = 1);
+  assert (seat ->> 'row_index')::int = 0, 'row A is the first row';
+  seat := (select x from jsonb_array_elements(seats) x where x ->> 'row' = 'B' and (x ->> 'number')::int = 1);
+  assert (seat ->> 'row_index')::int = 1, 'row B is the second';
+  raise notice 'PASS rows are indexed in order, so the dots land in rows';
+end $$;
+
 rollback;
