@@ -140,7 +140,10 @@ export async function uploadEventCover(uri: string, draftId: string): Promise<st
   const userId = userData?.user?.id;
   if (!userId) throw new Error('UNAUTHENTICATED');
 
-  const compressed = await compress(uri, 1600);
+  // 1920 wide, which at the picker's 16:9 crop is 1920×1080 — the size the
+  // card, the detail hero and the link-preview crawler all want, and small
+  // enough that a phone on mobile data still loads the feed.
+  const compressed = await compress(uri, 1920);
   return uploadToBucket({
     bucket: 'event-images',
     path: `${userId}/${draftId}/cover.jpg`,

@@ -12,6 +12,7 @@ import { createEventWithTickets } from '@/api/events';
 import { createPersonalOrganization, getMyOrganizations } from '@/api/organizations';
 import { getMyCommunities } from '@/api/communities';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
+import { geocodeAddress } from '@/maps/geocode';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
@@ -108,6 +109,9 @@ export default function CreateEventScreen() {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [communityId, setCommunityId] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [coverMissing, setCoverMissing] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [foundLabel, setFoundLabel] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
 
   const [startAt, setStartAt] = useState(() => {
@@ -117,6 +121,10 @@ export default function CreateEventScreen() {
     return date;
   });
   const [durationHours, setDurationHours] = useState(3);
+  // A festival is not a long evening. Hours cover most events; anything that
+  // crosses midnight more than once needs a real end date, not a bigger chip.
+  const [multiDay, setMultiDay] = useState(false);
+  const [endAt, setEndAt] = useState<Date>(() => new Date(Date.now() + 26 * 3600 * 1000));
 
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -149,6 +157,9 @@ export default function CreateEventScreen() {
 
   const eventCoords = coords ?? location.coords;
 
+  /** One definition of when it ends, so preview and submit cannot disagree. */
+  const endsAt = multiDay ? endAt : new Date(startAt.getTime() + durationHours * 3600 * 1000);
+
   // The map preview shows the draft exactly as it will be published. Building a
   // complete EventFeedItem (rather than casting a partial one to `never`) is
   // what keeps preview and card in sync — a missing field is a compile error.
@@ -170,7 +181,7 @@ export default function CreateEventScreen() {
       venue_name: venueName || null,
       city: location.city ?? null,
       start_at: startAt.toISOString(),
-      end_at: new Date(startAt.getTime() + durationHours * 3600 * 1000).toISOString(),
+      end_at: endsAt.toISOString(),
       is_free: isFree,
       price_cents: isFree ? 0 : cheapestCents(ticketTypes),
       currency: 'EUR',
@@ -197,9 +208,33 @@ export default function CreateEventScreen() {
     }];
   }, [
     eventCoords, title, description, coverUrl, category, address, venueName,
-    location.city, startAt, durationHours, isFree, ticketTypes, capacity, profile,
+    location.city, startAt, endsAt, isFree, ticketTypes, capacity, profile,
     organizationId,
   ]);
+
+  /**
+   * Moves the pin to the typed address. Dragging a pin across a city to find a
+   * street you already know the name of is work the geocoder can do.
+   */
+  const findAddress = async () => {
+    setError(null);
+    setLocating(true);
+    try {
+      const parts = [address, venueName].filter((p) => p.trim().length > 0);
+      const hit = await geocodeAddress(parts.join(', '));
+      if (!hit) {
+        setFoundLabel(null);
+        setError('Túto adresu sme nenašli. Skús ju napísať inak, alebo posuň špendlík ručne.');
+        return;
+      }
+      setCoords({ latitude: hit.latitude, longitude: hit.longitude });
+      setFoundLabel(hit.label);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setLocating(false);
+    }
+  };
 
   const changeCover = async () => {
     setError(null);
@@ -219,6 +254,18 @@ export default function CreateEventScreen() {
 
   const validate = (): string | null => {
     if (title.trim().length < 3) return 'Daj eventu názov (aspoň 3 znaky).';
+    // The feed is a wall of cards; one without a picture is the one nobody
+    // opens. Cheaper to insist here than to explain it later.
+    if (!coverUrl) {
+      setCoverMissing(true);
+      return 'Pridaj titulnú fotku — bez nej sa event vo feede stratí.';
+    }
+    if (multiDay) {
+      if (endsAt <= startAt) return 'Koniec musí byť po začiatku.';
+      if (endsAt.getTime() - startAt.getTime() > 30 * 24 * 3600 * 1000) {
+        return 'Event dlhší ako 30 dní radšej rozdeľ na viac eventov.';
+      }
+    }
     if (!eventCoords) return 'Vyber miesto — klikni na mapu alebo zapni GPS.';
     if (startAt.getTime() < Date.now() - 60_000) return 'Vyber čas začiatku v budúcnosti.';
     if (!isFree) {
@@ -285,6 +332,7 @@ export default function CreateEventScreen() {
 
   const submit = async () => {
     setError(null);
+    setCoverMissing(false);
 
     const problem = validate();
     if (problem) {
@@ -294,7 +342,6 @@ export default function CreateEventScreen() {
 
     setSaving(true);
     try {
-      const endAt = new Date(startAt.getTime() + durationHours * 3600 * 1000);
 
       // The event and its ticket types are written in one transaction, so a
       // paid event can never come out with nothing on sale.
@@ -309,7 +356,7 @@ export default function CreateEventScreen() {
           venueName: venueName || undefined,
           city: location.city ?? undefined,
           startAt,
-          endAt,
+          endAt: endsAt,
           capacity: capacity ? Number(capacity) : null,
           isFree,
           coverImageUrl: coverUrl,
@@ -356,9 +403,10 @@ export default function CreateEventScreen() {
         {coverUrl ? (
           <Image source={{ uri: coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
         ) : (
-          <View style={styles.coverPlaceholder}>
+          <View style={[styles.coverPlaceholder, coverMissing && styles.coverMissing]}>
             <Text style={styles.coverEmoji}>📷</Text>
             <Caption>{uploadingCover ? 'Nahrávam…' : 'Pridaj titulnú fotku'}</Caption>
+            <Caption style={styles.coverHint}>Na šírku, ideálne 1920 × 1080</Caption>
           </View>
         )}
       </Pressable>
@@ -408,16 +456,34 @@ export default function CreateEventScreen() {
       <SectionHeader title="Kedy" />
       <DateTimeField value={startAt} onChange={setStartAt} minimumDate={new Date()} />
 
+      <Caption style={styles.fieldLabel}>Ako dlho trvá</Caption>
       <View style={styles.chips}>
         {[2, 3, 4, 6, 8, 12].map((hours) => (
           <Chip
             key={hours}
             label={`${hours}h`}
-            selected={durationHours === hours}
-            onPress={() => setDurationHours(hours)}
+            selected={!multiDay && durationHours === hours}
+            onPress={() => { setMultiDay(false); setDurationHours(hours); }}
           />
         ))}
+        <Chip
+          label="Viac dní"
+          selected={multiDay}
+          onPress={() => {
+            setMultiDay(true);
+            // Start from the day after, so the field opens somewhere sensible
+            // rather than at a time already behind the start.
+            if (endAt <= startAt) setEndAt(new Date(startAt.getTime() + 26 * 3600 * 1000));
+          }}
+        />
       </View>
+
+      {multiDay ? (
+        <>
+          <Caption style={styles.fieldLabel}>Koniec</Caption>
+          <DateTimeField value={endAt} onChange={setEndAt} minimumDate={startAt} />
+        </>
+      ) : null}
 
       {/* --- where ---------------------------------------------------------- */}
       <SectionHeader title="Kde" />
@@ -449,10 +515,22 @@ export default function CreateEventScreen() {
       <Input
         label="Adresa"
         value={address}
-        onChangeText={setAddress}
+        onChangeText={(v) => { setAddress(v); setFoundLabel(null); }}
         placeholder="Námestie SNP 25, Bratislava"
         editable={!saving}
+        hint="Napíš adresu a daj ju nájsť — špendlík skočí, kam patrí."
       />
+      <Button
+        title={locating ? 'Hľadám…' : 'Nájsť adresu na mape'}
+        variant="secondary"
+        full
+        onPress={findAddress}
+        loading={locating}
+        disabled={saving || address.trim().length < 4}
+      />
+      {foundLabel ? (
+        <Caption style={styles.foundLabel}>📍 {foundLabel}</Caption>
+      ) : null}
 
       {/* --- micro-event ----------------------------------------------------- */}
       {(communitiesQuery.data ?? []).length > 0 ? (
@@ -660,6 +738,11 @@ const styles = StyleSheet.create({
   // minWidth:0 or the two cells refuse to shrink and the labels wrap a
   // character per line on a narrow phone.
   ticketCell: { flex: 1, minWidth: 0 },
+  // Outlined only after a failed submit — a form that scolds you for not yet
+  // having filled it in is a form that shouts at everyone.
+  coverMissing: { borderWidth: 1, borderColor: colors.danger, borderRadius: radius.lg },
+  coverHint: { marginTop: 2 },
+  fieldLabel: { marginTop: spacing.md, marginBottom: spacing.xs },
   ticketHint: { marginTop: spacing.xs, marginBottom: spacing.md },
 
   // A dashed outline reads as "there is room for another one here", which a
@@ -716,7 +799,9 @@ const styles = StyleSheet.create({
 
   mapHint: { marginBottom: spacing.sm },
   mapWrapper: {
-    height: 220,
+    // Taller, because 220 showed the pin and almost none of the streets
+    // around it — which is the part that tells you the pin is right.
+    height: 300,
     borderRadius: radius.lg,
     overflow: 'hidden',
     marginBottom: spacing.lg,
@@ -727,6 +812,7 @@ const styles = StyleSheet.create({
   mapCrosshair: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   mapCrosshairText: { fontSize: 30, marginBottom: 20 },
 
+  foundLabel: { marginTop: spacing.xs, marginBottom: spacing.md },
   orgHint: { marginBottom: spacing.sm },
   submit: { marginTop: spacing.lg },
   footnote: { textAlign: 'center', marginTop: spacing.md },
