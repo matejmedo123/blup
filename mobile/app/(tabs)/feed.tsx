@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useRequireAuth } from '@/auth/useRequireAuth';
-import { getFeed, togglePostLike, type CommunityPost } from '@/api/communities';
+import { getFeed, getFeedCounts, type FeedScope, togglePostLike, type CommunityPost } from '@/api/communities';
 import { getFollowing } from '@/api/profiles';
 import { pickImage, uploadCommunityImage } from '@/storage/uploads';
 import { createPost } from '@/api/communities';
@@ -29,6 +29,12 @@ import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
  * post belongs to, the photo, the text, and the actions — like, "Idem tiež",
  * and the event's rating on the right.
  */
+const SCOPES: { key: FeedScope; label: string }[] = [
+  { key: 'following', label: 'Sledujem' },
+  { key: 'for_you', label: 'Pre teba' },
+  { key: 'all', label: 'Všetko' },
+];
+
 export default function FeedScreen() {
   const { requireAuth } = useRequireAuth();
   const { profile, isGuest } = useAuth();
@@ -40,7 +46,24 @@ export default function FeedScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const posts = useQuery({ queryKey: ['feed'], queryFn: () => getFeed(50) });
+  const [scope, setScope] = useState<FeedScope | null>(null);
+
+  // How full each view is, so the first one shown has something in it. Opening
+  // on an empty "Sledujem" and making somebody find the tab that works is a
+  // worse first impression than showing them everything.
+  const counts = useQuery({ queryKey: ['feed', 'counts'], queryFn: getFeedCounts });
+
+  const activeScope: FeedScope = scope ?? (
+    (counts.data?.following ?? 0) > 0 ? 'following'
+      : (counts.data?.for_you ?? 0) > 0 ? 'for_you'
+        : 'all'
+  );
+
+  const posts = useQuery({
+    queryKey: ['feed', activeScope],
+    queryFn: () => getFeed(50, activeScope),
+    enabled: !counts.isLoading,
+  });
 
   const circles = useQuery({
     queryKey: ['profile', 'following', profile?.id],
@@ -108,6 +131,20 @@ export default function FeedScreen() {
         <Pressable style={styles.headerButton} onPress={() => router.push('/community')}>
           <Text style={styles.headerButtonLabel}>Komunity</Text>
         </Pressable>
+      </View>
+
+      <View style={styles.scopeRow}>
+        {SCOPES.map((option) => (
+          <Pressable
+            key={option.key}
+            onPress={() => setScope(option.key)}
+            style={[styles.scope, activeScope === option.key && styles.scopeOn]}
+          >
+            <Text style={[styles.scopeLabel, activeScope === option.key && styles.scopeLabelOn]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
       </View>
 
       {error ? <Notice tone="danger" title="Niečo sa pokazilo" body={error} /> : null}
@@ -285,6 +322,21 @@ function PostCard({ post, onLike }: { post: CommunityPost; onLike: () => void })
 }
 
 const styles = StyleSheet.create({
+  scopeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.gutter,
+    paddingBottom: spacing.md,
+  },
+  scope: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: radius.chip,
+    backgroundColor: colors.surfaceElevated,
+  },
+  scopeOn: { backgroundColor: colors.accent },
+  scopeLabel: { color: colors.textSecondary, fontWeight: '700', fontSize: 13 },
+  scopeLabelOn: { color: '#FFFFFF' },
   screen: { flex: 1, backgroundColor: colors.background },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.

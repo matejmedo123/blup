@@ -255,9 +255,28 @@ export async function getPosts(params: {
  * newest first. Falls back to the public feed for a brand-new account so the
  * screen is not empty before you follow anybody.
  */
-export async function getFeed(limit = 50): Promise<CommunityPost[]> {
+export type FeedScope = 'following' | 'for_you' | 'all';
+
+/** How many posts each view would hold, so the app can open on a full one. */
+export async function getFeedCounts(): Promise<Record<FeedScope, number>> {
+  const { data, error } = await supabase.rpc('feed_counts');
+  if (error) throw error;
+  return data as Record<FeedScope, number>;
+}
+
+export async function getFeed(limit = 50, scope: FeedScope = 'for_you'): Promise<CommunityPost[]> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
+
+  // The scope is applied in the database, not by filtering a fetched page:
+  // narrowing 50 rows down to the three from people you follow leaves a feed
+  // that looks empty while the rest of them sit on page two.
+  const { data: scoped, error: scopeError } = await supabase
+    .rpc('feed_posts', { p_scope: scope, p_limit: limit });
+  if (scopeError) throw scopeError;
+
+  const ids = ((scoped ?? []) as { id: string }[]).map((row) => row.id);
+  if (ids.length === 0) return [];
 
   const { data, error } = await supabase
     .from('posts')
@@ -266,9 +285,8 @@ export async function getFeed(limit = 50): Promise<CommunityPost[]> {
        author:profiles!posts_author_id_fkey (id, display_name, username, avatar_url),
        event:events (id, title, category)`,
     )
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+    .in('id', ids)
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
 
