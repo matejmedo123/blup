@@ -448,8 +448,25 @@ export default function OrganizerScreen() {
         subtitle={promoFor?.title}
         footer={
           <View style={styles.sheetActions}>
+            {/* The editor first: it is the one that lets an organizer pick their
+                own code and their own discount. The quick one below stays
+                because "give me a code, now" is a real thing to want, but it
+                is no longer the only door — you used to have to generate a
+                hardcoded −20 % before you could reach the screen that changes
+                it. */}
             <Button
-              title="Vygenerovať kód"
+              title="Nastaviť si vlastný"
+              onPress={() => {
+                const id = promoFor?.id;
+                setPromoFor(null);
+                if (id) router.push(`/organizer/promo/${id}`);
+              }}
+              large
+              style={styles.flex}
+            />
+            <Button
+              title={busy ? 'Vytváram…' : 'Rýchly −20 %'}
+              variant="secondary"
               onPress={generatePromo}
               loading={busy}
               large
@@ -458,8 +475,11 @@ export default function OrganizerScreen() {
           </View>
         }
       >
-        <SheetRow label="Zľava" value="−20 %" />
-        <SheetRow label="Platí pre" value="prvých 50 ľudí" />
+        <Body muted style={styles.sheetIntro}>
+          Vlastný kód, vlastné percento, vlastný počet použití — alebo si nechaj
+          vygenerovať jeden hotový.
+        </Body>
+        <SheetRow label="Rýchly kód" value="−20 %, prvých 50 ľudí" />
         <SheetRow label="Zľavu platí" value="organizátor" tone="muted" />
 
         {promoCode ? (
@@ -574,6 +594,7 @@ const styles = StyleSheet.create({
   boostGradient: { paddingHorizontal: spacing.lg, paddingVertical: 9 },
   boostLabel: { ...typography.chip, color: '#FFFFFF' },
 
+  sheetIntro: { marginBottom: spacing.md },
   moneyRow: { flexDirection: 'row', gap: spacing.md },
 
   package: {

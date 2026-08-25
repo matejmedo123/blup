@@ -29,7 +29,7 @@ import {
   AvatarStack, Body, Button, EmptyState, ErrorState, IconButton, LoadingState, Notice,
 } from '@/components/ui';
 import {
-  categoriesInFamily, categoryFilters, colors, radius, spacing, typography,
+  categoriesInFamily, categoryFilters, colors, radius, shadow, spacing, typography,
   type CategoryFamily,
 } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
@@ -520,6 +520,23 @@ export default function HomeScreen() {
           <Body muted>Na najbližší týždeň zatiaľ nič nemáme.</Body>
         ) : null}
       </BottomSheet>
+
+      {/* Creating an event used to be reachable from home only through the
+          empty state — so the moment the city had one event in it, the way to
+          add another disappeared. Always here now, above the tab bar. */}
+      <Pressable
+        onPress={() => {
+          if (!requireAuth('Na vytvorenie eventu treba účet.', () => {})) return;
+          router.push('/organizer/create');
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Vytvoriť event"
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+      >
+        <Text style={styles.fabGlyph}>＋</Text>
+        {layout.isWide ? <Text style={styles.fabLabel}>Vytvor BLUP</Text> : null}
+      </Pressable>
+
     </SafeAreaView>
   );
 }
@@ -530,6 +547,24 @@ const styles = StyleSheet.create({
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },
   pressed: { opacity: 0.92 },
+
+  fab: {
+    position: 'absolute',
+    right: spacing.gutter,
+    // Clear of the tab bar on a phone; the desktop has no tab bar to clear.
+    bottom: spacing.gutter,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    height: 56,
+    paddingHorizontal: 18,
+    borderRadius: 28,
+    backgroundColor: colors.accent,
+    ...shadow.cta,
+  },
+  fabPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
+  fabGlyph: { color: '#FFFFFF', fontSize: 26, lineHeight: 30, fontWeight: '700' },
+  fabLabel: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
 
   brandRow: {
     paddingHorizontal: spacing.gutter,

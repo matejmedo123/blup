@@ -14,7 +14,7 @@ import { followUser, unfollowUser, getFollowing } from '@/api/profiles';
 import { messageFor } from '@/lib/errors';
 import { formatCount, formatRelative } from '@/lib/format';
 import { useToast } from '@/components/Toast';
-import { Avatar, ErrorState, IconButton, LoadingState, Notice } from '@/components/ui';
+import { Avatar, ErrorState, IconButton, Input, LoadingState, Notice } from '@/components/ui';
 import {
   categoryFamilies, colors, familyFor, labelFor, radius, spacing, typography,
 } from '@/theme';
@@ -32,15 +32,28 @@ export default function CommunityScreen() {
   const toast = useToast();
 
   const [error, setError] = React.useState<string | null>(null);
+  const [search, setSearch] = React.useState('');
+  const [debounced, setDebounced] = React.useState('');
+
+  // A list of every community is only browsable while there are few of them.
+  // Debounced rather than per keystroke, so typing "techno" is one query.
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const people = useQuery({
     queryKey: ['people', 'recommendations'],
     queryFn: () => getPeopleRecommendations({ limit: 8 }),
   });
 
+  const searching = debounced.length >= 2;
+
   const communities = useQuery({
-    queryKey: ['communities', 'browse'],
-    queryFn: () => getCommunities({ limit: 8 }),
+    queryKey: ['communities', 'browse', debounced],
+    // A wider net while searching: eight is a taste of what exists, but a
+    // search is a question, and cutting the answer at eight hides matches.
+    queryFn: () => getCommunities(searching ? { query: debounced, limit: 40 } : { limit: 8 }),
   });
 
   const mine = useQuery({ queryKey: ['communities', 'mine'], queryFn: getMyCommunities });
@@ -144,12 +157,28 @@ export default function CommunityScreen() {
         {/* --- interest communities ------------------------------------------ */}
         <Text style={styles.section}>Záujmové komunity</Text>
 
+        <Input
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Hľadaj komunitu — techno, behanie, startupy…"
+          autoCapitalize="none"
+          style={styles.communitySearch}
+        />
+
         {(communities.data ?? []).length === 0 ? (
-          <EmptyBlock
-            text="Zatiaľ tu žiadne nie sú. Založ prvú — tematickú skupinu s vlastným feedom."
-            actionLabel="Založiť komunitu"
-            onAction={() => router.push('/community/new')}
-          />
+          searching ? (
+            <EmptyBlock
+              text={`Na „${debounced}" sme nič nenašli. Skús iné slovo — alebo takú komunitu založ.`}
+              actionLabel="Založiť komunitu"
+              onAction={() => router.push('/community/new')}
+            />
+          ) : (
+            <EmptyBlock
+              text="Zatiaľ tu žiadne nie sú. Založ prvú — tematickú skupinu s vlastným feedom."
+              actionLabel="Založiť komunitu"
+              onAction={() => router.push('/community/new')}
+            />
+          )
         ) : (
           (communities.data ?? []).map((community) => (
             <CommunityRow
@@ -337,6 +366,7 @@ function EmptyBlock({
 }
 
 const styles = StyleSheet.create({
+  communitySearch: { marginBottom: spacing.md },
   screen: { flex: 1, backgroundColor: colors.background },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
