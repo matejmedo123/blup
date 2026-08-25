@@ -10,6 +10,90 @@ Počítaj s **20 minútami**, z toho väčšina je čakanie na build.
 > Trvá to minútu a je to jediná vec v tomto postupe, ktorá sa nedá vrátiť späť,
 > ak ju vynecháš.
 
+
+---
+
+## Čo je nové v tomto balíku
+
+Toto je zoznam vecí z tvojho posledného testovania. Pri každej je aj to, čo
+presne bolo zle — nie preto, aby to znelo dôkladne, ale aby si vedel, čo presne
+overiť.
+
+**Peniaze a vstupenky**
+
+- **Brutto / netto / DPH** pri cene vstupenky. Zapína sa v *Organizátor →
+  Verejný profil a logo → DPH*; sadzba je prednastavená na 23 %. Cena, ktorú
+  zadávaš, je vždy tá, ktorú platí kupujúci — rozpad je len ukážka, nič
+  neprepočítava.
+- **Na jednu objednávku ide najviac 10 vstupeniek** (bolo 20). Číslo je v
+  `platform_settings.max_tickets_per_order`, dá sa zmeniť bez nasadenia.
+- **Plávajúci košík.** Po pridaní vstupenky ťa sleduje bublina s počtom; po
+  kliknutí ponúkne *Prejsť do pokladne* alebo *Pokračovať v nákupe*. Predtým to
+  bolo len číslo v bočnom menu, ktoré si nikto nevšimol — a rezervácie medzitým
+  ticho vypršali.
+- **Onboarding výplat** už nemlčí. Ak organizácia ešte nie je overená, pošle ťa
+  rovno na formulár overenia; ak zlyhá čokoľvek iné, napíše čo.
+
+**Zobrazenia**
+
+- **Zobrazenie sa počíta, len keď niekto otvorí event.** Predtým sa počítalo aj
+  pri prejdení kartou vo feede, a navyše sa zapisovalo vo funkcii, ktorá načítava
+  event — takže jedno otvorenie pripočítalo tri. Nová verzia počíta jedného
+  návštevníka raz za pol hodiny.
+
+**Vytváranie eventu**
+
+- **Naozajstný kalendár a hodiny** namiesto písania `YYYY-MM-DD`.
+- **Návrhy adries počas písania**; Enter adresu potvrdí a **špendlík sa naozaj
+  presunie** tam, kde adresa je.
+- **Mapa v evente** ukazuje event, nie miesto, kde práve stojíš.
+- Pri *Viac dní* už nie je nad políčkom napísané „Koniec Začiatok".
+- **Titulná fotka** si drží svoje proporcie, malú fotku nezväčšuje a formulár
+  píše odporúčaný rozmer aj to, čo sa naozaj nahralo.
+- **Voľba spôsobu predaja (po sektoroch a miestach) je zatiaľ vypnutá**, ako si
+  písal. Kód pre sedadlá ostáva v projekte, len sa naň z formulára nedá dostať.
+
+**Vzhľad**
+
+- **Karta ukazuje celý plagát**, nie výrez zo stredu. Čo sa nezmestí, leží na
+  rozmazanej kópii tej istej fotky namiesto sivých pruhov.
+- **Karty sa už neroztiahnu** cez celú šírku monitora — a to platí pre feed aj
+  pre swipovanie.
+- **Komentáre a Spoločné plány** sú zarovnané na stred, nadpisy tiež.
+- **Prechod medzi stránkami** modro prebliskne a skeletony pulzujú tou istou
+  modrou.
+
+**Feed**
+
+- Novo vytvorený event sa **objaví vo feede hneď**, nie až keď vyprší cache.
+- **Organizátor môže písať na feed pod menom svojej organizácie.** Autorom
+  zostáva človek — za každý príspevok niekto ručí — ale zobrazí sa logo a názov
+  organizácie. Podpísať príspevok cudzou organizáciou databáza nedovolí.
+
+**Mazanie a prázdne stránky**
+
+- **„Zmazať natrvalo" naozaj maže.** Pod RLS nie je odmietnuté zmazanie chyba,
+  je to zmazanie nula riadkov — appka si teraz prečíta, čo skutočne odišlo, a
+  event vyhodí zo všetkých cache, kým odíde z obrazovky.
+- **Pád obrazovky končí na chybovej stránke s tlačidlom *Skúsiť znova*.**
+  Doteraz nebola žiadna — jediná chyba pri vykresľovaní nechala bielu stránku a
+  jediná cesta von bol refresh. Presne to, čo si opisoval.
+
+**Drobnosti**
+
+- Enter potvrdzuje aj zľavový kód, sumu výplaty, názov partie a názov
+  organizátora.
+- Tlačidlá pod nadpismi v organizátorskej sekcii sú užšie a na strede.
+- „Vytvor BLUP" sa volá **„Vytvor event"**.
+
+**✓ Rýchla kontrola po nasadení**
+
+```sql
+-- zobrazenia sa počítajú raz za pol hodiny na návštevníka
+select public.cart_limits();          -- max_tickets_per_order musí byť 10
+select public.vat_split(1200, 2300);  -- 976 netto, 224 DPH
+```
+
 ---
 
 ## 1 · Databáza (3 minúty)
@@ -18,8 +102,8 @@ Počítaj s **20 minútami**, z toho väčšina je čakanie na build.
 npx supabase db push
 ```
 
-Aplikuje sa **10 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
-chyby). Existujúce tabuľky sa nemažú ani neprepisujú; pridávajú sa stĺpce a
+Aplikuje sa **15 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
+chyby) — 10 z predošlého balíka a 5 z tohto. Existujúce tabuľky sa nemažú ani neprepisujú; pridávajú sa stĺpce a
 funkcie.
 
 Nemusíš mi to veriť — `db push` sám vypíše, ktoré aplikuje, a čo je už v
@@ -164,7 +248,7 @@ Nič sa im nestratí — účty, vstupenky ani uložené eventy. Zmení sa toto:
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje **všetkých 40 migrácií od nuly** a prejde
-**188 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
+Postaví dočasnú databázu, aplikuje **všetkých 45 migrácií od nuly** a prejde
+**198 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
 potom zlyhá, chyba je v tvojich dátach, nie v schéme — a to je pri hľadaní
 veľmi cenné vedieť.
