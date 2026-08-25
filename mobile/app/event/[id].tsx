@@ -154,6 +154,28 @@ export default function EventDetailScreen() {
     enabled: Boolean(id),
   });
 
+  /**
+   * "3 priatelia a 6 ľudí s tvojimi záujmami" — the two things worth knowing
+   * before you decide to go alone. Friends come from the event itself (people
+   * you follow who are attending); the rest are matches on shared interests.
+   */
+  const connectMatches = connect.data ?? [];
+  // EventDetail has no friends_going — that lives on the feed item. Count the
+  // matches who are already in your circles instead: same question, and it is
+  // the only place this screen can answer it from.
+  const connectFriends = connectMatches.filter((m) => m.mutual_follows > 0).length;
+  const connectKindred = connectMatches.filter((m) => m.mutual_follows === 0).length;
+  const connectCount = connectMatches.length;
+
+  const connectSummary = [
+    connectFriends > 0
+      ? `${connectFriends} ${connectFriends === 1 ? 'priateľ' : connectFriends < 5 ? 'priatelia' : 'priateľov'}`
+      : null,
+    connectKindred > 0
+      ? `${connectKindred} ${connectKindred === 1 ? 'človek' : connectKindred < 5 ? 'ľudia' : 'ľudí'} s tvojimi záujmami`
+      : null,
+  ].filter(Boolean).join(' a ') || 'Pozri, kto tam bude';
+
   // One ViewContent per event opened, not per re-render.
   const viewedTitle = event.data?.title;
   useEffect(() => {
@@ -656,25 +678,27 @@ export default function EventDetailScreen() {
         )}
 
         {/* --- BLUP Connect ------------------------------------------------- */}
-        {(connect.data ?? []).length > 0 ? (
-          <>
-            <SectionHeader title="Blup Connect" />
-            <Caption style={styles.connectHint}>Ľudia odtiaľto, s ktorými si asi sadneš.</Caption>
-            {(connect.data ?? []).slice(0, 5).map((match) => (
-              <Pressable
-                key={match.user_id}
-                style={styles.connectRow}
-                onPress={() => router.push(`/user/${match.user_id}`)}
-              >
-                <Avatar url={match.avatar_url} name={match.display_name} size={44} />
-                <View style={styles.flex}>
-                  <Text style={styles.hostName}>{match.display_name ?? match.username}</Text>
-                  <Caption style={styles.matchReason}>{describeMatch(match)}</Caption>
-                </View>
-                <Badge tone="accent" label={`${Math.round(match.score * 100)}%`} />
-              </Pressable>
-            ))}
-          </>
+        {/* One line rather than five rows. The list sat unnamed halfway down
+            the page and only appeared when it had five people to show; the
+            summary is visible whenever there is anybody at all, and the screen
+            behind it has room to say why each of them is on it. */}
+        {connectCount > 0 ? (
+          <Pressable
+            style={styles.connectCard}
+            onPress={() => router.push(`/connect/${data.id}`)}
+            accessibilityRole="button"
+          >
+            <View style={styles.connectIcon}>
+              <Text style={styles.connectGlyph}>⇄</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.hostName}>Blup Connect</Text>
+              <Caption style={styles.matchReason}>{connectSummary}</Caption>
+            </View>
+            <View style={styles.connectCta}>
+              <Text style={styles.connectCtaLabel}>Zobraziť</Text>
+            </View>
+          </Pressable>
         ) : null}
 
         {/* --- crews --------------------------------------------------------- */}
@@ -990,6 +1014,29 @@ const styles = StyleSheet.create({
   // Capped and centred: at full column width on a desktop these two became a
   // pair of banners rather than buttons, and sat far left of everything else.
   loading: { flex: 1, backgroundColor: colors.background, padding: spacing.gutter },
+  connectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    marginTop: spacing.md,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
+  connectIcon: {
+    width: 44, height: 44, borderRadius: radius.md,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.accentSoft,
+  },
+  connectGlyph: { color: colors.accent, fontSize: 20 },
+  connectCta: {
+    paddingHorizontal: spacing.md, paddingVertical: 9,
+    borderRadius: radius.sm, backgroundColor: colors.tealSoft,
+  },
+  connectCtaLabel: { color: colors.teal, fontWeight: '700', fontSize: 13 },
   actionRow: {
     flexDirection: 'row',
     gap: spacing.sm,

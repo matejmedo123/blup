@@ -454,7 +454,7 @@ export default function HomeScreen() {
                   >
                     <Text style={styles.bannerTitle}>Ľudia ako ty</Text>
                     <Text style={styles.bannerBody}>
-                      Kto má rovnaké záujmy a chodí na to isté čo ty.
+                      Kto má rovnaké záujmy a chodí na to isté čo ty · Blup Connect
                     </Text>
                   </LinearGradient>
                 </Pressable>

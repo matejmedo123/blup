@@ -21,7 +21,7 @@ const { chromium } = require('playwright');
 const BASE = process.argv[2] ?? 'http://127.0.0.1:4401';
 const b = await chromium.launch({ ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-const PATHS = ['/', '/search', '/discover', '/feed', '/community', '/organizer', '/organizer/create', '/cart', '/settings', '/badges', '/premium', '/organizer/profile', '/org/abc'];
+const PATHS = ['/', '/search', '/discover', '/feed', '/community', '/organizer', '/organizer/create', '/cart', '/settings', '/badges', '/premium', '/organizer/profile', '/org/abc', '/connect/abc'];
 for (const [label, vp] of [['telefon',{width:390,height:844}], ['desktop',{width:1280,height:900}]]) {
   const ctx = await b.newContext({ viewport: vp });
   const p = await ctx.newPage();
