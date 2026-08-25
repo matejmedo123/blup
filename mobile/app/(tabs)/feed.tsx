@@ -15,13 +15,14 @@ import { pickImage, uploadCommunityImage } from '@/storage/uploads';
 import { createPost } from '@/api/communities';
 import { getMyOrganizations } from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
-import { formatCount, formatRelative } from '@/lib/format';
+import { eventHref, formatCount, formatRelative } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import { BottomSheet } from '@/components/BottomSheet';
 import {
   Avatar, Body, Button, Caption, Chip, EmptyState, ErrorState, Input, LoadingState, Notice,
   Screen,
 } from '@/components/ui';
+import { SiteFooter } from '@/components/SiteFooter';
 import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -173,6 +174,7 @@ export default function FeedScreen() {
             tintColor={colors.accent}
           />
         }
+        ListFooterComponent={<SiteFooter />}
         ListHeaderComponent={
           <View>
             {(circles.data ?? []).length > 0 ? (
@@ -322,7 +324,7 @@ function PostCard({ post, onLike }: { post: CommunityPost; onLike: () => void })
               ?? 'Niekto'}
           </Text>
           {post.event ? (
-            <Pressable onPress={() => router.push(`/event/${post.event!.id}`)}>
+            <Pressable onPress={() => router.push(eventHref(post.event!))}>
               <Text style={styles.postEvent} numberOfLines={1}>· {post.event.title}</Text>
             </Pressable>
           ) : null}
@@ -353,7 +355,7 @@ function PostCard({ post, onLike }: { post: CommunityPost; onLike: () => void })
         {post.event ? (
           <Pressable
             style={styles.goingButton}
-            onPress={() => router.push(`/event/${post.event!.id}`)}
+            onPress={() => router.push(eventHref(post.event!))}
           >
             <Text style={styles.goingLabel}>Idem tiež</Text>
           </Pressable>

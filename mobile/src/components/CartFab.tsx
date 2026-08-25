@@ -42,13 +42,33 @@ export function CartFab() {
     pathname.startsWith('/event/checkout') ||
     pathname.startsWith('/order');
 
-  if (!HAS_CART || quantity === 0 || onCartScreen) return null;
+  // Signing in and onboarding are not "inside" the app: a basket bubble
+  // floating over the sign-in form is noise at the worst possible moment.
+  const outsideTheApp =
+    pathname.startsWith('/sign-in') ||
+    pathname.startsWith('/sign-up') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password') ||
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/interests') ||
+    pathname.startsWith('/location') ||
+    pathname === '/profile-setup';
+
+  if (!HAS_CART || quantity === 0 || onCartScreen || outsideTheApp) return null;
 
   const total = cart.data?.total_cents ?? 0;
 
+  // Home has its own "Vytvor event" button in this corner, and the two were
+  // drawn on top of each other. The basket sits above it instead.
+  const overFab = pathname === '/' || pathname === '/index';
+
   return (
     <View
-      style={[styles.wrapper, layout.isDesktop ? styles.wrapperDesktop : styles.wrapperPhone]}
+      style={[
+        styles.wrapper,
+        layout.isDesktop ? styles.wrapperDesktop : styles.wrapperPhone,
+        overFab && (layout.isDesktop ? styles.aboveFabDesktop : styles.aboveFabPhone),
+      ]}
       pointerEvents="box-none"
     >
       {open ? (
@@ -105,6 +125,9 @@ const styles = StyleSheet.create({
   // Clear of the bottom tab bar on a phone; nothing is down there on a desktop.
   wrapperPhone: { bottom: 92 },
   wrapperDesktop: { bottom: spacing.xl },
+  // Clear of the 56px create-event button plus a gap.
+  aboveFabPhone: { bottom: 92 + 56 + spacing.md },
+  aboveFabDesktop: { bottom: spacing.xl + 56 + spacing.md },
 
   fab: {
     width: 60,

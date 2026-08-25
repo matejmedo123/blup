@@ -55,6 +55,7 @@ export function EventMap({
   userLocation,
   selectedId,
   onSelect,
+  onSelectGroup,
   onDeselect,
   onRegionChange,
   radiusM,
@@ -66,6 +67,12 @@ export function EventMap({
   userLocation?: Coordinates | null;
   selectedId?: string | null;
   onSelect?: (event: EventFeedItem) => void;
+  /**
+   * Several events on one pin. Tapping used to hand over the first and walk the
+   * rest on further taps, which nobody could guess — two events on a street
+   * looked like one. Given this, the caller gets all of them and can list them.
+   */
+  onSelectGroup?: (events: EventFeedItem[]) => void;
   /** Tapping the map itself, away from any pin. */
   onDeselect?: () => void;
   onRegionChange?: (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => void;
@@ -298,8 +305,14 @@ export function EventMap({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                // A cluster hands over its first event; tapping again walks the
-                // rest, which beats zooming in to separate two pins on one street.
+
+                if (grouped && onSelectGroup) {
+                  onSelectGroup(cluster.events);
+                  return;
+                }
+
+                // Without a group handler, tapping walks the pin's events one
+                // by one rather than being stuck on the first.
                 const index = cluster.events.findIndex((ev) => ev.id === selectedId);
                 onSelect?.(cluster.events[(index + 1) % cluster.events.length]);
               }}

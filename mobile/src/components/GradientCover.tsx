@@ -110,9 +110,13 @@ export function GradientCover({
       )}
 
       {overlay ? (
+        // Bottom only. The top used to be darkened too, to keep the floating
+        // back button legible over a photo — but that meant the top third of
+        // every poster was dimmed, and the poster is the part with the line-up
+        // on it. The controls have their own row above the cover now.
         <LinearGradient
-          colors={['rgba(6,8,11,0.45)', 'transparent', 'rgba(10,13,18,0.92)']}
-          locations={[0, 0.4, 1]}
+          colors={['transparent', 'transparent', 'rgba(10,13,18,0.92)']}
+          locations={[0, 0.45, 1]}
           style={styles.fill}
           pointerEvents="none"
         />

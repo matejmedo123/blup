@@ -38,7 +38,7 @@ export interface CommunityPost {
   author?: Pick<Profile, 'id' | 'display_name' | 'username' | 'avatar_url'> | null;
   /** Published under this organization's name, if the author chose to. */
   organization?: { id: string; name: string; slug: string; logo_url: string | null } | null;
-  event?: { id: string; title: string; category: string } | null;
+  event?: { id: string; slug: string | null; title: string; category: string } | null;
   event_rating?: { count: number; average: number } | null;
   liked_by_me?: boolean;
 }
@@ -291,7 +291,7 @@ export async function getFeed(limit = 50, scope: FeedScope = 'for_you'): Promise
       `*,
        author:profiles!posts_author_id_fkey (id, display_name, username, avatar_url),
        organization:organizations (id, name, slug, logo_url),
-       event:events (id, title, category)`,
+       event:events (id, slug, title, category)`,
     )
     .in('id', ids)
     .order('created_at', { ascending: false });

@@ -12,8 +12,17 @@ import { env } from '@/lib/env';
  * when it is not.
  */
 
-export function eventUrl(eventId: string): string {
-  return `${(env.webUrl || 'https://blup.app').replace(/\/+$/, '')}/event/${eventId}`;
+/**
+ * The link people actually paste into a chat.
+ *
+ * The readable slug, not the uuid — a shared link is the first thing anybody
+ * sees of an event, and `/event/2bb8e298-2fbe-…` says nothing about it. The
+ * uuid still resolves, so old links keep working; it is just no longer what we
+ * hand out.
+ */
+export function eventUrl(event: { id: string; slug?: string | null } | string): string {
+  const ref = typeof event === 'string' ? event : event.slug || event.id;
+  return `${(env.webUrl || 'https://blup.app').replace(/\/+$/, '')}/event/${ref}`;
 }
 
 export interface ShareResult {
@@ -24,10 +33,11 @@ export interface ShareResult {
 
 export async function shareEvent(event: {
   id: string;
+  slug?: string | null;
   title: string;
   whenLabel?: string;
 }): Promise<ShareResult> {
-  const url = eventUrl(event.id);
+  const url = eventUrl(event);
   const message = [event.title, event.whenLabel, url].filter(Boolean).join('\n');
 
   const result = await Share.share({ message, url, title: event.title });

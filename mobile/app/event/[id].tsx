@@ -21,7 +21,7 @@ import { useRequireAuth } from '@/auth/useRequireAuth';
 import { recordSignal } from '@/api/signals';
 import { reportContent } from '@/api/admin';
 import { addEventToCalendar, openDirections } from '@/maps/calendar';
-import { supabase } from '@/lib/supabase';
+import { subscribeToTable } from '@/lib/realtime';
 import { joinEventConversation } from '@/api/messages';
 import { createCrew, getEventCrews, joinCrew, leaveCrew } from '@/api/crews';
 import { getEventRating, getMyReview, reviewEvent } from '@/api/reviews';
@@ -167,6 +167,19 @@ export default function EventDetailScreen() {
       : null,
   ].filter(Boolean).join(' a ') || 'Pozri, kto tam bude';
 
+  // The address bar gets the readable one.
+  //
+  // Both work — a uuid link somebody pasted last month still resolves — but the
+  // page people are looking at should say what the event is. This goes through
+  // the router rather than `history.replaceState`, which rewrites the URL
+  // behind expo-router and leaves its state pointing at a route that is no
+  // longer there. That desync was its own bug, and it looked like a blank page.
+  const slug = event.data?.slug;
+  useEffect(() => {
+    if (!slug || !id || id === slug) return;
+    router.replace(`/event/${slug}`);
+  }, [id, slug]);
+
   // One recorded view per event actually opened on this screen. The fetcher
   // must not do this: it re-runs on every refetch and is shared with checkout,
   // editing and the seat plan, which is why one open used to count as three.
@@ -194,20 +207,14 @@ export default function EventDetailScreen() {
   useEffect(() => {
     if (!id) return;
 
-    const channel = supabase
-      .channel(`event-${id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_attendees', filter: `event_id=eq.${id}` },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['event', id] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return subscribeToTable({
+      topic: `event-${id}`,
+      table: 'event_attendees',
+      filter: `event_id=eq.${id}`,
+      onChange: () => {
+        void queryClient.invalidateQueries({ queryKey: ['event', id] });
+      },
+    });
   }, [id, queryClient]);
 
   /**
@@ -283,6 +290,7 @@ export default function EventDetailScreen() {
     try {
       const result = await shareEvent({
         id: data.id,
+        slug: data.slug,
         title: data.title,
         whenLabel: formatEventDateLong(data.start_at),
       });
@@ -420,6 +428,21 @@ export default function EventDetailScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       {/* --- hero ----------------------------------------------------------- */}
+      {/* Above the cover, not on top of it: floating these over the picture cut
+          the top off every portrait poster — which is where the date and the
+          venue usually are. */}
+      <View style={styles.heroTop}>
+        <IconButton glyph="‹" onPress={() => router.back()} />
+        <Pressable
+          onPress={handleSave}
+          style={[styles.savePill, data.is_saved && styles.savePillActive]}
+        >
+          <Text style={styles.savePillLabel}>
+            {data.is_saved ? '★  Blupnuté' : '☆  Blup'}
+          </Text>
+        </Pressable>
+      </View>
+
       <GradientCover
         uri={data.cover_image_url}
         category={data.category}
@@ -429,18 +452,6 @@ export default function EventDetailScreen() {
         showPlaceholderLabel={false}
         overlay
       >
-        <View style={styles.heroTop}>
-          <IconButton glyph="‹" tone="overlay" onPress={() => router.back()} />
-          <Pressable
-            onPress={handleSave}
-            style={[styles.savePill, data.is_saved && styles.savePillActive]}
-          >
-            <Text style={styles.savePillLabel}>
-              {data.is_saved ? '★  Blupnuté' : '☆  Blup'}
-            </Text>
-          </Pressable>
-        </View>
-
         <View style={styles.heroBottom}>
           <View style={styles.heroChips}>
             <Chip label={categoryFamilies[familyFor(data.category)].label} onCover />
@@ -882,14 +893,19 @@ export default function EventDetailScreen() {
         </View>
 
         <View style={[styles.commentInput, styles.commentBlock]}>
-          <Input
-            value={comment}
-            onChangeText={setComment}
-            placeholder="Opýtaj sa alebo pozdrav"
-            multiline
-            maxLength={1000}
-            style={styles.commentField}
-          />
+          {/* The flex has to be on the wrapper: Input passes `style` to the
+              TextInput inside it, so flex:1 there left the field sized to its
+              content and the whole row packed to the left of its centred box. */}
+          <View style={styles.flex}>
+            <Input
+              value={comment}
+              onChangeText={setComment}
+              placeholder="Opýtaj sa alebo pozdrav"
+              multiline
+              maxLength={1000}
+              style={styles.commentField}
+            />
+          </View>
           <Button title="Poslať" compact onPress={postComment} loading={busy} disabled={!comment.trim()} />
         </View>
 
@@ -1043,13 +1059,12 @@ const styles = StyleSheet.create({
 
 
   heroTop: {
-    position: 'absolute',
-    top: spacing.xxl,
-    left: spacing.lg,
-    right: spacing.lg,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
   },
   savePill: {
     backgroundColor: colors.overlay,
@@ -1164,12 +1179,12 @@ const styles = StyleSheet.create({
   },
   matchReason: { color: colors.accent },
 
-  commentInput: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  commentInput: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginTop: spacing.sm },
   // The comments read as a column under a centred heading, the same shape as
   // the crews above them — not as a full-width slab of text.
   commentBlock: { width: '100%', maxWidth: 520, alignSelf: 'center' },
   commentEmpty: { textAlign: 'center', alignSelf: 'center' },
-  commentField: { flex: 1, marginBottom: 0, minHeight: 44 },
+  commentField: { marginBottom: 0, minHeight: 44 },
   comment: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   commentAuthor: { ...typography.caption, color: colors.textSecondary, marginBottom: 2 },
 

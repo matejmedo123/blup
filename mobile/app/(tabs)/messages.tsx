@@ -8,12 +8,13 @@ import { ChatThread } from '../chat/[id]';
 import { useLayout } from '@/hooks/useLayout';
 import { SignInInvite } from '@/components/SignInInvite';
 import { useAuth } from '@/auth/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { subscribeToTable } from '@/lib/realtime';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 import {
   Avatar, Body, EmptyState, ErrorState, IconButton, LoadingState, Mono, Screen,
 } from '@/components/ui';
+import { SiteFooter } from '@/components/SiteFooter';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { ConversationSummary } from '@/types/models';
 
@@ -34,23 +35,15 @@ export default function MessagesScreen() {
   });
 
   // A new message lands in the list without pulling to refresh.
-  useEffect(() => {
-    const channel = supabase
-      .channel('inbox-messages')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-          void queryClient.invalidateQueries({ queryKey: ['messages', 'unread'] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
+  useEffect(() => subscribeToTable({
+    topic: 'inbox-messages',
+    table: 'messages',
+    event: 'INSERT',
+    onChange: () => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['messages', 'unread'] });
+    },
+  }), [queryClient]);
 
   // A stranger has no messages to show — and no way to have any.
   if (isGuest) {
@@ -93,6 +86,7 @@ export default function MessagesScreen() {
       </View>
 
       <FlatList
+        ListFooterComponent={<SiteFooter />}
         data={conversations}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}

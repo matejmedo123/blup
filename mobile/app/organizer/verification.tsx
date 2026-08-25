@@ -36,6 +36,15 @@ export default function VerificationScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
+  // Above the early returns, with the other hooks. Below them the hook count
+  // changed between renders and React took the screen down with #310 as soon
+  // as the organization loaded — which is what a verification screen that
+  // "just doesn't open" actually was.
+  const agreement = useQuery({
+    queryKey: ['legal', 'organizer_agreement'],
+    queryFn: () => getLegalDocument('organizer_agreement'),
+  });
+
   if (organizations.isLoading) return <Screen><LoadingState /></Screen>;
 
   if (!organization) {
@@ -47,11 +56,6 @@ export default function VerificationScreen() {
   }
 
   const pending = (requests.data ?? []).find((request) => request.status === 'pending');
-
-  const agreement = useQuery({
-    queryKey: ['legal', 'organizer_agreement'],
-    queryFn: () => getLegalDocument('organizer_agreement'),
-  });
 
   const submit = async () => {
     setError(null);

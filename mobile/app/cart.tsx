@@ -76,6 +76,21 @@ export default function CartScreen() {
     void refetch();
   }, [secondsLeft, expiresAt, refetch]);
 
+  // Buyers pay one number. This only says VAT is already inside it, and only
+  // when the organizer behind this basket is registered for VAT.
+  //
+  // Up here with the other hooks on purpose: it used to sit below the guest,
+  // loading and empty-basket returns, so the number of hooks changed between
+  // renders and React tore the screen down with #310 the moment a basket
+  // arrived. A hook after a conditional return is always this bug.
+  const vat = useQuery({
+    queryKey: ['event', cart.data?.event?.id, 'vat'],
+    queryFn: () => getEventVatInfo(cart.data!.event!.id),
+    enabled: Boolean(cart.data?.event?.id),
+    staleTime: 10 * 60_000,
+  });
+  const vatLabel = vatIncludedLabel(vat.data?.isVatPayer, vat.data?.rateBps);
+
   const apply = useCallback(
     async (ticketTypeId: string, next: number) => {
       setError(null);
@@ -160,15 +175,6 @@ export default function CartScreen() {
   const seconds = secondsLeft % 60;
   const urgent = secondsLeft > 0 && secondsLeft <= 120;
 
-  // Buyers pay one number. This only says VAT is already inside it, and only
-  // when the organizer behind this basket is registered for VAT.
-  const vat = useQuery({
-    queryKey: ['event', data?.event?.id, 'vat'],
-    queryFn: () => getEventVatInfo(data!.event!.id),
-    enabled: Boolean(data?.event?.id),
-    staleTime: 10 * 60_000,
-  });
-  const vatLabel = vatIncludedLabel(vat.data?.isVatPayer, vat.data?.rateBps);
 
   // On a desktop the basket is a two-column page: what you are buying on the
   // left, what it costs and the button on the right, where it stays in view

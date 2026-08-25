@@ -18,7 +18,7 @@ import { getAIRecommendations } from '@/api/ai';
 import { getUnreadCount } from '@/api/notifications';
 import { touchActivity } from '@/api/gamification';
 import { recordSignal, queueImpression } from '@/api/signals';
-import { supabase } from '@/lib/supabase';
+import { subscribeToTable } from '@/lib/realtime';
 import { messageFor } from '@/lib/errors';
 import { EventCard } from '@/components/EventCard';
 import { useLayout } from '@/hooks/useLayout';
@@ -55,7 +55,11 @@ export default function HomeScreen() {
 
   const [view, setView] = useState<View_>('list');
   const [family, setFamily] = useState<CategoryFamily | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // One pin can hold several events. Keeping the ids rather than a single one
+  // is what lets the card list them instead of silently showing the first.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  /** Measured, so the create button can sit above the card instead of on it. */
+  const [cardHeight, setCardHeight] = useState(0);
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,22 +119,13 @@ export default function HomeScreen() {
   }, [queryClient, isGuest]);
 
   // Realtime: an event created by anyone shows up without a refresh.
-  useEffect(() => {
-    const channel = supabase
-      .channel('home-events')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'events' },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['events'] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
+  useEffect(() => subscribeToTable({
+    topic: 'home-events',
+    table: 'events',
+    onChange: () => {
+      void queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
+  }), [queryClient]);
 
   // Impressions feed the ranker; queued so scrolling is not a write storm.
   useEffect(() => {
@@ -165,7 +160,8 @@ export default function HomeScreen() {
   };
 
   const events = nearby.data ?? [];
-  const selected = events.find((event) => event.id === selectedId) ?? null;
+  const selectedEvents = events.filter((event) => selectedIds.includes(event.id));
+  const selected = selectedEvents[0] ?? null;
 
   // The weekly digest picks the best of the coming week from the same ranker
   // the notification uses.
@@ -237,7 +233,7 @@ export default function HomeScreen() {
             style={[styles.switch, view === option && styles.switchActive]}
           >
             <Text style={[styles.switchLabel, view === option && styles.switchLabelActive]}>
-              {option === 'list' ? 'Zoznam' : 'Mapa'}
+              {option === 'list' ? 'Udalosti' : 'Mapa'}
             </Text>
           </Pressable>
         ))}
@@ -324,32 +320,63 @@ export default function HomeScreen() {
           <EventMap
             events={events}
             userLocation={coords}
-            selectedId={selectedId}
-            onSelect={(event) => setSelectedId(event.id)}
-            onDeselect={() => setSelectedId(null)}
+            selectedId={selected?.id ?? null}
+            onSelect={(event) => setSelectedIds([event.id])}
+            onSelectGroup={(group) => setSelectedIds(group.map((event) => event.id))}
+            onDeselect={() => setSelectedIds([])}
             style={styles.map}
           />
 
           {selected ? (
-            <Pressable style={styles.mapCard} onPress={() => openEvent(selected)}>
-              <View style={styles.mapThumb}>
-                <Text style={styles.mapThumbGlyph}>◉</Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.mapTitle} numberOfLines={1}>{selected.title}</Text>
-                <Text style={styles.mapMeta} numberOfLines={1}>
-                  {selected.venue_name ?? selected.city ?? ''}
-                </Text>
-                <Text style={styles.mapGoing}>{selected.attendee_count} ide</Text>
-              </View>
-              <View style={styles.mapButton}>
-                <Text style={styles.mapButtonLabel}>Detail</Text>
-              </View>
+            <View
+              style={styles.mapCard}
+              onLayout={(event) => setCardHeight(event.nativeEvent.layout.height)}
+            >
+              {selectedEvents.length > 1 ? (
+                <>
+                  <Text style={styles.mapGroupTitle}>
+                    {selectedEvents.length} eventy na tomto mieste
+                  </Text>
+                  {selectedEvents.map((event) => (
+                    <Pressable
+                      key={event.id}
+                      style={styles.mapGroupRow}
+                      onPress={() => openEvent(event)}
+                    >
+                      <View style={styles.flex}>
+                        <Text style={styles.mapTitle} numberOfLines={1}>{event.title}</Text>
+                        <Text style={styles.mapMeta} numberOfLines={1}>
+                          {event.venue_name ?? event.city ?? ''}
+                        </Text>
+                      </View>
+                      <View style={styles.mapButton}>
+                        <Text style={styles.mapButtonLabel}>Detail</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </>
+              ) : (
+                <Pressable style={styles.mapSingle} onPress={() => openEvent(selected)}>
+                  <View style={styles.mapThumb}>
+                    <Text style={styles.mapThumbGlyph}>◉</Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.mapTitle} numberOfLines={1}>{selected.title}</Text>
+                    <Text style={styles.mapMeta} numberOfLines={1}>
+                      {selected.venue_name ?? selected.city ?? ''}
+                    </Text>
+                    <Text style={styles.mapGoing}>{selected.attendee_count} ide</Text>
+                  </View>
+                  <View style={styles.mapButton}>
+                    <Text style={styles.mapButtonLabel}>Detail</Text>
+                  </View>
+                </Pressable>
+              )}
+
               {/* The card covers the pins underneath it, so it needs a way out
-                  that is not "open the event". Its own Pressable, so the tap
-                  never reaches the card behind it. */}
+                  that is not "open the event". */}
               <Pressable
-                onPress={() => setSelectedId(null)}
+                onPress={() => setSelectedIds([])}
                 accessibilityRole="button"
                 accessibilityLabel="Zavrieť"
                 hitSlop={10}
@@ -357,7 +384,7 @@ export default function HomeScreen() {
               >
                 <Text style={styles.mapCloseGlyph}>×</Text>
               </Pressable>
-            </Pressable>
+            </View>
           ) : null}
         </View>
       ) : nearby.isLoading ? (
@@ -537,7 +564,13 @@ export default function HomeScreen() {
         }}
         accessibilityRole="button"
         accessibilityLabel="Vytvoriť event"
-        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+        style={({ pressed }) => [
+          styles.fab,
+          // Above the map card when one is open: at the same height the button
+          // sat on top of the card's own Detail button and its close cross.
+          selected && view === 'map' ? { bottom: cardHeight + spacing.xl + spacing.md } : null,
+          pressed && styles.fabPressed,
+        ]}
       >
         <Text style={styles.fabGlyph}>＋</Text>
         {layout.isWide ? <Text style={styles.fabLabel}>Vytvor event</Text> : null}
@@ -634,9 +667,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.md,
     marginTop: spacing.lg,
-    paddingHorizontal: spacing.xxl,
+    paddingHorizontal: spacing.gutter,
   },
-  switchRowWide: { maxWidth: 320, marginHorizontal: spacing.xxl },
+  // Left edge shared with the title above and the category chips below. It
+  // used to add its own margin on top of the row's padding, so the switch sat
+  // a couple of centimetres in from everything around it.
+  switchRowWide: { maxWidth: 320, alignSelf: 'flex-start' },
   // The extra right padding keeps the last chip off the edge, so a rail that
   // has more to show ends in a gap rather than in a chip sliced by the screen —
   // which read as a broken layout rather than as "there is more, swipe".
@@ -664,7 +700,7 @@ const styles = StyleSheet.create({
   // columns, so a card never has to know how many neighbours it has.
   cardCell: { flex: 1, minWidth: 0 },
   column: { gap: spacing.lg },
-  listWide: { paddingHorizontal: spacing.xxl },
+  listWide: { paddingHorizontal: spacing.gutter },
 
   circles: {
     flexDirection: 'row',
@@ -725,14 +761,26 @@ const styles = StyleSheet.create({
     left: spacing.gutter,
     right: spacing.gutter,
     bottom: spacing.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
     padding: spacing.lg,
+    gap: spacing.sm,
     borderRadius: radius.card,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  mapSingle: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  mapGroupTitle: {
+    ...typography.captionStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+    // Clear of the close cross in the corner.
+    paddingRight: 34,
+  },
+  mapGroupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
   },
   mapThumb: {
     width: 54,

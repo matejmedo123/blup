@@ -6,10 +6,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import { getNotifications, markAllRead } from '@/api/notifications';
 import { SignInInvite } from '@/components/SignInInvite';
-import { supabase } from '@/lib/supabase';
+import { subscribeToTable } from '@/lib/realtime';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 import { EmptyState, ErrorState, LoadingState, Screen } from '@/components/ui';
+import { SiteFooter } from '@/components/SiteFooter';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { AppNotification, NotificationType } from '@/types/models';
 
@@ -52,22 +53,14 @@ export default function ActivityScreen() {
     enabled: !isGuest,
   });
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('activity-notifications')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
+  useEffect(() => subscribeToTable({
+    topic: 'activity-notifications',
+    table: 'notifications',
+    event: 'INSERT',
+    onChange: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  }), [queryClient]);
 
   // Opening the screen marks everything read.
   useEffect(() => {
@@ -130,6 +123,7 @@ export default function ActivityScreen() {
   return (
     <Screen contentStyle={styles.container}>
       <FlatList
+        ListFooterComponent={<SiteFooter />}
         data={items}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}

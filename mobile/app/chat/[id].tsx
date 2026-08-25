@@ -13,7 +13,7 @@ import {
 } from '@/api/messages';
 import { pickImage, signChatImage, uploadChatImage } from '@/storage/uploads';
 import { ImageLightbox } from '@/components/ImageLightbox';
-import { supabase } from '@/lib/supabase';
+import { subscribeToTable } from '@/lib/realtime';
 import { messageFor } from '@/lib/errors';
 import { formatMessageTime, isSameDay, formatDayLabel } from '@/lib/format';
 import {
@@ -107,21 +107,15 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
   useEffect(() => {
     if (!id) return;
 
-    const channel = supabase
-      .channel(`chat-${id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `conversation_id=eq.${id}` },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['messages', id] });
-          markRead();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return subscribeToTable({
+      topic: `chat-${id}`,
+      table: 'messages',
+      filter: `conversation_id=eq.${id}`,
+      onChange: () => {
+        void queryClient.invalidateQueries({ queryKey: ['messages', id] });
+        markRead();
+      },
+    });
   }, [id, queryClient, markRead]);
 
   const submit = async () => {

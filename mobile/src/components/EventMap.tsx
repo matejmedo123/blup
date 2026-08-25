@@ -15,13 +15,15 @@ import type { Coordinates, EventFeedItem } from '@/types/models';
  * a clustering dependency.
  */
 export function EventMap({
-  events, userLocation, selectedId, onSelect, onDeselect, onRegionChange, radiusM, style,
-  interactive = true, focus,
+  events, userLocation, selectedId, onSelect, onDeselect, onRegionChange, radiusM,
+  style, interactive = true, focus,
 }: {
   events: EventFeedItem[];
   userLocation?: Coordinates | null;
   selectedId?: string | null;
   onSelect?: (event: EventFeedItem) => void;
+  /** Web-only: several events share one pin there. Native draws them separately. */
+  onSelectGroup?: (events: EventFeedItem[]) => void;
   /** Tapping the map itself, away from any pin. */
   onDeselect?: () => void;
   onRegionChange?: (region: Region) => void;

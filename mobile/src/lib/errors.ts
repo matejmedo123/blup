@@ -102,6 +102,14 @@ export function messageFor(error: unknown): string {
 
   if (/network request failed|fetch failed/i.test(raw)) return MESSAGES.NETWORK;
 
+  // supabase-js says this when a function is not deployed, is named differently
+  // on the server, or died before answering. The raw English sentence tells the
+  // person reading it nothing they can act on; the deployment step does.
+  if (/failed to send a request to the edge function/i.test(raw)) {
+    return 'Serverová funkcia nie je nasadená alebo neodpovedá. Nasaď ju cez '
+      + '`./scripts/deploy-functions.sh` a skontroluj, či má nastavené kľúče.';
+  }
+
   return raw || 'Niečo sa pokazilo.';
 }
 
