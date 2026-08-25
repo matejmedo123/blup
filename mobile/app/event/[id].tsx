@@ -679,7 +679,9 @@ export default function EventDetailScreen() {
         {/* --- crews --------------------------------------------------------- */}
         {!isPast && data.status !== 'cancelled' ? (
           <>
-            <SectionHeader title="Spoločné plány" />
+            <View style={styles.crewHeader}>
+              <SectionHeader title="Spoločné plány" />
+            </View>
             <Caption style={styles.crewHint}>
               Partia, ktorá ide spolu. Založ si vlastnú alebo sa pridaj k existujúcej.
             </Caption>
@@ -717,11 +719,13 @@ export default function EventDetailScreen() {
                 style={styles.crewInput}
               />
               <Button
-                title="Založiť"
+                title="Založiť partiu"
+                variant="teal"
                 compact
                 onPress={startCrew}
                 loading={busy}
                 disabled={!crewName.trim()}
+                style={styles.crewSubmit}
               />
             </View>
           </>
@@ -903,20 +907,29 @@ const styles = StyleSheet.create({
   chatGlyph: { fontSize: 17, color: colors.accentText },
   chevron: { ...typography.heading, color: colors.textTertiary },
 
-  crewHint: { marginBottom: spacing.sm },
+  // The whole section is capped and centred like the actions above it —
+  // full-column-width rows of two short words read as a table, not a list.
+  crewHeader: { width: '100%', maxWidth: 520, alignSelf: 'center' },
+  crewHint: { marginBottom: spacing.sm, textAlign: 'center', alignSelf: 'center', maxWidth: 520 },
   crewRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
     borderRadius: radius.md,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
   },
-  crewComposer: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  crewInput: { flex: 1, marginBottom: 0 },
+  // Stacked rather than side by side: at the width the input needs to hold
+  // "Ideme vlakom o 18:00", a button beside it squeezed both.
+  crewComposer: { width: '100%', maxWidth: 520, alignSelf: 'center' },
+  crewInput: { marginBottom: spacing.sm },
+  crewSubmit: { alignSelf: 'center' },
 
   reviewBox: {
     padding: spacing.md,
