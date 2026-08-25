@@ -21,10 +21,12 @@ overiť.
 
 **Peniaze a vstupenky**
 
-- **Brutto / netto / DPH** pri cene vstupenky. Zapína sa v *Organizátor →
-  Verejný profil a logo → DPH*; sadzba je prednastavená na 23 %. Cena, ktorú
-  zadávaš, je vždy tá, ktorú platí kupujúci — rozpad je len ukážka, nič
-  neprepočítava.
+- **DPH.** Zapína sa v *Organizátor → Verejný profil a logo → DPH*, sadzba je
+  prednastavená na 23 %. **Kupujúci vidí a platí plnú sumu** — pri cene mu
+  pribudne len poznámka `(s DPH 23 %)`, na vstupenke, v košíku aj v pokladni.
+  **Rozpad brutto / netto / DPH vidíš len ty**, v *Účtovníctve* a v štatistike
+  eventu. Počíta sa z celej tržby za obdobie, nie sčítaním zaokrúhlení po
+  vstupenkách, takže to sedí s tým, čo ide do priznania.
 - **Na jednu objednávku ide najviac 10 vstupeniek** (bolo 20). Číslo je v
   `platform_settings.max_tickets_per_order`, dá sa zmeniť bez nasadenia.
 - **Plávajúci košík.** Po pridaní vstupenky ťa sleduje bublina s počtom; po
@@ -79,6 +81,26 @@ overiť.
   Doteraz nebola žiadna — jediná chyba pri vykresľovaní nechala bielu stránku a
   jediná cesta von bol refresh. Presne to, čo si opisoval.
 
+**Cookies a pätička**
+
+- **Lišta o cookies naozaj funguje.** A tu je horšia časť: doteraz nefungovala
+  vôbec. Súbor s natívnou (prázdnou) verziou meracieho modulu prekrýval webovú
+  verziu — Metro berie prvú príponu, na ktorú narazí, a `ts` je pred `tsx` —
+  takže na webe sa načítala prázdna verzia. **Nenačítal sa žiadny pixel a lišta
+  sa nikdy neukázala**, práve na jedinej platforme, kde cookies vôbec sú.
+  Premenovaním súboru je to vyriešené a `scripts/smoke-cookies.mjs` to odteraz
+  overuje v prehliadači, aby to znova nestíchlo.
+- **Zásady cookies** sú štvrtý právny dokument a idú v migrácii ako ostatné.
+  Popisujú, čo BLUP naozaj ukladá — prihlásenie, košík, odpoveď na lištu — a čo
+  sa načíta až po súhlase.
+- **Pätička na každej stránke**: právne dokumenty, *Aktualizovať nastavenia
+  cookies* (lišta sa otvorí znova a odpoveď sa dá prepísať) a údaje
+  prevádzkovateľa.
+- **Údaje prevádzkovateľa** vyplníš v *Admin → Poplatky a sadzby →
+  Prevádzkovateľ*: obchodné meno, sídlo, IČO, IČ DPH, kontakt. **Nič sa
+  nedopĺňa za teba** — čo nevyplníš, sa nezobrazí. Bez obchodného mena, sídla a
+  IČO nie je stránka v EÚ v poriadku, tak si na to vyhraď dve minúty.
+
 **Drobnosti**
 
 - Enter potvrdzuje aj zľavový kód, sumu výplaty, názov partie a názov
@@ -92,7 +114,13 @@ overiť.
 -- zobrazenia sa počítajú raz za pol hodiny na návštevníka
 select public.cart_limits();          -- max_tickets_per_order musí byť 10
 select public.vat_split(1200, 2300);  -- 976 netto, 224 DPH
+
+-- štyri právne dokumenty vrátane cookies
+select kind from public.legal_documents where published_at is not null;
 ```
+
+A v prehliadači: dole na stránke klikni na **Aktualizovať nastavenia cookies** —
+musí sa objaviť lišta s dvoma rovnocennými tlačidlami.
 
 ---
 
@@ -102,8 +130,8 @@ select public.vat_split(1200, 2300);  -- 976 netto, 224 DPH
 npx supabase db push
 ```
 
-Aplikuje sa **15 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
-chyby) — 10 z predošlého balíka a 5 z tohto. Existujúce tabuľky sa nemažú ani neprepisujú; pridávajú sa stĺpce a
+Aplikuje sa **17 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
+chyby) — 10 z predošlého balíka a 7 z tohto. Existujúce tabuľky sa nemažú ani neprepisujú; pridávajú sa stĺpce a
 funkcie.
 
 Nemusíš mi to veriť — `db push` sám vypíše, ktoré aplikuje, a čo je už v
@@ -248,7 +276,7 @@ Nič sa im nestratí — účty, vstupenky ani uložené eventy. Zmení sa toto:
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje **všetkých 45 migrácií od nuly** a prejde
+Postaví dočasnú databázu, aplikuje **všetkých 47 migrácií od nuly** a prejde
 **198 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
 potom zlyhá, chyba je v tvojich dátach, nie v schéme — a to je pri hľadaní
 veľmi cenné vedieť.
