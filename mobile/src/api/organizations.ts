@@ -154,6 +154,8 @@ export async function updateOrganization(
     logo_url: string | null;
     cover_url: string | null;
     city: string | null;
+    is_vat_payer: boolean;
+    vat_rate_bps: number;
   }>,
 ): Promise<Organization> {
   const { data, error } = await supabase

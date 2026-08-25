@@ -167,8 +167,10 @@ export async function getEvent(ref: string): Promise<EventDetail> {
     isLiked = Boolean(liked.data);
   }
 
-  // Viewing an event is a behavioural signal and an analytics view.
-  void recordSignal(eventId, 'open_detail', { source: 'detail' });
+  // NOTE: opening an event is deliberately *not* recorded here. This function
+  // is a React Query fetcher and runs on every refetch, and it also backs the
+  // checkout, edit, promo and seat-plan screens — recording here counted views
+  // the visitor never made. The detail screen records its own view once.
 
   const raw = event as Record<string, unknown>;
   const gallery = ((raw.gallery ?? []) as { id: string; url: string; sort_order: number }[]).sort(

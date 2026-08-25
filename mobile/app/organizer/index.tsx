@@ -557,7 +557,19 @@ const styles = StyleSheet.create({
   createBody: { ...typography.metaSm, color: colors.textTertiary, marginTop: 3 },
   createGlyph: { fontSize: 26, color: colors.accent },
 
-  section: { ...typography.heading, color: colors.text, marginTop: spacing.xl, marginBottom: spacing.md },
+  // Centred to sit over the controls beneath them, which are themselves capped
+  // and centred — a left-aligned heading over a centred row reads as two
+  // different columns on a wide screen.
+  section: {
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 520,
+  },
 
   empty: {
     padding: spacing.xl,
@@ -595,7 +607,7 @@ const styles = StyleSheet.create({
   boostLabel: { ...typography.chip, color: '#FFFFFF' },
 
   sheetIntro: { marginBottom: spacing.md },
-  moneyRow: { flexDirection: 'row', gap: spacing.md },
+  moneyRow: { flexDirection: 'row', gap: spacing.md, width: '100%', maxWidth: 520, alignSelf: 'center' },
 
   package: {
     flexDirection: 'row',

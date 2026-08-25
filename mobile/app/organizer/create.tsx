@@ -1,4 +1,3 @@
-import { eventHref } from '@/lib/format';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -14,7 +13,7 @@ import { getMyCommunities } from '@/api/communities';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
 import { geocodeAddress } from '@/maps/geocode';
 import { messageFor } from '@/lib/errors';
-import { formatEventDateLong } from '@/lib/format';
+import { eventHref, formatEventDateLong, formatVatLine } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
 import { DateTimeField } from '@/components/DateTimeField';
 import {
@@ -80,7 +79,6 @@ export default function CreateEventScreen() {
   // How the event sells. Most sell without places at all; a hall with a
   // seating plan is the exception, and building one is work — so it is a
   // deliberate choice rather than something every organizer walks through.
-  const [saleMode, setSaleMode] = useState<'open' | 'places'>('open');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const addTicket = () =>
@@ -151,6 +149,16 @@ export default function CreateEventScreen() {
   const verifiedOrgs = useMemo(
     () => (organizations ?? []).filter((org) => org.verification_status === 'verified'),
     [organizations],
+  );
+
+  /**
+   * VAT settings of the organization the event is being published under. A
+   * price typed here is gross; a VAT-registered organizer needs to see what of
+   * it is theirs and what is the state's.
+   */
+  const vatOrganization = useMemo(
+    () => (organizations ?? []).find((org) => org.id === organizationId) ?? null,
+    [organizations, organizationId],
   );
 
   /** An organization that exists but cannot sell yet — waiting, or turned down. */
@@ -385,10 +393,7 @@ export default function CreateEventScreen() {
       setTicketTypes([blankTicket()]);
       setFieldErrors({});
 
-      // Straight into the plan when that is how it sells: the sectors are the
-      // rest of setting the event up, and leaving them for later means an event
-      // on sale with a seating mode and nowhere to sit.
-      router.push(saleMode === 'places' ? `/organizer/plan/${event.id}` : eventHref(event));
+      router.push(eventHref(event));
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -398,7 +403,7 @@ export default function CreateEventScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <Text style={styles.title}>Vytvor BLUP</Text>
+      <Text style={styles.title}>Vytvor event</Text>
       <Body muted style={styles.intro}>
         Hneď po zverejnení je vonku — na mape, vo vyhľadávaní aj vo feede ostatných.
       </Body>
@@ -656,6 +661,14 @@ export default function CreateEventScreen() {
                       error={fieldErrors[`ticket.${index}.price`]}
                       editable={!saving}
                     />
+                    {vatOrganization?.is_vat_payer && centsFrom(ticket.price) > 0 ? (
+                      <Caption style={styles.vatLine}>
+                        {formatVatLine(
+                          centsFrom(ticket.price),
+                          vatOrganization.vat_rate_bps ?? 2300,
+                        )}
+                      </Caption>
+                    ) : null}
                   </View>
                   <View style={styles.ticketCell}>
                     <Input
@@ -699,24 +712,6 @@ export default function CreateEventScreen() {
                 : 'Ľudia uvidia všetky typy pri kúpe. Ceny a počty vieš neskôr upraviť.'}
             </Caption>
 
-            <Caption style={styles.fieldLabel}>Ako sa predáva</Caption>
-            <View style={styles.chips}>
-              <Chip
-                label="Bez miest"
-                selected={saleMode === 'open'}
-                onPress={() => setSaleMode('open')}
-              />
-              <Chip
-                label="Po sektoroch a miestach"
-                selected={saleMode === 'places'}
-                onPress={() => setSaleMode('places')}
-              />
-            </View>
-            <Caption style={styles.ticketHint}>
-              {saleMode === 'open'
-                ? 'Kúpiš vstupenku, miesto sa nerieši. Takto sa predáva väčšina eventov.'
-                : 'Po zverejnení ťa pustíme na plán sály, kde vyznačíš sektory — a v nich prípadne aj číslované rady.'}
-            </Caption>
           </>
         )
       ) : null}
@@ -771,6 +766,7 @@ const styles = StyleSheet.create({
   coverHint: { marginTop: 2 },
   fieldLabel: { marginTop: spacing.md, marginBottom: spacing.xs },
   ticketHint: { marginTop: spacing.xs, marginBottom: spacing.md },
+  vatLine: { marginTop: spacing.xs, marginBottom: spacing.sm },
 
   // A dashed outline reads as "there is room for another one here", which a
   // solid button does not — it would compete with "Zverejniť event".

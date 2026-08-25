@@ -478,7 +478,7 @@ export default function HomeScreen() {
               emoji="🌍"
               title="Zatiaľ sa tu nič nedeje"
               body="V tvojom okolí zatiaľ nikto nič nevytvoril. Môžeš byť prvý — trvá to minútu."
-              actionLabel="Vytvor BLUP"
+              actionLabel="Vytvor event"
               onAction={() => {
                 if (!requireAuth('Na vytvorenie eventu treba účet.', () => {})) return;
                 router.push('/organizer/create');
@@ -540,7 +540,7 @@ export default function HomeScreen() {
         style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
       >
         <Text style={styles.fabGlyph}>＋</Text>
-        {layout.isWide ? <Text style={styles.fabLabel}>Vytvor BLUP</Text> : null}
+        {layout.isWide ? <Text style={styles.fabLabel}>Vytvor event</Text> : null}
       </Pressable>
 
     </SafeAreaView>

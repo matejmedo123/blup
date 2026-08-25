@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
 
 import {
   getLedger, getMyOrganizations, getOrganizerBalance, getPayouts, refreshPayoutStatus,
@@ -38,6 +39,7 @@ export default function PayoutsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [onboardError, setOnboardError] = useState<string | null>(null);
 
   const organizations = useQuery({ queryKey: ['organizations', 'mine'], queryFn: getMyOrganizations });
   const organization = organizations.data?.[0];
@@ -71,19 +73,36 @@ export default function PayoutsScreen() {
   }
 
   const onboard = async () => {
+    setOnboardError(null);
     setError(null);
+
+    // Stripe refuses KYC for an organization BLUP has not verified, and the
+    // Edge Function refuses it before Stripe does. Sending the user to a button
+    // that can only fail is worse than sending them to the form that unblocks
+    // it, so do that instead of a round trip to an error.
+    if (organization.verification_status !== 'verified') {
+      router.push('/organizer/verification');
+      return;
+    }
+
     setBusy('onboard');
     try {
       const result = await startPayoutOnboarding(organization.id);
-      if (result.onboarding_url) {
-        await openExternal(result.onboarding_url);
-        // Re-read the capability flags once the user comes back.
-        await refreshPayoutStatus(organization.id);
-        await queryClient.invalidateQueries({ queryKey: ['organizations'] });
-        setNotice('Onboarding otvorený. Stav výplat sa aktualizuje, keď to poskytovateľ potvrdí.');
+      if (!result.onboarding_url) {
+        // The function answered, but without a link there is nowhere to send
+        // the user — say so rather than letting the button look inert.
+        setOnboardError(
+          'Poskytovateľ platieb nevrátil odkaz na onboarding. Skús to o chvíľu znova.',
+        );
+        return;
       }
+      await openExternal(result.onboarding_url);
+      // Re-read the capability flags once the user comes back.
+      await refreshPayoutStatus(organization.id);
+      await queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      setNotice('Onboarding otvorený. Stav výplat sa aktualizuje, keď to poskytovateľ potvrdí.');
     } catch (caught) {
-      setError(messageFor(caught));
+      setOnboardError(messageFor(caught));
     } finally {
       setBusy(null);
     }
@@ -160,13 +179,32 @@ export default function PayoutsScreen() {
       </View>
 
       {!organization.payouts_enabled ? (
-        <Notice
-          tone="warning"
-          title="Onboarding výplat nie je dokončený"
-          body="Kým peniaze odídu z BLUPu, poskytovateľ platieb potrebuje tvoju identitu a bankové údaje (KYC). Je to zákonná požiadavka, nie výmysel BLUPu."
-          actionLabel="Spustiť onboarding výplat"
-          onAction={onboard}
-        />
+        <>
+          <Notice
+            tone="warning"
+            title={
+              organization.verification_status === 'verified'
+                ? 'Onboarding výplat nie je dokončený'
+                : 'Najprv overenie organizácie'
+            }
+            body={
+              organization.verification_status === 'verified'
+                ? 'Kým peniaze odídu z BLUPu, poskytovateľ platieb potrebuje tvoju identitu a bankové údaje (KYC). Je to zákonná požiadavka, nie výmysel BLUPu.'
+                : 'Onboarding výplat sa dá spustiť až po tom, čo BLUP overí tvoju organizáciu. Vyplň žiadosť o overenie — trvá to pár minút.'
+            }
+            actionLabel={
+              busy === 'onboard'
+                ? 'Otváram…'
+                : organization.verification_status === 'verified'
+                  ? 'Spustiť onboarding výplat'
+                  : 'Vyplniť žiadosť o overenie'
+            }
+            onAction={busy === 'onboard' ? undefined : onboard}
+          />
+          {onboardError ? (
+            <Notice tone="danger" title="Onboarding sa nespustil" body={onboardError} />
+          ) : null}
+        </>
       ) : null}
 
       <SectionHeader title="Výber" />

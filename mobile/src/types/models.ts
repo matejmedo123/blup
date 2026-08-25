@@ -194,6 +194,10 @@ export interface Organization {
   payouts_enabled: boolean;
   platform_fee_bps: number;
   default_currency: string;
+  /** Registered for VAT — drives the gross/net split shown next to prices. */
+  is_vat_payer: boolean;
+  /** VAT rate in basis points; 2300 = 23%. */
+  vat_rate_bps: number;
   created_by: string;
   created_at: string;
 }

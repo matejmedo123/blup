@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
 import {
   Alert, FlatList, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View,
@@ -66,15 +66,6 @@ export default function EventDetailScreen() {
     enabled: Boolean(id),
   });
 
-  // The address someone copies from here should carry the event's name, even
-  // when they arrived through the old uuid form — which still resolves.
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const slug = event.data?.slug;
-    if (!slug || id === slug) return;
-    window.history.replaceState(null, '', `/event/${slug}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event.data?.slug]);
 
   // The basket, so the ticket rows can say "in your basket" and the button can
   // become "go to basket" instead of adding a second time.
@@ -175,6 +166,17 @@ export default function EventDetailScreen() {
       ? `${connectKindred} ${connectKindred === 1 ? 'človek' : connectKindred < 5 ? 'ľudia' : 'ľudí'} s tvojimi záujmami`
       : null,
   ].filter(Boolean).join(' a ') || 'Pozri, kto tam bude';
+
+  // One recorded view per event actually opened on this screen. The fetcher
+  // must not do this: it re-runs on every refetch and is shared with checkout,
+  // editing and the seat plan, which is why one open used to count as three.
+  const openedId = event.data?.id;
+  const countedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openedId || countedRef.current === openedId) return;
+    countedRef.current = openedId;
+    void recordSignal(openedId, 'open_detail', { source: 'detail' });
+  }, [openedId]);
 
   // One ViewContent per event opened, not per re-render.
   const viewedTitle = event.data?.title;

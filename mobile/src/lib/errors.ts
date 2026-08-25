@@ -46,7 +46,7 @@ const MESSAGES: Record<string, string> = {
   CART_EMPTY: 'Košík je prázdny.',
   CART_OTHER_EVENT:
     'V košíku máš vstupenky na iný event. Doplať ich alebo košík vyprázdni — jedna objednávka patrí jednému eventu.',
-  CART_LIMIT_REACHED: 'Na jednu objednávku ide najviac 20 vstupeniek.',
+  CART_LIMIT_REACHED: 'Na jednu objednávku ide najviac 10 vstupeniek.',
 
   // Seating. All three mean "pick another seat", and say which kind of gone it
   // is — a seat somebody is deciding about frees itself, a sold one does not.

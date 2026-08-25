@@ -7,8 +7,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMyOrganizations, updateOrganization } from '@/api/organizations';
 import { pickImage, uploadOrganizationLogo } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
+import { formatVatLine } from '@/lib/format';
 import {
-  Body, Button, Caption, Input, LoadingState, Notice, Screen, SectionHeader,
+  Body, Button, Caption, Input, LoadingState, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -37,6 +38,8 @@ export default function OrganizationProfileScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [isVatPayer, setIsVatPayer] = useState(false);
+  const [vatRate, setVatRate] = useState('23');
 
   useEffect(() => {
     if (!organization) return;
@@ -44,6 +47,8 @@ export default function OrganizationProfileScreen() {
     setDescription(organization.description ?? '');
     setWebsite(organization.website ?? '');
     setLogoUrl(organization.logo_url ?? null);
+    setIsVatPayer(Boolean(organization.is_vat_payer));
+    setVatRate(String((organization.vat_rate_bps ?? 2300) / 100));
   }, [organization]);
 
   if (organizations.isLoading) return <Screen><LoadingState /></Screen>;
@@ -85,6 +90,12 @@ export default function OrganizationProfileScreen() {
       return;
     }
 
+    const rate = Number(vatRate.replace(',', '.'));
+    if (isVatPayer && (!Number.isFinite(rate) || rate < 0 || rate > 100)) {
+      setError('Sadzba DPH musí byť medzi 0 a 100 %.');
+      return;
+    }
+
     setBusy(true);
     try {
       await updateOrganization(organization.id, {
@@ -92,6 +103,8 @@ export default function OrganizationProfileScreen() {
         description: description.trim() || null,
         website: website.trim() || null,
         logo_url: logoUrl,
+        is_vat_payer: isVatPayer,
+        vat_rate_bps: isVatPayer ? Math.round(rate * 100) : (organization.vat_rate_bps ?? 2300),
       });
       await queryClient.invalidateQueries({ queryKey: ['organizations'] });
       // The event pages carry this name and logo, so they are stale now too.
@@ -157,6 +170,30 @@ export default function OrganizationProfileScreen() {
         autoCapitalize="none"
         editable={!busy}
       />
+
+      <SectionHeader title="DPH" />
+      <Switch
+        label="Sme platiteľ DPH"
+        value={isVatPayer}
+        onValueChange={setIsVatPayer}
+        description="Ceny vstupeniek zadávaš vždy s DPH. Toto len ukazuje, koľko z ceny je základ a koľko daň."
+      />
+      {isVatPayer ? (
+        <>
+          <Input
+            label="Sadzba DPH (%)"
+            value={vatRate}
+            onChangeText={setVatRate}
+            placeholder="23"
+            keyboardType="decimal-pad"
+            editable={!busy}
+          />
+          <Caption style={styles.legal}>
+            {formatVatLine(1200, Math.round((Number(vatRate.replace(',', '.')) || 0) * 100))}
+            {' — takto to uvidíš pri cene vstupenky.'}
+          </Caption>
+        </>
+      ) : null}
 
       <Button title="Uložiť" onPress={save} loading={busy} />
 

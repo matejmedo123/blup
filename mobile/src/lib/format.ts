@@ -165,3 +165,36 @@ export function eventHref(event: { id: string; slug?: string | null }): string {
 export function profileHref(profile: { id: string; username?: string | null }): string {
   return `/user/${profile.username ? `@${profile.username}` : profile.id}`;
 }
+
+/**
+ * The gross / net / VAT split of a price.
+ *
+ * A price typed into BLUP is what the buyer pays, so VAT is *inside* it:
+ * 12,00 € at 23 % is 9,76 € plus 2,24 €. VAT is rounded to the cent and net is
+ * whatever is left, so the three numbers always add up exactly — an invoice
+ * that is off by a cent is a real problem, not a rounding curiosity.
+ */
+export interface VatSplit {
+  grossCents: number;
+  netCents: number;
+  vatCents: number;
+  rateBps: number;
+}
+
+export function vatSplit(grossCents: number, rateBps: number): VatSplit {
+  const gross = Math.max(0, Math.round(grossCents || 0));
+  const rate = Math.max(0, Math.round(rateBps || 0));
+  const vat = Math.round((gross * rate) / (10000 + rate));
+  return { grossCents: gross, netCents: gross - vat, vatCents: vat, rateBps: rate };
+}
+
+/** "Brutto 12,00 € · netto 9,76 € · DPH 23 % 2,24 €" */
+export function formatVatLine(grossCents: number, rateBps: number, currency = 'EUR'): string {
+  const split = vatSplit(grossCents, rateBps);
+  const rate = (split.rateBps / 100).toFixed(split.rateBps % 100 === 0 ? 0 : 2);
+  return [
+    `Brutto ${formatMoney(split.grossCents, currency)}`,
+    `netto ${formatMoney(split.netCents, currency)}`,
+    `DPH ${rate} % ${formatMoney(split.vatCents, currency)}`,
+  ].join(' · ');
+}

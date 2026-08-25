@@ -104,26 +104,26 @@ begin
   end;
 end $$;
 
--- --- twenty is the ceiling, and the database is the one enforcing it ---------
+-- --- ten is the ceiling, and the database is the one enforcing it -----------
 do $$
 declare basket jsonb;
 begin
   perform set_config('request.jwt.claim.sub', 'b1010101-0000-0000-0000-000000000001', true);
   perform public.cart_clear();
 
-  basket := public.cart_add('d1010101-0000-0000-0000-000000000010', 12);
-  assert (basket->>'quantity')::int = 12, 'twelve went in';
+  basket := public.cart_add('d1010101-0000-0000-0000-000000000010', 6);
+  assert (basket->>'quantity')::int = 6, 'six went in';
 
-  basket := public.cart_add('d1010101-0000-0000-0000-000000000011', 8);
-  assert (basket->>'quantity')::int = 20, 'twenty is allowed';
+  basket := public.cart_add('d1010101-0000-0000-0000-000000000011', 4);
+  assert (basket->>'quantity')::int = 10, 'ten is allowed';
 
   begin
     perform public.cart_add('d1010101-0000-0000-0000-000000000011', 1);
-    raise exception 'TEST FAILED: a 21st ticket was accepted';
+    raise exception 'TEST FAILED: an 11th ticket was accepted';
   exception when raise_exception then
     if sqlerrm like 'TEST FAILED%' then raise; end if;
     assert sqlerrm = 'CART_LIMIT_REACHED', format('expected CART_LIMIT_REACHED, got %s', sqlerrm);
-    raise notice 'PASS the 21st ticket is refused';
+    raise notice 'PASS the 11th ticket is refused';
   end;
 
   -- and the same ceiling applies to a direct order, not only to the basket
@@ -131,8 +131,8 @@ begin
     perform public.create_order(
       p_buyer_id => 'b1010101-0000-0000-0000-000000000001',
       p_ticket_type_id => 'd1010101-0000-0000-0000-000000000010',
-      p_quantity => 21);
-    raise exception 'TEST FAILED: create_order accepted 21 tickets';
+      p_quantity => 11);
+    raise exception 'TEST FAILED: create_order accepted 11 tickets';
   exception when raise_exception then
     if sqlerrm like 'TEST FAILED%' then raise; end if;
     assert sqlerrm = 'CART_LIMIT_REACHED', format('expected CART_LIMIT_REACHED, got %s', sqlerrm);

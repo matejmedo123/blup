@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -36,17 +36,6 @@ export default function UserProfileScreen() {
     enabled: Boolean(id),
   });
 
-  // Whatever the link used, the address people copy from here is the handle.
-  // Twelve call sites hold only a uuid and have no username to hand; rewriting
-  // it once, here, makes every share from this screen a readable link without
-  // chasing all of them.
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const handle = profile.data?.username;
-    if (!handle || id?.startsWith('@')) return;
-    window.history.replaceState(null, '', `/user/@${handle}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.data?.username]);
 
   const counts = useQuery({
     queryKey: ['profile', 'counts', id],
