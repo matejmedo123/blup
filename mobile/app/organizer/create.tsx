@@ -275,9 +275,7 @@ export default function CreateEventScreen() {
 
   /** Picks one of the suggestions: fills the field and moves the pin. */
   const useSuggestion = (hit: GeocodeHit) => {
-    // The geocoder's label is the full postal chain down to the country. The
-    // first few parts are the address; the rest is noise in a form field.
-    setAddress(hit.label.split(',').slice(0, 3).join(',').trim());
+    setAddress(hit.label);
     setCoords({ latitude: hit.latitude, longitude: hit.longitude });
     setMapFocus({ latitude: hit.latitude, longitude: hit.longitude });
     setFoundLabel(hit.label);

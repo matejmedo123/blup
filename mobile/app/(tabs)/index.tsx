@@ -21,6 +21,8 @@ import { recordSignal, queueImpression } from '@/api/signals';
 import { subscribeToTable } from '@/lib/realtime';
 import { messageFor } from '@/lib/errors';
 import { EventCard } from '@/components/EventCard';
+import { SiteFooter } from '@/components/SiteFooter';
+import { useClaimBottom } from '@/components/BottomInset';
 import { useLayout } from '@/hooks/useLayout';
 import { useRequireAuth } from '@/auth/useRequireAuth';
 import { EventMap } from '@/components/EventMap';
@@ -162,6 +164,11 @@ export default function HomeScreen() {
   const events = nearby.data ?? [];
   const selectedEvents = events.filter((event) => selectedIds.includes(event.id));
   const selected = selectedEvents[0] ?? null;
+
+  // What this screen occupies in the bottom corner, so the basket bubble can
+  // sit above it: the create button, and the map's card when one is open.
+  const cardClaim = view === 'map' && selected ? cardHeight + spacing.xl : 0;
+  useClaimBottom('home', Math.max(56 + spacing.gutter, cardClaim));
 
   // The weekly digest picks the best of the coming week from the same ranker
   // the notification uses.
@@ -466,7 +473,8 @@ export default function HomeScreen() {
             </View>
           )}
           ListFooterComponent={
-            events.length > 0 ? (
+            <>
+              {events.length > 0 ? (
               <View>
                 {/* --- banners --------------------------------------------- */}
                 <Pressable
@@ -498,7 +506,9 @@ export default function HomeScreen() {
                   </Pressable>
                 ) : null}
               </View>
-            ) : null
+              ) : null}
+              <SiteFooter />
+            </>
           }
           ListEmptyComponent={
             <EmptyState
@@ -627,10 +637,15 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.gutter,
     marginTop: spacing.xl,
+    alignSelf: 'flex-start',
   },
   switch: {
-    flex: 1,
+    // Sized by its label, not by an equal split of the row: "Udalosti" is
+    // longer than "Mapa" and a half-row was narrower than the word, so the
+    // text ran out past the rounded corners.
+    minWidth: 96,
     height: 42,
+    paddingHorizontal: spacing.xl,
     borderRadius: radius.chip,
     alignItems: 'center',
     justifyContent: 'center',
@@ -672,7 +687,7 @@ const styles = StyleSheet.create({
   // Left edge shared with the title above and the category chips below. It
   // used to add its own margin on top of the row's padding, so the switch sat
   // a couple of centimetres in from everything around it.
-  switchRowWide: { maxWidth: 320, alignSelf: 'flex-start' },
+  switchRowWide: { alignSelf: 'flex-start' },
   // The extra right padding keeps the last chip off the edge, so a rail that
   // has more to show ends in a gap rather than in a chip sliced by the screen —
   // which read as a broken layout rather than as "there is more, swipe".

@@ -17,6 +17,7 @@ import { AuthProvider } from '@/auth/AuthProvider';
 import { AuthGateProvider } from '@/auth/useRequireAuth';
 import { AppFrame } from '@/components/AppFrame';
 import { CartFab } from '@/components/CartFab';
+import { BottomInsetProvider } from '@/components/BottomInset';
 import { RouteProgress } from '@/components/RouteProgress';
 import { StartupGate } from '@/components/StartupGate';
 import { MarketingTags } from '@/marketing/tags';
@@ -180,10 +181,14 @@ export default function RootLayout() {
               <AuthGateProvider>
                 <RouteProgress />
                 <StartupGate>
-                  <AppFrame>{content}</AppFrame>
-                  {/* Floats over every screen so a basket with a ticket in it
-                      cannot go unnoticed until the reservation expires. */}
-                  <CartFab />
+                  {/* Screens say how much of the bottom corner they use, so the
+                      basket bubble sits above it instead of on top of it. */}
+                  <BottomInsetProvider>
+                    <AppFrame>{content}</AppFrame>
+                    {/* Floats over every screen so a basket with a ticket in it
+                        cannot go unnoticed until the reservation expires. */}
+                    <CartFab />
+                  </BottomInsetProvider>
                 </StartupGate>
               </AuthGateProvider>
               {/* Ad platform tags, and the consent bar they wait behind.

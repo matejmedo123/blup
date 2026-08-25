@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getCart } from '@/api/cart';
 import { useAuth } from '@/auth/AuthProvider';
 import { useLayout } from '@/hooks/useLayout';
+import { useBottomInset } from '@/components/BottomInset';
 import { formatMoney } from '@/lib/format';
 import { colors, radius, shadow, spacing, typography } from '@/theme';
 
@@ -26,6 +27,7 @@ export function CartFab() {
   const { isGuest, session } = useAuth();
   const pathname = usePathname();
   const layout = useLayout();
+  const bottomInset = useBottomInset();
   const [open, setOpen] = useState(false);
 
   const cart = useQuery({
@@ -58,16 +60,15 @@ export function CartFab() {
 
   const total = cart.data?.total_cents ?? 0;
 
-  // Home has its own "Vytvor event" button in this corner, and the two were
-  // drawn on top of each other. The basket sits above it instead.
-  const overFab = pathname === '/' || pathname === '/index';
+  // Whatever the screen has already put in this corner — the create-event
+  // button, the map's event card — the bubble goes above it.
+  const base = layout.isDesktop ? spacing.xl : 92;
 
   return (
     <View
       style={[
         styles.wrapper,
-        layout.isDesktop ? styles.wrapperDesktop : styles.wrapperPhone,
-        overFab && (layout.isDesktop ? styles.aboveFabDesktop : styles.aboveFabPhone),
+        { bottom: base + (bottomInset > 0 ? bottomInset + spacing.md : 0) },
       ]}
       pointerEvents="box-none"
     >
@@ -86,7 +87,7 @@ export function CartFab() {
             }}
             style={({ pressed }) => [styles.action, styles.actionPrimary, pressed && styles.pressed]}
           >
-            <Text style={styles.actionPrimaryLabel}>Prejsť do pokladne</Text>
+            <Text style={styles.actionPrimaryLabel}>Prejsť do košíka</Text>
           </Pressable>
 
           <Pressable
@@ -123,11 +124,6 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   // Clear of the bottom tab bar on a phone; nothing is down there on a desktop.
-  wrapperPhone: { bottom: 92 },
-  wrapperDesktop: { bottom: spacing.xl },
-  // Clear of the 56px create-event button plus a gap.
-  aboveFabPhone: { bottom: 92 + 56 + spacing.md },
-  aboveFabDesktop: { bottom: spacing.xl + 56 + spacing.md },
 
   fab: {
     width: 60,

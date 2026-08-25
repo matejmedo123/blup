@@ -80,8 +80,40 @@ export default function EventDetailScreen() {
 
   const cartCount = cart.data?.event?.id === id ? (cart.data?.quantity ?? 0) : 0;
 
-  const addTicket = async (ticketTypeId: string) => {
-    if (!requireAuth('Rezervácia drží vstupenky 15 minút — musí vedieť komu.', () => {})) return;
+  /**
+   * The one buy button under the ticket list.
+   *
+   * Everything goes through the basket: it is the same screen as the checkout
+   * was, and having two of them meant "Kúpiť" and "Do košíka" led to different
+   * places for the same purchase. With something already reserved this just
+   * opens the basket; with nothing, it puts the cheapest ticket still on sale
+   * in there first, so the button does what it says rather than opening an
+   * empty basket.
+   */
+  const buy = async () => {
+    if (!data) return;
+
+    if (cartCount > 0 || !HAS_CART) {
+      router.push(HAS_CART ? '/cart' : `/event/checkout/${data.id}`);
+      return;
+    }
+
+    const cheapest = [...data.ticket_types]
+      .filter((ticket) => ticket.quantity_total - ticket.quantity_sold > 0)
+      .sort((a, b) => a.price_cents - b.price_cents)[0];
+
+    if (!cheapest) return;
+
+    // Only leave the page if the ticket is really reserved — otherwise the
+    // basket opens empty and the reason it failed stays behind on this screen.
+    if (await addTicket(cheapest.id)) router.push('/cart');
+  };
+
+  /** True when the ticket actually made it into the basket. */
+  const addTicket = async (ticketTypeId: string): Promise<boolean> => {
+    if (!requireAuth('Rezervácia drží vstupenky 15 minút — musí vedieť komu.', () => {})) {
+      return false;
+    }
     setError(null);
     setBusy(true);
     try {
@@ -96,8 +128,10 @@ export default function EventDetailScreen() {
         contentName: updated.event?.title,
         items: [{ id: ticketTypeId, name: line?.name, quantity: 1 }],
       });
+      return true;
     } catch (caught) {
       setError(messageFor(caught));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -586,9 +620,8 @@ export default function EventDetailScreen() {
 
             <Button
               title={cartCount > 0 ? `Do košíka (${cartCount})` : 'Kúpiť'}
-              onPress={() =>
-                router.push(cartCount > 0 ? '/cart' : `/event/checkout/${data.id}`)
-              }
+              loading={busy}
+              onPress={() => void buy()}
               disabled={data.ticket_types.every((t) => t.quantity_sold >= t.quantity_total)}
               style={styles.ticketButton}
             />

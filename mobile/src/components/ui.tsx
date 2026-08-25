@@ -52,10 +52,15 @@ export function Screen({
     ? { padding: spacing.xxl, paddingBottom: spacing.huge }
     : { padding: spacing.lg, paddingBottom: spacing.xxxl };
 
+  // The scroll content fills the screen even when there is little of it, so the
+  // footer's `marginTop: auto` has room to push it to the bottom instead of
+  // leaving it stranded under a short page.
+  const grow = footer && Platform.OS === 'web' ? { flexGrow: 1 } : null;
+
   const body = scroll ? (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[pad, column, contentStyle]}
+      contentContainerStyle={[pad, column, grow, contentStyle]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}

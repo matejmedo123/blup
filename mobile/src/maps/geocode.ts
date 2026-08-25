@@ -21,6 +21,33 @@ export interface GeocodeHit {
   city: string | null;
 }
 
+
+/**
+ * A Slovak address, written the way Slovak writes it.
+ *
+ * Nominatim's `display_name` leads with the house number and then walks the
+ * whole administrative chain — "13, Mostná, Staré Mesto, Nitra, Nitriansky
+ * kraj, 949 01, Slovensko". Nobody writes an address like that, and in a list
+ * of suggestions the useful part is buried. Rebuilt from the parts it also
+ * returns: street first, then the number, then the town.
+ */
+function slovakAddress(
+  parts: Record<string, string> | undefined,
+  fallback: string,
+): string {
+  const a = parts ?? {};
+  const street = a.road ?? a.pedestrian ?? a.footway ?? a.square ?? null;
+  const number = a.house_number ?? null;
+  const place =
+    a.city ?? a.town ?? a.village ?? a.municipality ?? a.suburb ?? a.county ?? null;
+
+  const line = [street, number].filter(Boolean).join(' ');
+  const label = [line || a.name || null, place].filter(Boolean).join(', ');
+
+  // Nothing recognisable — better the geocoder's own words than an empty row.
+  return label || fallback;
+}
+
 export async function geocodeAddress(
   query: string,
   options: { countryCodes?: string; signal?: AbortSignal } = {},
@@ -66,7 +93,7 @@ export async function geocodeAddress(
   return {
     latitude,
     longitude,
-    label: hit.display_name ?? q,
+    label: slovakAddress(hit.address, hit.display_name ?? q),
     city: a.city ?? a.town ?? a.village ?? a.municipality ?? null,
   };
 }
@@ -122,7 +149,7 @@ export async function suggestAddresses(
     hits.push({
       latitude,
       longitude,
-      label: hit.display_name ?? q,
+      label: slovakAddress(hit.address, hit.display_name ?? q),
       city: a.city ?? a.town ?? a.village ?? a.municipality ?? null,
     });
   }

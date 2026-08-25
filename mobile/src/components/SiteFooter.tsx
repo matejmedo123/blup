@@ -126,8 +126,12 @@ function FooterLink({
 
 const styles = StyleSheet.create({
   footer: {
-    marginTop: spacing.huge,
-    paddingTop: spacing.xl,
+    // Pushed to the bottom: on a short page the footer used to sit right under
+    // the content, halfway up the screen, which reads as the page having
+    // ended early. `marginTop: auto` needs the scroll content to grow, which
+    // Screen sets.
+    marginTop: 'auto',
+    paddingTop: spacing.huge,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     gap: spacing.lg,
