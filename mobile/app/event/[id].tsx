@@ -973,8 +973,26 @@ const styles = StyleSheet.create({
   host: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg },
   hostName: { ...typography.bodyStrong, color: colors.text },
 
-  actionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
-  iconRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap' },
+  // Capped and centred: at full column width on a desktop these two became a
+  // pair of banners rather than buttons, and sat far left of everything else.
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
+  iconRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
   iconButton: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,

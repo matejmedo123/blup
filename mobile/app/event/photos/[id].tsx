@@ -13,7 +13,7 @@ import {
 import { messageFor } from '@/lib/errors';
 import { GradientCover } from '@/components/GradientCover';
 import {
-  Body, Button, EmptyState, ErrorState, LoadingState, Mono, Notice, Screen, SectionHeader,
+  Body, Button, Caption, EmptyState, ErrorState, LoadingState, Mono, Notice, Screen, SectionHeader,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -130,44 +130,72 @@ export default function EventPhotosScreen() {
   }
 
   const gallery = images.data ?? [];
+  const hasCover = Boolean(event.data?.cover_image_url);
 
   return (
     <Screen scroll>
       {error ? <Notice tone="danger" title="Nepodarilo sa" body={error} /> : null}
 
-      <SectionHeader title="Titulná fotka" />
-      <Body muted style={styles.intro}>
-        Toto je obrázok, ktorý ľudia uvidia na karte eventu vo feede, na mape aj v hľadaní.
-      </Body>
+      {/* The cover is required when an event is created, so having one is the
+          normal case and does not need a section of its own — a thumbnail is
+          enough to confirm it. Only an event from before that rule, or one whose
+          cover was deleted, gets the full treatment and the explanation. */}
+      {hasCover ? (
+        <View style={styles.coverRow}>
+          <GradientCover
+            uri={event.data?.cover_image_url}
+            category={event.data?.category}
+            height={64}
+            style={styles.coverThumb}
+          />
+          <View style={styles.flex}>
+            <Caption>Titulná fotka</Caption>
+            <Body muted>Vymeníš ju cez „Dať na titulku" pri ktorejkoľvek fotke nižšie.</Body>
+          </View>
+        </View>
+      ) : (
+        <>
+          <SectionHeader title="Titulná fotka" />
+          <Body muted style={styles.intro}>
+            Toto je obrázok, ktorý ľudia uvidia na karte eventu vo feede, na mape aj v hľadaní.
+          </Body>
 
-      <GradientCover
-        uri={event.data?.cover_image_url}
-        category={event.data?.category}
-        height={200}
-        style={styles.cover}
-      >
-        {!event.data?.cover_image_url ? (
-          <Mono style={styles.coverHint}>[ zatiaľ bez fotky · karta má gradient ]</Mono>
-        ) : null}
-      </GradientCover>
+          <GradientCover
+            uri={null}
+            category={event.data?.category}
+            height={200}
+            style={styles.cover}
+          >
+            <Mono style={styles.coverHint}>[ zatiaľ bez fotky · karta má gradient ]</Mono>
+          </GradientCover>
+        </>
+      )}
 
       {canEdit ? (
-        <View style={styles.actions}>
-          <Button
-            title="Nahrať z galérie"
-            variant="secondary"
-            onPress={() => add('library')}
-            loading={busy}
-            style={styles.flex}
-          />
-          <Button
-            title="Odfotiť"
-            variant="secondary"
-            onPress={() => add('camera')}
-            disabled={busy}
-            style={styles.flex}
-          />
-        </View>
+        <>
+          <SectionHeader title={hasCover ? 'Pridaj fotky' : 'Pridaj prvú fotku'} />
+          <Body muted style={styles.intro}>
+            {hasCover
+              ? 'Fotky z miesta alebo z minulých ročníkov. Ktorúkoľvek z nich vieš dať na titulku.'
+              : 'Prvú nahratú fotku vieš hneď dať na titulku.'}
+          </Body>
+          <View style={styles.actions}>
+            <Button
+              title="Nahrať z galérie"
+              variant="secondary"
+              onPress={() => add('library')}
+              loading={busy}
+              style={styles.flex}
+            />
+            <Button
+              title="Odfotiť"
+              variant="secondary"
+              onPress={() => add('camera')}
+              disabled={busy}
+              style={styles.flex}
+            />
+          </View>
+        </>
       ) : null}
 
       <SectionHeader title={`Galéria (${gallery.length})`} />
@@ -244,6 +272,13 @@ export default function EventPhotosScreen() {
 }
 
 const styles = StyleSheet.create({
+  coverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  coverThumb: { width: 110, borderRadius: radius.md, overflow: 'hidden' },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },
