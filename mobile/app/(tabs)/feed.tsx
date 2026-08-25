@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -85,7 +86,11 @@ export default function FeedScreen() {
   };
 
   if (posts.isLoading) {
-    return <SafeAreaView style={styles.screen} edges={['top']}><LoadingState /></SafeAreaView>;
+    return (
+      <SafeAreaView style={styles.screen} edges={['top']}>
+        <EventListSkeleton count={3} />
+      </SafeAreaView>
+    );
   }
 
   if (posts.isError) {

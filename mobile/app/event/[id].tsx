@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
 import {
   Alert, FlatList, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View,
 } from 'react-native';
@@ -302,7 +303,7 @@ export default function EventDetailScreen() {
     }
   };
 
-  if (event.isLoading) return <LoadingState label="Načítavam event…" />;
+  if (event.isLoading) return <View style={styles.loading}><DetailSkeleton /></View>;
 
   if (event.isError || !data) {
     return (
@@ -988,6 +989,7 @@ const styles = StyleSheet.create({
 
   // Capped and centred: at full column width on a desktop these two became a
   // pair of banners rather than buttons, and sat far left of everything else.
+  loading: { flex: 1, backgroundColor: colors.background, padding: spacing.gutter },
   actionRow: {
     flexDirection: 'row',
     gap: spacing.sm,

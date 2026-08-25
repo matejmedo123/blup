@@ -1,4 +1,5 @@
 import { eventHref } from '@/lib/format';
+import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
 import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -87,7 +88,7 @@ export default function DiscoverScreen() {
   if (nearby.isLoading) {
     return (
       <SafeAreaView style={styles.screen} edges={['top']}>
-        <LoadingState label="Skladám ti program…" />
+        <EventListSkeleton count={3} />
       </SafeAreaView>
     );
   }

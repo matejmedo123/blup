@@ -1,4 +1,5 @@
 import { eventHref } from '@/lib/format';
+import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
@@ -360,7 +361,7 @@ export default function HomeScreen() {
           ) : null}
         </View>
       ) : nearby.isLoading ? (
-        <LoadingState label="Hľadám eventy okolo teba…" />
+        <EventListSkeleton count={4} />
       ) : nearby.isError ? (
         <ErrorState message={messageFor(nearby.error)} onRetry={() => void nearby.refetch()} />
       ) : (
