@@ -47,6 +47,14 @@ const MESSAGES: Record<string, string> = {
   CART_OTHER_EVENT:
     'V košíku máš vstupenky na iný event. Doplať ich alebo košík vyprázdni — jedna objednávka patrí jednému eventu.',
   CART_LIMIT_REACHED: 'Na jednu objednávku ide najviac 20 vstupeniek.',
+
+  // Seating. All three mean "pick another seat", and say which kind of gone it
+  // is — a seat somebody is deciding about frees itself, a sold one does not.
+  SEAT_HELD: 'Toto miesto si práve drží niekto iný. Skús ho o pár minút, alebo vyber iné.',
+  SEAT_TAKEN: 'Toto miesto je už predané. Vyber si iné.',
+  SEAT_NOT_SELLABLE: 'Toto miesto sa nepredáva — býva to výhľad alebo vyhradené miesto.',
+  SEAT_NOT_FOUND: 'Toto miesto na pláne nenájdeme. Skús stránku obnoviť.',
+  SECTION_NOT_ON_SALE: 'Tento sektor zatiaľ nie je v predaji.',
   RESERVATION_EXPIRED: 'Rezervácia vypršala a vstupenky sa vrátili do predaja.',
   CHECKOUT_NOT_FOUND: 'Táto objednávka už neexistuje.',
   AUTH_REQUIRED: 'Na toto sa treba prihlásiť.',

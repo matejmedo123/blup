@@ -141,6 +141,8 @@ export interface BlupEvent {
   id: string;
   /** Readable address; null only for a row written before slugs existed. */
   slug: string | null;
+  /** Set when the event sells by sector or seat; null for everything else. */
+  venue_map_id?: string | null;
   creator_id: string;
   organization_id: string | null;
   title: string;

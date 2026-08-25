@@ -677,6 +677,28 @@ export default function EventDetailScreen() {
           />
         )}
 
+        {/* --- seating -------------------------------------------------------- */}
+        {/* Only for an event that has a plan, which is almost none of them —
+            everything else keeps the plain ticket list above. */}
+        {data.venue_map_id ? (
+          <Pressable
+            style={styles.connectCard}
+            onPress={() => router.push(`/event/seats/${data.id}`)}
+            accessibilityRole="button"
+          >
+            <View style={styles.connectIcon}>
+              <Text style={styles.connectGlyph}>▦</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.hostName}>Vybrať si miesto</Text>
+              <Caption style={styles.matchReason}>Plán sály so sektormi a sedadlami</Caption>
+            </View>
+            <View style={styles.connectCta}>
+              <Text style={styles.connectCtaLabel}>Otvoriť</Text>
+            </View>
+          </Pressable>
+        ) : null}
+
         {/* --- BLUP Connect ------------------------------------------------- */}
         {/* One line rather than five rows. The list sat unnamed halfway down
             the page and only appeared when it had five people to show; the
