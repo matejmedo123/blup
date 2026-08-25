@@ -13,12 +13,14 @@ import { getFeed, getFeedCounts, type FeedScope, togglePostLike, type CommunityP
 import { getFollowing } from '@/api/profiles';
 import { pickImage, uploadCommunityImage } from '@/storage/uploads';
 import { createPost } from '@/api/communities';
+import { getMyOrganizations } from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
 import { formatCount, formatRelative } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import { BottomSheet } from '@/components/BottomSheet';
 import {
-  Avatar, Body, Button, EmptyState, ErrorState, Input, LoadingState, Notice, Screen,
+  Avatar, Body, Button, Caption, Chip, EmptyState, ErrorState, Input, LoadingState, Notice,
+  Screen,
 } from '@/components/ui';
 import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
 
@@ -45,6 +47,8 @@ export default function FeedScreen() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Whose name the post goes out under: null = mine, otherwise an organization. */
+  const [postAs, setPostAs] = useState<string | null>(null);
 
   const [scope, setScope] = useState<FeedScope | null>(null);
 
@@ -52,6 +56,14 @@ export default function FeedScreen() {
   // on an empty "Sledujem" and making somebody find the tab that works is a
   // worse first impression than showing them everything.
   const counts = useQuery({ queryKey: ['feed', 'counts'], queryFn: getFeedCounts });
+
+  // An organizer writes to the feed as the name their events are sold under,
+  // not as themselves. Only fetched for signed-in people — a guest has none.
+  const organizations = useQuery({
+    queryKey: ['organizations', 'mine'],
+    queryFn: getMyOrganizations,
+    enabled: !isGuest,
+  });
 
   const activeScope: FeedScope = scope ?? (
     (counts.data?.following ?? 0) > 0 ? 'following'
@@ -96,7 +108,7 @@ export default function FeedScreen() {
         imageUrl = await uploadCommunityImage(picked.uri, 'feed');
       }
 
-      await createPost({ body: body || '📷', imageUrl });
+      await createPost({ body: body || '📷', imageUrl, organizationId: postAs });
       setDraft('');
       setComposerOpen(false);
       toast.show('Zdieľané do feedu');
@@ -247,6 +259,27 @@ export default function FeedScreen() {
           </View>
         }
       >
+        {(organizations.data ?? []).length > 0 ? (
+          <>
+            <Caption style={styles.postAsLabel}>Uverejniť ako</Caption>
+            <View style={styles.postAsRow}>
+              <Chip
+                label={profile?.display_name ?? 'Ja'}
+                selected={postAs === null}
+                onPress={() => setPostAs(null)}
+              />
+              {(organizations.data ?? []).map((organization) => (
+                <Chip
+                  key={organization.id}
+                  label={organization.name}
+                  selected={postAs === organization.id}
+                  onPress={() => setPostAs(organization.id)}
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
+
         <Input
           value={draft}
           onChangeText={setDraft}
@@ -265,13 +298,28 @@ function PostCard({ post, onLike }: { post: CommunityPost; onLike: () => void })
     <View style={styles.post}>
       <Pressable
         style={styles.postHeader}
-        onPress={() => post.author && router.push(`/user/${post.author.id}`)}
+        onPress={() =>
+          post.organization
+            ? router.push(`/org/${post.organization.slug || post.organization.id}`)
+            : post.author && router.push(`/user/${post.author.id}`)
+        }
       >
-        <Avatar url={post.author?.avatar_url} name={post.author?.display_name} size={38} />
+        {post.organization ? (
+          post.organization.logo_url ? (
+            <Image source={{ uri: post.organization.logo_url }} style={styles.postOrgLogo} />
+          ) : (
+            <Avatar name={post.organization.name} size={38} />
+          )
+        ) : (
+          <Avatar url={post.author?.avatar_url} name={post.author?.display_name} size={38} />
+        )}
 
         <View style={styles.flex}>
           <Text style={styles.postAuthor} numberOfLines={1}>
-            {post.author?.display_name ?? post.author?.username ?? 'Niekto'}
+            {post.organization?.name
+              ?? post.author?.display_name
+              ?? post.author?.username
+              ?? 'Niekto'}
           </Text>
           {post.event ? (
             <Pressable onPress={() => router.push(`/event/${post.event!.id}`)}>
@@ -442,5 +490,8 @@ const styles = StyleSheet.create({
   rating: { ...typography.metaSm, color: colors.textTertiary },
 
   sheetInput: { minHeight: 96, textAlignVertical: 'top', marginBottom: 0 },
+  postAsLabel: { marginBottom: spacing.sm },
+  postAsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  postOrgLogo: { width: 38, height: 38, borderRadius: radius.md },
   sheetActions: { flexDirection: 'row', gap: spacing.md },
 });

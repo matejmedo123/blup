@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
-import { Platform } from 'react-native';
-import { Stack } from 'expo-router';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -23,7 +23,8 @@ import { MarketingTags } from '@/marketing/tags';
 import { handleAuthDeepLink } from '@/auth/api';
 import { env, isConfigured } from '@/lib/env';
 import { registerServiceWorker } from '@/lib/pwa';
-import { colors } from '@/theme';
+import { Wordmark } from '@/components/Wordmark';
+import { colors, radius, spacing, typography } from '@/theme';
 import { useAppFonts } from '@/theme/fonts';
 
 const queryClient = new QueryClient({
@@ -196,3 +197,84 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+/**
+ * The screen that a crash lands on.
+ *
+ * Expo Router looks for an `ErrorBoundary` export on a layout route and uses it
+ * when anything below throws while rendering. Without one, a single bad render
+ * unmounts the tree and leaves a blank white page — which is exactly what a
+ * reload appeared to "fix", because a reload is the only way out of it.
+ *
+ * `retry()` re-renders the failed route rather than reloading the app, so the
+ * basket, the session and everything else survive a hiccup.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={errorStyles.container}>
+      <Wordmark size={40} />
+      <Text style={errorStyles.title}>Toto sa nám nepodarilo zobraziť</Text>
+      <Text style={errorStyles.body}>
+        Niečo v tejto obrazovke spadlo. Skús to znova — ak to bude pokračovať, napíš nám a
+        priloz, čo si robil.
+      </Text>
+      <Text style={errorStyles.detail} numberOfLines={4}>
+        {error.message}
+      </Text>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => retry()}
+        style={({ pressed }) => [errorStyles.button, pressed && errorStyles.pressed]}
+      >
+        <Text style={errorStyles.buttonLabel}>Skúsiť znova</Text>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.replace('/')}
+        style={({ pressed }) => [errorStyles.ghost, pressed && errorStyles.pressed]}
+      >
+        <Text style={errorStyles.ghostLabel}>Späť na domovskú</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const errorStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  title: { ...typography.heading, color: colors.text, textAlign: 'center' },
+  body: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 360,
+    lineHeight: 22,
+  },
+  detail: {
+    ...typography.monoSm,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    maxWidth: 360,
+  },
+  button: {
+    marginTop: spacing.lg,
+    height: 48,
+    minWidth: 220,
+    borderRadius: radius.block,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonLabel: { ...typography.captionStrong, color: '#FFFFFF' },
+  ghost: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  ghostLabel: { ...typography.captionStrong, color: colors.textSecondary },
+  pressed: { opacity: 0.9 },
+});

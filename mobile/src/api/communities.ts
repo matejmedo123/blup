@@ -34,7 +34,10 @@ export interface CommunityPost {
   like_count: number;
   comment_count: number;
   created_at: string;
+  organization_id: string | null;
   author?: Pick<Profile, 'id' | 'display_name' | 'username' | 'avatar_url'> | null;
+  /** Published under this organization's name, if the author chose to. */
+  organization?: { id: string; name: string; slug: string; logo_url: string | null } | null;
   event?: { id: string; title: string; category: string } | null;
   event_rating?: { count: number; average: number } | null;
   liked_by_me?: boolean;
@@ -223,7 +226,11 @@ export async function getPosts(params: {
 } = {}): Promise<CommunityPost[]> {
   let request = supabase
     .from('posts')
-    .select('*, author:profiles!posts_author_id_fkey (id, display_name, username, avatar_url)')
+    .select(
+      `*,
+       author:profiles!posts_author_id_fkey (id, display_name, username, avatar_url),
+       organization:organizations (id, name, slug, logo_url)`,
+    )
     .eq('is_deleted', false)
     .order('created_at', { ascending: false })
     .limit(params.limit ?? 50);
@@ -283,6 +290,7 @@ export async function getFeed(limit = 50, scope: FeedScope = 'for_you'): Promise
     .select(
       `*,
        author:profiles!posts_author_id_fkey (id, display_name, username, avatar_url),
+       organization:organizations (id, name, slug, logo_url),
        event:events (id, title, category)`,
     )
     .in('id', ids)
@@ -343,6 +351,11 @@ export async function createPost(input: {
   communityId?: string | null;
   eventId?: string | null;
   imageUrl?: string | null;
+  /**
+   * Publish under this organization's name. The author is still the person —
+   * the database insists on that — but the feed shows the organizer.
+   */
+  organizationId?: string | null;
 }): Promise<CommunityPost> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
@@ -356,6 +369,7 @@ export async function createPost(input: {
       community_id: input.communityId ?? null,
       event_id: input.eventId ?? null,
       image_url: input.imageUrl ?? null,
+      organization_id: input.organizationId ?? null,
     })
     .select()
     .single();
