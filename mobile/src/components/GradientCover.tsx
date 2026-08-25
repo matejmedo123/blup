@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +25,8 @@ export function GradientCover({
   children,
   style,
   overlay = false,
+  whole = false,
+  wholeMinRatio = 0.8,
 }: {
   uri?: string | null;
   /** Event category — decides the gradient. */
@@ -36,13 +38,62 @@ export function GradientCover({
   style?: StyleProp<ViewStyle>;
   /** Darkens the bottom so a title sits legibly on top (event hero). */
   overlay?: boolean;
+  /**
+   * Show the whole picture instead of a crop of it.
+   *
+   * A poster is usually portrait and a card is usually landscape, so a fixed
+   * height cuts the poster's top and bottom off — which is the part with the
+   * line-up on it. With this on, the cover takes the picture's own proportions
+   * (within reason) and nothing is cut away.
+   */
+  whole?: boolean;
+  /** How tall the cover may get when showing the whole picture (w/h). */
+  wholeMinRatio?: number;
 }) {
   const [start, end] = coverGradientFor(category);
+  const [ratio, setRatio] = useState<number | null>(null);
+
+  // Between a tall poster and a wide banner, but never so tall that one card
+  // fills the screen: 4:5 is as narrow as a card gets before the list stops
+  // reading as a list.
+  const wholeRatio = whole && ratio ? Math.min(Math.max(ratio, wholeMinRatio), 1.91) : null;
 
   return (
-    <View style={[styles.container, height ? { height } : null, style]}>
+    <View
+      style={[
+        styles.container,
+        wholeRatio ? { aspectRatio: wholeRatio } : height ? { height } : null,
+        style,
+      ]}
+    >
       {uri ? (
-        <Image source={{ uri }} style={styles.fill} contentFit="cover" transition={180} />
+        <>
+          {/* A poster taller than the card's limit letterboxes. Grey bars look
+              like a bug; the picture's own colours, blurred, look deliberate. */}
+          {whole ? (
+            <Image
+              source={{ uri }}
+              style={[styles.fill, styles.blurred]}
+              contentFit="cover"
+              blurRadius={24}
+              pointerEvents="none"
+            />
+          ) : null}
+          <Image
+            source={{ uri }}
+            style={styles.fill}
+            contentFit={whole ? 'contain' : 'cover'}
+            transition={180}
+            onLoad={
+              whole
+                ? (event) => {
+                    const { width, height: h } = event.source ?? {};
+                    if (width && h) setRatio(width / h);
+                  }
+                : undefined
+            }
+          />
+        </>
       ) : (
         <>
           <LinearGradient
@@ -94,6 +145,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   fill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  blurred: { opacity: 0.55 },
 
   hatching: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
   bar: {

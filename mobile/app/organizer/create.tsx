@@ -112,6 +112,7 @@ export default function CreateEventScreen() {
   const [communityId, setCommunityId] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [coverMissing, setCoverMissing] = useState(false);
+  const [coverSize, setCoverSize] = useState<{ width: number; height: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [foundLabel, setFoundLabel] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -255,8 +256,9 @@ export default function CreateEventScreen() {
       if (!picked) return;
 
       setUploadingCover(true);
-      const url = await uploadEventCover(picked.uri, draftId);
-      setCoverUrl(url);
+      const cover = await uploadEventCover(picked.uri, draftId, picked.width || undefined);
+      setCoverUrl(cover.url);
+      setCoverSize({ width: cover.width, height: cover.height });
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -389,6 +391,7 @@ export default function CreateEventScreen() {
       setTitle('');
       setDescription('');
       setCoverUrl(null);
+      setCoverSize(null);
       setCapacity('');
       setTicketTypes([blankTicket()]);
       setFieldErrors({});
@@ -418,16 +421,35 @@ export default function CreateEventScreen() {
           <View style={[styles.coverPlaceholder, coverMissing && styles.coverMissing]}>
             <Text style={styles.coverEmoji}>📷</Text>
             <Caption>{uploadingCover ? 'Nahrávam…' : 'Pridaj titulnú fotku'}</Caption>
-            <Caption style={styles.coverHint}>Na šírku, ideálne 1920 × 1080</Caption>
+            <Caption style={styles.coverHint}>Odporúčame 1920 × 1080 px, na šírku</Caption>
           </View>
         )}
       </Pressable>
 
       {coverUrl ? (
-        <View style={styles.coverActions}>
-          <Button title="Vymeniť" variant="ghost" compact onPress={changeCover} />
-          <Button title="Odstrániť" variant="ghost" compact onPress={() => setCoverUrl(null)} />
-        </View>
+        <>
+          <Caption style={styles.coverSize}>
+            {coverSize
+              ? `Nahraté ${coverSize.width} × ${coverSize.height} px${
+                  coverSize.height > coverSize.width
+                    ? ' — plagát na výšku ukážeme celý.'
+                    : ''
+                }`
+              : 'Odporúčame 1920 × 1080 px, na šírku.'}
+          </Caption>
+          <View style={styles.coverActions}>
+            <Button title="Vymeniť" variant="ghost" compact onPress={changeCover} />
+            <Button
+              title="Odstrániť"
+              variant="ghost"
+              compact
+              onPress={() => {
+                setCoverUrl(null);
+                setCoverSize(null);
+              }}
+            />
+          </View>
+        </>
       ) : null}
 
       {/* --- basics --------------------------------------------------------- */}
@@ -764,6 +786,7 @@ const styles = StyleSheet.create({
   // having filled it in is a form that shouts at everyone.
   coverMissing: { borderWidth: 1, borderColor: colors.danger, borderRadius: radius.lg },
   coverHint: { marginTop: 2 },
+  coverSize: { marginTop: spacing.xs, textAlign: 'center', alignSelf: 'center' },
   fieldLabel: { marginTop: spacing.md, marginBottom: spacing.xs },
   ticketHint: { marginTop: spacing.xs, marginBottom: spacing.md },
   vatLine: { marginTop: spacing.xs, marginBottom: spacing.sm },

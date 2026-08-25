@@ -68,10 +68,23 @@ export async function pickImage(options: {
   };
 }
 
-/** Downscales and re-encodes so a 12 MP phone photo does not become a 6 MB upload. */
-async function compress(uri: string, maxWidth: number): Promise<{ uri: string }> {
+/**
+ * Downscales and re-encodes so a 12 MP phone photo does not become a 6 MB
+ * upload.
+ *
+ * `resize({ width })` sets the width, it does not cap it — handed a 900px
+ * picture and a 1920 limit it *enlarges* it, which costs bytes and buys blur.
+ * So when the source is already small enough, only the re-encode happens.
+ */
+async function compress(
+  uri: string,
+  maxWidth: number,
+  sourceWidth?: number,
+): Promise<{ uri: string; width: number; height: number }> {
   const context = ImageManipulator.ImageManipulator.manipulate(uri);
-  context.resize({ width: maxWidth });
+  if (!sourceWidth || sourceWidth > maxWidth) {
+    context.resize({ width: maxWidth });
+  }
   const image = await context.renderAsync();
   return image.saveAsync({ compress: 0.82, format: ImageManipulator.SaveFormat.JPEG });
 }
@@ -135,20 +148,33 @@ export async function removeAvatar(): Promise<void> {
 }
 
 /** Event cover: uploaded before the event exists, so it is keyed by a draft id. */
-export async function uploadEventCover(uri: string, draftId: string): Promise<string> {
+export interface UploadedCover {
+  url: string;
+  width: number;
+  height: number;
+}
+
+export async function uploadEventCover(
+  uri: string,
+  draftId: string,
+  sourceWidth?: number,
+): Promise<UploadedCover> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
   if (!userId) throw new Error('UNAUTHENTICATED');
 
-  // 1920 wide, which at the picker's 16:9 crop is 1920×1080 — the size the
-  // card, the detail hero and the link-preview crawler all want, and small
-  // enough that a phone on mobile data still loads the feed.
-  const compressed = await compress(uri, 1920);
-  return uploadToBucket({
+  // 1920 on the long edge: the size the card, the detail hero and the
+  // link-preview crawler all want, and small enough that a phone on mobile
+  // data still loads the feed. The picture's own proportions are kept —
+  // a portrait poster is shown whole rather than cropped to a strip.
+  const compressed = await compress(uri, 1920, sourceWidth);
+  const url = await uploadToBucket({
     bucket: 'event-images',
     path: `${userId}/${draftId}/cover.jpg`,
     uri: compressed.uri,
   });
+
+  return { url, width: compressed.width, height: compressed.height };
 }
 
 /** Adds a photo to an event gallery and records the row. */

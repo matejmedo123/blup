@@ -417,6 +417,8 @@ export default function EventDetailScreen() {
         uri={data.cover_image_url}
         category={data.category}
         height={300}
+        whole
+        wholeMinRatio={0.66}
         showPlaceholderLabel={false}
         overlay
       >
@@ -749,7 +751,7 @@ export default function EventDetailScreen() {
         {!isPast && data.status !== 'cancelled' ? (
           <>
             <View style={styles.crewHeader}>
-              <SectionHeader title="Spoločné plány" />
+              <SectionHeader title="Spoločné plány" centered />
             </View>
             <Caption style={styles.crewHint}>
               Partia, ktorá ide spolu. Založ si vlastnú alebo sa pridaj k existujúcej.
@@ -857,9 +859,11 @@ export default function EventDetailScreen() {
         ) : null}
 
         {/* --- comments ----------------------------------------------------- */}
-        <SectionHeader title={`Komentáre · ${formatCount(data.comment_count)}`} />
+        <View style={styles.commentBlock}>
+          <SectionHeader title={`Komentáre · ${formatCount(data.comment_count)}`} centered />
+        </View>
 
-        <View style={styles.commentInput}>
+        <View style={[styles.commentInput, styles.commentBlock]}>
           <Input
             value={comment}
             onChangeText={setComment}
@@ -872,10 +876,10 @@ export default function EventDetailScreen() {
         </View>
 
         {(comments.data ?? []).length === 0 ? (
-          <Body muted>Zatiaľ žiadne komentáre.</Body>
+          <Body muted style={styles.commentEmpty}>Zatiaľ žiadne komentáre.</Body>
         ) : (
           (comments.data ?? []).map((item) => (
-            <View key={item.id} style={styles.comment}>
+            <View key={item.id} style={[styles.comment, styles.commentBlock]}>
               <Avatar url={item.author?.avatar_url} name={item.author?.display_name} size={34} />
               <View style={styles.flex}>
                 <Text style={styles.commentAuthor}>
@@ -1141,6 +1145,10 @@ const styles = StyleSheet.create({
   matchReason: { color: colors.accent },
 
   commentInput: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  // The comments read as a column under a centred heading, the same shape as
+  // the crews above them — not as a full-width slab of text.
+  commentBlock: { width: '100%', maxWidth: 520, alignSelf: 'center' },
+  commentEmpty: { textAlign: 'center', alignSelf: 'center' },
   commentField: { flex: 1, marginBottom: 0, minHeight: 44 },
   comment: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   commentAuthor: { ...typography.caption, color: colors.textSecondary, marginBottom: 2 },

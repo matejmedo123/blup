@@ -109,7 +109,7 @@ export default function EditEventScreen() {
       const picked = await pickImage({ source: 'library', aspect: [16, 9] });
       if (!picked) return;
       setSaving(true);
-      const url = await uploadEventCover(picked.uri, id!);
+      const { url } = await uploadEventCover(picked.uri, id!, picked.width || undefined);
       await updateEvent(id!, { coverImageUrl: url });
       await event.refetch();
     } catch (caught) {

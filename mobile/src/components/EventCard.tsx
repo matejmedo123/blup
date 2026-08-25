@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, familyFor, categoryFamilies, radius, spacing, typography } from '@/theme';
 import { formatCount, formatDistance, formatEventDate, formatPrice } from '@/lib/format';
 import { reasonLabel } from '@/lib/labels';
+import { CARD_MAX } from '@/hooks/useLayout';
 import type { EventFeedItem } from '@/types/models';
 import { GradientCover } from './GradientCover';
 import { AvatarStack } from './ui';
@@ -55,6 +56,7 @@ export function EventCard({
         uri={event.cover_image_url}
         category={event.category}
         height={isCompact ? 96 : 168}
+        whole={!isCompact}
         showPlaceholderLabel={!isCompact}
       >
         <View style={styles.coverTop}>
@@ -138,13 +140,19 @@ function GlassBadge({ label }: { label: string }) {
 
 const styles = StyleSheet.create({
   card: {
+    // A card is a card, not a banner. Past this width the cover turns into a
+    // letterbox strip and the two lines of text under it float in white space —
+    // which is what a full-width card on a desktop monitor actually looks like.
+    width: '100%',
+    maxWidth: CARD_MAX,
+    alignSelf: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.cardLarge,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  cardCompact: { width: 190, borderRadius: radius.card },
+  cardCompact: { width: 190, maxWidth: 190, borderRadius: radius.card },
   pressed: { borderColor: colors.borderAccent },
 
   coverTop: {

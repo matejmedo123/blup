@@ -563,15 +563,17 @@ export function Row({
 }
 
 export function SectionHeader({
-  title, action, onAction,
+  title, action, onAction, centered = false,
 }: {
   title: string;
   action?: string;
   onAction?: () => void;
+  /** Centres the heading over a centred block, e.g. crews and comments. */
+  centered?: boolean;
 }) {
   return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={[styles.sectionHeader, centered && styles.sectionHeaderCentered]}>
+      <Text style={[styles.sectionTitle, centered && styles.sectionTitleCentered]}>{title}</Text>
       {action && onAction ? (
         <Pressable onPress={onAction} hitSlop={8}>
           <Text style={styles.sectionAction}>{action}</Text>
@@ -821,7 +823,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     marginTop: spacing.xl,
   },
+  sectionHeaderCentered: { justifyContent: 'center' },
   sectionTitle: { ...typography.heading, color: colors.text },
+  sectionTitleCentered: { textAlign: 'center', flex: 1 },
   sectionAction: { ...typography.captionStrong, color: colors.accentText },
 
   switchRow: {

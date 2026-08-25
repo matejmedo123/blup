@@ -356,7 +356,6 @@ export default function OrganizerScreen() {
             <Button
               title="Verejný profil a logo"
               variant="secondary"
-              full
               onPress={() => router.push('/organizer/profile')}
             />
 
@@ -384,7 +383,6 @@ export default function OrganizerScreen() {
                 <Button
                   title="Skener vstupeniek"
                   variant="secondary"
-                  full
                   onPress={() => router.push('/organizer/scan')}
                 />
               </>

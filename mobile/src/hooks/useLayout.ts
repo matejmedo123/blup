@@ -22,6 +22,15 @@ export const DESKTOP_MIN = 1080;
 export const CONTENT_MAX = 1180;
 export const SIDEBAR_WIDTH = 244;
 
+/**
+ * Widest a single event card ever gets.
+ *
+ * On a wide window a one-column list stretched each card across the whole
+ * reading column: the cover became a letterbox strip and the title floated
+ * alone on a very long line. Cards stop here and centre instead.
+ */
+export const CARD_MAX = 560;
+
 export interface LayoutInfo {
   size: LayoutSize;
   /** Sidebar navigation instead of a bottom tab bar. */

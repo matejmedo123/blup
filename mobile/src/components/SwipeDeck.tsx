@@ -10,6 +10,7 @@ import {
 } from '@/theme';
 import { formatCount, formatEventDate, formatPrice } from '@/lib/format';
 import type { EventFeedItem } from '@/types/models';
+import { CARD_MAX } from '@/hooks/useLayout';
 import { GradientCover } from './GradientCover';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -241,6 +242,7 @@ function DeckCard({ event }: { event: EventFeedItem }) {
         uri={event.cover_image_url}
         category={event.category}
         height={250}
+        whole
         placeholderLabel="[ foto z minulého ročníka ]"
       >
         <View style={styles.cardBadges}>
@@ -280,7 +282,15 @@ function DeckCard({ event }: { event: EventFeedItem }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center' },
-  deck: { justifyContent: 'center', paddingHorizontal: spacing.gutter },
+  // One card, centred and card-shaped. Stretched across a desktop window it
+  // stopped looking like something you swipe.
+  deck: {
+    justifyContent: 'center',
+    paddingHorizontal: spacing.gutter,
+    width: '100%',
+    maxWidth: CARD_MAX + spacing.gutter * 2,
+    alignSelf: 'center',
+  },
   behind: { position: 'absolute', left: spacing.gutter, right: spacing.gutter },
   live: {},
 
