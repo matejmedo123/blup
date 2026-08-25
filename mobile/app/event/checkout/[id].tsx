@@ -15,7 +15,7 @@ import {
   canTakePayment, payForTickets, requiresPublishableKey, unavailableMessage,
 } from '@/payments/checkout';
 import { messageFor } from '@/lib/errors';
-import { formatMoney, formatPrice } from '@/lib/format';
+import { formatMoney, formatPrice, vatIncludedLabel } from '@/lib/format';
 import {
   Body, Button, Caption, Divider, ErrorState, Input, LoadingState, Mono, Notice, Screen,
   SectionHeader,
@@ -205,6 +205,12 @@ export default function CheckoutScreen() {
     : 0;
   const payable = quote.data?.buyer_total_cents ?? Math.max(subtotal - discount, 0);
 
+  // One number to pay; this only says VAT is already in it.
+  const vatLabel = vatIncludedLabel(
+    event.data.organization?.is_vat_payer,
+    event.data.organization?.vat_rate_bps,
+  );
+
   return (
     <Screen scroll>
       <Text style={styles.eventTitle}>{event.data.title}</Text>
@@ -352,6 +358,12 @@ export default function CheckoutScreen() {
           <Text style={styles.total}>Spolu</Text>
           <Text style={styles.total}>{formatMoney(payable, currency)}</Text>
         </View>
+
+        {vatLabel && payable > 0 ? (
+          <View style={styles.summaryRow}>
+            <Caption>({vatLabel})</Caption>
+          </View>
+        ) : null}
 
         <Caption style={styles.feeNote}>
           {archiveFee > 0

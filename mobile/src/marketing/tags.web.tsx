@@ -68,6 +68,25 @@ declare global {
 let loaded: Tags | null = null;
 let injected = false;
 
+/**
+ * Reopening the consent bar from the footer.
+ *
+ * Consent that cannot be withdrawn as easily as it was given is not consent, so
+ * "Aktualizovať nastavenia cookies" has to bring the same bar back — including
+ * for somebody who already said no, and including when no tag is configured, in
+ * which case the bar says exactly that.
+ */
+const reopenListeners = new Set<() => void>();
+
+export function openCookieSettings(): void {
+  for (const listener of reopenListeners) listener();
+}
+
+export function onCookieSettingsOpen(listener: () => void): () => void {
+  reopenListeners.add(listener);
+  return () => { reopenListeners.delete(listener); };
+}
+
 export function hasConsent(): boolean {
   try {
     return globalThis.localStorage?.getItem(CONSENT_KEY) === 'yes';
@@ -212,6 +231,13 @@ export function track(event: TrackEvent, payload: TrackPayload = {}): void {
  */
 export function MarketingTags(): React.ReactElement | null {
   const [ask, setAsk] = useState(false);
+  /** True when the bar was opened from the footer rather than by a first visit. */
+  const [reopened, setReopened] = useState(false);
+
+  useEffect(() => onCookieSettingsOpen(() => {
+    setReopened(true);
+    setAsk(true);
+  }), []);
 
   useEffect(() => {
     if (!isConfigured.supabase) return;
@@ -240,11 +266,19 @@ export function MarketingTags(): React.ReactElement | null {
 
   if (!ask) return null;
 
+  const anythingConfigured = Boolean(
+    loaded?.meta_pixel_id || loaded?.google_ads_id || loaded?.google_analytics_id,
+  );
+
   return (
     <View style={styles.bar} accessibilityRole="alert">
       <Text style={styles.text}>
-        Meriame návštevnosť cez Metu a Google, aby sme vedeli, ktoré eventy ľudí naozaj zaujímajú.
-        Bez tvojho súhlasu sa nenačíta nič.
+        {anythingConfigured
+          ? 'Meriame návštevnosť cez Metu a Google, aby sme vedeli, ktoré eventy ľudí naozaj zaujímajú. Bez tvojho súhlasu sa nenačíta nič.'
+          : 'Meracie nástroje na tomto nasadení zapnuté nie sú, takže sa nenačítava nič. Nevyhnutné cookies — prihlásenie a košík — bežia vždy.'}
+        {reopened && consentAnswered()
+          ? ` Tvoja doterajšia odpoveď: ${hasConsent() ? 'súhlas' : 'odmietnutie'}.`
+          : ''}
       </Text>
 
       <View style={styles.actions}>

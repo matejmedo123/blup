@@ -28,7 +28,7 @@ import { getEventRating, getMyReview, reviewEvent } from '@/api/reviews';
 import { messageFor } from '@/lib/errors';
 import {
   estimateWalkingTime, formatCount, formatDistanceFromYou, formatEventDate,
-  formatEventDateLong, formatPrice,
+  formatEventDateLong, formatPrice, vatIncludedLabel,
 } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
 import { GradientCover } from '@/components/GradientCover';
@@ -358,6 +358,13 @@ export default function EventDetailScreen() {
   const isOwner = data.creator_id === profile?.id;
   const isFull = Boolean(data.capacity && data.attendee_count >= data.capacity);
   const hasTickets = data.ticket_types.length > 0;
+
+  // Buyers see one number — the full price. This only says VAT is already in it,
+  // and only for an organizer who is registered for it.
+  const vatLabel = vatIncludedLabel(
+    data.organization?.is_vat_payer,
+    data.organization?.vat_rate_bps,
+  );
   const isPast = new Date(data.start_at).getTime() < Date.now();
 
   const toggleCrew = async (crewId: string, joined: boolean) => {
@@ -545,9 +552,14 @@ export default function EventDetailScreen() {
                       {inCart(ticket.id) > 0 ? ` · ${inCart(ticket.id)} v košíku` : ''}
                     </Caption>
                   </View>
-                  <Text style={styles.ticketPrice}>
-                    {formatPrice(ticket.price_cents, ticket.currency)}
-                  </Text>
+                  <View style={styles.ticketPriceCell}>
+                    <Text style={styles.ticketPrice}>
+                      {formatPrice(ticket.price_cents, ticket.currency)}
+                    </Text>
+                    {vatLabel && ticket.price_cents > 0 ? (
+                      <Caption style={styles.ticketVat}>({vatLabel})</Caption>
+                    ) : null}
+                  </View>
                   {HAS_CART && !soldOut ? (
                     <Button
                       title="Pridať"
@@ -1127,7 +1139,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   ticketName: { ...typography.bodyStrong, color: colors.text },
+  ticketPriceCell: { alignItems: 'flex-end' },
   ticketPrice: { ...typography.subheading, color: colors.text },
+  ticketVat: { marginTop: 1 },
   soldOut: { color: colors.danger },
   ticketButton: { marginTop: spacing.lg },
 

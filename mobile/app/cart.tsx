@@ -7,10 +7,11 @@ import { useAuth } from '@/auth/AuthProvider';
 import {
   clearCart, getCart, removeFromCart, setCartQuantity, type CartLine,
 } from '@/api/cart';
+import { getEventVatInfo } from '@/api/events';
 import { payForCart } from '@/payments/checkout';
 import { track } from '@/marketing/tags';
 import { messageFor } from '@/lib/errors';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, vatIncludedLabel } from '@/lib/format';
 import { SignInInvite } from '@/components/SignInInvite';
 import { useLayout } from '@/hooks/useLayout';
 import {
@@ -159,6 +160,16 @@ export default function CartScreen() {
   const seconds = secondsLeft % 60;
   const urgent = secondsLeft > 0 && secondsLeft <= 120;
 
+  // Buyers pay one number. This only says VAT is already inside it, and only
+  // when the organizer behind this basket is registered for VAT.
+  const vat = useQuery({
+    queryKey: ['event', data?.event?.id, 'vat'],
+    queryFn: () => getEventVatInfo(data!.event!.id),
+    enabled: Boolean(data?.event?.id),
+    staleTime: 10 * 60_000,
+  });
+  const vatLabel = vatIncludedLabel(vat.data?.isVatPayer, vat.data?.rateBps);
+
   // On a desktop the basket is a two-column page: what you are buying on the
   // left, what it costs and the button on the right, where it stays in view
   // instead of sitting a scroll below the last ticket type.
@@ -180,6 +191,9 @@ export default function CartScreen() {
         ) : null}
         <Divider />
         <Row label="Spolu" value={formatMoney(data?.total_cents ?? 0, data?.currency)} strong />
+        {vatLabel ? (
+          <Row label={`(${vatLabel})`} value="" muted />
+        ) : null}
       </View>
 
       <Caption style={styles.note}>
@@ -351,11 +365,27 @@ function Step({
   );
 }
 
-function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Row({
+  label, value, strong, muted,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  /** A note under the total — "(s DPH 23 %)" — not a line of its own arithmetic. */
+  muted?: boolean;
+}) {
   return (
     <View style={styles.row}>
-      <Text style={[styles.rowLabel, strong && styles.rowLabelStrong]}>{label}</Text>
-      <Text style={[styles.rowValue, strong && styles.rowValueStrong]}>{value}</Text>
+      <Text
+        style={[styles.rowLabel, strong && styles.rowLabelStrong, muted && styles.rowMuted]}
+      >
+        {label}
+      </Text>
+      <Text
+        style={[styles.rowValue, strong && styles.rowValueStrong, muted && styles.rowMuted]}
+      >
+        {value}
+      </Text>
     </View>
   );
 }
@@ -364,6 +394,8 @@ const styles = StyleSheet.create({
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },
+
+  rowMuted: { color: colors.textTertiary, ...typography.caption },
 
   columns: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xxl },
   main: { flex: 1, minWidth: 0 },

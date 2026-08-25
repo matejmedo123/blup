@@ -22,6 +22,7 @@ const KINDS: Record<string, LegalKind> = {
   terms: 'terms',
   privacy: 'privacy',
   agreement: 'organizer_agreement',
+  cookies: 'cookies',
 };
 
 export default function LegalScreen() {

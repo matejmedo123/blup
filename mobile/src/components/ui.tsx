@@ -10,6 +10,7 @@ import { Image } from 'expo-image';
 import { avatarColorFor, colors, radius, spacing, typography, shadow } from '@/theme';
 import { initialsFor } from '@/lib/format';
 import { CONTENT_MAX, useLayout } from '@/hooks/useLayout';
+import { SiteFooter } from './SiteFooter';
 
 /** Screen shell: safe area + background, used by every route. */
 export function Screen({
@@ -19,6 +20,7 @@ export function Screen({
   style,
   contentStyle,
   refreshControl,
+  footer = true,
 }: {
   children: React.ReactNode;
   edges?: Edge[];
@@ -26,6 +28,12 @@ export function Screen({
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
   refreshControl?: ScrollViewProps['refreshControl'];
+  /**
+   * The site footer at the end of the page. On by default for scrollable web
+   * screens — it is a website down there — and off for anything that owns its
+   * own bottom edge, like the scanner or a full-screen map.
+   */
+  footer?: boolean;
 }) {
   const layout = useLayout();
 
@@ -53,6 +61,7 @@ export function Screen({
       refreshControl={refreshControl}
     >
       {children}
+      {footer && Platform.OS === 'web' ? <SiteFooter /> : null}
     </ScrollView>
   ) : (
     <View style={[styles.flex, column, contentStyle]}>{children}</View>

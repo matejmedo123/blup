@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-export type LegalKind = 'terms' | 'privacy' | 'organizer_agreement';
+export type LegalKind = 'terms' | 'privacy' | 'organizer_agreement' | 'cookies';
 
 export interface LegalDocument {
   id: string;

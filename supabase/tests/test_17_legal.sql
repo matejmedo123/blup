@@ -3,7 +3,7 @@
 -- ============================================================================
 -- What is actually being proved here:
 --
---   · the three documents ship published, so a fresh deployment can sell
+--   · the four documents ship published, so a fresh deployment can sell
 --   · published text cannot be edited — a new version is the only way to change
 --   · an acceptance points at one exact version
 --   · accepting twice keeps the first timestamp, not the latest
@@ -35,8 +35,16 @@ declare
 begin
   -- ---- shipped and published ----------------------------------------------
   select count(*) into n from public.legal_documents where published_at is not null;
-  assert n = 3, format('three documents should ship published, found %s', n);
-  raise notice 'PASS all three documents ship published';
+  assert n = 4, format('four documents should ship published, found %s', n);
+
+  -- The cookie policy is one of them: a public site that stores anything in a
+  -- browser has to say what and why, and it must be there before launch, not
+  -- after somebody asks.
+  assert exists (
+    select 1 from public.legal_documents
+     where kind = 'cookies' and locale = 'sk' and published_at is not null
+  ), 'the cookie policy ships published';
+  raise notice 'PASS all four documents ship published';
 
   v_doc := public.current_legal_document('organizer_agreement', 'sk');
   assert v_doc.id is not null, 'the live agreement resolves';

@@ -97,7 +97,15 @@ export async function searchEvents(params: SearchParams): Promise<EventFeedItem[
 
 export interface EventDetail extends BlupEvent {
   creator: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'> | null;
-  organization: { id: string; name: string; logo_url: string | null; verification_status: string } | null;
+  organization: {
+    id: string;
+    name: string;
+    logo_url: string | null;
+    verification_status: string;
+    /** Ticket prices are always gross; this only decides whether we say so. */
+    is_vat_payer: boolean;
+    vat_rate_bps: number;
+  } | null;
   gallery: { id: string; url: string }[];
   ticket_types: TicketType[];
   my_rsvp: AttendeeStatus | null;
@@ -121,7 +129,7 @@ export async function getEvent(ref: string): Promise<EventDetail> {
       .select(
         `*,
          creator:profiles!events_creator_id_fkey (id, username, display_name, avatar_url),
-         organization:organizations (id, name, logo_url, verification_status),
+         organization:organizations (id, name, logo_url, verification_status, is_vat_payer, vat_rate_bps),
          gallery:event_images (id, url, sort_order),
          ticket_types (*)`,
       )
@@ -186,6 +194,33 @@ export async function getEvent(ref: string): Promise<EventDetail> {
     my_rsvp: myRsvp,
     is_saved: isSaved,
     is_liked: isLiked,
+  };
+}
+
+/**
+ * Whether the organizer behind an event is registered for VAT, and at what rate.
+ *
+ * Only for the "s DPH 23 %" note next to a price — buyers are shown one number,
+ * the full one. The basket knows its event but not its organizer, and this is
+ * cheaper than widening the basket's SQL function for a label.
+ */
+export async function getEventVatInfo(
+  eventId: string,
+): Promise<{ isVatPayer: boolean; rateBps: number }> {
+  const { data, error } = await supabase
+    .from('events')
+    .select('organization:organizations (is_vat_payer, vat_rate_bps)')
+    .eq('id', eventId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const organization = (data as { organization?: { is_vat_payer?: boolean; vat_rate_bps?: number } } | null)
+    ?.organization;
+
+  return {
+    isVatPayer: Boolean(organization?.is_vat_payer),
+    rateBps: organization?.vat_rate_bps ?? 2300,
   };
 }
 

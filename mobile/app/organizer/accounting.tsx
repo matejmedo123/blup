@@ -8,7 +8,7 @@ import {
 } from '@/api/accounting';
 import { getMyOrganizations } from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, vatSplit } from '@/lib/format';
 import {
   Body, Button, Caption, Card, Divider, EmptyState, LoadingState, Mono, Notice, Screen,
   SectionHeader, Segmented,
@@ -121,6 +121,11 @@ export default function AccountingScreen() {
   const rows = summary.data ?? [];
   const sum = totals(rows);
 
+  // The VAT split of the period's takings. Computed on the total rather than by
+  // adding up per-ticket roundings: a cent of drift per ticket is what makes a
+  // report disagree with a tax return.
+  const vat = vatSplit(sum.net, organization.vat_rate_bps ?? 2300);
+
   return (
     <Screen scroll>
       {error ? <Notice tone="danger" title="Export sa nepodaril" body={error} /> : null}
@@ -171,6 +176,36 @@ export default function AccountingScreen() {
               <Line label="Vrátené" value={`− ${formatMoney(sum.refunded, sum.currency)}`} tone="danger" />
             ) : null}
           </Card>
+
+          {organization.is_vat_payer ? (
+            <>
+              <Card style={styles.vatCard}>
+                <SectionHeader title="DPH" />
+                <Line
+                  label="Brutto (tržba po zľavách)"
+                  value={formatMoney(sum.net, sum.currency)}
+                  strong
+                />
+                <Line
+                  label={`Základ dane (netto)`}
+                  value={formatMoney(vat.netCents, sum.currency)}
+                />
+                <Line
+                  label={`DPH ${(organization.vat_rate_bps / 100)
+                    .toFixed(organization.vat_rate_bps % 100 === 0 ? 0 : 2)} %`}
+                  value={formatMoney(vat.vatCents, sum.currency)}
+                  tone="warning"
+                />
+              </Card>
+
+              <Caption style={styles.feeNote}>
+                Ceny vstupeniek sú vždy s DPH — kupujúci vidí a platí plnú sumu. Rozpad je
+                len pre teba. Počíta sa z celej tržby za obdobie, nie sčítaním zaokrúhlení
+                po jednotlivých vstupenkách, takže sedí to, čo ide do priznania. Sadzbu
+                zmeníš v <Body style={styles.inlineLink}>Verejný profil a logo → DPH</Body>.
+              </Caption>
+            </>
+          ) : null}
 
           <Caption style={styles.feeNote}>
             Archívny poplatok platí kupujúci navyše k cene vstupenky, takže ti z tržby neuberá.
@@ -280,6 +315,8 @@ const styles = StyleSheet.create({
   lineValue: { ...typography.body },
   lineValueStrong: { ...typography.bodyStrong },
 
+  vatCard: { marginTop: spacing.lg },
+  inlineLink: { color: colors.accentText },
   feeNote: { marginTop: spacing.sm },
   exportNote: { marginBottom: spacing.md },
 

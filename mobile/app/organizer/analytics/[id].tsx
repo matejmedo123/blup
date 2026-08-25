@@ -3,11 +3,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
-import { getEventAnalytics, getEventOrders, getEventSalesSeries } from '@/api/organizations';
+import {
+  getEventAnalytics, getEventOrders, getEventSalesSeries, getMyOrganizations,
+} from '@/api/organizations';
 import { SalesChart } from '@/components/SalesChart';
 import { useLayout } from '@/hooks/useLayout';
 import { messageFor } from '@/lib/errors';
-import { formatMoney, formatRelative } from '@/lib/format';
+import { formatMoney, formatRelative, vatSplit } from '@/lib/format';
 import {
   Badge, Body, Caption, Divider, ErrorState, LoadingState, Screen, SectionHeader,
 } from '@/components/ui';
@@ -29,6 +31,13 @@ export default function EventAnalyticsScreen() {
     queryFn: () => getEventOrders(id!),
     enabled: Boolean(id),
   });
+
+  // Only to know whether this organizer is VAT-registered, and at what rate.
+  const organizations = useQuery({
+    queryKey: ['organizations', 'mine'],
+    queryFn: getMyOrganizations,
+  });
+  const organization = organizations.data?.[0];
 
   const [days, setDays] = useState(30);
 
@@ -119,6 +128,34 @@ export default function EventAnalyticsScreen() {
         <Divider />
         <MoneyRow label="Tvoj čistý príjem" value={formatMoney(data.organizer_net_cents, data.currency)} strong />
       </View>
+
+      {organization?.is_vat_payer ? (
+        <>
+          <SectionHeader title="DPH z tržby" />
+          <View style={styles.money}>
+            <MoneyRow
+              label="Základ dane (netto)"
+              value={formatMoney(
+                vatSplit(data.net_revenue_cents, organization.vat_rate_bps ?? 2300).netCents,
+                data.currency,
+              )}
+            />
+            <MoneyRow
+              label={`DPH ${((organization.vat_rate_bps ?? 2300) / 100).toFixed(
+                (organization.vat_rate_bps ?? 2300) % 100 === 0 ? 0 : 2,
+              )} %`}
+              value={formatMoney(
+                vatSplit(data.net_revenue_cents, organization.vat_rate_bps ?? 2300).vatCents,
+                data.currency,
+              )}
+            />
+          </View>
+          <Caption style={styles.conversion}>
+            Ceny vstupeniek sú s DPH — kupujúci vidí a platí plnú sumu. Toto je rozpad tej
+            istej tržby, len pre teba.
+          </Caption>
+        </>
+      ) : null}
 
       {data.archive_fee_cents > 0 ? (
         <Caption style={styles.conversion}>

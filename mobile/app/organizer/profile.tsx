@@ -178,7 +178,7 @@ export default function OrganizationProfileScreen() {
         label="Sme platiteľ DPH"
         value={isVatPayer}
         onValueChange={setIsVatPayer}
-        description="Ceny vstupeniek zadávaš vždy s DPH. Toto len ukazuje, koľko z ceny je základ a koľko daň."
+        description="Ceny vstupeniek zadávaš vždy s DPH a kupujúci vidí plnú sumu. Toto len pridá rozpad do tvojich štatistík a účtovníctva."
       />
       {isVatPayer ? (
         <>
@@ -192,7 +192,8 @@ export default function OrganizationProfileScreen() {
           />
           <Caption style={styles.legal}>
             {formatVatLine(1200, Math.round((Number(vatRate.replace(',', '.')) || 0) * 100))}
-            {' — takto to uvidíš pri cene vstupenky.'}
+            {' — takto sa tržba rozpadne v Účtovníctve a v štatistike eventu. '}
+            {'Na cenníku, v košíku ani na vstupenke sa nič nemení.'}
           </Caption>
         </>
       ) : null}

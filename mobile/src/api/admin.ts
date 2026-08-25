@@ -176,12 +176,24 @@ export interface PlatformSettings {
   settlement_days: number;
   default_currency: string;
   updated_at: string;
+  /** Who runs this deployment — shown in the site footer, empty until filled in. */
+  operator_name: string | null;
+  operator_address: string | null;
+  operator_city: string | null;
+  operator_country: string | null;
+  operator_reg_no: string | null;
+  operator_vat_no: string | null;
+  operator_email: string | null;
+  operator_phone: string | null;
+  operator_website: string | null;
 }
 
 export async function getPlatformSettings(): Promise<PlatformSettings> {
   const { data, error } = await supabase
     .from('platform_settings')
-    .select('platform_fee_bps, archive_fee_cents, archive_fee_payer, settlement_days, default_currency, updated_at')
+    .select(
+      'platform_fee_bps, archive_fee_cents, archive_fee_payer, settlement_days, default_currency, updated_at, operator_name, operator_address, operator_city, operator_country, operator_reg_no, operator_vat_no, operator_email, operator_phone, operator_website',
+    )
     .single();
 
   if (error) throw error;
@@ -194,7 +206,10 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
  */
 export async function updatePlatformSettings(
   patch: Partial<Pick<PlatformSettings,
-    'platform_fee_bps' | 'archive_fee_cents' | 'archive_fee_payer' | 'settlement_days'>>,
+    'platform_fee_bps' | 'archive_fee_cents' | 'archive_fee_payer' | 'settlement_days'
+    | 'operator_name' | 'operator_address' | 'operator_city' | 'operator_country'
+    | 'operator_reg_no' | 'operator_vat_no' | 'operator_email' | 'operator_phone'
+    | 'operator_website'>>,
 ): Promise<PlatformSettings> {
   const { data: userData } = await supabase.auth.getUser();
 
@@ -202,7 +217,9 @@ export async function updatePlatformSettings(
     .from('platform_settings')
     .update({ ...patch, updated_at: new Date().toISOString(), updated_by: userData?.user?.id ?? null })
     .eq('id', true)
-    .select('platform_fee_bps, archive_fee_cents, archive_fee_payer, settlement_days, default_currency, updated_at')
+    .select(
+      'platform_fee_bps, archive_fee_cents, archive_fee_payer, settlement_days, default_currency, updated_at, operator_name, operator_address, operator_city, operator_country, operator_reg_no, operator_vat_no, operator_email, operator_phone, operator_website',
+    )
     .single();
 
   if (error) throw error;

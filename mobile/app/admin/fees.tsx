@@ -29,6 +29,13 @@ export default function FeesScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // The operator's own identity, shown in the footer of every page on the web.
+  const [operator, setOperator] = useState({
+    name: '', address: '', city: '', country: '', regNo: '', vatNo: '', email: '', phone: '',
+    website: '',
+  });
+  const [savingOperator, setSavingOperator] = useState(false);
+
   const settings = useQuery({ queryKey: ['platform-settings'], queryFn: getPlatformSettings });
 
   useEffect(() => {
@@ -37,7 +44,52 @@ export default function FeesScreen() {
     setArchive((settings.data.archive_fee_cents / 100).toFixed(2));
     setPayer(settings.data.archive_fee_payer);
     setSettlement(String(settings.data.settlement_days));
+    setOperator({
+      name: settings.data.operator_name ?? '',
+      address: settings.data.operator_address ?? '',
+      city: settings.data.operator_city ?? '',
+      country: settings.data.operator_country ?? '',
+      regNo: settings.data.operator_reg_no ?? '',
+      vatNo: settings.data.operator_vat_no ?? '',
+      email: settings.data.operator_email ?? '',
+      phone: settings.data.operator_phone ?? '',
+      website: settings.data.operator_website ?? '',
+    });
   }, [settings.data]);
+
+  const saveOperator = async () => {
+    setError(null);
+    setNotice(null);
+
+    const email = operator.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('E-mail prevádzkovateľa nevyzerá ako e-mail.');
+      return;
+    }
+
+    setSavingOperator(true);
+    try {
+      const clean = (value: string) => value.trim() || null;
+      await updatePlatformSettings({
+        operator_name: clean(operator.name),
+        operator_address: clean(operator.address),
+        operator_city: clean(operator.city),
+        operator_country: clean(operator.country),
+        operator_reg_no: clean(operator.regNo),
+        operator_vat_no: clean(operator.vatNo),
+        operator_email: clean(email),
+        operator_phone: clean(operator.phone),
+        operator_website: clean(operator.website),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['platform-settings'] });
+      await queryClient.invalidateQueries({ queryKey: ['platform', 'operator'] });
+      setNotice('Údaje prevádzkovateľa sú v pätičke na každej stránke.');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setSavingOperator(false);
+    }
+  };
 
   const save = async () => {
     setError(null);
@@ -144,6 +196,70 @@ export default function FeesScreen() {
       </Card>
 
       <Button title="Uložiť sadzbu" loading={busy} onPress={() => void save()} />
+
+      <SectionHeader title="Prevádzkovateľ" />
+      <Caption style={styles.hint}>
+        Toto je v pätičke každej stránky na webe. Čo tu nevyplníš, sa nezobrazí — nič sa
+        nedopĺňa za teba. Bez obchodného mena, sídla a IČO nie je stránka v EÚ v poriadku.
+      </Caption>
+
+      <Input
+        label="Obchodné meno"
+        value={operator.name}
+        onChangeText={(v) => setOperator((o) => ({ ...o, name: v }))}
+        placeholder="Napr. Blup s. r. o."
+      />
+      <Input
+        label="Ulica a číslo"
+        value={operator.address}
+        onChangeText={(v) => setOperator((o) => ({ ...o, address: v }))}
+        placeholder="Mostná 13"
+      />
+      <Input
+        label="PSČ a mesto"
+        value={operator.city}
+        onChangeText={(v) => setOperator((o) => ({ ...o, city: v }))}
+        placeholder="949 01 Nitra"
+      />
+      <Input
+        label="Krajina"
+        value={operator.country}
+        onChangeText={(v) => setOperator((o) => ({ ...o, country: v }))}
+        placeholder="Slovensko"
+      />
+      <Input
+        label="IČO"
+        value={operator.regNo}
+        onChangeText={(v) => setOperator((o) => ({ ...o, regNo: v }))}
+        placeholder="12345678"
+      />
+      <Input
+        label="IČ DPH (ak si platiteľ)"
+        value={operator.vatNo}
+        onChangeText={(v) => setOperator((o) => ({ ...o, vatNo: v }))}
+        placeholder="SK1234567890"
+      />
+      <Input
+        label="Kontaktný e-mail"
+        value={operator.email}
+        onChangeText={(v) => setOperator((o) => ({ ...o, email: v }))}
+        placeholder="info@blup.sk"
+        autoCapitalize="none"
+        keyboardType="email-address"
+      />
+      <Input
+        label="Telefón (nepovinné)"
+        value={operator.phone}
+        onChangeText={(v) => setOperator((o) => ({ ...o, phone: v }))}
+        placeholder="+421 900 000 000"
+      />
+
+      <Button
+        title="Uložiť údaje prevádzkovateľa"
+        variant="secondary"
+        loading={savingOperator}
+        onPress={() => void saveOperator()}
+      />
       <Caption style={styles.footNote}>
         Zmena platí len dopredu. Každá objednávka si pamätá poplatky, ktoré na ňu naozaj sadli, takže
         staré výplaty ostávajú nedotknuté.

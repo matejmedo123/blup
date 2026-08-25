@@ -13,7 +13,7 @@ import { getMyCommunities } from '@/api/communities';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
 import { geocodeAddress, suggestAddresses, type GeocodeHit } from '@/maps/geocode';
 import { messageFor } from '@/lib/errors';
-import { eventHref, formatEventDateLong, formatVatLine } from '@/lib/format';
+import { eventHref, formatEventDateLong } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
 import { DateTimeField } from '@/components/DateTimeField';
 import {
@@ -154,16 +154,6 @@ export default function CreateEventScreen() {
   const verifiedOrgs = useMemo(
     () => (organizations ?? []).filter((org) => org.verification_status === 'verified'),
     [organizations],
-  );
-
-  /**
-   * VAT settings of the organization the event is being published under. A
-   * price typed here is gross; a VAT-registered organizer needs to see what of
-   * it is theirs and what is the state's.
-   */
-  const vatOrganization = useMemo(
-    () => (organizations ?? []).find((org) => org.id === organizationId) ?? null,
-    [organizations, organizationId],
   );
 
   /** An organization that exists but cannot sell yet — waiting, or turned down. */
@@ -759,14 +749,6 @@ export default function CreateEventScreen() {
                       error={fieldErrors[`ticket.${index}.price`]}
                       editable={!saving}
                     />
-                    {vatOrganization?.is_vat_payer && centsFrom(ticket.price) > 0 ? (
-                      <Caption style={styles.vatLine}>
-                        {formatVatLine(
-                          centsFrom(ticket.price),
-                          vatOrganization.vat_rate_bps ?? 2300,
-                        )}
-                      </Caption>
-                    ) : null}
                   </View>
                   <View style={styles.ticketCell}>
                     <Input
@@ -874,7 +856,6 @@ const styles = StyleSheet.create({
   coverSize: { marginTop: spacing.xs, textAlign: 'center', alignSelf: 'center' },
   fieldLabel: { marginTop: spacing.md, marginBottom: spacing.xs },
   ticketHint: { marginTop: spacing.xs, marginBottom: spacing.md },
-  vatLine: { marginTop: spacing.xs, marginBottom: spacing.sm },
 
   // A dashed outline reads as "there is room for another one here", which a
   // solid button does not — it would compete with "Zverejniť event".

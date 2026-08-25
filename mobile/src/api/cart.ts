@@ -63,7 +63,7 @@ const EMPTY: Cart = {
   currency: 'EUR',
   expires_at: null,
   seconds_left: 0,
-  limits: { max_tickets_per_order: 20, hold_minutes: 15 },
+  limits: { max_tickets_per_order: 10, hold_minutes: 15 },
 };
 
 function normalise(data: unknown): Cart {

@@ -188,6 +188,23 @@ export function vatSplit(grossCents: number, rateBps: number): VatSplit {
   return { grossCents: gross, netCents: gross - vat, vatCents: vat, rateBps: rate };
 }
 
+/**
+ * "s DPH 23 %" — what a buyer is told next to a price.
+ *
+ * Buyers see one number: the full amount. This only says that VAT is already
+ * inside it, and only appears for an organizer who is registered for VAT.
+ * Returns null when there is nothing true to say.
+ */
+export function vatIncludedLabel(
+  isVatPayer: boolean | null | undefined,
+  rateBps: number | null | undefined,
+): string | null {
+  if (!isVatPayer) return null;
+  const rate = Math.max(0, Math.round(rateBps ?? 0));
+  if (rate === 0) return null;
+  return `s DPH ${(rate / 100).toFixed(rate % 100 === 0 ? 0 : 1)} %`;
+}
+
 /** "Brutto 12,00 € · netto 9,76 € · DPH 23 % 2,24 €" */
 export function formatVatLine(grossCents: number, rateBps: number, currency = 'EUR'): string {
   const split = vatSplit(grossCents, rateBps);
