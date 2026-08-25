@@ -226,7 +226,6 @@ export default function PlanEditorScreen() {
       <Button
         title={event.data?.venue_map_id ? 'Vymeniť obrázok plánu' : 'Nahrať obrázok plánu'}
         variant="secondary"
-        full
         onPress={choosePlan}
         loading={busy}
       />

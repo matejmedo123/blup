@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -66,6 +66,7 @@ const cheapestCents = (tickets: TicketDraft[]): number => {
 export default function CreateEventScreen() {
   const { profile } = useAuth();
   const location = useLocation();
+  const queryClient = useQueryClient();
 
   const [draftId] = useState(() => Crypto.randomUUID());
   const [title, setTitle] = useState('');
@@ -440,6 +441,13 @@ export default function CreateEventScreen() {
       setCapacity('');
       setTicketTypes([blankTicket()]);
       setFieldErrors({});
+
+      // The feed holds its list for a while; without this the organizer lands
+      // back on a home screen that does not contain the event they just
+      // published, which reads as the publish having failed.
+      await queryClient.invalidateQueries({ queryKey: ['events'] });
+      await queryClient.invalidateQueries({ queryKey: ['ai'] });
+      await queryClient.invalidateQueries({ queryKey: ['feed'] });
 
       router.push(eventHref(event));
     } catch (caught) {

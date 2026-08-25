@@ -791,6 +791,8 @@ export default function EventDetailScreen() {
                 onChangeText={setCrewName}
                 placeholder="Napr. Ideme vlakom o 18:00"
                 maxLength={60}
+                returnKeyType="done"
+                onSubmitEditing={() => { if (crewName.trim()) void startCrew(); }}
                 style={styles.crewInput}
               />
               <Button

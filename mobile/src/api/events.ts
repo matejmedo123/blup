@@ -387,8 +387,17 @@ export async function cancelEvent(eventId: string): Promise<void> {
 }
 
 export async function deleteEvent(eventId: string): Promise<void> {
-  const { error } = await supabase.from('events').delete().eq('id', eventId);
+  // `.select()` matters: under RLS a delete the policy refuses is not an error,
+  // it is a delete of zero rows. Without reading back what went, "Zmazať
+  // natrvalo" would report success over an event that is still there.
+  const { data, error } = await supabase
+    .from('events')
+    .delete()
+    .eq('id', eventId)
+    .select('id');
+
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error('NOT_AUTHORIZED');
 }
 
 // --- RSVP / save / like -----------------------------------------------------

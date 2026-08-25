@@ -215,6 +215,8 @@ export default function PayoutsScreen() {
         placeholder="0.00"
         keyboardType="decimal-pad"
         editable={organization.payouts_enabled}
+        returnKeyType="done"
+        onSubmitEditing={() => { if (organization.payouts_enabled) void withdraw(); }}
         hint={
           organization.payouts_enabled
             ? 'Pôjde na bankový účet, ktorý si pripojil pri onboardingu.'

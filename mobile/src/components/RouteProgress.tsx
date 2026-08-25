@@ -16,11 +16,17 @@ import { colors } from '@/theme';
  * Deliberately not tied to any request. A bar that waits for the network stalls
  * visibly when one query is slow, and this is about the transition, not about
  * the loading — the skeletons already speak for that.
+ *
+ * Under the bar, a single soft blue pulse washes over the screen. It is what
+ * makes a change of page feel like one movement instead of one slide replacing
+ * another, and it is faint on purpose: 12% of the accent for a third of a
+ * second, and nothing at all for anyone who has asked for reduced motion.
  */
 export function RouteProgress() {
   const pathname = usePathname();
   const progress = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const wash = useRef(new Animated.Value(0)).current;
   const first = useRef(true);
 
   useEffect(() => {
@@ -34,6 +40,16 @@ export function RouteProgress() {
 
       progress.setValue(0);
       opacity.setValue(1);
+      wash.setValue(0);
+
+      Animated.sequence([
+        Animated.timing(wash, {
+          toValue: 1, duration: 140, easing: Easing.out(Easing.quad), useNativeDriver: true,
+        }),
+        Animated.timing(wash, {
+          toValue: 0, duration: 260, easing: Easing.in(Easing.quad), useNativeDriver: true,
+        }),
+      ]).start();
 
       Animated.sequence([
         // Quick to most of the way, then the last stretch slower — the shape
@@ -51,23 +67,35 @@ export function RouteProgress() {
     }).catch(() => {});
 
     return () => { cancelled = true; };
-  }, [pathname, progress, opacity]);
+  }, [pathname, progress, opacity, wash]);
 
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.bar,
-        {
-          opacity,
-          width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-        },
-      ]}
-    />
+    <>
+      <Animated.View pointerEvents="none" style={[styles.wash, { opacity: wash }]} />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.bar,
+          {
+            opacity,
+            width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+          },
+        ]}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  wash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.accentSoft,
+    zIndex: 9998,
+  },
   bar: {
     position: 'absolute',
     top: 0,

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { cancelEvent, deleteEvent, getEvent, updateEvent } from '@/api/events';
@@ -42,6 +42,7 @@ const CATEGORIES = [
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile, isAdmin } = useAuth();
+  const queryClient = useQueryClient();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -318,6 +319,8 @@ export default function EditEventScreen() {
             async () => {
               try {
                 await cancelEvent(id!);
+                await queryClient.invalidateQueries({ queryKey: ['event', id] });
+                await queryClient.invalidateQueries({ queryKey: ['events'] });
                 router.replace(`/event/${id}`);
               } catch (caught) {
                 setError(messageFor(caught));
@@ -338,6 +341,12 @@ export default function EditEventScreen() {
             async () => {
               try {
                 await deleteEvent(id!);
+                // Drop it from every cache before leaving, or the feed keeps
+                // showing the event for as long as its data stays fresh — which
+                // reads as "delete did nothing".
+                queryClient.removeQueries({ queryKey: ['event', id] });
+                await queryClient.invalidateQueries({ queryKey: ['events'] });
+                await queryClient.invalidateQueries({ queryKey: ['ai'] });
                 router.replace('/');
               } catch (caught) {
                 setError(messageFor(caught));

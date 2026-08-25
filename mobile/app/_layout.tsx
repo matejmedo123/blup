@@ -16,6 +16,7 @@ import { ToastProvider } from '@/components/Toast';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { AuthGateProvider } from '@/auth/useRequireAuth';
 import { AppFrame } from '@/components/AppFrame';
+import { CartFab } from '@/components/CartFab';
 import { RouteProgress } from '@/components/RouteProgress';
 import { StartupGate } from '@/components/StartupGate';
 import { MarketingTags } from '@/marketing/tags';
@@ -179,6 +180,9 @@ export default function RootLayout() {
                 <RouteProgress />
                 <StartupGate>
                   <AppFrame>{content}</AppFrame>
+                  {/* Floats over every screen so a basket with a ticket in it
+                      cannot go unnoticed until the reservation expires. */}
+                  <CartFab />
                 </StartupGate>
               </AuthGateProvider>
               {/* Ad platform tags, and the consent bar they wait behind.

@@ -150,6 +150,8 @@ export default function OrganizationProfileScreen() {
         onChangeText={setName}
         placeholder="Event Bros"
         editable={!busy}
+        returnKeyType="done"
+        onSubmitEditing={() => void save()}
         hint="Pod týmto menom ťa uvidia návštevníci. Nemusí to byť tvoje meno."
       />
 

@@ -58,7 +58,17 @@ export function Skeleton({
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={[
-        { width: width ?? '100%', height, borderRadius: r, backgroundColor: colors.surfaceElevated, opacity: pulse },
+        {
+          width: width ?? '100%',
+          height,
+          borderRadius: r,
+          // Blue, not grey: the pulse should read as the app's own colour
+          // arriving, the same blue the transition bar uses.
+          backgroundColor: colors.accentSoft,
+          borderWidth: 1,
+          borderColor: colors.accentBorder,
+          opacity: pulse,
+        },
         style,
       ]}
     />

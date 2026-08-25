@@ -268,6 +268,8 @@ export default function CartScreen() {
             onChangeText={setPromoInput}
             placeholder="napr. EARLY20"
             autoCapitalize="characters"
+            returnKeyType="done"
+            onSubmitEditing={() => setPromo(promoInput.trim() || null)}
           />
         </View>
         <Button
