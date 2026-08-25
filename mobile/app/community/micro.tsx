@@ -10,11 +10,14 @@ import { Body, ErrorState, LoadingState, Screen, SectionHeader } from '@/compone
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
- * Micro-eventy.
+ * What the communities you belong to are putting on.
  *
- * Small events hosted inside a community — workshops, meetups — collected from
- * every community you belong to. Hosting one requires membership, which the
- * database enforces, so this list is exactly what your groups are doing.
+ * These are ordinary events that name a community as their host, gathered from
+ * every community you are in. "Micro-event" was the word for them and it is
+ * gone from the screen: it named nothing a person recognises, and worse, it
+ * suggested they were somehow smaller or private, which they are not — a
+ * community event with public visibility is visible to everyone, exactly like
+ * any other. The community is who is putting it on, not who may see it.
  */
 export default function MicroEventsScreen() {
   const communities = useQuery({ queryKey: ['communities', 'mine'], queryFn: getMyCommunities });
@@ -37,7 +40,7 @@ export default function MicroEventsScreen() {
   });
 
   if (communities.isLoading || events.isLoading) {
-    return <Screen><LoadingState label="Načítavam micro-eventy…" /></Screen>;
+    return <Screen><LoadingState label="Pozerám, čo tvoje komunity chystajú…" /></Screen>;
   }
 
   if (events.isError) {
@@ -54,8 +57,8 @@ export default function MicroEventsScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Najprv sa pridaj do komunity</Text>
           <Body muted>
-            Micro-eventy sú malé akcie vnútri komunít — workshop, meetup, spoločný tréning.
-            Uvidíš tie z komunít, ktorých si členom.
+            Komunity tu organizujú vlastné akcie — workshop, meetup, spoločný tréning.
+            Keď sa do niektorej pridáš, uvidíš tu všetko, čo chystá.
           </Body>
           <Pressable style={styles.cta} onPress={() => router.push('/community')}>
             <Text style={styles.ctaLabel}>Prejsť na komunity</Text>
@@ -76,10 +79,10 @@ export default function MicroEventsScreen() {
         onRefresh={() => void events.refetch()}
         ListHeaderComponent={
           <View>
-            <Text style={styles.title}>Micro-eventy</Text>
+            <Text style={styles.title}>Čo chystajú tvoje komunity</Text>
             <Body muted style={styles.intro}>
-              Malé akcie z komunít, ktorých si členom. Založiť micro-event môžeš priamo
-              v komunite.
+              Akcie od komunít, v ktorých si. Keď vytváraš event, môžeš ako organizátora
+              uviesť ktorúkoľvek z nich — objaví sa potom aj tu.
             </Body>
           </View>
         }
@@ -96,12 +99,13 @@ export default function MicroEventsScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>Zatiaľ žiadne micro-eventy</Text>
+            <Text style={styles.emptyTitle}>Zatiaľ nič nechystajú</Text>
             <Body muted>
-              Tvoje komunity zatiaľ nič nechystajú. Založ prvý — stačí byť členom.
+              Tvoje komunity zatiaľ nemajú naplánovanú žiadnu akciu. Prvú môžeš
+              zorganizovať ty — stačí byť členom.
             </Body>
             <Pressable style={styles.cta} onPress={() => router.push('/organizer/create')}>
-              <Text style={styles.ctaLabel}>Vytvoriť micro-event</Text>
+              <Text style={styles.ctaLabel}>Zorganizovať akciu</Text>
             </Pressable>
           </View>
         }

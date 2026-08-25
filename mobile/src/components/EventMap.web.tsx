@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { colors, emojiFor, radius, spacing, typography } from '@/theme';
+import { categoryFamilies, colors, emojiFor, familyFor, radius, spacing, typography } from '@/theme';
 import type { Coordinates, EventFeedItem } from '@/types/models';
 
 /**
@@ -188,6 +188,32 @@ export function EventMap({
     top: (latToY(lat, zoom) - latToY(centre.latitude, zoom)) * TILE_SIZE + size.height / 2,
   }), [centre, zoom, size.width, size.height]);
 
+  /**
+   * Pins closer together than a pin is wide merge into one.
+   *
+   * Without this, three events on the same street drew three overlapping
+   * bubbles: you could not tell how many there were, and the top one was the
+   * only one you could tap. Bucketed by screen position rather than by
+   * coordinates, so a cluster splits naturally as you zoom in.
+   */
+  const clusters = useMemo(() => {
+    const CELL = 46;
+    const buckets = new Map<string, { key: string; position: { left: number; top: number }; events: EventFeedItem[] }>();
+
+    for (const event of events) {
+      const position = project(event.latitude, event.longitude);
+      const key = `${Math.round(position.left / CELL)}:${Math.round(position.top / CELL)}`;
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.events.push(event);
+      } else {
+        buckets.set(key, { key, position, events: [event] });
+      }
+    }
+
+    return [...buckets.values()];
+  }, [events, project]);
+
   return (
     <View style={[styles.container, style]}>
       <div
@@ -241,33 +267,51 @@ export function EventMap({
           />
         ) : null}
 
-        {events.map((event) => {
-          const position = project(event.latitude, event.longitude);
-          const active = selectedId === event.id;
+        {clusters.map((cluster) => {
+          const { left, top } = cluster.position;
+          const lead = cluster.events[0];
+          const active = cluster.events.some((e) => e.id === selectedId);
+          const grouped = cluster.events.length > 1;
+          const tint = categoryFamilies[familyFor(lead.category)].color;
+
           return (
             <button
-              key={event.id}
+              key={cluster.key}
               type="button"
-              onClick={(e) => { e.stopPropagation(); onSelect?.(event); }}
-              title={event.title}
+              onClick={(e) => {
+                e.stopPropagation();
+                // A cluster hands over its first event; tapping again walks the
+                // rest, which beats zooming in to separate two pins on one street.
+                const index = cluster.events.findIndex((ev) => ev.id === selectedId);
+                onSelect?.(cluster.events[(index + 1) % cluster.events.length]);
+              }}
+              title={grouped
+                ? cluster.events.map((ev) => ev.title).join('\n')
+                : lead.title}
               style={{
                 position: 'absolute',
-                left: position.left, top: position.top,
+                left, top,
                 transform: 'translate(-50%, -100%)',
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: active ? '6px 10px' : '5px 8px',
                 borderRadius: 999,
-                border: `1px solid ${active ? colors.accent : colors.border}`,
-                background: active ? colors.accent : colors.surface,
+                // The family colour rather than one grey for everything: a
+                // glance at the map should separate a music night from a run
+                // before any label is read.
+                border: `1px solid ${active ? tint : colors.border}`,
+                background: active ? tint : colors.surface,
                 color: active ? '#fff' : colors.text,
                 font: '700 12px/1 system-ui, sans-serif',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                boxShadow: '0 4px 14px rgba(0,0,0,.5)',
+                boxShadow: `0 4px 14px rgba(0,0,0,.5)${active ? '' : `, inset 0 0 0 2px ${tint}22`}`,
               }}
             >
-              <span aria-hidden>{emojiFor(event.category)}</span>
-              {active ? <span>{event.title}</span> : null}
+              <span aria-hidden>{emojiFor(lead.category)}</span>
+              {grouped ? (
+                <span style={{ color: active ? '#fff' : tint }}>{cluster.events.length}</span>
+              ) : null}
+              {active && !grouped ? <span>{lead.title}</span> : null}
             </button>
           );
         })}

@@ -227,9 +227,12 @@ export default function CommunityScreen() {
             end={{ x: 1, y: 0.6 }}
             style={styles.banner}
           >
-            <Text style={styles.bannerTitle}>Micro-eventy</Text>
+            <Text style={styles.bannerTitle}>Čo chystajú tvoje komunity</Text>
+            {/* The old copy promised "do 20 ľudí, bez vstupenky". Nothing
+                anywhere enforces either — a community event is an ordinary
+                event whose host happens to be a community. */}
             <Text style={styles.bannerBody}>
-              Malé workshopy a meetupy vnútri komunít — do 20 ľudí, bez vstupenky.
+              Workshopy, meetupy a tréningy od komunít, v ktorých si.
             </Text>
             <Text style={styles.bannerCta}>Pozrieť →</Text>
           </LinearGradient>

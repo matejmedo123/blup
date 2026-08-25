@@ -494,7 +494,7 @@ export default function EventDetailScreen() {
             <View style={styles.chatIcon}><Text style={styles.chatGlyph}>✉</Text></View>
             <View style={styles.flex}>
               <Text style={styles.hostName}>Chat eventu</Text>
-              <Caption>Dohodni sa s ostatnými, kto čo nesie a o koľkej vyrážate.</Caption>
+              <Caption>Dohodni sa, s kým prídeš, opýtaj sa na parkovanie a nezmeškaj, čo píše organizátor.</Caption>
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>

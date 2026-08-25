@@ -535,9 +535,10 @@ export default function CreateEventScreen() {
       {/* --- micro-event ----------------------------------------------------- */}
       {(communitiesQuery.data ?? []).length > 0 ? (
         <>
-          <SectionHeader title="Hostí to komunita?" />
+          <SectionHeader title="Robí to niektorá z tvojich komunít?" />
           <Caption style={styles.orgHint}>
-            Micro-event sa zobrazí členom komunity a v sekcii Micro-eventy.
+            Ak áno, komunita sa uvedie ako organizátor a event pribudne aj do jej
+            zoznamu. Viditeľnosť sa tým nemení — verejný event vidia všetci tak či tak.
           </Caption>
           <View style={styles.chips}>
             <Chip
