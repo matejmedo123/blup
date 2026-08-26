@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native';
 
 import { categoryFamilies, colors, emojiFor, familyFor, radius, spacing, typography } from '@/theme';
+import { env } from '@/lib/env';
 import type { Coordinates, EventFeedItem } from '@/types/models';
 
 /**
@@ -14,17 +15,43 @@ import type { Coordinates, EventFeedItem } from '@/types/models';
  * a stylesheet Metro cannot import and a bundle several times the size of this
  * file.
  *
- * Tiles come from CARTO's dark basemap, which is free at small volume and
- * matches the app instead of fighting it. Attribution is rendered because it is
- * a condition of use, not decoration — see WEB.md for what to switch to when
- * the traffic outgrows a courtesy tier.
+ * Tiles come from Esri's dark grey canvas, in two layers — the ground, and the
+ * place names over it. It needs no key and no account, which is the point: the
+ * map has to work on a fresh clone and on the first deploy.
+ *
+ * It used to be CARTO's dark basemap. CARTO now stamps "API KEY REQUIRED"
+ * diagonally across every tile unless a key is in the URL, and a watermark is
+ * not something a map can "mostly" have. Anyone with a key (CARTO's or another
+ * provider's) points EXPO_PUBLIC_MAP_TILES_URL at it and this steps aside.
+ *
+ * Attribution is rendered because it is a condition of use, not decoration.
  */
 
 const TILE_SIZE = 256;
 const MIN_ZOOM = 3;
 const MAX_ZOOM = 18;
-const TILE_URL = (x: number, y: number, z: number) =>
-  `https://basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`;
+/** Esri's Dark Gray Canvas: ground and labels are separate layers. */
+const DEFAULT_TILES =
+  'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+const DEFAULT_LABELS =
+  'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
+const DEFAULT_ATTRIBUTION = 'Esri · OpenStreetMap';
+
+const TILES_TEMPLATE = env.mapTilesUrl || DEFAULT_TILES;
+// A configured basemap carries its own labels; only the built-in default has
+// them as a second layer.
+const LABELS_TEMPLATE = env.mapTilesUrl ? env.mapLabelsUrl : DEFAULT_LABELS;
+const ATTRIBUTION = env.mapAttribution || (env.mapTilesUrl ? '' : DEFAULT_ATTRIBUTION);
+
+const fillTemplate = (template: string, x: number, y: number, z: number) =>
+  template
+    .replace('{z}', String(z))
+    .replace('{x}', String(x))
+    .replace('{y}', String(y));
+
+const TILE_URL = (x: number, y: number, z: number) => fillTemplate(TILES_TEMPLATE, x, y, z);
+const LABEL_URL = (x: number, y: number, z: number) =>
+  (LABELS_TEMPLATE ? fillTemplate(LABELS_TEMPLATE, x, y, z) : null);
 
 // --- Web Mercator ------------------------------------------------------------
 const lonToX = (lon: number, z: number) => ((lon + 180) / 360) * Math.pow(2, z);
@@ -192,7 +219,13 @@ export function EventMap({
     const halfW = size.width / 2 / TILE_SIZE;
     const halfH = size.height / 2 / TILE_SIZE;
 
-    const out: { key: string; url: string; left: number; top: number }[] = [];
+    const out: {
+      key: string;
+      url: string;
+      labels: string | null;
+      left: number;
+      top: number;
+    }[] = [];
     for (let x = Math.floor(centreX - halfW); x <= Math.ceil(centreX + halfW); x++) {
       for (let y = Math.floor(centreY - halfH); y <= Math.ceil(centreY + halfH); y++) {
         if (y < 0 || y >= scale) continue;               // no tiles past the poles
@@ -200,6 +233,7 @@ export function EventMap({
         out.push({
           key: `${zoom}/${x}/${y}`,
           url: TILE_URL(wrappedX, y, zoom),
+          labels: LABEL_URL(wrappedX, y, zoom),
           left: (x - centreX) * TILE_SIZE + size.width / 2,
           top: (y - centreY) * TILE_SIZE + size.height / 2,
         });
@@ -261,21 +295,39 @@ export function EventMap({
         }}
       >
         {tiles.map((tile) => (
-          <img
-            key={tile.key}
-            src={tile.url}
-            alt=""
-            draggable={false}
-            style={{
-              position: 'absolute',
-              left: tile.left,
-              top: tile.top,
-              width: TILE_SIZE,
-              height: TILE_SIZE,
-              userSelect: 'none',
-              pointerEvents: 'none',
-            }}
-          />
+          <React.Fragment key={tile.key}>
+            <img
+              src={tile.url}
+              alt=""
+              draggable={false}
+              style={{
+                position: 'absolute',
+                left: tile.left,
+                top: tile.top,
+                width: TILE_SIZE,
+                height: TILE_SIZE,
+                userSelect: 'none',
+                pointerEvents: 'none',
+              }}
+            />
+            {/* Place names, when the basemap keeps them in their own layer. */}
+            {tile.labels ? (
+              <img
+                src={tile.labels}
+                alt=""
+                draggable={false}
+                style={{
+                  position: 'absolute',
+                  left: tile.left,
+                  top: tile.top,
+                  width: TILE_SIZE,
+                  height: TILE_SIZE,
+                  userSelect: 'none',
+                  pointerEvents: 'none',
+                }}
+              />
+            ) : null}
+          </React.Fragment>
         ))}
 
         {userLocation ? (
@@ -348,22 +400,25 @@ export function EventMap({
         })}
 
         {/* Required by the tile provider's terms — not decoration. */}
-        <div
-          style={{
-            position: 'absolute', right: 6, bottom: 4,
-            font: '400 10px/1.4 system-ui, sans-serif',
-            color: colors.textQuaternary,
-            background: 'rgba(6,8,11,.55)',
-            padding: '2px 6px', borderRadius: 6,
-            pointerEvents: 'auto',
-          }}
-        >
-          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
-               style={{ color: colors.textTertiary }}>OpenStreetMap</a>
-          {' · '}
-          <a href="https://carto.com/attributions" target="_blank" rel="noreferrer"
-             style={{ color: colors.textTertiary }}>CARTO</a>
-        </div>
+        {ATTRIBUTION ? (
+          <div
+            style={{
+              position: 'absolute', right: 6, bottom: 4,
+              font: '400 10px/1.4 system-ui, sans-serif',
+              color: colors.textQuaternary,
+              background: 'rgba(6,8,11,.55)',
+              padding: '2px 6px', borderRadius: 6,
+              pointerEvents: 'auto',
+            }}
+          >
+            {/* The text is whatever the provider requires; the link is to the
+                data everyone underneath is ultimately using. */}
+            © <span style={{ color: colors.textTertiary }}>{ATTRIBUTION}</span>
+            {' · '}
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
+               style={{ color: colors.textTertiary }}>licencia</a>
+          </div>
+        ) : null}
       </div>
     </View>
   );

@@ -31,6 +31,24 @@ export const env = {
    *  push service and cannot be used to send anything. */
   vapidPublicKey: process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY ?? '',
 
+  /**
+   * Where the web map gets its tiles.
+   *
+   * Templates with `{z}`, `{x}` and `{y}`. Left empty, the map uses a keyless
+   * dark basemap that works out of the box. Set these to use a provider you
+   * have an account with — e.g. CARTO, whose dark basemap now stamps
+   * "API KEY REQUIRED" across every tile unless the key is in the URL:
+   *
+   *   EXPO_PUBLIC_MAP_TILES_URL=https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key=YOUR_KEY
+   *   EXPO_PUBLIC_MAP_ATTRIBUTION=© OpenStreetMap · CARTO
+   *
+   * A full basemap already has its labels, so `MAP_LABELS_URL` stays empty for
+   * those; it exists for providers that ship labels as a separate overlay.
+   */
+  mapTilesUrl: process.env.EXPO_PUBLIC_MAP_TILES_URL ?? '',
+  mapLabelsUrl: process.env.EXPO_PUBLIC_MAP_LABELS_URL ?? '',
+  mapAttribution: process.env.EXPO_PUBLIC_MAP_ATTRIBUTION ?? '',
+
   supabaseUrl: extra.supabaseUrl ?? '',
   supabaseAnonKey: extra.supabaseAnonKey ?? '',
   stripePublishableKey: extra.stripePublishableKey ?? '',

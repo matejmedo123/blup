@@ -153,11 +153,24 @@ pan and wheel to zoom. About two hundred lines and no dependency — which
 matters more than it sounds, because Leaflet and Mapbox GL each want a
 stylesheet Metro cannot import and a bundle several times the size.
 
-Tiles come from CARTO's dark basemap over OpenStreetMap data. **Attribution is
-rendered on the map because it is a condition of use.** Both are courtesy tiers:
-fine for a launch, not for scale. When traffic outgrows them, change
-`TILE_URL` in that one file to a paid provider (MapTiler, Stadia, Mapbox) — the
-rest of the component does not care where a tile came from.
+Tiles come from Esri's dark grey canvas, in two layers: the ground, and the
+place names over it. It needs no key and no account, so the map works on a
+fresh clone and on the first deploy. **Attribution is rendered on the map
+because it is a condition of use.**
+
+It used to be CARTO. CARTO now stamps `API KEY REQUIRED` diagonally across
+every tile unless a key is in the URL — a map cannot "mostly" have a watermark,
+so the default moved. To use CARTO (or MapTiler, Stadia, Mapbox) point the
+build at it, no code change:
+
+```bash
+EXPO_PUBLIC_MAP_TILES_URL=https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key=YOUR_KEY
+EXPO_PUBLIC_MAP_ATTRIBUTION=OpenStreetMap · CARTO
+```
+
+`EXPO_PUBLIC_MAP_LABELS_URL` is only for basemaps that ship place names as a
+separate overlay; a complete basemap already has them, and setting the tiles
+URL turns the built-in labels layer off.
 
 ### Push notifications
 
