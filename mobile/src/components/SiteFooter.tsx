@@ -69,7 +69,10 @@ export function SiteFooter() {
         <View style={styles.column}>
           <Text style={styles.heading}>Váš účet</Text>
           <FooterLink label="Môj profil" onPress={() => router.push('/profile')} />
-          <FooterLink label="Moje vstupenky" onPress={() => router.push('/settings/attending')} />
+          {/* /settings/attending is "Idem na" — the events you said yes to.
+              The tickets you actually bought live somewhere else. */}
+          <FooterLink label="Moje vstupenky" onPress={() => router.push('/tickets')} />
+          <FooterLink label="Idem na" onPress={() => router.push('/settings/attending')} />
           <FooterLink label="Aktualizovať nastavenia cookies" onPress={openCookieSettings} />
         </View>
 

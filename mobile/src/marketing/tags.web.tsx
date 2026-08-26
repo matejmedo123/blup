@@ -239,6 +239,16 @@ export function MarketingTags(): React.ReactElement | null {
     setAsk(true);
   }), []);
 
+  // Asked once, on the first visit, whatever is configured.
+  //
+  // It used to wait for a pixel to exist, which meant a deployment with no
+  // analytics never asked at all — and the moment one was switched on, people
+  // who had been using the site for weeks got a bar out of nowhere. Asking up
+  // front is one decision, made once, before anything can load.
+  useEffect(() => {
+    if (!consentAnswered()) setAsk(true);
+  }, []);
+
   useEffect(() => {
     if (!isConfigured.supabase) return;
     let active = true;
@@ -253,12 +263,9 @@ export function MarketingTags(): React.ReactElement | null {
       const anything = tags.meta_pixel_id || tags.google_ads_id || tags.google_analytics_id;
       if (!anything) return;
 
-      if (!tags.consent_required || hasConsent()) {
-        inject(tags);
-        return;
-      }
-
-      if (!consentAnswered()) setAsk(true);
+      // Nothing loads before the answer — and once it is a yes, it loads
+      // without asking again.
+      if (!tags.consent_required || hasConsent()) inject(tags);
     })();
 
     return () => { active = false; };
@@ -266,16 +273,14 @@ export function MarketingTags(): React.ReactElement | null {
 
   if (!ask) return null;
 
-  const anythingConfigured = Boolean(
-    loaded?.meta_pixel_id || loaded?.google_ads_id || loaded?.google_analytics_id,
-  );
-
+  // One sentence that is true either way. The bar appears before we know what
+  // the deployment has configured, so text that promises a Meta pixel — or
+  // swears there isn't one — would sometimes be a lie for the first second.
   return (
     <View style={styles.bar} accessibilityRole="alert">
       <Text style={styles.text}>
-        {anythingConfigured
-          ? 'Meriame návštevnosť cez Metu a Google, aby sme vedeli, ktoré eventy ľudí naozaj zaujímajú. Bez tvojho súhlasu sa nenačíta nič.'
-          : 'Meracie nástroje na tomto nasadení zapnuté nie sú, takže sa nenačítava nič. Nevyhnutné cookies — prihlásenie a košík — bežia vždy.'}
+        Nevyhnutné cookies — prihlásenie a košík — bežia vždy. Meranie návštevnosti cez Metu
+        a Google sa načíta až s tvojím súhlasom; bez neho sa nenačíta nič.
         {reopened && consentAnswered()
           ? ` Tvoja doterajšia odpoveď: ${hasConsent() ? 'súhlas' : 'odmietnutie'}.`
           : ''}

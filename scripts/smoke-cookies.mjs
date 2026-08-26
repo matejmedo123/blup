@@ -10,10 +10,11 @@
  *
  * So this asserts the behaviour from outside, in a browser:
  *
- *   1. the footer's "Aktualizovať nastavenia cookies" opens the bar
- *   2. refusing is a real button, not a link hidden next to a big green one
- *   3. the answer is stored
- *   4. reopening it shows what was answered last time
+ *   1. a first visit is asked, before anything is configured or loaded
+ *   2. an answered visitor is not asked again
+ *   3. the footer's "Aktualizovať nastavenia cookies" opens the bar
+ *   4. refusing is a real button, not a link hidden next to a big green one
+ *   5. the answer is stored, and reopening shows what was answered last time
  *
  *   node scripts/serve-web.mjs mobile/dist 4401
  *   node scripts/smoke-cookies.mjs [port]
@@ -36,15 +37,33 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
-// A page that renders its footer without waiting on any query.
+// --- the first visit, in a browser that has never been here ------------------
 await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(900);
+
+const firstVisit = await page.content();
+check(firstVisit.includes('Súhlasím'), 'prvá návšteva sa spýta sama od seba');
+check(firstVisit.includes('Odmietnuť'), 'a odmietnuť je rovnocenné tlačidlo');
+
+await page.getByText('Súhlasím').first().click();
+await page.waitForTimeout(400);
+check(
+  (await page.evaluate(() => localStorage.getItem('blup.marketing.consent'))) === 'yes',
+  'súhlas sa uloží',
+);
+
+// --- and a second visit is left alone ---------------------------------------
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(900);
+check(
+  !(await page.content()).includes('Súhlasím'),
+  'druhá návšteva sa už nepýta',
+);
 
 const footer = await page.evaluate(() => document.body.innerText);
 check(footer.includes('Zásady cookies'), 'pätička odkazuje na zásady cookies');
 check(footer.includes('Ochrana osobných údajov'), 'pätička odkazuje na ochranu údajov');
 check(footer.includes('Aktualizovať nastavenia cookies'), 'pätička ponúka zmenu nastavení');
-
-check(!footer.includes('Súhlasím'), 'lišta pred kliknutím nesvieti');
 
 await page.getByText('Aktualizovať nastavenia cookies').first().click();
 await page.waitForTimeout(600);
