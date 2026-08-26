@@ -27,6 +27,7 @@ export function GradientCover({
   overlay = false,
   whole = false,
   wholeMinRatio = 0.8,
+  backdrop = 'gradient',
 }: {
   uri?: string | null;
   /** Event category — decides the gradient. */
@@ -49,6 +50,17 @@ export function GradientCover({
   whole?: boolean;
   /** How tall the cover may get when showing the whole picture (w/h). */
   wholeMinRatio?: number;
+  /**
+   * What fills the space beside a picture that does not match the cover's
+   * shape.
+   *
+   * `gradient` is the category's own colours and costs nothing. `blur` is a
+   * second copy of the picture behind the first, blurred — it looks better and
+   * is only worth it where the cover is big and still. On a card being dragged
+   * across the screen, compositing a blurred full-size image every frame is
+   * what made the swipe stutter, so that is not the default.
+   */
+  backdrop?: 'gradient' | 'blur';
 }) {
   const [start, end] = coverGradientFor(category);
   const [ratio, setRatio] = useState<number | null>(null);
@@ -68,14 +80,22 @@ export function GradientCover({
     >
       {uri ? (
         <>
-          {/* A poster taller than the card's limit letterboxes. Grey bars look
-              like a bug; the picture's own colours, blurred, look deliberate. */}
-          {whole ? (
+          {/* A poster taller than the card's limit letterboxes, and grey bars
+              read as a bug. Something has to be behind it. */}
+          {whole && backdrop === 'blur' ? (
             <Image
               source={{ uri }}
               style={[styles.fill, styles.blurred]}
               contentFit="cover"
               blurRadius={24}
+              pointerEvents="none"
+            />
+          ) : whole ? (
+            <LinearGradient
+              colors={[start, end]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.fill, styles.blurred]}
               pointerEvents="none"
             />
           ) : null}

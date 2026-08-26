@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, usePathname, router } from 'expo-router';
 
@@ -43,7 +43,14 @@ interface NavItem {
  * itself — `Link` brings its own style and wins, which is how the glyphs ended
  * up stacked above their labels instead of beside them.
  */
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({
+  item, active, collapsed = false,
+}: {
+  item: NavItem;
+  active: boolean;
+  /** Glyph only, with the label as a tooltip. */
+  collapsed?: boolean;
+}) {
   const [hovered, setHovered] = React.useState(false);
 
   return (
@@ -52,6 +59,8 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       accessibilityRole="link"
       accessibilityState={{ selected: active }}
       style={styles.linkReset}
+      // A glyph on its own says little; the browser's own tooltip fills in.
+      {...({ title: collapsed ? item.label : undefined } as object)}
     >
       <View
         // react-native-web forwards mouse events on any View; Link's own props
@@ -60,14 +69,21 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
           onMouseEnter: () => setHovered(true),
           onMouseLeave: () => setHovered(false),
         } as object)}
-        style={[styles.link, hovered && styles.linkHovered, active && styles.linkActive]}
+        style={[
+          styles.link,
+          collapsed && styles.linkCollapsed,
+          hovered && styles.linkHovered,
+          active && styles.linkActive,
+        ]}
       >
         <Text style={[styles.glyph, active && styles.glyphActive]}>{item.glyph}</Text>
-        <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
-          {item.label}
-        </Text>
+        {collapsed ? null : (
+          <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
+            {item.label}
+          </Text>
+        )}
         {item.badge ? (
-          <View style={styles.badge}>
+          <View style={[styles.badge, collapsed && styles.badgeCollapsed]}>
             <Text style={styles.badgeText}>{item.badge > 99 ? '99+' : item.badge}</Text>
           </View>
         ) : null}
@@ -76,9 +92,48 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
+/** Remembered per browser, so the choice survives a reload. */
+const COLLAPSED_KEY = 'blup.sidebar.collapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(COLLAPSED_KEY) === 'yes';
+  } catch {
+    // A private window that refuses storage is not a reason to fail to render.
+    return false;
+  }
+}
+
 export function DesktopShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { profile, isAdmin, isGuest } = useAuth();
+
+  /**
+   * The sidebar can be put away.
+   *
+   * It opens with the app — navigation you cannot see is navigation you do not
+   * use — but it is 244px of a monitor that a map, a seat plan or a long
+   * document would rather have. Collapsed it keeps the glyphs, so it is still
+   * navigation and not a mystery strip.
+   *
+   * Read after mount, not during the first render: on a static export the
+   * first paint happens on the server, where there is no localStorage, and
+   * reading it during render makes the markup disagree with the browser's.
+   */
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => { setCollapsed(readCollapsed()); }, []);
+
+  const toggle = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        globalThis.localStorage?.setItem(COLLAPSED_KEY, next ? 'yes' : 'no');
+      } catch {
+        /* not remembered, still collapsed for this visit */
+      }
+      return next;
+    });
+  };
 
   // The shell frames every screen, not just the tabs, so the badges belong to
   // it rather than to whichever layout happens to be mounted underneath.
@@ -127,22 +182,40 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
 
   return (
     <View style={styles.shell}>
-      <View style={styles.sidebar}>
-        <Pressable
-          onPress={() => router.push('/')}
-          accessibilityRole="link"
-          accessibilityLabel="Blup — domov"
-          style={styles.brand}
-        >
-          <Text style={styles.wordmark}>
-            Blup<Text style={styles.dot}>.</Text>
-          </Text>
-        </Pressable>
+      <View style={[styles.sidebar, collapsed && styles.sidebarCollapsed]}>
+        <View style={[styles.brandRow, collapsed && styles.brandRowCollapsed]}>
+          {collapsed ? null : (
+            <Pressable
+              onPress={() => router.push('/')}
+              accessibilityRole="link"
+              accessibilityLabel="Blup — domov"
+              style={styles.brand}
+            >
+              <Text style={styles.wordmark}>
+                Blup<Text style={styles.dot}>.</Text>
+              </Text>
+            </Pressable>
+          )}
+
+          <Pressable
+            onPress={toggle}
+            accessibilityRole="button"
+            accessibilityLabel={collapsed ? 'Rozbaliť menu' : 'Zbaliť menu'}
+            style={(state) => [styles.collapseButton, isHovered(state) && styles.linkHovered]}
+          >
+            <Text style={styles.collapseGlyph}>{collapsed ? '»' : '«'}</Text>
+          </Pressable>
+        </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.navScroll}>
           <View style={styles.group}>
             {primary.map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(item.href)} />
+              <NavLink
+                key={item.href}
+                item={item}
+                active={isActive(item.href)}
+                collapsed={collapsed}
+              />
             ))}
           </View>
 
@@ -150,12 +223,17 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
 
           <View style={styles.group}>
             {secondary.map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(item.href)} />
+              <NavLink
+                key={item.href}
+                item={item}
+                active={isActive(item.href)}
+                collapsed={collapsed}
+              />
             ))}
           </View>
         </ScrollView>
 
-        {isGuest ? (
+        {isGuest && !collapsed ? (
           <View style={styles.guest}>
             <Text style={styles.guestTitle}>Prezeráš ako hosť</Text>
             <Text style={styles.guestBody}>
@@ -163,13 +241,18 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
             </Text>
             <Button title="Prihlásiť sa" compact onPress={() => router.push('/(auth)/sign-in')} />
           </View>
-        ) : (
+        ) : isGuest ? null : (
           <Pressable
             onPress={() => router.push('/settings')}
             accessibilityRole="link"
-            style={(state) => [styles.me, isHovered(state) && styles.linkHovered]}
+            style={(state) => [
+              styles.me,
+              collapsed && styles.meCollapsed,
+              isHovered(state) && styles.linkHovered,
+            ]}
           >
             <Avatar name={profile?.display_name ?? profile?.username ?? '·'} url={profile?.avatar_url} size={32} />
+            {collapsed ? null : (
             <View style={styles.meText}>
               <Text style={styles.meName} numberOfLines={1}>
                 {profile?.display_name ?? 'Ja'}
@@ -178,6 +261,7 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
                 {profile?.username ? `@${profile.username}` : 'Nastavenia'}
               </Text>
             </View>
+            )}
           </Pressable>
         )}
       </View>
@@ -199,7 +283,28 @@ const styles = StyleSheet.create({
     // The sidebar never scrolls with the page — it is the frame, not content.
     ...(Platform.OS === 'web' ? ({ position: 'sticky', top: 0, height: '100vh' } as object) : null),
   },
-  brand: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  sidebarCollapsed: { width: 68 },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  brandRowCollapsed: { justifyContent: 'center', paddingRight: 0 },
+  brand: { paddingHorizontal: spacing.xl },
+  collapseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  collapseGlyph: { ...typography.captionStrong, color: colors.textSecondary, fontSize: 15 },
+  linkCollapsed: { justifyContent: 'center', paddingHorizontal: 0 },
+  badgeCollapsed: { position: 'absolute', top: 4, right: 8 },
+  meCollapsed: { justifyContent: 'center' },
   wordmark: { ...typography.logo, fontSize: 28, color: colors.text, letterSpacing: -1.2 },
   dot: { color: colors.accent },
 

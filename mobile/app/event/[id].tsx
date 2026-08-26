@@ -46,6 +46,9 @@ import {
  */
 const HAS_CART = Platform.OS === 'web';
 
+/** The address bar carries either a slug or a uuid; only one of them is an id. */
+const UUID_REF = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function EventDetailScreen() {
   const { requireAuth } = useRequireAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -59,12 +62,25 @@ export default function EventDetailScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [crewName, setCrewName] = useState('');
   const [reviewBody, setReviewBody] = useState('');
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   const event = useQuery({
     queryKey: ['event', id],
     queryFn: () => getEvent(id!),
     enabled: Boolean(id),
   });
+
+  /**
+   * The event's real id.
+   *
+   * `id` here is whatever is in the address bar, and since links carry the
+   * readable slug that is usually *not* a uuid. Everything else on this screen
+   * — comments, RSVP, saving, crews, ratings — writes rows keyed by uuid, so
+   * they all have to use this one. Passing the slug to them failed silently:
+   * the lists came back empty and posting a comment errored at the top of a
+   * page the reader was at the bottom of.
+   */
+  const eventId = event.data?.id ?? (id && UUID_REF.test(id) ? id : null);
 
 
   // The basket, so the ticket rows can say "in your basket" and the button can
@@ -139,44 +155,44 @@ export default function EventDetailScreen() {
 
   const attendees = useQuery({
     queryKey: ['event', id, 'attendees'],
-    queryFn: () => getEventAttendees(id!),
-    enabled: Boolean(id),
+    queryFn: () => getEventAttendees(eventId!),
+    enabled: Boolean(eventId),
   });
 
   const followedGoing = useQuery({
     queryKey: ['event', id, 'followed'],
-    queryFn: () => getFollowedAttendees(id!),
-    enabled: Boolean(id),
+    queryFn: () => getFollowedAttendees(eventId!),
+    enabled: Boolean(eventId),
   });
 
   const crews = useQuery({
     queryKey: ['event', id, 'crews'],
-    queryFn: () => getEventCrews(id!),
-    enabled: Boolean(id),
+    queryFn: () => getEventCrews(eventId!),
+    enabled: Boolean(eventId),
   });
 
   const rating = useQuery({
     queryKey: ['event', id, 'rating'],
-    queryFn: () => getEventRating(id!),
-    enabled: Boolean(id),
+    queryFn: () => getEventRating(eventId!),
+    enabled: Boolean(eventId),
   });
 
   const myReview = useQuery({
     queryKey: ['event', id, 'my-review'],
-    queryFn: () => getMyReview(id!),
-    enabled: Boolean(id),
+    queryFn: () => getMyReview(eventId!),
+    enabled: Boolean(eventId),
   });
 
   const comments = useQuery({
     queryKey: ['event', id, 'comments'],
-    queryFn: () => getComments(id!),
-    enabled: Boolean(id),
+    queryFn: () => getComments(eventId!),
+    enabled: Boolean(eventId),
   });
 
   const connect = useQuery({
     queryKey: ['event', id, 'connect'],
-    queryFn: () => getPeopleRecommendations({ eventId: id, limit: 10 }),
-    enabled: Boolean(id),
+    queryFn: () => getPeopleRecommendations({ eventId: eventId!, limit: 10 }),
+    enabled: Boolean(eventId),
   });
 
   /**
@@ -280,9 +296,9 @@ export default function EventDetailScreen() {
     setBusy(true);
     try {
       if (data?.my_rsvp === status) {
-        await cancelRsvp(id!);
+        await cancelRsvp(eventId!);
       } else {
-        await rsvpToEvent(id!, status);
+        await rsvpToEvent(eventId!, status);
       }
       await refresh();
     } catch (caught) {
@@ -298,8 +314,8 @@ export default function EventDetailScreen() {
   const save = async () => {
     setError(null);
     try {
-      if (data?.is_saved) await unsaveEvent(id!);
-      else await saveEvent(id!);
+      if (data?.is_saved) await unsaveEvent(eventId!);
+      else await saveEvent(eventId!);
       await refresh();
     } catch (caught) {
       setError(messageFor(caught));
@@ -312,7 +328,7 @@ export default function EventDetailScreen() {
   const like = async () => {
     if (!data) return;
     try {
-      await toggleLike(id!, !data.is_liked);
+      await toggleLike(eventId!, !data.is_liked);
       await refresh();
     } catch (caught) {
       setError(messageFor(caught));
@@ -345,7 +361,7 @@ export default function EventDetailScreen() {
     Alert.prompt?.('Nahlásiť event', 'Čo je s ním zle?', async (reason) => {
       if (!reason?.trim()) return;
       try {
-        await reportContent({ targetType: 'event', targetId: id!, reason: reason.trim() });
+        await reportContent({ targetType: 'event', targetId: eventId!, reason: reason.trim() });
         setNotice('Nahlásené. Naši moderátori sa na to pozrú.');
       } catch (caught) {
         setError(messageFor(caught));
@@ -354,16 +370,19 @@ export default function EventDetailScreen() {
   };
 
   const postComment = async () => {
-    if (!comment.trim()) return;
+    if (!comment.trim() || !eventId) return;
     setBusy(true);
-    setError(null);
+    setCommentError(null);
     try {
-      await addComment(id!, comment);
+      await addComment(eventId, comment);
       setComment('');
       await comments.refetch();
       await refresh();
     } catch (caught) {
-      setError(messageFor(caught));
+      // Beside the composer, not in the notice at the top: somebody writing a
+      // comment is at the bottom of a long page and never saw it up there, so
+      // a refused comment looked like a button that does nothing.
+      setCommentError(messageFor(caught));
     } finally {
       setBusy(false);
     }
@@ -483,17 +502,20 @@ export default function EventDetailScreen() {
         height={300}
         whole
         wholeMinRatio={0.66}
+        backdrop="blur"
         showPlaceholderLabel={false}
-        overlay
-      >
-        <View style={styles.heroBottom}>
-          <View style={styles.heroChips}>
-            <Chip label={categoryFamilies[familyFor(data.category)].label} onCover />
-            {data.attendee_count > 20 ? <Chip label="Frčí" onCover /> : null}
-          </View>
-          <Text style={styles.heroTitle}>{data.title}</Text>
+      />
+
+      {/* Under the poster, not over it. The title used to sit on the picture
+          with a dark gradient behind it, which on a phone covered the bottom
+          third — the part with the line-up and the date on it. */}
+      <View style={styles.heroBottom}>
+        <View style={styles.heroChips}>
+          <Chip label={categoryFamilies[familyFor(data.category)].label} />
+          {data.attendee_count > 20 ? <Chip label="Frčí" /> : null}
         </View>
-      </GradientCover>
+        <Text style={styles.heroTitle}>{data.title}</Text>
+      </View>
 
       <View style={styles.body}>
         {error ? <Notice tone="danger" title="Niečo sa pokazilo" body={error} /> : null}
@@ -942,6 +964,12 @@ export default function EventDetailScreen() {
           <Button title="Poslať" compact onPress={postComment} loading={busy} disabled={!comment.trim()} />
         </View>
 
+        {commentError ? (
+          <View style={styles.commentBlock}>
+            <Notice tone="danger" title="Komentár neodišiel" body={commentError} />
+          </View>
+        ) : null}
+
         {(comments.data ?? []).length === 0 ? (
           <Body muted style={styles.commentEmpty}>Zatiaľ žiadne komentáre.</Body>
         ) : (
@@ -1107,16 +1135,17 @@ const styles = StyleSheet.create({
   },
   savePillActive: { backgroundColor: colors.accent },
   savePillLabel: { ...typography.chip, color: colors.text },
-  heroBottom: { padding: spacing.lg, gap: spacing.sm },
+  heroBottom: {
+    paddingHorizontal: spacing.gutter,
+    paddingTop: spacing.lg,
+    gap: spacing.sm,
+  },
   heroChips: { flexDirection: 'row', gap: spacing.sm },
-  heroTitle: { ...typography.eventTitle, color: '#FFFFFF' },
+  heroTitle: { ...typography.eventTitle, color: colors.text },
 
   body: {
     padding: spacing.gutter,
-    marginTop: -spacing.xl,
     backgroundColor: colors.background,
-    borderTopLeftRadius: radius.xxl,
-    borderTopRightRadius: radius.xxl,
     gap: spacing.md,
   },
   infoRow: { flexDirection: 'row', gap: spacing.md },

@@ -166,9 +166,13 @@ export default function HomeScreen() {
   const selected = selectedEvents[0] ?? null;
 
   // What this screen occupies in the bottom corner, so the basket bubble can
-  // sit above it: the create button, and the map's card when one is open.
-  const cardClaim = view === 'map' && selected ? cardHeight + spacing.xl : 0;
-  useClaimBottom('home', Math.max(56 + spacing.gutter, cardClaim));
+  // sit above all of it. The create button is the topmost thing down there —
+  // it is itself pushed up by the map card — so the claim is where its top
+  // edge ends up, not the card's.
+  const fabBottom = view === 'map' && selected
+    ? cardHeight + spacing.xl + spacing.md
+    : spacing.gutter;
+  useClaimBottom('home', fabBottom + 56);
 
   // The weekly digest picks the best of the coming week from the same ranker
   // the notification uses.
@@ -576,9 +580,9 @@ export default function HomeScreen() {
         accessibilityLabel="Vytvoriť event"
         style={({ pressed }) => [
           styles.fab,
-          // Above the map card when one is open: at the same height the button
-          // sat on top of the card's own Detail button and its close cross.
-          selected && view === 'map' ? { bottom: cardHeight + spacing.xl + spacing.md } : null,
+          // Above the map card when one is open: at its usual height the button
+          // sat on the card's own Detail buttons and its close cross.
+          { bottom: fabBottom },
           pressed && styles.fabPressed,
         ]}
       >
