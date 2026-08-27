@@ -1,6 +1,6 @@
 import { eventHref } from '@/lib/format';
 import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -63,6 +63,19 @@ export default function HomeScreen() {
   /** Measured, so the create button can sit above the card instead of on it. */
   const [cardHeight, setCardHeight] = useState(0);
   const [weeklyOpen, setWeeklyOpen] = useState(false);
+  /**
+   * What the map is looking at.
+   *
+   * The feed asks for 50km around *you*, which is right for a list called
+   * "Dnes okolo teba" and wrong for a map: pan west or zoom out and the events
+   * over there simply were not in the answer. The map asks for what is on
+   * screen instead, and this is the debounced region it asks about.
+   */
+  const [mapRegion, setMapRegion] = useState<{
+    latitude: number;
+    longitude: number;
+    radiusM: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const coords = location.coords;
@@ -81,6 +94,35 @@ export default function HomeScreen() {
     // No `enabled`: browsing needs neither an account nor a location. A guest
     // sees the same events a member does, and a visitor who refused location
     // gets the upcoming list rather than an empty city.
+  });
+
+  /**
+   * Events inside the visible part of the map.
+   *
+   * Rounded before it becomes a query key so nudging the map by a few metres
+   * does not refetch, and capped at 300km — past that the pins are meaningless
+   * and the query is expensive.
+   */
+  const mapEvents = useQuery({
+    queryKey: [
+      'events', 'in-view',
+      mapRegion ? Math.round(mapRegion.latitude * 100) / 100 : null,
+      mapRegion ? Math.round(mapRegion.longitude * 100) / 100 : null,
+      mapRegion ? Math.round(mapRegion.radiusM / 1000) : null,
+      categories,
+    ],
+    queryFn: () =>
+      getFeedEvents({
+        latitude: mapRegion!.latitude,
+        longitude: mapRegion!.longitude,
+        radiusM: mapRegion!.radiusM,
+        categories,
+        limit: 120,
+      }),
+    enabled: view === 'map' && Boolean(mapRegion),
+    // The map is panned around; keeping answers a while makes going back to
+    // where you were instant instead of a second of empty map.
+    staleTime: 5 * 60_000,
   });
 
   const circles = useQuery({
@@ -156,12 +198,65 @@ export default function HomeScreen() {
     [queryClient, toast, requireAuth],
   );
 
+  /**
+   * The map moved. Waits for it to settle before asking the database anything
+   * — a pan is dozens of region changes, and each one is a query.
+   */
+  const regionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRegionKey = useRef<string | null>(null);
+  const onMapRegion = useCallback(
+    (region: {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    }) => {
+      if (regionTimer.current) clearTimeout(regionTimer.current);
+
+      regionTimer.current = setTimeout(() => {
+        // Half the diagonal of what is on screen, in metres — the circle that
+        // covers the visible rectangle.
+        const latM = region.latitudeDelta * 111_320;
+        const lonM = region.longitudeDelta * 111_320
+          * Math.cos((region.latitude * Math.PI) / 180);
+        const radiusM = Math.min(300_000, Math.max(2_000, Math.hypot(latM, lonM) / 2));
+
+        // The map reports the same view more than once — on mount, and again
+        // when the zoom settles. Comparing the rounded values here means one
+        // view is one query, whatever the map does.
+        const key = [
+          Math.round(region.latitude * 100) / 100,
+          Math.round(region.longitude * 100) / 100,
+          Math.round(radiusM / 1000),
+        ].join('/');
+        if (key === lastRegionKey.current) return;
+        lastRegionKey.current = key;
+
+        setMapRegion({
+          latitude: region.latitude,
+          longitude: region.longitude,
+          radiusM,
+        });
+      }, 400);
+    },
+    [],
+  );
+
+  useEffect(() => () => {
+    if (regionTimer.current) clearTimeout(regionTimer.current);
+  }, []);
+
   const openEvent = (event: EventFeedItem) => {
     void recordSignal(event.id, 'open_detail');
     router.push(eventHref(event));
   };
 
-  const events = nearby.data ?? [];
+  // On the map, what is on the map; in the list, what is around you. Until the
+  // first region answer arrives the map keeps showing the nearby set rather
+  // than blinking empty.
+  const events = view === 'map'
+    ? (mapEvents.data ?? nearby.data ?? [])
+    : (nearby.data ?? []);
   const selectedEvents = events.filter((event) => selectedIds.includes(event.id));
   const selected = selectedEvents[0] ?? null;
 
@@ -335,6 +430,7 @@ export default function HomeScreen() {
             onSelect={(event) => setSelectedIds([event.id])}
             onSelectGroup={(group) => setSelectedIds(group.map((event) => event.id))}
             onDeselect={() => setSelectedIds([])}
+            onRegionChange={onMapRegion}
             style={styles.map}
           />
 

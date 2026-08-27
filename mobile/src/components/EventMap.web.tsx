@@ -147,6 +147,14 @@ export function EventMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
 
+  const reported = useRef(false);
+  useEffect(() => {
+    if (reported.current || !size.width || !size.height) return;
+    reported.current = true;
+    report(centre, zoom);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.width, size.height]);
+
   useEffect(() => {
     if (size.height > 0) setZoom(zoomForRadius(radiusM, centre.latitude, size.height));
     // Only when the requested radius changes, not on every pan.
@@ -283,6 +291,7 @@ export function EventMap({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
+        onPointerCancel={endDrag}
         onPointerLeave={endDrag}
         onWheel={onWheel}
         style={{
