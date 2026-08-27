@@ -102,6 +102,15 @@ export async function callFunction<T>(
         if (parseError instanceof FunctionError) throw parseError;
       }
     }
+    // supabase-js says "Failed to send a request to the Edge Function" when the
+    // request never completed at all — the function is not deployed (its
+    // preflight 404s without CORS headers, so the browser blocks it), or the
+    // project URL points somewhere else. Carry the name: the next person to
+    // read this error should not have to guess which function it was.
+    if (/failed to send a request/i.test(error.message ?? '')) {
+      throw new FunctionError('FUNCTION_UNREACHABLE', name, 0);
+    }
+
     throw new FunctionError('FUNCTION_ERROR', error.message, 500);
   }
 

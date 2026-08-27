@@ -83,6 +83,14 @@ export function messageFor(error: unknown): string {
   if (!error) return 'Niečo sa pokazilo.';
 
   if (error instanceof FunctionError) {
+    // This one carries the function's name as its message, so the text can name
+    // it rather than talking about "the Edge Function" in the abstract.
+    if (error.code === 'FUNCTION_UNREACHABLE') {
+      return `Serverová funkcia „${error.message}" neodpovedá — pravdepodobne nie je nasadená. `
+        + 'Nasaď ju cez `./scripts/deploy-functions.sh` a skontroluj, že projekt v '
+        + '`mobile/.env` je ten, do ktorého si ju nasadil.';
+    }
+
     return MESSAGES[error.code] ?? error.message ?? 'Niečo sa pokazilo.';
   }
 
