@@ -159,7 +159,7 @@ again:
 
 | Provider | Why not |
 | --- | --- |
-| CARTO `dark_all` | Stamps `API KEY REQUIRED` across every tile without a key. The right look, and free with a key — see below. |
+| CARTO `dark_all` | Stamps `API KEY REQUIRED` across every tile without a key. The right look, and free with one — the parameter is `?key=`, and `?api_key=` is accepted and ignored, which looks identical to having no key. |
 | Esri Dark Gray Canvas | No key, right look, but outside its detailed regions it stops at zoom 16. Over Slovakia, zooming past a neighbourhood returned `Map data not yet available` on every tile. |
 
 OpenStreetMap has full detail everywhere and needs no key; inverting it gives a
@@ -172,12 +172,17 @@ To use CARTO (or MapTiler, Stadia, Mapbox) point the build at it, no code
 change:
 
 ```bash
-EXPO_PUBLIC_MAP_TILES_URL=https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key=YOUR_KEY
+EXPO_PUBLIC_MAP_TILES_URL=https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=YOUR_KEY
 EXPO_PUBLIC_MAP_ATTRIBUTION=OpenStreetMap · CARTO
 ```
 
 `EXPO_PUBLIC_MAP_LABELS_URL` is only for basemaps that ship place names as a
 separate overlay; a complete basemap already has them.
+Anything `EXPO_PUBLIC_*` is compiled into the JavaScript the browser downloads,
+so a tile key is public by construction. Restrict it to the site's own domain in
+the provider's dashboard — that is what stops somebody else spending it, not
+keeping it out of sight.
+
 `EXPO_PUBLIC_MAP_TILES_DARKEN` inverts the tiles — on by default for the
 built-in OpenStreetMap layer, off for anything you configure, and `1` forces it
 back on for a light provider of your own.

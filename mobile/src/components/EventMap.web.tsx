@@ -207,20 +207,87 @@ export function EventMap({
   const layerRef = useRef<HTMLDivElement | null>(null);
   const offset = useRef({ x: 0, y: 0 });
 
-  const paint = (x: number, y: number) => {
+  /**
+   * Every finger currently on the map.
+   *
+   * Zooming used to be the mouse wheel and nothing else, so on a phone there
+   * was no way to zoom at all — no wheel, and a pinch went to the drag handler
+   * as one confused pointer. Two fingers now mean a pinch, and the buttons in
+   * the corner mean nobody has to discover the gesture.
+   */
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number } | null>(null);
+  /** The last distance between the two fingers, while both were still down. */
+  const lastSpread = useRef(0);
+
+  const paint = (x: number, y: number, scale = 1) => {
     offset.current = { x, y };
     if (layerRef.current) {
-      layerRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      layerRef.current.style.transform =
+        `translate3d(${x}px, ${y}px, 0)` + (scale === 1 ? '' : ` scale(${scale})`);
     }
+  };
+
+  const spread = () => {
+    const [a, b] = [...pointers.current.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
+
+  /** Zoom by whole levels, keeping the map's centre where it is. */
+  const applyZoom = (next: number) => {
+    const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+    if (clamped === zoom) return;
+    setZoom(clamped);
+    report(centre, clamped);
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!interactive) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+
+    // A pointerup can go missing — a gesture interrupted by the browser, a
+    // finger that left through the edge — and a stale entry here would leave
+    // the map convinced two fingers are still down, which is a map that never
+    // pans again. A new gesture starting from more than two is that state, so
+    // it starts clean.
+    if (pointers.current.size >= 2) {
+      pointers.current.clear();
+      pinch.current = null;
+      lastSpread.current = 0;
+      paint(0, 0);
+    }
+
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.current.size === 2) {
+      // A second finger turns a drag into a pinch. Whatever the first one had
+      // moved is committed first, so the map does not jump back.
+      endDrag();
+      const distance = spread();
+      pinch.current = { distance, zoom };
+      lastSpread.current = distance;
+      return;
+    }
+
     drag.current = { x: e.clientX, y: e.clientY, centre };
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointers.current.has(e.pointerId)) {
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (pinch.current) {
+      const distance = spread();
+      if (!distance || !pinch.current.distance) return;
+      // Live feedback while the fingers move; the zoom itself lands on release,
+      // because the tile grid only knows whole levels.
+      lastSpread.current = distance;
+      const ratio = Math.min(4, Math.max(0.25, distance / pinch.current.distance));
+      paint(0, 0, ratio);
+      return;
+    }
+
     if (!drag.current) return;
     paint(e.clientX - drag.current.x, e.clientY - drag.current.y);
   };
@@ -247,6 +314,37 @@ export function EventMap({
 
     setCentre(settled);
     report(settled, zoom);
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(e.pointerId);
+
+    if (pinch.current) {
+      // Fewer than two fingers: the pinch is over. How far apart they ended up
+      // decides how many levels it was worth.
+      if (pointers.current.size < 2) {
+        // Measured from the last frame both fingers were down — by now one of
+        // them is gone and the distance between them is meaningless.
+        const ratio = lastSpread.current
+          ? lastSpread.current / pinch.current.distance
+          : 1;
+        const target = pinch.current.zoom + Math.round(Math.log2(ratio || 1));
+
+        pinch.current = null;
+        lastSpread.current = 0;
+        paint(0, 0);
+        applyZoom(target);
+      }
+      return;
+    }
+
+    endDrag();
+  };
+
+  /** A pointer that leaves or is cancelled is a finger that is no longer there. */
+  const onPointerLeave = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId) && !drag.current) return;
+    onPointerUp(e);
   };
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -328,9 +426,9 @@ export function EventMap({
         onClick={() => onDeselect?.()}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onPointerLeave={endDrag}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerLeave={onPointerLeave}
         onWheel={onWheel}
         style={{
           position: 'absolute',
@@ -457,6 +555,42 @@ export function EventMap({
         })}
 
         </div>
+
+        {/* Buttons as well as gestures: a pinch is invisible, and on a phone
+            there is no wheel at all — which is how the map ended up with no way
+            to zoom on the platform most people are using. */}
+        {interactive ? (
+          <div
+            style={{
+              position: 'absolute', right: 10, top: 10,
+              display: 'flex', flexDirection: 'column', gap: 6,
+            }}
+          >
+            {([['+', 1], ['−', -1]] as const).map(([label, step]) => (
+              <button
+                key={label}
+                type="button"
+                aria-label={step > 0 ? 'Priblížiť' : 'Oddialiť'}
+                disabled={step > 0 ? zoom >= MAX_ZOOM : zoom <= MIN_ZOOM}
+                onClick={(e) => { e.stopPropagation(); applyZoom(zoom + step); }}
+                onPointerDown={(e) => e.stopPropagation()}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.surface,
+                  color: colors.text,
+                  font: '600 18px/1 system-ui, sans-serif',
+                  cursor: 'pointer',
+                  opacity: (step > 0 ? zoom >= MAX_ZOOM : zoom <= MIN_ZOOM) ? 0.4 : 1,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {/* Required by the tile provider's terms — not decoration. */}
         {ATTRIBUTION ? (
