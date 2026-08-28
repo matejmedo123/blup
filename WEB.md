@@ -153,15 +153,23 @@ pan and wheel to zoom. About two hundred lines and no dependency — which
 matters more than it sounds, because Leaflet and Mapbox GL each want a
 stylesheet Metro cannot import and a bundle several times the size.
 
-Tiles come from Esri's dark grey canvas, in two layers: the ground, and the
-place names over it. It needs no key and no account, so the map works on a
-fresh clone and on the first deploy. **Attribution is rendered on the map
-because it is a condition of use.**
+Tiles come from OpenStreetMap, inverted in CSS to match a dark app. Two other
+options were tried and rejected, which is worth recording so nobody tries them
+again:
 
-It used to be CARTO. CARTO now stamps `API KEY REQUIRED` diagonally across
-every tile unless a key is in the URL — a map cannot "mostly" have a watermark,
-so the default moved. To use CARTO (or MapTiler, Stadia, Mapbox) point the
-build at it, no code change:
+| Provider | Why not |
+| --- | --- |
+| CARTO `dark_all` | Stamps `API KEY REQUIRED` across every tile without a key. The right look, and free with a key — see below. |
+| Esri Dark Gray Canvas | No key, right look, but outside its detailed regions it stops at zoom 16. Over Slovakia, zooming past a neighbourhood returned `Map data not yet available` on every tile. |
+
+OpenStreetMap has full detail everywhere and needs no key; inverting it gives a
+readable dark map, if not as considered as a purpose-built dark style. Its tiles
+are a volunteer-funded courtesy — the right default because the map works on a
+fresh clone, and the wrong thing to lean on at scale. **Attribution is rendered
+on the map because it is a condition of use.**
+
+To use CARTO (or MapTiler, Stadia, Mapbox) point the build at it, no code
+change:
 
 ```bash
 EXPO_PUBLIC_MAP_TILES_URL=https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key=YOUR_KEY
@@ -169,8 +177,15 @@ EXPO_PUBLIC_MAP_ATTRIBUTION=OpenStreetMap · CARTO
 ```
 
 `EXPO_PUBLIC_MAP_LABELS_URL` is only for basemaps that ship place names as a
-separate overlay; a complete basemap already has them, and setting the tiles
-URL turns the built-in labels layer off.
+separate overlay; a complete basemap already has them.
+`EXPO_PUBLIC_MAP_TILES_DARKEN` inverts the tiles — on by default for the
+built-in OpenStreetMap layer, off for anything you configure, and `1` forces it
+back on for a light provider of your own.
+
+Panning moves one CSS transform on the layer holding the tiles and the pins,
+and commits the new centre when the finger lifts. Recomputing each tile's
+position per pointer move meant a layout pass over ~50 elements per frame,
+which is what made dragging stutter on a phone.
 
 ### Push notifications
 

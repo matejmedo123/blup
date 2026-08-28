@@ -48,6 +48,8 @@ export const env = {
   mapTilesUrl: process.env.EXPO_PUBLIC_MAP_TILES_URL ?? '',
   mapLabelsUrl: process.env.EXPO_PUBLIC_MAP_LABELS_URL ?? '',
   mapAttribution: process.env.EXPO_PUBLIC_MAP_ATTRIBUTION ?? '',
+  /** '1' inverts the tiles for a dark app, '0' leaves them alone. */
+  mapTilesDarken: process.env.EXPO_PUBLIC_MAP_TILES_DARKEN ?? '',
 
   supabaseUrl: extra.supabaseUrl ?? '',
   supabaseAnonKey: extra.supabaseAnonKey ?? '',

@@ -15,33 +15,43 @@ import type { Coordinates, EventFeedItem } from '@/types/models';
  * a stylesheet Metro cannot import and a bundle several times the size of this
  * file.
  *
- * Tiles come from Esri's dark grey canvas, in two layers — the ground, and the
- * place names over it. It needs no key and no account, which is the point: the
- * map has to work on a fresh clone and on the first deploy.
+ * Tiles come from OpenStreetMap, inverted in CSS to match a dark app. That is
+ * a compromise, and worth being clear about which parts:
  *
- * It used to be CARTO's dark basemap. CARTO now stamps "API KEY REQUIRED"
- * diagonally across every tile unless a key is in the URL, and a watermark is
- * not something a map can "mostly" have. Anyone with a key (CARTO's or another
- * provider's) points EXPO_PUBLIC_MAP_TILES_URL at it and this steps aside.
+ *   · CARTO's dark basemap is the right look, but it now stamps
+ *     "API KEY REQUIRED" across every tile unless a key is in the URL.
+ *   · Esri's dark grey canvas needs no key and looked right, but outside its
+ *     detailed regions it stops at zoom 16 — over Slovakia, zooming in past a
+ *     neighbourhood returned "Map data not yet available" on every tile.
+ *   · OpenStreetMap has full detail everywhere and needs no key. It is a light
+ *     map, so it is inverted; the result is honest and readable, if not as
+ *     considered as a purpose-built dark style.
+ *
+ * OSM's tiles are a volunteer-funded courtesy. They are the right default
+ * because the map works on a fresh clone with nothing configured, and the wrong
+ * thing to lean on at scale — point EXPO_PUBLIC_MAP_TILES_URL at a provider you
+ * pay before this becomes real traffic. WEB.md has the one-line settings.
  *
  * Attribution is rendered because it is a condition of use, not decoration.
  */
 
 const TILE_SIZE = 256;
 const MIN_ZOOM = 3;
-const MAX_ZOOM = 18;
-/** Esri's Dark Gray Canvas: ground and labels are separate layers. */
-const DEFAULT_TILES =
-  'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
-const DEFAULT_LABELS =
-  'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
-const DEFAULT_ATTRIBUTION = 'Esri · OpenStreetMap';
+const MAX_ZOOM = 19;
+const DEFAULT_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const DEFAULT_ATTRIBUTION = 'OpenStreetMap';
 
 const TILES_TEMPLATE = env.mapTilesUrl || DEFAULT_TILES;
-// A configured basemap carries its own labels; only the built-in default has
-// them as a second layer.
-const LABELS_TEMPLATE = env.mapTilesUrl ? env.mapLabelsUrl : DEFAULT_LABELS;
+const LABELS_TEMPLATE = env.mapTilesUrl ? env.mapLabelsUrl : '';
 const ATTRIBUTION = env.mapAttribution || (env.mapTilesUrl ? '' : DEFAULT_ATTRIBUTION);
+
+/**
+ * Only the built-in light basemap gets inverted. A configured provider is
+ * presumably already the style its owner wanted, so inverting it would be
+ * vandalism — `EXPO_PUBLIC_MAP_TILES_DARKEN=1` turns it on for one that is not.
+ */
+const DARKEN = env.mapTilesDarken === '1' || (!env.mapTilesUrl && env.mapTilesDarken !== '0');
+const DARK_FILTER = 'invert(1) hue-rotate(180deg) saturate(0.55) brightness(0.86) contrast(1.05)';
 
 const fillTemplate = (template: string, x: number, y: number, z: number) =>
   template
@@ -183,7 +193,26 @@ export function EventMap({
   }, [onRegionChange, size.width, size.height]);
 
   // --- panning ---------------------------------------------------------------
+  /**
+   * A drag moves one CSS transform, not fifty images.
+   *
+   * Recomputing the centre on every pointer move meant React re-rendered the
+   * whole grid, and every tile got a new `left` and `top` — a layout pass for
+   * ~50 elements per frame, which is what made dragging stutter on a phone.
+   * Now the offset goes straight onto a wrapper's `transform`, which the
+   * compositor handles without touching layout, and the centre is committed
+   * once when the finger lifts.
+   */
   const drag = useRef<{ x: number; y: number; centre: Coordinates } | null>(null);
+  const layerRef = useRef<HTMLDivElement | null>(null);
+  const offset = useRef({ x: 0, y: 0 });
+
+  const paint = (x: number, y: number) => {
+    offset.current = { x, y };
+    if (layerRef.current) {
+      layerRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    }
+  };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!interactive) return;
@@ -193,22 +222,31 @@ export function EventMap({
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
-    const scale = Math.pow(2, zoom);
-    const dx = (e.clientX - drag.current.x) / TILE_SIZE;
-    const dy = (e.clientY - drag.current.y) / TILE_SIZE;
-    const next = {
-      latitude: yToLat(latToY(drag.current.centre.latitude, zoom) - dy, zoom),
-      longitude: xToLon(lonToX(drag.current.centre.longitude, zoom) - dx, zoom),
-    };
-    setCentre({
-      latitude: Math.max(-85, Math.min(85, next.latitude)),
-      longitude: ((next.longitude + 540) % 360) - 180,
-    });
+    paint(e.clientX - drag.current.x, e.clientY - drag.current.y);
   };
 
   const endDrag = () => {
-    if (drag.current) report(centre, zoom);
+    const started = drag.current;
     drag.current = null;
+    if (!started) return;
+
+    const { x, y } = offset.current;
+    paint(0, 0);
+
+    // Nothing moved — a tap, not a drag.
+    if (x === 0 && y === 0) return;
+
+    const next = {
+      latitude: yToLat(latToY(started.centre.latitude, zoom) - y / TILE_SIZE, zoom),
+      longitude: xToLon(lonToX(started.centre.longitude, zoom) - x / TILE_SIZE, zoom),
+    };
+    const settled = {
+      latitude: Math.max(-85, Math.min(85, next.latitude)),
+      longitude: ((next.longitude + 540) % 360) - 180,
+    };
+
+    setCentre(settled);
+    report(settled, zoom);
   };
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -303,6 +341,13 @@ export function EventMap({
           touchAction: 'none',
         }}
       >
+        {/* Everything that moves with the map lives in here, so a drag is one
+            transform on one element rather than new coordinates on every tile
+            and every pin. */}
+        <div
+          ref={layerRef}
+          style={{ position: 'absolute', inset: 0, willChange: 'transform' }}
+        >
         {tiles.map((tile) => (
           <React.Fragment key={tile.key}>
             <img
@@ -317,6 +362,8 @@ export function EventMap({
                 height: TILE_SIZE,
                 userSelect: 'none',
                 pointerEvents: 'none',
+                // The tiles only — pins and the location dot keep their colours.
+                filter: DARKEN ? DARK_FILTER : undefined,
               }}
             />
             {/* Place names, when the basemap keeps them in their own layer. */}
@@ -333,6 +380,7 @@ export function EventMap({
                   height: TILE_SIZE,
                   userSelect: 'none',
                   pointerEvents: 'none',
+                  filter: DARKEN ? DARK_FILTER : undefined,
                 }}
               />
             ) : null}
@@ -407,6 +455,8 @@ export function EventMap({
             </button>
           );
         })}
+
+        </div>
 
         {/* Required by the tile provider's terms — not decoration. */}
         {ATTRIBUTION ? (
