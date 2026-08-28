@@ -192,6 +192,29 @@ and commits the new centre when the finger lifts. Recomputing each tile's
 position per pointer move meant a layout pass over ~50 elements per frame,
 which is what made dragging stutter on a phone.
 
+### Deploys that actually land
+
+The HTML names the hashed bundle it wants, so it is the one file that must never
+be reused without asking. Left cacheable, a browser keeps yesterday's page,
+which asks for yesterday's bundle, and the site looks unchanged however many
+times the files are uploaded. `make-host-config.mjs` writes the rule for every
+host it supports — `.htaccess` (mod_headers, with mod_expires as a fallback),
+`_headers` for Netlify and Cloudflare Pages, and `headers` in `vercel.json`:
+
+| File | Cache |
+| --- | --- |
+| `*.html`, `sw.js`, `manifest.webmanifest` | `no-cache, must-revalidate` |
+| `/_expo/**`, other hashed assets | `public, max-age=31536000, immutable` |
+
+`ExpiresByType text/javascript "access plus 1 year"` used to cover `sw.js` too,
+which is the last file that should be pinned: a service worker that cannot be
+replaced is a deploy that never lands.
+
+`./scripts/check-deploy.sh https://blup.sk` answers the question directly. It
+reads the bundle name out of the live page, compares it with the one in
+`mobile/dist`, and prints the cache headers — which separates "the files did not
+arrive" from "they arrived and something is still serving the old page".
+
 ### Push notifications
 
 Real Web Push, not a shim. The browser hands out a subscription, the server

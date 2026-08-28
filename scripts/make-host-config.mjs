@@ -124,10 +124,36 @@ writeFileSync(join(dist, 'vercel.json'), JSON.stringify({
   // Crawler rules first: a rewrite list is evaluated in order, and the generic
   // /event/:id rule below would otherwise swallow them.
   rewrites: [...crawlerRewrites, ...routes.map((r) => ({ source: r.source, destination: r.file }))],
+  headers: [
+    {
+      source: '/(.*).html',
+      headers: [{ key: 'Cache-Control', value: 'no-cache, must-revalidate' }],
+    },
+    {
+      source: '/sw.js',
+      headers: [{ key: 'Cache-Control', value: 'no-cache, must-revalidate' }],
+    },
+    {
+      source: '/_expo/(.*)',
+      headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+    },
+  ],
 }, null, 2) + '\n');
 
 writeFileSync(join(dist, '_redirects'),
   routes.map((r) => `${r.source}  ${r.file}  200`).join('\n') + '\n');
+
+// Netlify and Cloudflare Pages read this. Same rule as everywhere else: the
+// page is revalidated, the hashed bundles are not.
+writeFileSync(join(dist, '_headers'),
+  `/*.html\n` +
+  `  Cache-Control: no-cache, must-revalidate\n` +
+  `/sw.js\n` +
+  `  Cache-Control: no-cache, must-revalidate\n` +
+  `/manifest.webmanifest\n` +
+  `  Cache-Control: no-cache, must-revalidate\n` +
+  `/_expo/*\n` +
+  `  Cache-Control: public, max-age=31536000, immutable\n`);
 
 writeFileSync(join(dist, 'nginx.conf'),
   `# Include inside your server { } block.\n` +
@@ -166,11 +192,36 @@ writeFileSync(join(dist, '.htaccess'),
   }).join('\n\n') +
   `\n\n# Anything else is genuinely missing.\n` +
   `ErrorDocument 404 /+not-found.html\n\n` +
-  `# The hashed bundles never change under the same name; the pages do.\n` +
+  // Caching, which is what decides whether a deploy is actually visible.
+  //
+  // The HTML names the hashed bundle it wants, so it is the one file that must
+  // never be reused without asking. Left cacheable, a browser keeps yesterday's
+  // page, which asks for yesterday's bundle — and the site looks unchanged no
+  // matter how many times the files are uploaded.
+  //
+  // mod_expires alone was not enough for two reasons: shared hosting often does
+  // not have it, and `ExpiresByType text/javascript` also covered /sw.js, which
+  // is the last file that should be pinned for a year. mod_headers does the
+  // work; the expires block stays as a fallback for hosts that have one and not
+  // the other.
+  `# Caching. The HTML names its bundle, so it must always be revalidated;\n` +
+  `# the bundles carry a hash in the name and never change under it.\n` +
+  `# Apache applies these in order and the last match wins, so the broad rule\n` +
+  `# comes first and the files that must never be pinned come after it.\n` +
+  `<IfModule mod_headers.c>\n` +
+  `  <FilesMatch "\\.(js|css|woff2?|png|jpg|jpeg|svg|webp)$">\n` +
+  `    Header set Cache-Control "public, max-age=31536000, immutable"\n` +
+  `  </FilesMatch>\n` +
+  `  # The page, the worker and the manifest decide what version everyone is\n` +
+  `  # running. A service worker that cannot be replaced is a deploy that never\n` +
+  `  # lands.\n` +
+  `  <FilesMatch "(\\.html|^sw\\.js|\\.webmanifest)$">\n` +
+  `    Header set Cache-Control "no-cache, must-revalidate"\n` +
+  `  </FilesMatch>\n` +
+  `</IfModule>\n\n` +
   `<IfModule mod_expires.c>\n` +
   `  ExpiresActive On\n` +
   `  ExpiresByType text/html "access plus 0 seconds"\n` +
-  `  ExpiresByType text/javascript "access plus 1 year"\n` +
   `  ExpiresByType text/css "access plus 1 year"\n` +
   `</IfModule>\n`);
 
@@ -203,4 +254,4 @@ const retitled = dropEmptyHelmetTitle(dist);
 console.log(`${routes.length} dynamic routes:`);
 for (const r of routes) console.log(`  ${r.source.padEnd(34)} -> ${r.file}`);
 console.log(`\nremoved the empty helmet <title> from ${retitled} pages`);
-console.log(`wrote vercel.json, _redirects, nginx.conf and .htaccess into ${dist}`);
+console.log(`wrote vercel.json, _redirects, _headers, nginx.conf and .htaccess into ${dist}`);
