@@ -20,16 +20,34 @@ type Extra = {
   premiumProductIdMonthly: string;
   premiumProductIdYearly: string;
   debugAi: boolean;
+  webUrl: string;
+  vapidPublicKey: string;
+  mapTilesUrl: string;
+  mapLabelsUrl: string;
+  mapAttribution: string;
+  mapTilesDarken: string;
+  cartoKey: string;
 };
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Partial<Extra>;
 
 export const env = {
+  /**
+   * Everything comes through `extra`, which app.config.ts fills in from
+   * EXPO_PUBLIC_* at build time.
+   *
+   * Reading `process.env` here instead looks identical and does not work: Expo
+   * inlines those variables into the config, and the config is what reaches the
+   * bundle. A value read directly from process.env is undefined at runtime and
+   * quietly falls back to its default — a setting that appears to be ignored,
+   * with a clean build and no warning. The `process.env` fallbacks below are
+   * for `expo start`, where both paths are live.
+   */
   /** Origin the web build is served from; used for shareable links. */
-  webUrl: process.env.EXPO_PUBLIC_WEB_URL ?? '',
+  webUrl: extra.webUrl || process.env.EXPO_PUBLIC_WEB_URL || '',
   /** VAPID public key for Web Push. Public by design — it identifies us to the
    *  push service and cannot be used to send anything. */
-  vapidPublicKey: process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY ?? '',
+  vapidPublicKey: extra.vapidPublicKey || process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY || '',
 
   /**
    * Where the web map gets its tiles.
@@ -45,11 +63,13 @@ export const env = {
    * A full basemap already has its labels, so `MAP_LABELS_URL` stays empty for
    * those; it exists for providers that ship labels as a separate overlay.
    */
-  mapTilesUrl: process.env.EXPO_PUBLIC_MAP_TILES_URL ?? '',
-  mapLabelsUrl: process.env.EXPO_PUBLIC_MAP_LABELS_URL ?? '',
-  mapAttribution: process.env.EXPO_PUBLIC_MAP_ATTRIBUTION ?? '',
+  mapTilesUrl: extra.mapTilesUrl || process.env.EXPO_PUBLIC_MAP_TILES_URL || '',
+  mapLabelsUrl: extra.mapLabelsUrl || process.env.EXPO_PUBLIC_MAP_LABELS_URL || '',
+  mapAttribution: extra.mapAttribution || process.env.EXPO_PUBLIC_MAP_ATTRIBUTION || '',
   /** '1' inverts the tiles for a dark app, '0' leaves them alone. */
-  mapTilesDarken: process.env.EXPO_PUBLIC_MAP_TILES_DARKEN ?? '',
+  mapTilesDarken: extra.mapTilesDarken || process.env.EXPO_PUBLIC_MAP_TILES_DARKEN || '',
+  /** CARTO basemap key. Public by construction — restrict it by domain. */
+  cartoKey: extra.cartoKey || process.env.EXPO_PUBLIC_CARTO_KEY || '',
 
   supabaseUrl: extra.supabaseUrl ?? '',
   supabaseAnonKey: extra.supabaseAnonKey ?? '',

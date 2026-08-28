@@ -169,6 +169,25 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     premiumProductIdYearly:
       process.env.EXPO_PUBLIC_PREMIUM_PRODUCT_ID_YEARLY ?? 'com.blup.app.premium.yearly',
     debugAi: process.env.EXPO_PUBLIC_DEBUG_AI === 'true',
+
+    // Read here, not from process.env inside the app. Expo inlines
+    // EXPO_PUBLIC_* into the *config*, and `extra` is what reaches the bundle —
+    // a component reading process.env directly gets undefined at runtime and
+    // silently falls back to its default, which is exactly what happened to the
+    // map: the tiles URL was set, the build was clean, and nothing changed.
+    webUrl: process.env.EXPO_PUBLIC_WEB_URL ?? '',
+    vapidPublicKey: process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY ?? '',
+
+    mapTilesUrl: process.env.EXPO_PUBLIC_MAP_TILES_URL ?? '',
+    mapLabelsUrl: process.env.EXPO_PUBLIC_MAP_LABELS_URL ?? '',
+    mapAttribution: process.env.EXPO_PUBLIC_MAP_ATTRIBUTION ?? '',
+    mapTilesDarken: process.env.EXPO_PUBLIC_MAP_TILES_DARKEN ?? '',
+    // CARTO basemap key. Not a secret and cannot be made into one: it ends up
+    // in the JavaScript every visitor downloads, which is true of any tile key.
+    // What protects it is the domain restriction in CARTO's dashboard, so keep
+    // this one limited to blup.sk. EXPO_PUBLIC_CARTO_KEY overrides it.
+    cartoKey:
+      process.env.EXPO_PUBLIC_CARTO_KEY || 'cb1_2fbx_1_94af91e6bc014253ab48e733',
     eas: { projectId: process.env.EAS_PROJECT_ID },
   },
 });

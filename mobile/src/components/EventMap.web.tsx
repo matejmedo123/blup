@@ -15,22 +15,20 @@ import type { Coordinates, EventFeedItem } from '@/types/models';
  * a stylesheet Metro cannot import and a bundle several times the size of this
  * file.
  *
- * Tiles come from OpenStreetMap, inverted in CSS to match a dark app. That is
- * a compromise, and worth being clear about which parts:
+ * Tiles come from CARTO's dark basemap, which is what this app is designed to
+ * sit on. It needs a key — CARTO stamps "API KEY REQUIRED" across every tile
+ * without one — and the key is in `extra.cartoKey`, set from
+ * EXPO_PUBLIC_CARTO_KEY at build time. A basemap key ends up in the JavaScript
+ * the browser downloads whatever anyone does about it; restricting it to the
+ * site's own domain in CARTO's dashboard is what protects it, not secrecy.
  *
- *   · CARTO's dark basemap is the right look, but it now stamps
- *     "API KEY REQUIRED" across every tile unless a key is in the URL.
- *   · Esri's dark grey canvas needs no key and looked right, but outside its
- *     detailed regions it stops at zoom 16 — over Slovakia, zooming in past a
- *     neighbourhood returned "Map data not yet available" on every tile.
- *   · OpenStreetMap has full detail everywhere and needs no key. It is a light
- *     map, so it is inverted; the result is honest and readable, if not as
- *     considered as a purpose-built dark style.
+ * With no key at all it falls back to OpenStreetMap inverted in CSS: a real map
+ * rather than a wall of watermarks, so a fresh clone still works. Two other
+ * options were tried and rejected — Esri's dark canvas has no tiles past zoom
+ * 16 over Slovakia, and CARTO without a key is the watermark. WEB.md keeps the
+ * table.
  *
- * OSM's tiles are a volunteer-funded courtesy. They are the right default
- * because the map works on a fresh clone with nothing configured, and the wrong
- * thing to lean on at scale — point EXPO_PUBLIC_MAP_TILES_URL at a provider you
- * pay before this becomes real traffic. WEB.md has the one-line settings.
+ * EXPO_PUBLIC_MAP_TILES_URL overrides all of it, for a provider of your own.
  *
  * Attribution is rendered because it is a condition of use, not decoration.
  */
@@ -38,19 +36,23 @@ import type { Coordinates, EventFeedItem } from '@/types/models';
 const TILE_SIZE = 256;
 const MIN_ZOOM = 3;
 const MAX_ZOOM = 19;
-const DEFAULT_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const DEFAULT_ATTRIBUTION = 'OpenStreetMap';
+const CARTO_TILES = `https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=${env.cartoKey}`;
+const OSM_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-const TILES_TEMPLATE = env.mapTilesUrl || DEFAULT_TILES;
+const TILES_TEMPLATE = env.mapTilesUrl || (env.cartoKey ? CARTO_TILES : OSM_TILES);
 const LABELS_TEMPLATE = env.mapTilesUrl ? env.mapLabelsUrl : '';
-const ATTRIBUTION = env.mapAttribution || (env.mapTilesUrl ? '' : DEFAULT_ATTRIBUTION);
+const ATTRIBUTION = env.mapAttribution
+  || (env.mapTilesUrl ? '' : env.cartoKey ? 'OpenStreetMap · CARTO' : 'OpenStreetMap');
 
 /**
- * Only the built-in light basemap gets inverted. A configured provider is
- * presumably already the style its owner wanted, so inverting it would be
- * vandalism — `EXPO_PUBLIC_MAP_TILES_DARKEN=1` turns it on for one that is not.
+ * Inverting is only for the OpenStreetMap fallback, which is a light map in a
+ * dark app. CARTO's dark style and any provider configured by hand are already
+ * what their owner intended, so inverting those would be vandalism —
+ * `EXPO_PUBLIC_MAP_TILES_DARKEN=1` turns it on for a light one of your own.
  */
-const DARKEN = env.mapTilesDarken === '1' || (!env.mapTilesUrl && env.mapTilesDarken !== '0');
+const USING_OSM_FALLBACK = !env.mapTilesUrl && !env.cartoKey;
+const DARKEN = env.mapTilesDarken === '1'
+  || (USING_OSM_FALLBACK && env.mapTilesDarken !== '0');
 const DARK_FILTER = 'invert(1) hue-rotate(180deg) saturate(0.55) brightness(0.86) contrast(1.05)';
 
 const fillTemplate = (template: string, x: number, y: number, z: number) =>

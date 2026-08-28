@@ -153,13 +153,15 @@ pan and wheel to zoom. About two hundred lines and no dependency — which
 matters more than it sounds, because Leaflet and Mapbox GL each want a
 stylesheet Metro cannot import and a bundle several times the size.
 
-Tiles come from OpenStreetMap, inverted in CSS to match a dark app. Two other
+Tiles come from CARTO's dark basemap, with the key in `extra.cartoKey`
+(`EXPO_PUBLIC_CARTO_KEY` overrides it). With no key it falls back to
+OpenStreetMap inverted in CSS, so a fresh clone still gets a real map. Two other
 options were tried and rejected, which is worth recording so nobody tries them
 again:
 
 | Provider | Why not |
 | --- | --- |
-| CARTO `dark_all` | Stamps `API KEY REQUIRED` across every tile without a key. The right look, and free with one — the parameter is `?key=`, and `?api_key=` is accepted and ignored, which looks identical to having no key. |
+| CARTO `dark_all` **without a key** | Stamps `API KEY REQUIRED` across every tile. With a key it is what the app now uses — the parameter is `?key=`, and `?api_key=` is accepted and ignored, which looks identical to having no key. |
 | Esri Dark Gray Canvas | No key, right look, but outside its detailed regions it stops at zoom 16. Over Slovakia, zooming past a neighbourhood returned `Map data not yet available` on every tile. |
 
 OpenStreetMap has full detail everywhere and needs no key; inverting it gives a
@@ -178,6 +180,14 @@ EXPO_PUBLIC_MAP_ATTRIBUTION=OpenStreetMap · CARTO
 
 `EXPO_PUBLIC_MAP_LABELS_URL` is only for basemaps that ship place names as a
 separate overlay; a complete basemap already has them.
+**Configuration only reaches the app through `app.config.ts` → `extra`.** Expo
+inlines `EXPO_PUBLIC_*` into the *config*, and the config is what ships in the
+bundle; `process.env.EXPO_PUBLIC_X` read inside a component is undefined at
+runtime and silently falls back to its default. That is a setting that appears
+to be ignored, with a clean build and no warning — it cost a day on the map
+tiles URL. Add a variable in `app.config.ts` and read it from `extra` in
+`src/lib/env.ts`; nothing else.
+
 Anything `EXPO_PUBLIC_*` is compiled into the JavaScript the browser downloads,
 so a tile key is public by construction. Restrict it to the site's own domain in
 the provider's dashboard — that is what stops somebody else spending it, not
