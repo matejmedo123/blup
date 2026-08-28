@@ -23,9 +23,7 @@ type Extra = {
   webUrl: string;
   vapidPublicKey: string;
   mapTilesUrl: string;
-  mapLabelsUrl: string;
   mapAttribution: string;
-  mapTilesDarken: string;
   cartoKey: string;
 };
 
@@ -52,22 +50,11 @@ export const env = {
   /**
    * Where the web map gets its tiles.
    *
-   * Templates with `{z}`, `{x}` and `{y}`. Left empty, the map uses a keyless
-   * dark basemap that works out of the box. Set these to use a provider you
-   * have an account with — e.g. CARTO, whose dark basemap now stamps
-   * "API KEY REQUIRED" across every tile unless the key is in the URL:
-   *
-   *   EXPO_PUBLIC_MAP_TILES_URL=https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key=YOUR_KEY
-   *   EXPO_PUBLIC_MAP_ATTRIBUTION=© OpenStreetMap · CARTO
-   *
-   * A full basemap already has its labels, so `MAP_LABELS_URL` stays empty for
-   * those; it exists for providers that ship labels as a separate overlay.
+   * A template with `{z}`, `{x}` and `{y}`. Left empty the map uses CARTO's
+   * dark basemap with `cartoKey`; set it to point at a provider of your own.
    */
   mapTilesUrl: extra.mapTilesUrl || process.env.EXPO_PUBLIC_MAP_TILES_URL || '',
-  mapLabelsUrl: extra.mapLabelsUrl || process.env.EXPO_PUBLIC_MAP_LABELS_URL || '',
   mapAttribution: extra.mapAttribution || process.env.EXPO_PUBLIC_MAP_ATTRIBUTION || '',
-  /** '1' inverts the tiles for a dark app, '0' leaves them alone. */
-  mapTilesDarken: extra.mapTilesDarken || process.env.EXPO_PUBLIC_MAP_TILES_DARKEN || '',
   /** CARTO basemap key. Public by construction — restrict it by domain. */
   cartoKey: extra.cartoKey || process.env.EXPO_PUBLIC_CARTO_KEY || '',
 

@@ -154,32 +154,28 @@ matters more than it sounds, because Leaflet and Mapbox GL each want a
 stylesheet Metro cannot import and a bundle several times the size.
 
 Tiles come from CARTO's dark basemap, with the key in `extra.cartoKey`
-(`EXPO_PUBLIC_CARTO_KEY` overrides it). With no key it falls back to
-OpenStreetMap inverted in CSS, so a fresh clone still gets a real map. Two other
-options were tried and rejected, which is worth recording so nobody tries them
-again:
+(`EXPO_PUBLIC_CARTO_KEY` overrides it). **Attribution is rendered on the map
+because it is a condition of use.**
 
-| Provider | Why not |
+There is no second basemap, deliberately. Two were tried and both are gone:
+
+| Tried | Why it is not there |
 | --- | --- |
-| CARTO `dark_all` **without a key** | Stamps `API KEY REQUIRED` across every tile. With a key it is what the app now uses — the parameter is `?key=`, and `?api_key=` is accepted and ignored, which looks identical to having no key. |
-| Esri Dark Gray Canvas | No key, right look, but outside its detailed regions it stops at zoom 16. Over Slovakia, zooming past a neighbourhood returned `Map data not yet available` on every tile. |
+| Esri Dark Gray Canvas | No key and the right look, but outside its detailed regions it stops at zoom 16. Over Slovakia, zooming past a neighbourhood returned `Map data not yet available` on every tile. |
+| OpenStreetMap, inverted in CSS | Full detail and no key, but a stand-in for having no CARTO key — and as a fallback it meant the map could quietly come up looking wrong, with no way to tell a bad deploy from a bad setting. |
 
-OpenStreetMap has full detail everywhere and needs no key; inverting it gives a
-readable dark map, if not as considered as a purpose-built dark style. Its tiles
-are a volunteer-funded courtesy — the right default because the map works on a
-fresh clone, and the wrong thing to lean on at scale. **Attribution is rendered
-on the map because it is a condition of use.**
+CARTO without a key stamps `API KEY REQUIRED` across every tile; the parameter
+is `?key=`, and `?api_key=` is accepted and ignored, which looks identical to
+having no key at all.
 
-To use CARTO (or MapTiler, Stadia, Mapbox) point the build at it, no code
-change:
+To use a different provider (MapTiler, Stadia, Mapbox) point the build at it,
+no code change:
 
 ```bash
-EXPO_PUBLIC_MAP_TILES_URL=https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=YOUR_KEY
-EXPO_PUBLIC_MAP_ATTRIBUTION=OpenStreetMap · CARTO
+EXPO_PUBLIC_MAP_TILES_URL=https://example.com/dark/{z}/{x}/{y}.png?key=YOUR_KEY
+EXPO_PUBLIC_MAP_ATTRIBUTION=OpenStreetMap · Example
 ```
 
-`EXPO_PUBLIC_MAP_LABELS_URL` is only for basemaps that ship place names as a
-separate overlay; a complete basemap already has them.
 **Configuration only reaches the app through `app.config.ts` → `extra`.** Expo
 inlines `EXPO_PUBLIC_*` into the *config*, and the config is what ships in the
 bundle; `process.env.EXPO_PUBLIC_X` read inside a component is undefined at
@@ -192,10 +188,6 @@ Anything `EXPO_PUBLIC_*` is compiled into the JavaScript the browser downloads,
 so a tile key is public by construction. Restrict it to the site's own domain in
 the provider's dashboard — that is what stops somebody else spending it, not
 keeping it out of sight.
-
-`EXPO_PUBLIC_MAP_TILES_DARKEN` inverts the tiles — on by default for the
-built-in OpenStreetMap layer, off for anything you configure, and `1` forces it
-back on for a light provider of your own.
 
 Panning moves one CSS transform on the layer holding the tiles and the pins,
 and commits the new centre when the finger lifts. Recomputing each tile's

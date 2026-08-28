@@ -179,9 +179,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     vapidPublicKey: process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY ?? '',
 
     mapTilesUrl: process.env.EXPO_PUBLIC_MAP_TILES_URL ?? '',
-    mapLabelsUrl: process.env.EXPO_PUBLIC_MAP_LABELS_URL ?? '',
     mapAttribution: process.env.EXPO_PUBLIC_MAP_ATTRIBUTION ?? '',
-    mapTilesDarken: process.env.EXPO_PUBLIC_MAP_TILES_DARKEN ?? '',
     // CARTO basemap key. Not a secret and cannot be made into one: it ends up
     // in the JavaScript every visitor downloads, which is true of any tile key.
     // What protects it is the domain restriction in CARTO's dashboard, so keep

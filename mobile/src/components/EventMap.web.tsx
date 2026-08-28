@@ -22,13 +22,14 @@ import type { Coordinates, EventFeedItem } from '@/types/models';
  * the browser downloads whatever anyone does about it; restricting it to the
  * site's own domain in CARTO's dashboard is what protects it, not secrecy.
  *
- * With no key at all it falls back to OpenStreetMap inverted in CSS: a real map
- * rather than a wall of watermarks, so a fresh clone still works. Two other
- * options were tried and rejected — Esri's dark canvas has no tiles past zoom
- * 16 over Slovakia, and CARTO without a key is the watermark. WEB.md keeps the
- * table.
+ * There is no second basemap. Two were tried and both are gone: Esri's dark
+ * canvas has no tiles past zoom 16 over Slovakia, and OpenStreetMap inverted in
+ * CSS was a stand-in for having no key. Keeping either as a fallback meant the
+ * map could quietly come up looking wrong — and then nobody could tell whether
+ * they were looking at a bad deploy or a bad setting. One basemap, so a map
+ * that looks wrong is a deploy that did not land.
  *
- * EXPO_PUBLIC_MAP_TILES_URL overrides all of it, for a provider of your own.
+ * EXPO_PUBLIC_MAP_TILES_URL still overrides it, for a provider of your own.
  *
  * Attribution is rendered because it is a condition of use, not decoration.
  */
@@ -37,33 +38,15 @@ const TILE_SIZE = 256;
 const MIN_ZOOM = 3;
 const MAX_ZOOM = 19;
 const CARTO_TILES = `https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=${env.cartoKey}`;
-const OSM_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-const TILES_TEMPLATE = env.mapTilesUrl || (env.cartoKey ? CARTO_TILES : OSM_TILES);
-const LABELS_TEMPLATE = env.mapTilesUrl ? env.mapLabelsUrl : '';
-const ATTRIBUTION = env.mapAttribution
-  || (env.mapTilesUrl ? '' : env.cartoKey ? 'OpenStreetMap · CARTO' : 'OpenStreetMap');
+const TILES_TEMPLATE = env.mapTilesUrl || CARTO_TILES;
+const ATTRIBUTION = env.mapAttribution || (env.mapTilesUrl ? '' : 'OpenStreetMap · CARTO');
 
-/**
- * Inverting is only for the OpenStreetMap fallback, which is a light map in a
- * dark app. CARTO's dark style and any provider configured by hand are already
- * what their owner intended, so inverting those would be vandalism —
- * `EXPO_PUBLIC_MAP_TILES_DARKEN=1` turns it on for a light one of your own.
- */
-const USING_OSM_FALLBACK = !env.mapTilesUrl && !env.cartoKey;
-const DARKEN = env.mapTilesDarken === '1'
-  || (USING_OSM_FALLBACK && env.mapTilesDarken !== '0');
-const DARK_FILTER = 'invert(1) hue-rotate(180deg) saturate(0.55) brightness(0.86) contrast(1.05)';
-
-const fillTemplate = (template: string, x: number, y: number, z: number) =>
-  template
+const TILE_URL = (x: number, y: number, z: number) =>
+  TILES_TEMPLATE
     .replace('{z}', String(z))
     .replace('{x}', String(x))
     .replace('{y}', String(y));
-
-const TILE_URL = (x: number, y: number, z: number) => fillTemplate(TILES_TEMPLATE, x, y, z);
-const LABEL_URL = (x: number, y: number, z: number) =>
-  (LABELS_TEMPLATE ? fillTemplate(LABELS_TEMPLATE, x, y, z) : null);
 
 // --- Web Mercator ------------------------------------------------------------
 const lonToX = (lon: number, z: number) => ((lon + 180) / 360) * Math.pow(2, z);
@@ -365,13 +348,7 @@ export function EventMap({
     const halfW = size.width / 2 / TILE_SIZE;
     const halfH = size.height / 2 / TILE_SIZE;
 
-    const out: {
-      key: string;
-      url: string;
-      labels: string | null;
-      left: number;
-      top: number;
-    }[] = [];
+    const out: { key: string; url: string; left: number; top: number }[] = [];
     for (let x = Math.floor(centreX - halfW); x <= Math.ceil(centreX + halfW); x++) {
       for (let y = Math.floor(centreY - halfH); y <= Math.ceil(centreY + halfH); y++) {
         if (y < 0 || y >= scale) continue;               // no tiles past the poles
@@ -379,7 +356,6 @@ export function EventMap({
         out.push({
           key: `${zoom}/${x}/${y}`,
           url: TILE_URL(wrappedX, y, zoom),
-          labels: LABEL_URL(wrappedX, y, zoom),
           left: (x - centreX) * TILE_SIZE + size.width / 2,
           top: (y - centreY) * TILE_SIZE + size.height / 2,
         });
@@ -449,42 +425,21 @@ export function EventMap({
           style={{ position: 'absolute', inset: 0, willChange: 'transform' }}
         >
         {tiles.map((tile) => (
-          <React.Fragment key={tile.key}>
-            <img
-              src={tile.url}
-              alt=""
-              draggable={false}
-              style={{
-                position: 'absolute',
-                left: tile.left,
-                top: tile.top,
-                width: TILE_SIZE,
-                height: TILE_SIZE,
-                userSelect: 'none',
-                pointerEvents: 'none',
-                // The tiles only — pins and the location dot keep their colours.
-                filter: DARKEN ? DARK_FILTER : undefined,
-              }}
-            />
-            {/* Place names, when the basemap keeps them in their own layer. */}
-            {tile.labels ? (
-              <img
-                src={tile.labels}
-                alt=""
-                draggable={false}
-                style={{
-                  position: 'absolute',
-                  left: tile.left,
-                  top: tile.top,
-                  width: TILE_SIZE,
-                  height: TILE_SIZE,
-                  userSelect: 'none',
-                  pointerEvents: 'none',
-                  filter: DARKEN ? DARK_FILTER : undefined,
-                }}
-              />
-            ) : null}
-          </React.Fragment>
+          <img
+            key={tile.key}
+            src={tile.url}
+            alt=""
+            draggable={false}
+            style={{
+              position: 'absolute',
+              left: tile.left,
+              top: tile.top,
+              width: TILE_SIZE,
+              height: TILE_SIZE,
+              userSelect: 'none',
+              pointerEvents: 'none',
+            }}
+          />
         ))}
 
         {userLocation ? (
