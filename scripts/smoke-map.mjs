@@ -125,6 +125,7 @@ if (!box) {
   await touch('touchEnd', []);
   await page.waitForTimeout(1000);
   check(await tilesOf() !== beforeTiles, 'ťahanie prstom posunie mapu');
+
 }
 
 await browser.close();

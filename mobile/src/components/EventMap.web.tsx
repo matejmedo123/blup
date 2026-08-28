@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { categoryFamilies, colors, emojiFor, familyFor, radius, spacing, typography } from '@/theme';
@@ -226,6 +226,22 @@ export function EventMap({
     report(centre, clamped);
   };
 
+  /**
+   * Put the layer back once the new positions are on screen.
+   *
+   * Resetting the transform at the moment the finger lifts was a frame of the
+   * map snapping back to where the drag started: the transform is a DOM write
+   * and happens at once, while the new centre is React state and lands a frame
+   * or two later, so for that gap the tiles still sat at the old position with
+   * no offset on them. That gap is the flicker. A layout effect runs after the
+   * commit that moves the tiles and before the browser paints, so there is no
+   * frame where the two disagree.
+   */
+  useLayoutEffect(() => {
+    paint(0, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centre, zoom]);
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!interactive) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -283,10 +299,12 @@ export function EventMap({
     if (!started) return;
 
     const { x, y } = offset.current;
-    paint(0, 0);
 
     // Nothing moved — a tap, not a drag.
-    if (x === 0 && y === 0) return;
+    if (x === 0 && y === 0) {
+      paint(0, 0);
+      return;
+    }
 
     const next = {
       latitude: yToLat(latToY(started.centre.latitude, zoom) - y / TILE_SIZE, zoom),
@@ -314,10 +332,14 @@ export function EventMap({
           ? lastSpread.current / pinch.current.distance
           : 1;
         const target = pinch.current.zoom + Math.round(Math.log2(ratio || 1));
+        const changing = target !== zoom
+          && target >= MIN_ZOOM && target <= MAX_ZOOM;
 
         pinch.current = null;
         lastSpread.current = 0;
-        paint(0, 0);
+        // If the zoom is not going to change there is no re-render coming, so
+        // nothing else will put the scale back.
+        if (!changing) paint(0, 0);
         applyZoom(target);
       }
       return;
@@ -449,8 +471,12 @@ export function EventMap({
               ...project(userLocation.latitude, userLocation.longitude),
               width: 16, height: 16, marginLeft: -8, marginTop: -8,
               borderRadius: '50%',
-              background: colors.mapUser,
-              boxShadow: `0 0 0 6px ${colors.accentSoft}, 0 2px 8px rgba(0,0,0,.6)`,
+              // White with a blue halo now that the event pins are blue —
+              // otherwise "you are here" was the same colour as everything
+              // else on the map and stopped meaning anything.
+              background: '#fff',
+              boxShadow: `0 0 0 4px ${colors.mapUser}, 0 0 0 9px ${colors.accentSoft},`
+                + ` 0 2px 8px rgba(0,0,0,.6)`,
               pointerEvents: 'none',
             }}
           />
@@ -490,22 +516,24 @@ export function EventMap({
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: active ? '6px 10px' : '5px 8px',
                 borderRadius: 999,
-                // The family colour rather than one grey for everything: a
-                // glance at the map should separate a music night from a run
-                // before any label is read.
-                border: `1px solid ${active ? tint : colors.border}`,
-                background: active ? tint : colors.surface,
-                color: active ? '#fff' : colors.text,
+                // BLUP's own blue, not the near-black surface: a dark pill on a
+                // dark basemap read as a hole in the map rather than as a thing
+                // to tap. The category still comes through the emoji, and a
+                // hairline of the family colour keeps a glance at the map able
+                // to separate a music night from a run.
+                border: `1px solid ${active ? '#fff' : tint}`,
+                background: active ? colors.accentHover : colors.accent,
+                color: '#fff',
                 font: '700 12px/1 system-ui, sans-serif',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                boxShadow: `0 4px 14px rgba(0,0,0,.5)${active ? '' : `, inset 0 0 0 2px ${tint}22`}`,
+                boxShadow: `0 4px 14px rgba(0,0,0,.5)${
+                  active ? ', 0 0 0 3px rgba(255,255,255,.28)' : ''
+                }`,
               }}
             >
               <span aria-hidden>{emojiFor(lead.category)}</span>
-              {grouped ? (
-                <span style={{ color: active ? '#fff' : tint }}>{cluster.events.length}</span>
-              ) : null}
+              {grouped ? <span>{cluster.events.length}</span> : null}
               {active && !grouped ? <span>{lead.title}</span> : null}
             </button>
           );
