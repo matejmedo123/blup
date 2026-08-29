@@ -1,0 +1,288 @@
+@import "tailwindcss";
+
+/* ================================================================== */
+/*  ENZO — dizajnové tokeny (odvodené z brand boardu)                  */
+/* ================================================================== */
+
+@theme {
+  /* Farebná paleta */
+  --color-burgundy: #7a1e1e;
+  --color-burgundy-500: #8d2626;
+  --color-burgundy-700: #601616;
+  --color-burgundy-800: #4a1010;
+  --color-burgundy-900: #320a0a;
+
+  --color-cream: #f6f0e3;
+  --color-cream-200: #efe7d5;
+  --color-cream-300: #e3d8c1;
+  --color-cream-400: #cfc1a5;
+
+  --color-ink: #111111;
+  --color-ink-800: #1b1514;
+  --color-ink-700: #2a2220;
+
+  --color-gold: #e1b12c;
+  --color-gold-600: #c8991c;
+
+  /* Typografia */
+  --font-display: var(--font-anton), "Arial Narrow", "Haettenschweiler", sans-serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+
+  /* Layout */
+  --spacing-header: 4.5rem;
+  --breakpoint-xs: 26.75rem; /* 428px — veľké telefóny */
+
+  /* Animácie */
+  --animate-reveal: reveal 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-slide-up: slide-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-pop: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes cart-bump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+/* ================================================================== */
+/*  Základ                                                            */
+/* ================================================================== */
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5.5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-cream);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-synthesis-weight: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.005em;
+    line-height: 1.02;
+    text-transform: uppercase;
+  }
+
+  ::selection {
+    background: var(--color-burgundy);
+    color: var(--color-cream);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-gold);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  input, select, textarea, button {
+    font-family: inherit;
+    font-size: 100%;
+  }
+
+  /* Odstránenie natívneho vzhľadu number inputov */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+/* ================================================================== */
+/*  Komponentové utility                                              */
+/* ================================================================== */
+
+@utility container-enzo {
+  width: 100%;
+  max-width: 88rem; /* 1408px */
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+
+  @media (width >= 48rem) {
+    padding-inline: 2rem;
+  }
+  @media (width >= 80rem) {
+    padding-inline: 3rem;
+  }
+}
+
+/* Šachovnicový vzor z brand boardu */
+@utility checkerboard {
+  background-image: repeating-conic-gradient(
+    var(--checker-color, currentColor) 0% 25%,
+    transparent 0% 50%
+  );
+  background-size: var(--checker-size, 1.25rem) var(--checker-size, 1.25rem);
+  background-position: 0 0;
+}
+
+/* Jemná zrnitosť pre "tlačený" pocit */
+@utility grain {
+  position: relative;
+}
+
+@utility text-balance-enzo {
+  text-wrap: balance;
+}
+
+@layer components {
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 0.6875rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .rule-checker {
+    height: 0.75rem;
+    --checker-size: 0.75rem;
+  }
+
+  .link-underline {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 2px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    transition: background-size 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .link-underline:hover,
+  .link-underline:focus-visible {
+    background-size: 100% 2px;
+  }
+
+  /* Skryté scrollbary pre horizontálne taby */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Rešpektovanie preferencie používateľa */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ================================================================== */
+/*  Tlač — účtenka / potvrdenie objednávky                            */
+/* ================================================================== */
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 6mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    overflow: visible !important;
+  }
+
+  .no-print,
+  header,
+  footer,
+  nav {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  * {
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
