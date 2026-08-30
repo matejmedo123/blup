@@ -396,25 +396,40 @@ export function EventMap({
    *
    * Without this, three events on the same street drew three overlapping
    * bubbles: you could not tell how many there were, and the top one was the
-   * only one you could tap. Bucketed by screen position rather than by
-   * coordinates, so a cluster splits naturally as you zoom in.
+   * only one you could tap.
+   *
+   * Measured by distance, not by a grid. Bucketing by `round(x / cell)` was
+   * cheaper and wrong at the edges: two pins four pixels apart but either side
+   * of a cell boundary landed in different buckets and were drawn on top of
+   * each other — one pin covering another, which is the thing this exists to
+   * prevent. Comparing against the clusters already made costs nothing at this
+   * many events and has no boundaries to fall between.
    */
   const clusters = useMemo(() => {
-    const CELL = 46;
-    const buckets = new Map<string, { key: string; position: { left: number; top: number }; events: EventFeedItem[] }>();
+    // A pin is about 54px wide with the count on it; merge anything that would
+    // overlap, plus a little room so two do not sit edge to edge.
+    const MERGE_WITHIN = 60;
+    const made: { key: string; position: { left: number; top: number }; events: EventFeedItem[] }[] = [];
 
-    for (const event of events) {
+    // Sorted so the same events always cluster the same way, whatever order
+    // the feed returned them in — otherwise a refetch could reshuffle the pins.
+    const ordered = [...events].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+    for (const event of ordered) {
       const position = project(event.latitude, event.longitude);
-      const key = `${Math.round(position.left / CELL)}:${Math.round(position.top / CELL)}`;
-      const existing = buckets.get(key);
-      if (existing) {
-        existing.events.push(event);
+
+      const near = made.find((cluster) =>
+        Math.hypot(cluster.position.left - position.left, cluster.position.top - position.top)
+          < MERGE_WITHIN);
+
+      if (near) {
+        near.events.push(event);
       } else {
-        buckets.set(key, { key, position, events: [event] });
+        made.push({ key: event.id, position, events: [event] });
       }
     }
 
-    return [...buckets.values()];
+    return made;
   }, [events, project]);
 
   return (
