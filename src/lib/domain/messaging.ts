@@ -315,12 +315,14 @@ export async function adminConversations(eventId: string, query?: string) {
       shiftId: conversations.shiftId,
       lastMessageAt: conversations.lastMessageAt,
       createdAt: conversations.createdAt,
+      // Korelácia musí byť kvalifikovaná — pozri poznámku pri `filledExpr` v `shifts.ts`.
       memberCount: sql<number>`(
-        select count(*)::int from ${conversationMembers} cm where cm.conversation_id = ${conversations.id}
+        select count(*)::int from ${conversationMembers} cm
+        where cm.conversation_id = "conversations"."id"
       )`,
       messageCount: sql<number>`(
         select count(*)::int from ${messages} m
-        where m.conversation_id = ${conversations.id} and m.deleted_at is null
+        where m.conversation_id = "conversations"."id" and m.deleted_at is null
       )`,
     })
     .from(conversations)

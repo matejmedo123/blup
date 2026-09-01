@@ -245,15 +245,20 @@ export async function portalConversations(userId: string, eventId: string) {
       shiftId: conversations.shiftId,
       lastMessageAt: conversations.lastMessageAt,
       lastReadAt: conversationMembers.lastReadAt,
+      // Korelácia musí byť kvalifikovaná — pozri poznámku pri `filledExpr` v `shifts.ts`.
       memberCount: sql<number>`(
-        select count(*)::int from ${conversationMembers} cm where cm.conversation_id = ${conversations.id}
+        select count(*)::int from ${conversationMembers} cm
+        where cm.conversation_id = "conversations"."id"
       )`,
       unread: sql<number>`(
         select count(*)::int from ${messages} m
-        where m.conversation_id = ${conversations.id}
+        where m.conversation_id = "conversations"."id"
           and m.deleted_at is null
           and (m.sender_id is null or m.sender_id <> ${userId})
-          and (${conversationMembers.lastReadAt} is null or m.created_at > ${conversationMembers.lastReadAt})
+          and (
+            "conversation_members"."last_read_at" is null
+            or m.created_at > "conversation_members"."last_read_at"
+          )
       )`,
     })
     .from(conversationMembers)

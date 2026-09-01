@@ -48,9 +48,15 @@ export const ACTIVE_ASSIGNMENT_STATUSES: AssignmentStatus[] = [
   "completed",
 ];
 
+/**
+ * Korelácia je napísaná ako `"shifts"."id"` zámerne: drizzle vykresľuje stĺpce
+ * v SELECT zozname nekvalifikovane, takže `${shifts.id}` by sa vnútri poddotazu
+ * naviazalo na `sa.id` a počet by vyšiel vždy 0. Platí pre dotazy nad `shifts`
+ * bez aliasu.
+ */
 const filledExpr = sql<number>`(
   select count(*)::int from ${shiftAssignments} sa
-  where sa.shift_id = ${shifts.id}
+  where sa.shift_id = "shifts"."id"
     and sa.status in ('invited', 'pending_confirmation', 'confirmed', 'completed')
 )`;
 
@@ -383,7 +389,7 @@ export async function occupancy(eventId: string): Promise<{ filled: number; capa
       capacity: sql<number>`coalesce(sum(${shifts.capacity}), 0)::int`,
       filled: sql<number>`coalesce(sum((
         select count(*) from ${shiftAssignments} sa
-        where sa.shift_id = ${shifts.id}
+        where sa.shift_id = "shifts"."id"
           and sa.status in ('invited', 'pending_confirmation', 'confirmed', 'completed')
       )), 0)::int`,
     })

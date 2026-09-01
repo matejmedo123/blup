@@ -78,7 +78,7 @@ export async function listApplicants(
   }
   if (filters.position) {
     conditions.push(
-      sql`exists (select 1 from ${applicationPositions} ap where ap.application_id = ${applications.id} and ap.position_key = ${filters.position})`,
+      sql`exists (select 1 from ${applicationPositions} ap where ap.application_id = "applications"."id" and ap.position_key = ${filters.position})`,
     );
   }
   if (filters.minScore != null) {
@@ -435,9 +435,9 @@ export async function ensureDirectConversation(args: {
         eq(conversations.eventId, args.eventId),
         eq(conversations.type, "direct"),
         isNull(conversations.deletedAt),
-        sql`(select count(*) from ${conversationMembers} cm where cm.conversation_id = ${conversations.id}) = 2`,
-        sql`exists (select 1 from ${conversationMembers} cm where cm.conversation_id = ${conversations.id} and cm.user_id = ${args.userA})`,
-        sql`exists (select 1 from ${conversationMembers} cm where cm.conversation_id = ${conversations.id} and cm.user_id = ${args.userB})`,
+        sql`(select count(*) from ${conversationMembers} cm where cm.conversation_id = "conversations"."id") = 2`,
+        sql`exists (select 1 from ${conversationMembers} cm where cm.conversation_id = "conversations"."id" and cm.user_id = ${args.userA})`,
+        sql`exists (select 1 from ${conversationMembers} cm where cm.conversation_id = "conversations"."id" and cm.user_id = ${args.userB})`,
       ),
     )
     .limit(1);

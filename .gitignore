@@ -46,3 +46,6 @@ CLAUDE.md
 
 # local dev database (PGlite)
 /.pglite/
+
+# test database
+/.pglite-test/

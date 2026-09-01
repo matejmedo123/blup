@@ -97,7 +97,8 @@ export const QUESTIONS: { key: (typeof QUESTION_KEYS)[number]; label: string }[]
 ];
 
 export const stepAnswersSchema = z.object({
-  answers: z.record(z.enum(QUESTION_KEYS), z.boolean()),
+  // Doplňujúce otázky sú nepovinné — nezodpovedaná otázka jednoducho chýba.
+  answers: z.partialRecord(z.enum(QUESTION_KEYS), z.boolean()),
   motivation: optionalText(800),
 });
 

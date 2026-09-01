@@ -78,7 +78,7 @@ export async function listStaff(
       sql`exists (
         select 1 from ${shiftAssignments} sa
         join ${shifts} s on s.id = sa.shift_id
-        where sa.user_id = ${users.id} and s.position_id = ${filters.positionId}
+        where sa.user_id = "users"."id" and s.position_id = ${filters.positionId}
       )`,
     );
   }
@@ -87,18 +87,19 @@ export async function listStaff(
   }
   const where = and(...conditions);
 
+  // Korelácia musí byť kvalifikovaná — pozri poznámku pri `filledExpr` v `shifts.ts`.
   const shiftCountExpr = sql<number>`(
     select count(*)::int from ${shiftAssignments} sa
-    where sa.user_id = ${users.id} and sa.event_id = ${eventId}
+    where sa.user_id = "users"."id" and sa.event_id = ${eventId}
       and sa.status in ('confirmed','completed')
   )`;
   const minutesExpr = sql<number>`(
     select coalesce(sum(a.worked_minutes), 0)::int from ${attendance} a
-    where a.user_id = ${users.id} and a.event_id = ${eventId}
+    where a.user_id = "users"."id" and a.event_id = ${eventId}
   )`;
   const noShowExpr = sql<number>`(
     select count(*)::int from ${attendance} a
-    where a.user_id = ${users.id} and a.event_id = ${eventId} and a.status = 'missing'
+    where a.user_id = "users"."id" and a.event_id = ${eventId} and a.status = 'missing'
   )`;
 
   const orderBy = (() => {
