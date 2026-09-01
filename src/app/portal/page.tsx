@@ -104,7 +104,7 @@ export default async function PortalHomePage() {
               ? `${active.coordinatorFirstName} ${active.coordinatorLastName}`
               : null
           }
-          conversationHref={active.coordinatorId ? `/portal/messages` : null}
+          coordinatorId={active.coordinatorId}
           serverNow={now.getTime()}
         />
       ) : next ? (

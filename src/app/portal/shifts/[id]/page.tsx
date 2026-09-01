@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { CheckInButton } from "@/components/portal/CheckInButton";
 import { ConfirmShiftButtons } from "@/components/portal/ConfirmShiftButtons";
+import { MessageUserButton, ShiftChatButton } from "@/components/portal/OpenConversationButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { ASSIGNMENT_STATUS_META, Pill, StatusPill } from "@/components/ui/Badge";
 import { ButtonLink, RoundButton } from "@/components/ui/Button";
@@ -45,8 +46,8 @@ export default async function PortalShiftPage({
   const settings = eventSettings(event);
   const colleagues = shift.showColleagues ? await shiftColleagues(id, session.user.id) : [];
 
-  const now = Date.now();
-  const minutesToStart = (shift.startsAt.getTime() - now) / 60_000;
+  const now = new Date();
+  const minutesToStart = (shift.startsAt.getTime() - now.getTime()) / 60_000;
   const durationMinutes = Math.round(
     (shift.endsAt.getTime() - shift.startsAt.getTime()) / 60_000,
   );
@@ -118,7 +119,7 @@ export default async function PortalShiftPage({
         {shift.coordinatorFirstName ? (
           <div className="flex items-center justify-between gap-3 border-t border-divider py-3.5">
             <span className="text-[15px] text-muted">Koordinátor</span>
-            <Link href="/portal/messages" className="flex items-center gap-2.5">
+            <span className="flex items-center gap-2.5">
               <Avatar
                 firstName={shift.coordinatorFirstName}
                 lastName={shift.coordinatorLastName ?? ""}
@@ -126,7 +127,8 @@ export default async function PortalShiftPage({
                 tone="dark"
               />
               <span className="text-[15px] font-semibold">{shift.coordinatorFirstName}</span>
-            </Link>
+              <MessageUserButton userId={shift.coordinatorId!} size="sm" variant="quiet" />
+            </span>
           </div>
         ) : null}
       </Card>
@@ -160,6 +162,9 @@ export default async function PortalShiftPage({
           <h2 className="mb-3 text-lg font-bold tracking-[-0.02em]">
             Kto ešte robí ({colleagues.length})
           </h2>
+          <div className="mb-3">
+            <ShiftChatButton shiftId={shift.shiftId} variant="outline" size="sm" />
+          </div>
           <div className="flex flex-wrap gap-2.5">
             {colleagues.map((person) => (
               <span

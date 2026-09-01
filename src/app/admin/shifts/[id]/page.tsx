@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { AssignPanel } from "@/components/admin/AssignPanel";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { ShiftActions } from "@/components/admin/ShiftActions";
+import { ShiftChatButton } from "@/components/portal/OpenConversationButton";
 import { SHIFT_STATUS_META, StatusPill } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -79,6 +80,7 @@ export default async function ShiftDetailPage({ params }: { params: Promise<{ id
               <ButtonLink href={`/admin/shifts/${id}/upravit`} variant="outline" size="sm">
                 Upraviť
               </ButtonLink>
+              <ShiftChatButton shiftId={id} target="admin" variant="outline" size="sm" />
               <ShiftActions shiftId={id} status={shift.status} usesQr={usesQr} />
             </>
           ) : null

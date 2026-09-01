@@ -8,6 +8,8 @@ import { InlineNotice } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 
+import { MessageUserButton } from "./OpenConversationButton";
+
 /**
  * Živý časovač a zárobok — tiká každú sekundu od skutočného check-inu.
  * Hodiny sú externý zdroj, preto `useSyncExternalStore`: serverový snapshot
@@ -42,7 +44,7 @@ export function OnShiftCard({
   rate,
   currency,
   coordinatorName,
-  conversationHref,
+  coordinatorId,
   serverNow,
 }: {
   shiftId: string;
@@ -52,7 +54,7 @@ export function OnShiftCard({
   rate: number;
   currency: string;
   coordinatorName: string | null;
-  conversationHref: string | null;
+  coordinatorId: string | null;
   /** `Date.now()` v momente serverového renderu — kotva pre hydratáciu. */
   serverNow: number;
 }) {
@@ -123,13 +125,13 @@ export function OnShiftCard({
         CHECK-OUT
       </Button>
 
-      {coordinatorName && conversationHref ? (
-        <p className="mt-4 text-[13px]">
-          Koordinátor: <span className="font-semibold">{coordinatorName}</span> ·{" "}
-          <a href={conversationHref} className="font-semibold underline underline-offset-4">
-            napísať
-          </a>
-        </p>
+      {coordinatorName && coordinatorId ? (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/12 pt-4">
+          <p className="text-[13px]">
+            Koordinátor: <span className="font-semibold">{coordinatorName}</span>
+          </p>
+          <MessageUserButton userId={coordinatorId} size="sm" variant="quiet" />
+        </div>
       ) : null}
     </div>
   );

@@ -8,6 +8,7 @@ import { DetailTabs } from "@/components/admin/DetailTabs";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { StaffNoteForm } from "@/components/admin/StaffNoteForm";
 import { StaffRoleForm } from "@/components/admin/StaffRoleForm";
+import { MessageUserButton } from "@/components/portal/OpenConversationButton";
 import { Avatar } from "@/components/ui/Avatar";
 import {
   ASSIGNMENT_STATUS_META,
@@ -183,9 +184,7 @@ export default async function StaffDetailPage({
             <ButtonLink href={`/admin/assignments?user=${id}`} variant="dark" size="sm">
               Priradiť na smenu
             </ButtonLink>
-            <ButtonLink href={`/admin/messages/new?user=${id}`} variant="outline" size="sm">
-              Napísať
-            </ButtonLink>
+            <MessageUserButton userId={id} target="admin" variant="outline" size="sm" />
           </>
         }
       />
