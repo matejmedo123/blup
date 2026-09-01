@@ -10,7 +10,7 @@ import { IconMenu, IconX } from "@/components/ui/Icons";
 import { cn } from "@/lib/cn";
 
 import { ADMIN_NAV, isActive } from "./nav-config";
-import { CommandMenu, type CommandMenuData } from "./CommandMenu";
+import { CommandMenu } from "./CommandMenu";
 import { EventSwitcher } from "./EventSwitcher";
 
 export type AdminShellUser = {
@@ -36,17 +36,12 @@ export function AdminShell({
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [commandData, setCommandData] = useState<CommandMenuData | null>(null);
 
   const allowed = new Set(sections);
   const groups = ADMIN_NAV.map((group) => ({
     ...group,
     items: group.items.filter((item) => allowed.has(item.section)),
   })).filter((group) => group.items.length > 0);
-
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -76,6 +71,7 @@ export function AdminShell({
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setMobileNavOpen(false)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-h-11 items-center rounded-10 px-2.5 text-sm transition-colors duration-150",
@@ -197,12 +193,8 @@ export function AdminShell({
         </main>
       </div>
 
-      <CommandMenu
-        open={commandOpen}
-        onClose={() => setCommandOpen(false)}
-        data={commandData}
-        onData={setCommandData}
-      />
+      {/* Menu sa montuje až pri otvorení — stav sa tak resetuje bez efektu. */}
+      {commandOpen ? <CommandMenu onClose={() => setCommandOpen(false)} /> : null}
     </div>
   );
 }

@@ -7,49 +7,36 @@ import { globalSearch, type SearchHit } from "@/app/actions/search";
 import { Spinner } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
-export type CommandMenuData = SearchHit[];
-
-/** ⌘K vyhľadávanie s debounce (§21). */
-export function CommandMenu({
-  open,
-  onClose,
-  data,
-  onData,
-}: {
-  open: boolean;
-  onClose: () => void;
-  data: CommandMenuData | null;
-  onData: (data: CommandMenuData | null) => void;
-}) {
+/** ⌘K vyhľadávanie s debounce (§21). Montuje sa až pri otvorení. */
+export function CommandMenu({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
+  // Výsledky si nesú dopyt, ku ktorému patria — zastarané sa tak zahodia
+  // pri renderi a netreba ich mazať efektom.
+  const [results, setResults] = useState<{ query: string; hits: SearchHit[] } | null>(null);
   const [highlight, setHighlight] = useState(0);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (open) {
-      setQuery("");
-      onData(null);
-      setHighlight(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open, onData]);
+  const trimmed = query.trim();
+  const tooShort = trimmed.length < 2;
+  const data = !tooShort && results?.query === trimmed ? results.hits : null;
 
   useEffect(() => {
-    if (!open) return;
-    if (query.trim().length < 2) {
-      onData(null);
-      return;
-    }
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) return;
     const timer = setTimeout(() => {
       startTransition(async () => {
-        onData(await globalSearch(query));
+        setResults({ query: term, hits: await globalSearch(term) });
         setHighlight(0);
       });
     }, 250);
     return () => clearTimeout(timer);
-  }, [query, open, onData]);
+  }, [query]);
 
   const groups = useMemo(() => {
     const map = new Map<string, SearchHit[]>();
@@ -62,8 +49,6 @@ export function CommandMenu({
   }, [data]);
 
   const flat = useMemo(() => groups.flatMap(([, hits]) => hits), [groups]);
-
-  if (!open) return null;
 
   function go(hit: SearchHit) {
     onClose();
@@ -108,14 +93,14 @@ export function CommandMenu({
         />
 
         <div className="max-h-[50vh] overflow-y-auto py-3">
-          {pending ? (
-            <div className="flex items-center gap-2.5 px-[22px] py-3 text-[15px] text-muted">
-              <Spinner /> Hľadám…
-            </div>
-          ) : query.trim().length < 2 ? (
+          {tooShort ? (
             <p className="px-[22px] py-3 text-[15px] text-faint">
               Napíš aspoň dva znaky — meno, e-mail, mesto alebo názov smeny.
             </p>
+          ) : data === null || pending ? (
+            <div className="flex items-center gap-2.5 px-[22px] py-3 text-[15px] text-muted">
+              <Spinner /> Hľadám…
+            </div>
           ) : flat.length === 0 ? (
             <p className="px-[22px] py-3 text-[15px] text-faint">
               Pre „{query}“ sme nič nenašli. Skús iné meno alebo e-mail.

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { headers } from "next/headers";
-import { forbidden, redirect, unauthorized } from "next/navigation";
+import { forbidden, redirect } from "next/navigation";
 
 import {
   canAccessAdmin,

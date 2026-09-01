@@ -40,12 +40,17 @@ export function SearchInput({
 }) {
   const params = useSearchParams();
   const update = useQueryUpdater();
-  const [value, setValue] = useState(params.get(paramName) ?? "");
+  const urlValue = params.get(paramName) ?? "";
+  const [value, setValue] = useState(urlValue);
+  const [syncedValue, setSyncedValue] = useState(urlValue);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    setValue(params.get(paramName) ?? "");
-  }, [params, paramName]);
+  // URL je zdroj pravdy (späť/dopredu, vymazanie filtra) — dorovnáme počas renderu,
+  // nie v efekte, aby nevznikol zbytočný druhý render.
+  if (urlValue !== syncedValue) {
+    setSyncedValue(urlValue);
+    setValue(urlValue);
+  }
 
   useEffect(() => {
     const current = params.get(paramName) ?? "";
