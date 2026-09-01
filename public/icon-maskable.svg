@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#111111"/>
+  <rect width="512" height="512" fill="#111111"/>
   <text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle"
         font-family="'Inter','Helvetica Neue',Arial,sans-serif"
-        font-size="150" font-weight="700" fill="#ffffff" letter-spacing="-6">CREW<tspan fill="#C7F36B">.</tspan></text>
+        font-size="118" font-weight="700" fill="#ffffff" letter-spacing="-4">CREW<tspan fill="#C7F36B">.</tspan></text>
 </svg>

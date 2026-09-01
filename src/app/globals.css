@@ -1,288 +1,217 @@
 @import "tailwindcss";
 
-/* ================================================================== */
-/*  ENZO — dizajnové tokeny (odvodené z brand boardu)                  */
-/* ================================================================== */
+/* ==========================================================================
+   CREW. design tokens — hodnoty prevzaté 1:1 z dizajnového prototypu.
+   Elevácia vzniká 1px linkami a kontrastom pozadia, nie tieňmi.
+   ========================================================================== */
 
 @theme {
-  /* Farebná paleta */
-  --color-burgundy: #7a1e1e;
-  --color-burgundy-500: #8d2626;
-  --color-burgundy-700: #601616;
-  --color-burgundy-800: #4a1010;
-  --color-burgundy-900: #320a0a;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, Monaco, "Courier New", monospace;
 
-  --color-cream: #f6f0e3;
-  --color-cream-200: #efe7d5;
-  --color-cream-300: #e3d8c1;
-  --color-cream-400: #cfc1a5;
-
+  /* Základná paleta */
   --color-ink: #111111;
-  --color-ink-800: #1b1514;
-  --color-ink-700: #2a2220;
+  --color-bg: #f7f7f5;
+  --color-surface: #ffffff;
+  --color-accent: #c7f36b;
+  --color-accent-deep: #9dbf52;
 
-  --color-gold: #e1b12c;
-  --color-gold-600: #c8991c;
+  /* Text */
+  --color-muted: #6b6b66;
+  --color-faint: #9a9a93;
+  --color-body: #4a4a44;
 
-  /* Typografia */
-  --font-display: var(--font-anton), "Arial Narrow", "Haettenschweiler", sans-serif;
-  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
+  /* Výplne a linky */
+  --color-subtle: #f1f1ee;
+  --color-subtle-2: #f4f4f1;
+  --color-avatar: #efefeb;
+  --color-hover: #fafaf8;
+  --color-track: #e2e2dc;
+  --color-ring-track: #edede8;
+  --color-line: rgba(17, 17, 17, 0.08);
+  --color-line-strong: rgba(17, 17, 17, 0.16);
+  --color-divider: rgba(17, 17, 17, 0.07);
 
-  /* Layout */
-  --spacing-header: 4.5rem;
-  --breakpoint-xs: 26.75rem; /* 428px — veľké telefóny */
+  /* Sémantické pilulky — stav je vždy farba + text, nikdy len farba */
+  --color-ok-bg: #edf7e3;
+  --color-ok-fg: #3e6b1f;
+  --color-ok-dot: #5c9e2e;
+  --color-warn-bg: #fbf1dc;
+  --color-warn-fg: #8a5a12;
+  --color-warn-dot: #d08a16;
+  --color-bad-bg: #fbe7e5;
+  --color-bad-fg: #8c2f26;
+  --color-bad-dot: #c0483c;
+  --color-info-bg: #e6eff7;
+  --color-info-fg: #1f4e75;
+  --color-info-dot: #3a7cb0;
 
-  /* Animácie */
-  --animate-reveal: reveal 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-fade-in: fade-in 0.3s ease-out both;
-  --animate-slide-up: slide-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-pop: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --radius-8: 8px;
+  --radius-10: 10px;
+  --radius-12: 12px;
+  --radius-14: 14px;
+  --radius-16: 16px;
+  --radius-20: 20px;
+  --radius-22: 22px;
+  --radius-28: 28px;
+
+  /* Výška mobilnej spodnej navigácie */
+  --spacing-nav: 84px;
+
+  --animate-crew-up: crewUp 0.28s ease-out;
+  --animate-crew-in: crewIn 0.35s cubic-bezier(0.2, 0.7, 0.3, 1);
+  --animate-crew-drawer: crewDrawer 0.26s cubic-bezier(0.2, 0.7, 0.3, 1);
+  --animate-crew-pulse: crewPulse 1.8s ease-in-out infinite;
+  --animate-crew-ring: crewRing 0.9s ease-out;
 }
-
-@keyframes reveal {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 26px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 100%, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes marquee {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(-50%, 0, 0);
-  }
-}
-
-@keyframes cart-bump {
-  0% { transform: scale(1); }
-  35% { transform: scale(1.28); }
-  100% { transform: scale(1); }
-}
-
-/* ================================================================== */
-/*  Základ                                                            */
-/* ================================================================== */
 
 @layer base {
   * {
-    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+    border-color: var(--color-line);
   }
 
   html {
-    scroll-behavior: smooth;
-    scroll-padding-top: 5.5rem;
     -webkit-text-size-adjust: 100%;
   }
 
   body {
-    background-color: var(--color-cream);
+    margin: 0;
+    background: var(--color-bg);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-synthesis-weight: none;
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
     overflow-x: hidden;
   }
 
-  h1, h2, h3, h4 {
-    font-family: var(--font-display);
-    font-weight: 400;
-    letter-spacing: 0.005em;
-    line-height: 1.02;
-    text-transform: uppercase;
-  }
-
   ::selection {
-    background: var(--color-burgundy);
-    color: var(--color-cream);
+    background: var(--color-accent);
+    color: var(--color-ink);
   }
 
-  :focus-visible {
-    outline: 3px solid var(--color-gold);
-    outline-offset: 3px;
-    border-radius: 2px;
+  h1, h2, h3, h4 {
+    margin: 0;
+    text-wrap: balance;
   }
 
-  input, select, textarea, button {
-    font-family: inherit;
-    font-size: 100%;
-  }
-
-  /* Odstránenie natívneho vzhľadu number inputov */
-  input[type="number"]::-webkit-outer-spin-button,
-  input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
+  p {
     margin: 0;
   }
-}
 
-/* ================================================================== */
-/*  Komponentové utility                                              */
-/* ================================================================== */
-
-@utility container-enzo {
-  width: 100%;
-  max-width: 88rem; /* 1408px */
-  margin-inline: auto;
-  padding-inline: 1.25rem;
-
-  @media (width >= 48rem) {
-    padding-inline: 2rem;
+  a {
+    color: inherit;
+    text-decoration: none;
   }
-  @media (width >= 80rem) {
-    padding-inline: 3rem;
+
+  /* Prototyp sa spoliehal na predvolený focus prehliadača; produkcia potrebuje viditeľný prstenec. */
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* iOS nezoomuje pri fokuse, keď má pole aspoň 16px */
+  input, select, textarea {
+    font-family: inherit;
+    font-size: max(16px, 1rem);
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-/* Šachovnicový vzor z brand boardu */
-@utility checkerboard {
-  background-image: repeating-conic-gradient(
-    var(--checker-color, currentColor) 0% 25%,
-    transparent 0% 50%
-  );
-  background-size: var(--checker-size, 1.25rem) var(--checker-size, 1.25rem);
-  background-position: 0 0;
-}
+@layer utilities {
+  /* Dotykový cieľ minimálne 44×44 px (§71) */
+  .touch {
+    min-height: 44px;
+    min-width: 44px;
+  }
 
-/* Jemná zrnitosť pre "tlačený" pocit */
-@utility grain {
-  position: relative;
-}
+  .nums {
+    font-variant-numeric: tabular-nums;
+  }
 
-@utility text-balance-enzo {
-  text-wrap: balance;
-}
-
-@layer components {
   .eyebrow {
-    font-family: var(--font-sans);
+    font-size: 11px;
     font-weight: 700;
-    font-size: 0.6875rem;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
   }
 
-  .rule-checker {
-    height: 0.75rem;
-    --checker-size: 0.75rem;
+  .section-label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 
-  .link-underline {
-    background-image: linear-gradient(currentColor, currentColor);
-    background-size: 0% 2px;
-    background-position: 0 100%;
-    background-repeat: no-repeat;
-    transition: background-size 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .link-underline:hover,
-  .link-underline:focus-visible {
-    background-size: 100% 2px;
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  /* Skryté scrollbary pre horizontálne taby */
-  .no-scrollbar {
+  .pb-nav {
+    padding-bottom: calc(var(--spacing-nav) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .scrollbar-none {
     scrollbar-width: none;
-    -ms-overflow-style: none;
   }
-  .no-scrollbar::-webkit-scrollbar {
+  .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
-}
 
-/* Rešpektovanie preferencie používateľa */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
+  /* Zástupné fotografie — pruhované bloky, kým nepribudne skutočná fotografia */
+  .photo-light {
+    background: repeating-linear-gradient(135deg, #ecece8 0 10px, #f4f4f1 10px 20px);
+  }
+  .photo-dark {
+    background: repeating-linear-gradient(135deg, #1e1e1c 0 10px, #262624 10px 20px);
+  }
+  .photo-slot {
+    background: repeating-linear-gradient(135deg, #fafaf8 0 6px, #f4f4f1 6px 12px);
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, #ededea 25%, #f4f4f1 37%, #ededea 63%);
+    background-size: 400% 100%;
+    animation: crewShimmer 1.4s ease infinite;
   }
 }
 
-/* ================================================================== */
-/*  Tlač — účtenka / potvrdenie objednávky                            */
-/* ================================================================== */
-
-.print-only {
-  display: none;
+@keyframes crewUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes crewIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes crewDrawer {
+  from { transform: translateX(24px); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes crewPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes crewRing {
+  from { stroke-dashoffset: 314; }
+  to { stroke-dashoffset: var(--ring-offset, 25); }
+}
+@keyframes crewShimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
 }
 
 @media print {
-  @page {
-    size: 80mm auto;
-    margin: 6mm;
-  }
-
-  html,
-  body {
-    background: #fff !important;
-    color: #000 !important;
-    overflow: visible !important;
-  }
-
-  .no-print,
-  header,
-  footer,
-  nav {
-    display: none !important;
-  }
-
-  .print-only {
-    display: block !important;
-  }
-
-  .print-hide {
-    display: none !important;
-  }
-
-  main {
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  * {
-    box-shadow: none !important;
-    animation: none !important;
-    transition: none !important;
-  }
+  .no-print { display: none !important; }
 }
