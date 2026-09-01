@@ -12,9 +12,9 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.mts",
-    "db:seed": "tsx scripts/seed.mts",
+    "db:seed": "NODE_OPTIONS=--conditions=react-server tsx scripts/seed.mts",
     "db:reset": "rm -rf .pglite && npm run db:migrate && npm run db:seed",
-    "cron:reminders": "tsx scripts/reminders.mts"
+    "cron:reminders": "NODE_OPTIONS=--conditions=react-server tsx scripts/reminders.mts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -26,6 +26,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.87.0",
+    "server-only": "^0.0.1",
     "sharp": "^0.35.4",
     "zod": "^4.5.4"
   },
