@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
  * Tlačidlá podľa prototypu: `dark` = #111, `accent` = #C7F36B, `outline` = biele
  * s 1px linkou, `quiet` = #F1F1EE, `ghost` = bez pozadia. Žiadne tiene.
  */
-type Variant = "dark" | "accent" | "outline" | "quiet" | "ghost" | "danger" | "onDark";
+type Variant = "dark" | "accent" | "outline" | "quiet" | "ghost" | "danger" | "onDark" | "onAccent";
 type Size = "sm" | "md" | "lg" | "block";
 
 const VARIANTS: Record<Variant, string> = {
@@ -18,6 +18,7 @@ const VARIANTS: Record<Variant, string> = {
   ghost: "bg-transparent text-muted hover:bg-subtle hover:text-ink",
   danger: "bg-bad-fg text-white hover:opacity-90 disabled:opacity-60",
   onDark: "bg-transparent text-white border border-white/28 hover:bg-white/10",
+  onAccent: "bg-transparent text-ink border border-[rgba(17,17,17,0.3)] hover:bg-ink/5",
 };
 
 const SIZES: Record<Size, string> = {

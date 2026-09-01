@@ -256,11 +256,7 @@ export default function LandingPage() {
             <ButtonLink href="/brigada/registracia" variant="dark" size="lg">
               Chcem robiť
             </ButtonLink>
-            <ButtonLink
-              href="/pre-organizatorov"
-              size="lg"
-              className="border border-[rgba(17,17,17,0.3)] bg-transparent text-ink hover:bg-ink/5"
-            >
+            <ButtonLink href="/pre-organizatorov" variant="onAccent" size="lg">
               Hľadám crew
             </ButtonLink>
           </div>

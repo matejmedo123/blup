@@ -1,11 +1,22 @@
 import "server-only";
 
-import { drizzle as drizzleNode, type NodePgDatabase } from "drizzle-orm/node-postgres";
-import { drizzle as drizzlePglite, type PgliteDatabase } from "drizzle-orm/pglite";
+import type { ExtractTablesWithRelations } from "drizzle-orm";
+import { drizzle as drizzleNode } from "drizzle-orm/node-postgres";
+import type { PgDatabase, PgQueryResultHKT, PgTransaction } from "drizzle-orm/pg-core";
+import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 
 import * as schema from "./schema";
 
-export type Database = NodePgDatabase<typeof schema> | PgliteDatabase<typeof schema>;
+type Relations = ExtractTablesWithRelations<typeof schema>;
+
+/**
+ * Spoločný typ pre oba drivery (node-postgres v produkcii, PGlite v dev/testoch).
+ * Rovnaký dialekt znamená, že testy overujú presne tú SQL, ktorá pobeží v produkcii.
+ */
+export type Database = PgDatabase<PgQueryResultHKT, typeof schema, Relations>;
+
+/** Typ transakcie — funkcie, ktoré musia byť atomické, ho prijímajú ako parameter. */
+export type Transaction = PgTransaction<PgQueryResultHKT, typeof schema, Relations>;
 
 type Global = typeof globalThis & {
   __crewDb?: Database;

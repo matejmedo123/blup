@@ -11,10 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed": "tsx scripts/seed.ts",
+    "db:migrate": "tsx scripts/migrate.mts",
+    "db:seed": "tsx scripts/seed.mts",
     "db:reset": "rm -rf .pglite && npm run db:migrate && npm run db:seed",
-    "cron:reminders": "tsx scripts/reminders.ts"
+    "cron:reminders": "tsx scripts/reminders.mts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
