@@ -234,7 +234,7 @@ export function VendorForm() {
         </p>
         <div className="mt-5 flex flex-col gap-3">
           {attachments.map((attachment, index) => (
-            <div key={index} className="grid gap-3 sm:grid-cols-[1fr_2fr_auto]">
+            <div key={index} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
               <TextField
                 label={index === 0 ? "Názov" : undefined}
                 aria-label="Názov prílohy"

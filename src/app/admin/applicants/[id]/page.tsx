@@ -117,7 +117,7 @@ export default async function ApplicantDetailPage({
       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <Card className="p-5 sm:p-6">
             <h2 className="eyebrow mb-4 text-muted">Kontakt</h2>
             <dl className="grid gap-x-6 gap-y-3.5 sm:grid-cols-2">
@@ -209,7 +209,7 @@ export default async function ApplicantDetailPage({
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <div className="grid grid-cols-3 gap-2.5">
             <StatTile value={detail.score ?? 70} label="Crew Score" tone="fill" />
             <StatTile value={detail.experiences.length} label="Skúsenosti" tone="fill" />

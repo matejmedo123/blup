@@ -69,7 +69,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <Card className="p-5 sm:p-6">
             <h2 className="eyebrow mb-4 text-muted">Kontakt</h2>
             <dl className="grid gap-3.5 sm:grid-cols-2">
@@ -102,7 +102,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           </Card>
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <Card className="p-5 sm:p-6">
             <h2 className="eyebrow mb-3.5 text-muted">Technické požiadavky</h2>
             <ul className="flex flex-col divide-y divide-divider">

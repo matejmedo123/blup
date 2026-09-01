@@ -23,7 +23,7 @@ export function ScoreRulesForm({ rules: initial }: { rules: RuleRow[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <InlineNotice tone="info">
         Skóre začína na 70 a drží sa v rozsahu 0–100. Automatické prideľovanie ho berie ako jeden
         z faktorov, nikdy nie ako jediný.
@@ -31,12 +31,13 @@ export function ScoreRulesForm({ rules: initial }: { rules: RuleRow[] }) {
 
       <ul className="flex flex-col divide-y divide-divider">
         {rules.map((rule) => (
-          <li key={rule.key} className="flex flex-wrap items-center gap-4 py-4">
+          <li key={rule.key} className="flex flex-col gap-3 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold">{rule.label}</p>
-              <p className="text-[13px] text-faint">{rule.key}</p>
+              <p className="truncate text-[13px] text-faint">{rule.key}</p>
             </div>
 
+            <div className="flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-2">
               <span className="text-[13px] text-muted">Body</span>
               <input
@@ -58,6 +59,7 @@ export function ScoreRulesForm({ rules: initial }: { rules: RuleRow[] }) {
               />
               <span className="text-[13px] text-muted">Aktívne</span>
             </label>
+            </div>
           </li>
         ))}
       </ul>

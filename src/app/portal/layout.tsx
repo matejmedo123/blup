@@ -19,7 +19,10 @@ export default async function PortalLayout({ children }: { children: React.React
     <div className="min-h-dvh bg-bg">
       <header className="sticky top-0 z-20 border-b border-line bg-bg/94 backdrop-blur-[12px]">
         <div className="mx-auto flex h-14 max-w-[1100px] items-center gap-3 px-4 lg:h-16 lg:px-6">
-          <Link href="/portal" className="text-[19px] leading-none font-extrabold tracking-[-0.04em]">
+          <Link
+            href="/portal"
+            className="flex min-h-11 items-center text-[19px] leading-none font-extrabold tracking-[-0.04em]"
+          >
             CREW<span className="text-accent-deep">.</span>
           </Link>
           <Link

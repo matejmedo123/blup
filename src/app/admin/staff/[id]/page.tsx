@@ -374,7 +374,7 @@ export default async function StaffDetailPage({
       ) : null}
 
       {activeTab === "earnings" ? (
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <div className="grid gap-4 sm:grid-cols-3">
             <Card className="p-5">
               <p className="text-[13px] text-muted">Odhad zo všetkej dochádzky</p>
@@ -431,7 +431,7 @@ export default async function StaffDetailPage({
       ) : null}
 
       {activeTab === "rating" ? (
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <Card className="p-5 sm:p-6">
             <h2 className="eyebrow mb-3 text-muted">Priemerné hodnotenie</h2>
             <p className="nums text-[32px] leading-none font-extrabold tracking-[-0.045em]">
@@ -478,7 +478,7 @@ export default async function StaffDetailPage({
       ) : null}
 
       {activeTab === "score" ? (
-        <div className="grid gap-5 lg:grid-cols-[auto_1fr] lg:items-start">
+        <div className="grid gap-5 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
           <Card className="flex items-center gap-6 p-5 sm:p-6">
             <CrewScoreRing score={member.score} />
             <div>
@@ -515,7 +515,7 @@ export default async function StaffDetailPage({
       ) : null}
 
       {activeTab === "notes" ? (
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           {canManage ? (
             <Card className="p-5">
               <StaffNoteForm staffId={id} />

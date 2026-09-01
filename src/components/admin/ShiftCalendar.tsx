@@ -257,7 +257,7 @@ export function ShiftCalendar({
                     {canManage ? (
                       <Link
                         href={`/admin/shifts/nova?date=${day}`}
-                        className="text-[13px] font-semibold text-muted hover:text-ink"
+                        className="-mr-2 flex min-h-11 items-center px-2 text-[13px] font-semibold text-muted hover:text-ink"
                       >
                         + smena
                       </Link>

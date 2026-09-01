@@ -73,7 +73,7 @@ export default function LandingPage() {
       {/* ---------------------------------------------------------------- hero */}
       <section className="bg-ink px-5 pt-16 text-white lg:px-8 lg:pt-24">
         <div className="mx-auto max-w-[1240px]">
-          <div className="grid items-end gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
+          <div className="grid items-end gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-16">
             <div>
               <p className="mb-6 text-xs font-semibold tracking-[0.16em] text-accent uppercase lg:mb-7">
                 Eventová crew platforma
@@ -199,7 +199,7 @@ export default function LandingPage() {
 
       {/* ---------------------------------------------------------- prečo CREW */}
       <section id="preco-crew" className="scroll-mt-20 px-5 pb-16 lg:px-8 lg:pb-[104px]">
-        <div className="mx-auto grid max-w-[1240px] items-center gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
+        <div className="mx-auto grid max-w-[1240px] items-center gap-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-16">
           <PhotoSlot
             caption="foto — koordinátorka s vysielačkou"
             className="h-[260px] rounded-20 p-5 lg:h-[460px]"
@@ -210,7 +210,7 @@ export default function LandingPage() {
             </h2>
             <div className="flex flex-col gap-6">
               {BENEFITS.map((benefit) => (
-                <div key={benefit.title} className="grid grid-cols-[28px_1fr] items-start gap-4">
+                <div key={benefit.title} className="grid grid-cols-[28px_minmax(0,1fr)] items-start gap-4">
                   <span className="mt-2 block size-2.5 rounded-[3px] bg-accent" aria-hidden />
                   <div>
                     <h3 className="mb-1.5 text-[19px] font-semibold tracking-[-0.02em]">
@@ -246,8 +246,8 @@ export default function LandingPage() {
 
       {/* ------------------------------------------------------------- záver CTA */}
       <section className="px-5 py-16 lg:px-8 lg:py-[104px]">
-        <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-8 rounded-28 bg-accent px-7 py-12 lg:gap-12 lg:px-16 lg:py-20">
-          <h2 className="min-w-[280px] flex-1 text-[32px] leading-[1.02] font-extrabold tracking-[-0.04em] lg:text-[52px]">
+        <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-8 rounded-28 bg-accent px-5 py-10 sm:px-7 sm:py-12 lg:gap-12 lg:px-16 lg:py-20">
+          <h2 className="min-w-0 flex-1 text-[28px] leading-[1.02] font-extrabold tracking-[-0.04em] sm:min-w-[280px] sm:text-[32px] lg:text-[52px]">
             Najbližší event
             <br />
             už zháňa ľudí.

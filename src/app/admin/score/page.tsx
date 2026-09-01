@@ -102,8 +102,8 @@ export default async function ScorePage() {
         <Kpi label="Aktívnych pravidiel" value={rules.filter((r) => r.active).length} note={`z ${rules.length}`} />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.1fr_1fr] xl:items-start">
-        <Card className="p-5 sm:p-6">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] xl:items-start">
+        <Card className="min-w-0 p-5 sm:p-6">
           <h2 className="section-label mb-4">Pravidlá bodovania</h2>
           {canManage ? (
             <ScoreRulesForm
@@ -128,8 +128,8 @@ export default async function ScorePage() {
           )}
         </Card>
 
-        <div className="flex flex-col gap-5">
-          <Card className="p-5 sm:p-6">
+        <div className="flex min-w-0 flex-col gap-5">
+          <Card className="min-w-0 p-5 sm:p-6">
             <h2 className="section-label mb-4">Najlepšia crew</h2>
             {leaderboard.length === 0 ? (
               <EmptyState

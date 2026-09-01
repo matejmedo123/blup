@@ -108,7 +108,7 @@ export default async function PortalNotificationsPage() {
                       ) : row.actionUrl ? (
                         <Link
                           href={row.actionUrl}
-                          className="mt-2.5 inline-block text-[13px] font-semibold underline underline-offset-4"
+                          className="-ml-1 mt-1 inline-flex min-h-11 items-center px-1 text-[13px] font-semibold underline underline-offset-4"
                         >
                           Zobraziť
                         </Link>

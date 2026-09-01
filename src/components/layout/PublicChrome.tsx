@@ -16,8 +16,11 @@ export function PublicHeader({ homeHref }: { homeHref: string | null }) {
 
   return (
     <header className="sticky top-0 z-20 bg-ink/92 text-white backdrop-blur-[12px]">
-      <div className="mx-auto flex max-w-[1240px] items-center gap-6 px-5 py-[18px] lg:gap-10 lg:px-8">
-        <Link href="/" className="text-[21px] leading-none font-extrabold tracking-[-0.04em]">
+      <div className="mx-auto flex max-w-[1240px] items-center gap-3 px-4 py-[18px] sm:gap-6 sm:px-5 lg:gap-10 lg:px-8">
+        <Link
+          href="/"
+          className="flex min-h-11 shrink-0 items-center text-[21px] leading-none font-extrabold tracking-[-0.04em]"
+        >
           CREW<span className="text-accent">.</span>
         </Link>
 
@@ -33,7 +36,7 @@ export function PublicHeader({ homeHref }: { homeHref: string | null }) {
           {homeHref ? (
             <Link
               href={homeHref}
-              className="touch inline-flex items-center rounded-12 bg-accent px-5 text-sm font-semibold text-ink transition-[filter] hover:brightness-95"
+              className="touch inline-flex items-center rounded-12 bg-accent px-3.5 text-sm font-semibold whitespace-nowrap text-ink transition-[filter] hover:brightness-95 sm:px-5"
             >
               Môj CREW.
             </Link>
@@ -47,7 +50,7 @@ export function PublicHeader({ homeHref }: { homeHref: string | null }) {
               </Link>
               <Link
                 href="/brigada/registracia"
-                className="touch inline-flex items-center rounded-12 bg-accent px-5 text-sm font-semibold text-ink transition-[filter] hover:brightness-95"
+                className="touch inline-flex items-center rounded-12 bg-accent px-3.5 text-sm font-semibold whitespace-nowrap text-ink transition-[filter] hover:brightness-95 sm:px-5"
               >
                 Chcem robiť
               </Link>
@@ -100,16 +103,26 @@ export function PublicHeader({ homeHref }: { homeHref: string | null }) {
 export function PublicFooter() {
   return (
     <footer className="border-t border-line px-5 py-10 lg:px-8">
-      <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-x-6 gap-y-4 text-[13px] text-muted">
+      <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-muted">
         <span className="text-lg font-extrabold tracking-[-0.04em] text-ink">
           CREW<span className="text-accent-deep">.</span>
         </span>
-        <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Pätička">
-          <Link href="/brigada" className="hover:text-ink">Brigáda</Link>
-          <Link href="/dobrovolnik" className="hover:text-ink">Dobrovoľník</Link>
-          <Link href="/stanok" className="hover:text-ink">Stánok</Link>
-          <Link href="/gdpr" className="hover:text-ink">Ochrana údajov</Link>
-          <Link href="/podmienky" className="hover:text-ink">Podmienky</Link>
+        <nav className="-mx-2 flex flex-wrap items-center" aria-label="Pätička">
+          {[
+            { href: "/brigada", label: "Brigáda" },
+            { href: "/dobrovolnik", label: "Dobrovoľník" },
+            { href: "/stanok", label: "Stánok" },
+            { href: "/gdpr", label: "Ochrana údajov" },
+            { href: "/podmienky", label: "Podmienky" },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex min-h-11 items-center px-2 transition-colors hover:text-ink"
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
         <span className="ml-auto">© {new Date().getFullYear()} CREW. Bratislava</span>
       </div>

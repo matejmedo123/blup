@@ -185,7 +185,7 @@ export default async function PortalHomePage() {
       <div>
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <h2 className="text-lg font-bold tracking-[-0.02em]">Tvoj týždeň</h2>
-          <Link href="/portal/shifts" className="text-[13px] font-semibold text-muted hover:text-ink">
+          <Link href="/portal/shifts" className="-mr-2 flex min-h-11 items-center px-2 text-[13px] font-semibold text-muted hover:text-ink">
             Všetky smeny →
           </Link>
         </div>

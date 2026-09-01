@@ -1,145 +1,200 @@
-# ENZO — Smash Burgers & Fries
+# CREW.
 
-Responzívny prototyp webu slovenskej smash-burger prevádzky **ENZO** s plne funkčným
-online objednávkovým procesom. Vizuálna identita je odvodená z priloženého brand boardu
-(bordová, krémová, čierna + horčicová; Anton ako display písmo, šachovnicový vzor,
-packaging ENZO).
+**Ľudia, ktorí držia event v pohybe.**
 
-**Smashed fresh. Served hot.**
+Platforma na nábor, plánovanie smien, dochádzku, komunikáciu a mzdy brigádnikov,
+dobrovoľníkov a stánkarov na festivaloch a eventoch. Jeden responzívny web:
+**desktop = command center pre organizátorov**, **mobil = pracovný nástroj pre crew**.
+
+---
+
+## Rýchly štart
+
+```bash
+npm install
+npm run db:migrate     # vytvorí lokálnu databázu (PGlite, žiadna externá služba)
+npm run db:seed        # demo event, crew, smeny, dochádzka, správy
+npm run dev            # http://localhost:3000
+```
+
+Demo prístupy zo seedu (menia sa cez `SEED_*` premenné):
+
+| Rola | E-mail | Heslo |
+|---|---|---|
+| Admin | `admin@crew.local` | `crew-admin-2026` |
+| Koordinátor | `peter@crew.local` | `crew-staff-2026` |
+| Crew | `martin@crew.local` | `crew-staff-2026` |
+
+> **Pozor:** PGlite je jednoprocesová. Pred `db:seed` alebo `db:reset` zastav dev
+> server — inak si obe strany prepíšu svoj pohľad na dáta.
+
+## Príkazy
+
+| | |
+|---|---|
+| `npm run dev` | vývojový server |
+| `npm run build` / `npm start` | produkčný build a beh |
+| `npm run lint` / `npm run typecheck` | ESLint a TypeScript |
+| `npm test` | Vitest (112 testov nad reálnou databázou) |
+| `npm run db:generate` | vygeneruje SQL migráciu zo zmien v schéme |
+| `npm run db:migrate` | aplikuje migrácie |
+| `npm run db:seed` | naplní demo dáta |
+| `npm run db:reset` | zahodí lokálnu DB, migruje a naseeduje |
+| `npm run cron:reminders` | pripomienky smien, no-show, upratovanie relácií |
 
 ---
 
 ## Stack
 
-| | |
+| Vrstva | Voľba |
 |---|---|
-| Framework | Next.js 16 (App Router, Turbopack) |
+| Framework | Next.js 16 (App Router, Turbopack), React 19 |
 | Jazyk | TypeScript (strict) |
-| Štýly | Tailwind CSS v4 (`@theme` tokeny v `src/app/globals.css`) |
-| Písma | Anton (display) + Archivo (UI) cez `next/font/google`, subset `latin-ext` |
-| Stav | React Context + `localStorage`, žiadne ďalšie závislosti |
+| Štýly | Tailwind CSS v4, dizajnové tokeny v `globals.css` |
+| Databáza | PostgreSQL — `pg` v produkcii, **PGlite** (Postgres vo WASM) v dev a testoch |
+| ORM | Drizzle (`pg-core`), migrácie cez `drizzle-kit` |
+| Validácia | Zod v4, zdieľaná medzi klientom a serverom |
+| Formuláre | React Hook Form (viac-krokové verejné formuláre) |
+| Auth | vlastná session vrstva (scrypt + opaque tokeny + httpOnly cookie) |
+| Realtime | SSE nad in-process event busom (vymeniteľné za Redis / LISTEN-NOTIFY) |
+| E-mail | vlastná abstrakcia `EmailProvider` (console / Resend / webhook) |
+| Testy | Vitest proti PGlite |
 
-Žiadna UI knižnica, žiadny state manager, žiadna animačná knižnica — všetko je
-v komponentoch projektu.
+Rovnaký Postgres dialekt v dev, testoch aj produkcii znamená, že testy overujú
+presne tú SQL, ktorá pobeží naostro. Podrobné zdôvodnenie volieb je v [`PLAN.md`](./PLAN.md).
 
-## Spustenie
+---
 
-```bash
-npm install
-npm run dev      # http://localhost:3000
-npm run build    # produkčný build
-npm run lint     # ESLint
-npx tsc --noEmit # typová kontrola
+## Konfigurácia
+
+Všetko má rozumný default; pre produkciu nastav aspoň `DATABASE_URL` a `SEED_ADMIN_PASSWORD`.
+
+| Premenná | Default | Význam |
+|---|---|---|
+| `DATABASE_URL` | — | `postgres://…`. Bez nej sa použije lokálna PGlite. |
+| `DATABASE_SSL` | `false` | `true` zapne SSL pre spravovaný Postgres. |
+| `PGLITE_DATA_DIR` | `.pglite` | Adresár lokálnej databázy. |
+| `APP_URL` | `http://localhost:3000` | Základ pre odkazy v e-mailoch a QR kódoch. |
+| `EMAIL_PROVIDER` | `console` | `console` \| `resend` \| `webhook` |
+| `EMAIL_FROM` | `CREW. <noreply@crew.local>` | Odosielateľ. |
+| `RESEND_API_KEY` | — | Pri `EMAIL_PROVIDER=resend`. |
+| `EMAIL_WEBHOOK_URL` / `EMAIL_WEBHOOK_TOKEN` | — | Pri `EMAIL_PROVIDER=webhook`. |
+| `CRON_SECRET` | — | Bez neho je `/api/cron/reminders` vypnutý. |
+| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` / `SEED_STAFF_PASSWORD` | demo | Prístupy zo seedu. |
+
+Pripomienky spúšťaj hodinovo — buď `POST /api/cron/reminders` s hlavičkou
+`Authorization: Bearer $CRON_SECRET`, alebo systémovým cronom cez `npm run cron:reminders`.
+
+---
+
+## Ako to funguje
+
+### Tri vstupy z landingu
+
+1. **Chcem brigádovať** → 6-krokový formulár → schválenie adminom → prístup do `/portal`
+2. **Chcem byť dobrovoľník** → krátka prihláška → admin sekcia, bez prístupu do portálu
+3. **Chcem mať stánok** → prihláška so sortimentom, rozmermi a technikou
+
+### Role
+
+| Rola | Vidí |
+|---|---|
+| `admin` | všetko vrátane miezd, nastavení a audit logu |
+| `coordinator` | len to, na čo má výslovné oprávnenie (check-in, dochádzka, správy, hodnotenia, smeny, mzdy) |
+| `staff` | výhradne vlastné smeny, dochádzku, zárobok, správy a skóre |
+| `applicant_volunteer` / `applicant_vendor` | iba stav vlastnej prihlášky |
+
+Oprávnenia koordinátora sú granulárne (`can_check_in_others`, `can_edit_attendance`,
+`can_manage_shifts`, `can_message_staff`, `can_view_payroll`, `can_rate_staff`,
+`can_check_out_others`) a nastavujú sa v detaile človeka.
+
+### Produktové pravidlá
+
+Tieto pravidlá sú vynútené na serveri, nie v UI:
+
+1. Schválenie prihlášky vytvorí crew účet, **ale nepridelí smenu**.
+2. Pridelenie smeny ≠ potvrdenie — potvrdiť ju musí pracovník.
+3. Dochádzku nemožno zmeniť bez záznamu korekcie a audit logu (v jednej transakcii).
+4. Staff dotazy sú vždy obmedzené na vlastné `user_id`.
+5. Koordinátor má len práva, ktoré mu admin udelil.
+6. Mzdy počítajú iba zo **schválenej** dochádzky; každá oprava schválenie zruší.
+7. Prideľovanie (manuálne aj automatické) nikdy nevytvorí prekrývajúce sa smeny.
+8. Prístup ku konverzácii rozhoduje členstvo — platí aj pre adminov.
+
+### Dochádzka
+
+Check-in podporuje **manuálny**, **QR** a **GPS geofence** režim, plus check-in
+koordinátorom za pracovníka. QR kód kóduje URL, takže ho naskenuje bežná appka
+fotoaparátu. Zápis je **idempotentný** — retry na slabom pripojení nikdy nevytvorí
+druhý check-in (hlavička `Idempotency-Key` + DB unikáty a `CHECK` constrainty).
+
+### Mzdy
+
+```
+odpracované minúty  = check-out − check-in − prestávka
+hodiny              = zaokrúhlenie podľa nastavenia eventu (presne / 5 min / 15 min)
+hrubé               = bežné hodiny × sadzba + nadčas × sadzba × násobok
+spolu               = hrubé + bonus + korekcie
 ```
 
-## Používateľská cesta
+Sadzba smeny prebíja sadzbu pozície. Staff vidí **odhad** z aktuálnej dochádzky,
+admin **schválenú** sumu. Export je CSV (`;`, UTF-8 s BOM, ochrana pred CSV injection).
 
-```
-Úvod → Menu → Detail produktu (extra + množstvo + poznámka)
-     → Košík (drawer) → Pokladňa (odber/doručenie, platba, validácia)
-     → Potvrdenie objednávky → Tlač účtenky
-```
-
-Košík sa ukladá do `localStorage` a prežije reload. Objednávka dostane číslo
-`ENZO-1042`, uloží sa do histórie a košík sa vyprázdni.
+---
 
 ## Štruktúra
 
 ```
 src/
 ├── app/
-│   ├── layout.tsx                  # metadata, OG, JSON-LD, providery, skip link
-│   ├── page.tsx                    # úvodná stránka
-│   ├── globals.css                 # dizajnové tokeny, utility, tlačové štýly
-│   ├── pokladna/                   # checkout
-│   ├── objednavka/                 # potvrdenie objednávky (?c=ENZO-1042)
-│   ├── podmienky/                  # obchodné podmienky
-│   └── ochrana-osobnych-udajov/
+│   ├── (public)/     landing, prihlášky, prihlásenie, právne stránky
+│   ├── portal/       crew portál (mobile-first, bottom navigation)
+│   ├── admin/        command center (desktop-first, sidebar + ⌘K)
+│   ├── actions/      server actions (všetky mutácie)
+│   └── api/          check-in, SSE, QR, CSV export, cron
 ├── components/
-│   ├── layout/    Header, MobileNavigation, Footer, LegalPage
-│   ├── home/      Hero, BrandStory, HowItWorks, PromoSection, ContactSection
-│   ├── menu/      MenuSection, MenuCategoryTabs, ProductCard, ProductModal, SauceLid
-│   ├── cart/      CartDrawer, CartItemRow, MobileOrderBar, CartToast
-│   ├── checkout/  Checkout, OrderSummary, PickupForm, DeliveryForm, PaymentSelector
-│   ├── order/     OrderConfirmation, PrintableReceipt
-│   └── ui/        Button, Field, Logo, Icons, QuantityStepper, Checkerboard, Reveal
-├── context/CartContext.tsx         # jediný zdroj pravdy pre košík
-└── lib/
-    ├── types.ts        # doménové typy (Product, CartItem, Order, …)
-    ├── config.ts       # údaje prevádzky, poplatky, limity  ← tu sa mení najviac
-    ├── products.ts     # katalóg produktov a kategórií
-    ├── cart.ts         # čisté funkcie: pridanie, množstvo, súčty
-    ├── order.ts        # model objednávky, číslovanie, perzistencia
-    ├── validation.ts   # validácia pokladne + slovenské hlášky
-    ├── format.ts       # formátovanie cien a dátumov (sk-SK)
-    ├── scrollLock.ts   # zamknutie scrollu bez „poskočenia" stránky
-    └── storage.ts      # bezpečná obálka nad localStorage
+│   ├── ui/           dizajnový systém (Button, Card, Pill, DataTable, …)
+│   ├── layout/       verejná hlavička a pätička
+│   ├── forms/        viac-krokové formuláre
+│   ├── admin/        admin komponenty
+│   └── portal/       crew komponenty
+├── db/               Drizzle schéma, enumy, klient (pg | PGlite)
+├── lib/
+│   ├── auth/         heslá, session, guardy
+│   ├── domain/       biznis logika (smeny, dochádzka, mzdy, skóre, messaging…)
+│   ├── email/        provider + šablóny
+│   └── validation/   Zod schémy
+└── tests/            Vitest
 ```
-
-Doménová logika je oddelená od UI — `lib/` neobsahuje žiadny JSX a dá sa
-bez zmien nahradiť volaniami na API.
-
-## Čo sa mení najčastejšie
-
-| Chcem zmeniť | Súbor |
-|---|---|
-| Adresu, telefón, otváracie hodiny, rozvozové obce | `src/lib/config.ts` → `RESTAURANT` |
-| Poplatok za doručenie, minimálnu objednávku, časy | `src/lib/config.ts` → `ORDER_CONFIG` |
-| Produkty, ceny, popisy, doplnky, kategórie | `src/lib/products.ts` |
-| Fotky produktov | `public/images/products/` + pole `image` v produkte |
-| Farby, písma, šachovnicu | `src/app/globals.css` → blok `@theme` |
-
-Pridanie produktu = jeden objekt v `PRODUCTS`; kategórie, taby aj počty
-sa dopočítajú samé.
-
-## Napojenie na backend
-
-Prototyp je pripravený na výmenu perzistencie za API:
-
-- `getProducts()` / `getProductById()` / `getMenu()` v `lib/products.ts` — nahradiť `fetch`.
-- `createOrder()` + `saveOrder()` v `lib/order.ts` — nahradiť `POST /api/orders`.
-- `CartContext` pracuje výhradne s čistými funkciami z `lib/cart.ts`, takže
-  serverový prepočet cien sa dá zapojiť bez zásahu do komponentov.
-
-## Platba
-
-Platobná brána **nie je** napojená. Pri platbe kartou sa objednávka označí ako
-`paymentState: "demo-paid"` a používateľ je na to explicitne upozornený
-v pokladni aj na potvrdení. Nič sa nestrháva.
-
-## Tlač účtenky
-
-Tlačidlo *Vytlačiť potvrdenie* volá `window.print()`. Tlačová vrstva
-(`PrintableReceipt`) je v prehliadači skrytá a pri tlači je jediným viditeľným
-obsahom — hlavička, pätička aj zvyšok UI sa skryjú. Formát `80 mm`, monospace,
-so všetkými položkami, doplnkami, poznámkami a súčtami.
-
-## Prístupnosť
-
-- sémantické HTML, jeden `h1` na stránku, korektná hierarchia nadpisov
-- skip link, viditeľné focus stavy (horčicový outline), focus pasca v modáloch
-- `Escape` zatvára modal, košík aj mobilnú navigáciu
-- popisky a `aria-describedby` pri chybách formulára, `role="alert"` pri hláškach
-- dotykové ciele min. 44 px, `alt` texty na všetkých fotkách
-- rešpektuje `prefers-reduced-motion`; bez JavaScriptu sa obsah zobrazí okamžite
-
-## Overené
-
-Manuálne aj automatizovane (Playwright) prejdené na šírkach
-375 / 390 / 430 / 640 / 768 / 820 / 1024 / 1180 / 1280 / 1440 / 1920 px:
-žiadne horizontálne pretečenie, žiadne chyby v konzole, kompletná objednávková
-cesta vrátane validácie, perzistencie košíka a tlače.
-
-## Obrázky
-
-- `public/images/products/`, `public/images/editorial/` — fotografie z Unsplash
-  (Unsplash License, voľné na komerčné použitie), zmenšené a prevedené do WebP.
-  Ide o zástupné fotky — pred ostrým nasadením ich treba nahradiť skutočnou
-  produktovou fotografiou ENZO.
-- `public/images/brand/` — výrezy packagingu priamo z dodaného ENZO brand boardu.
-- Logo, kruhový odznak a šachovnica sú vyskladané typograficky / v CSS,
-  takže sú ostré v akejkoľvek veľkosti.
 
 ---
 
-Demo prototyp. Objednávky sa ukladajú výhradne lokálne v prehliadači.
+## Dizajn
+
+Vizuálny jazyk vychádza z dodaného prototypu: uhľová `#111111`, podklad `#F7F7F5`,
+akcent `#C7F36B`, Inter 400–800, **žiadne tiene** — elevácia vzniká 1px linkami
+a kontrastom pozadia. Stav je vždy farba **a** text, nikdy len farba.
+
+* **Desktop (admin):** sidebar + grid, klasické tabuľky, týždenný kalendár, ⌘K vyhľadávanie.
+* **Mobil (crew):** bottom navigation, veľké CTA, tabuľky sa menia na karty,
+  kalendár na agendu, filtre na bottom sheet, dotykové ciele ≥ 44 px.
+
+Overené na 320 / 375 / 390 / 414 / 768 / 1280 / 1440 / 1920 px — bez horizontálneho
+presahu na žiadnom z nich.
+
+## Prístupnosť a súkromie
+
+Skip link, viditeľný focus ring, `prefers-reduced-motion`, sémantické `<button>`
+a `<a>` s popismi. Heslá sú výhradne scrypt hashe, session tokeny sa v databáze
+ukladajú len ako SHA-256. Súhlasy sa logujú, crew si vie stiahnuť všetky svoje
+údaje z profilu a osobné údaje sa nikdy neobjavia v URL.
+
+## Známe obmedzenia
+
+* `drizzle-kit` (iba vývojový nástroj) ťahá starší `esbuild` s moderate advisory —
+  netýka sa runtime ani produkčného buildu.
+* Realtime beží nad in-process busom, takže pri viacerých inštanciách treba
+  `RealtimeBus` podložiť Redisom alebo Postgres `LISTEN/NOTIFY` (rozhranie je pripravené).
+* Rate limiting je in-memory z rovnakého dôvodu — rozhranie `RateLimiter` počíta
+  s výmenou za Redis.
+* Prílohy stánkarov sa zadávajú ako odkazy; nahrávanie súborov nie je súčasťou.

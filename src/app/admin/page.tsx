@@ -191,11 +191,11 @@ export default async function AdminDashboardPage() {
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr] xl:items-start">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:items-start">
         <SectionCard
           label="Dnešné smeny"
           action={
-            <Link href="/admin/calendar" className="text-sm font-semibold text-muted hover:text-ink">
+            <Link href="/admin/calendar" className="-mr-2 flex min-h-11 items-center px-2 text-sm font-semibold text-muted hover:text-ink">
               Kalendár →
             </Link>
           }
@@ -213,7 +213,7 @@ export default async function AdminDashboardPage() {
                 <li key={shift.id}>
                   <Link
                     href={`/admin/shifts/${shift.id}`}
-                    className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 rounded-10 px-3 py-4 transition-colors hover:bg-hover xl:grid-cols-[110px_1fr_130px_80px_auto]"
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-10 px-3 py-4 transition-colors hover:bg-hover xl:grid-cols-[110px_minmax(0,1fr)_130px_80px_auto]"
                   >
                     <span className="text-sm font-bold tracking-[-0.01em]">
                       {shift.positionName}
@@ -249,7 +249,7 @@ export default async function AdminDashboardPage() {
           )}
         </SectionCard>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <SectionCard label="Vyžaduje pozornosť">
             {alerts.length === 0 ? (
               <p className="text-[15px] text-muted">
@@ -261,7 +261,7 @@ export default async function AdminDashboardPage() {
                   <li key={alert.key}>
                     <Link
                       href={alert.href}
-                      className="grid grid-cols-[8px_1fr] items-start gap-3.5 rounded-10 py-1 transition-colors hover:opacity-80"
+                      className="grid grid-cols-[8px_minmax(0,1fr)] items-start gap-3.5 rounded-10 py-1 transition-colors hover:opacity-80"
                     >
                       <StatusDot kind={alert.kind} className="mt-1.5" />
                       <span>
@@ -282,7 +282,7 @@ export default async function AdminDashboardPage() {
             action={
               <Link
                 href="/admin/attendance"
-                className="text-sm font-semibold text-muted hover:text-ink"
+                className="-mr-2 flex min-h-11 items-center px-2 text-sm font-semibold text-muted hover:text-ink"
               >
                 Dochádzka →
               </Link>
@@ -329,7 +329,7 @@ export default async function AdminDashboardPage() {
         <SectionCard
           label="Najbližšie smeny"
           action={
-            <Link href="/admin/shifts" className="text-sm font-semibold text-muted hover:text-ink">
+            <Link href="/admin/shifts" className="-mr-2 flex min-h-11 items-center px-2 text-sm font-semibold text-muted hover:text-ink">
               Všetky smeny →
             </Link>
           }

@@ -97,7 +97,7 @@ export default async function VolunteerDetailPage({
           </dl>
         </Card>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <Card className="p-5 sm:p-6">
             <h2 className="eyebrow mb-3.5 text-muted">Kde chce pomôcť</h2>
             <div className="flex flex-wrap gap-2">

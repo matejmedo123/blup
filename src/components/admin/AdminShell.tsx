@@ -94,7 +94,10 @@ export function AdminShell({
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh w-[236px] shrink-0 flex-col overflow-y-auto bg-ink lg:flex">
         <div className="px-6 pt-7 pb-2">
-          <Link href="/admin" className="text-[22px] leading-none font-extrabold tracking-[-0.04em] text-white">
+          <Link
+            href="/admin"
+            className="flex min-h-11 items-center text-[22px] leading-none font-extrabold tracking-[-0.04em] text-white"
+          >
             CREW<span className="text-accent">.</span>
           </Link>
         </div>
@@ -149,7 +152,7 @@ export function AdminShell({
 
             <Link
               href="/admin"
-              className="text-[19px] leading-none font-extrabold tracking-[-0.04em] lg:hidden"
+              className="flex min-h-11 items-center text-[19px] leading-none font-extrabold tracking-[-0.04em] lg:hidden"
             >
               CREW<span className="text-accent-deep">.</span>
             </Link>

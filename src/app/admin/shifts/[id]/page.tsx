@@ -120,7 +120,7 @@ export default async function ShiftDetailPage({ params }: { params: Promise<{ id
           />
         </Card>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <Card className="p-5 sm:p-6">
             <h2 className="section-label mb-4">Detaily</h2>
             <dl className="flex flex-col divide-y divide-divider">

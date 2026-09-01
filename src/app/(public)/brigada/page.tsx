@@ -35,7 +35,7 @@ export default async function BrigadePage() {
   return (
     <>
       <section className="bg-ink px-5 pt-14 pb-16 text-white lg:px-8 lg:pt-20 lg:pb-24">
-        <div className="mx-auto grid max-w-[1240px] items-end gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
+        <div className="mx-auto grid max-w-[1240px] items-end gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-16">
           <div>
             <p className="mb-6 text-xs font-semibold tracking-[0.16em] text-accent uppercase">
               Brigáda

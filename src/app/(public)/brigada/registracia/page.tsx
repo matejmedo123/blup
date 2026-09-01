@@ -65,7 +65,7 @@ export default async function BrigadeRegistrationPage() {
             </p>
             <Link
               href="/brigada/prihlasenie"
-              className="mt-3 inline-flex text-[14px] font-semibold text-ink underline underline-offset-4"
+              className="-ml-1 mt-1 inline-flex min-h-11 items-center px-1 text-[14px] font-semibold text-ink underline underline-offset-4"
             >
               Prihlásiť sa
             </Link>

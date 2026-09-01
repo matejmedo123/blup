@@ -65,7 +65,7 @@ export default async function PayrollPage() {
         }
       />
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-[1.1fr_1fr_1fr]">
+      <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <Kpi
           tone="dark"
           label="Na vyplatenie"

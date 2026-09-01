@@ -1,7 +1,7 @@
 import "server-only";
 
 import { headers } from "next/headers";
-import { forbidden, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 
 import {
   canAccessAdmin,
@@ -33,28 +33,31 @@ export async function requireSession(returnTo?: string): Promise<SessionContext>
 /** Staff portál — iba schválený staff alebo admin (§6, Rule 4). */
 export async function requireStaff(returnTo?: string): Promise<SessionContext> {
   const session = await requireSession(returnTo);
-  if (!canAccessPortal(session.user)) redirect("/prihlaska/stav");
-  if (session.user.status !== "active") redirect("/prihlaska/stav");
+  if (!canAccessPortal(session.user) || session.user.status !== "active") {
+    redirect("/prihlaska/stav");
+  }
   return session;
 }
 
 /** Admin rozhranie — admin alebo koordinátor s aspoň jedným právom. */
 export async function requireAdminAccess(): Promise<SessionContext> {
   const session = await requireSession("/admin");
-  if (!canAccessAdmin(session.actor)) forbidden();
+  if (!canAccessAdmin(session.actor)) redirect("/pristup-zamietnuty?reason=admin");
   return session;
 }
 
 /** Plné admin práva (schvaľovanie, nastavenia, role). */
 export async function requireFullAdmin(): Promise<SessionContext> {
   const session = await requireSession("/admin");
-  if (!isAdmin(session.actor) && session.actor.eventRole !== "admin") forbidden();
+  if (!isAdmin(session.actor) && session.actor.eventRole !== "admin") {
+    redirect("/pristup-zamietnuty?reason=permission");
+  }
   return session;
 }
 
 export async function requirePermission(permission: PermissionKey): Promise<SessionContext> {
   const session = await requireSession("/admin");
-  if (!can(session.actor, permission)) forbidden();
+  if (!can(session.actor, permission)) redirect("/pristup-zamietnuty?reason=permission");
   return session;
 }
 

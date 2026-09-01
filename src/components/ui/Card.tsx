@@ -30,7 +30,7 @@ export function SectionCard({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("rounded-20 border border-line bg-surface p-5 sm:p-6", className)}>
+    <section className={cn("min-w-0 rounded-20 border border-line bg-surface p-5 sm:p-6", className)}>
       <div className="mb-[18px] flex items-center justify-between gap-3">
         <h2 className="section-label">{label}</h2>
         {action}
