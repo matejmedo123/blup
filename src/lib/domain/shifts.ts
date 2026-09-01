@@ -23,7 +23,13 @@ export type ShiftWithMeta = {
   capacity: number;
   status: ShiftStatus;
   hourlyRate: string | null;
-  checkInMethod: string;
+  checkInMethod: "manual" | "qr" | "geofence" | "qr_geofence";
+  instructions: string | null;
+  dressCode: string | null;
+  showColleagues: boolean;
+  lat: string | null;
+  lng: string | null;
+  geofenceRadiusM: number;
   positionId: string;
   positionName: string;
   positionColor: string;
@@ -59,6 +65,12 @@ export function shiftSelection() {
     status: shifts.status,
     hourlyRate: shifts.hourlyRate,
     checkInMethod: shifts.checkInMethod,
+    instructions: shifts.instructions,
+    dressCode: shifts.dressCode,
+    showColleagues: shifts.showColleagues,
+    lat: shifts.lat,
+    lng: shifts.lng,
+    geofenceRadiusM: shifts.geofenceRadiusM,
     positionId: positions.id,
     positionName: positions.name,
     positionColor: positions.color,
