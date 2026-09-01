@@ -1,20 +1,30 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { InlineNotice } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 
-/** Živý časovač a zárobok — tiká každú sekundu od skutočného check-inu. */
-function useElapsed(since: string) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+/**
+ * Živý časovač a zárobok — tiká každú sekundu od skutočného check-inu.
+ * Hodiny sú externý zdroj, preto `useSyncExternalStore`: serverový snapshot
+ * drží hydratáciu konzistentnú a klient prevezme skutočný čas hneď po pripojení.
+ */
+function subscribeToClock(onChange: () => void): () => void {
+  const timer = setInterval(onChange, 1000);
+  return () => clearInterval(timer);
+}
+
+function useElapsed(since: string, serverNow: number) {
+  const now = useSyncExternalStore(
+    subscribeToClock,
+    // Zaokrúhlenie na sekundu drží snapshot referenčne stabilný medzi tikmi.
+    () => Math.floor(Date.now() / 1000) * 1000,
+    () => serverNow,
+  );
   return Math.max(0, now - new Date(since).getTime());
 }
 
@@ -33,6 +43,7 @@ export function OnShiftCard({
   currency,
   coordinatorName,
   conversationHref,
+  serverNow,
 }: {
   shiftId: string;
   positionName: string;
@@ -42,10 +53,12 @@ export function OnShiftCard({
   currency: string;
   coordinatorName: string | null;
   conversationHref: string | null;
+  /** `Date.now()` v momente serverového renderu — kotva pre hydratáciu. */
+  serverNow: number;
 }) {
   const router = useRouter();
   const toast = useToast();
-  const elapsed = useElapsed(checkInAt);
+  const elapsed = useElapsed(checkInAt, serverNow);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
