@@ -1,5 +1,4 @@
 import { RESTAURANT } from "@/lib/config";
-import { itemLineTotal, itemUnitPrice } from "@/lib/cart";
 import { formatDateTime, formatPriceCompact } from "@/lib/format";
 import { ORDER_TYPE_LABEL, PAYMENT_LABEL } from "@/lib/order";
 import type { Order } from "@/lib/types";
@@ -46,12 +45,13 @@ export function PrintableReceipt({ order }: { order: Order }) {
       <Divider />
 
       <Row label="OBJEDNÁVKA" value={`#${order.orderNumber}`} bold />
+      {order.docNumber ? <Row label="Doklad" value={order.docNumber} /> : null}
       <Row label="Dátum" value={formatDateTime(order.createdAt)} />
       <Row label="Typ" value={ORDER_TYPE_LABEL[order.orderType]} />
       <Row label="Platba" value={PAYMENT_LABEL[order.paymentMethod]} />
       <Row
         label="Stav platby"
-        value={order.paymentState === "demo-paid" ? "Zaplatené (demo)" : "Platba pri prevzatí"}
+        value={order.paymentStatus === "paid" ? "Zaplatené" : "Platba pri prevzatí"}
       />
 
       <Divider />
@@ -77,10 +77,10 @@ export function PrintableReceipt({ order }: { order: Order }) {
         <div key={item.key} style={{ marginBottom: "5px" }}>
           <Row
             label={`${item.name} ×${item.quantity}`}
-            value={formatPriceCompact(itemLineTotal(item))}
+            value={formatPriceCompact(item.lineTotal)}
           />
           <div style={{ fontSize: "9px", paddingLeft: "6px", color: "#333" }}>
-            {formatPriceCompact(itemUnitPrice(item))} / ks
+            {formatPriceCompact(item.unitPrice)} / ks
           </div>
           {item.extras.map((e) => (
             <div key={e.id} style={{ fontSize: "9px", paddingLeft: "6px" }}>

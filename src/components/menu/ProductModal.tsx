@@ -63,6 +63,7 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
     product.price + chosen.reduce((sum, e) => sum + e.price, 0),
   );
   const total = round2(unitPrice * quantity);
+  const soldOut = product.available === false;
 
   const toggle = (id: string) =>
     setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -224,13 +225,25 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
               <button
                 type="button"
                 onClick={() => onAdd(product, chosen, quantity, note)}
-                className="flex h-13 flex-1 items-center justify-center gap-1.5 rounded-full bg-burgundy px-3 font-sans text-[0.75rem] font-extrabold tracking-[0.08em] text-cream uppercase transition-colors hover:bg-burgundy-700 active:bg-burgundy-800 sm:h-14 sm:gap-2 sm:px-4 sm:text-[0.85rem] sm:tracking-[0.1em]"
+                disabled={soldOut}
+                className={cn(
+                  "flex h-13 flex-1 items-center justify-center gap-1.5 rounded-full px-3 font-sans text-[0.75rem] font-extrabold tracking-[0.08em] uppercase transition-colors sm:h-14 sm:gap-2 sm:px-4 sm:text-[0.85rem] sm:tracking-[0.1em]",
+                  soldOut
+                    ? "cursor-not-allowed bg-ink/12 text-ink/45"
+                    : "bg-burgundy text-cream hover:bg-burgundy-700 active:bg-burgundy-800",
+                )}
               >
-                <span>
-                  Pridať<span className="hidden xs:inline"> do košíka</span>
-                </span>
-                <span aria-hidden className="opacity-50">—</span>
-                <span className="tabular-nums">{formatPrice(total)}</span>
+                {soldOut ? (
+                  <span>Momentálne vypredané</span>
+                ) : (
+                  <>
+                    <span>
+                      Pridať<span className="hidden xs:inline"> do košíka</span>
+                    </span>
+                    <span aria-hidden className="opacity-50">—</span>
+                    <span className="tabular-nums">{formatPrice(total)}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

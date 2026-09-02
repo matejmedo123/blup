@@ -1,36 +1,107 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RESTAURANT } from "@/lib/config";
-import { itemLineTotal } from "@/lib/cart";
 import { formatDateTime, formatPrice } from "@/lib/format";
+import { fetchOrder } from "@/lib/api";
 import {
+  formatReadyTime,
   getLastOrder,
-  getOrderByNumber,
+  getStoredOrder,
+  ORDER_STATUS_HINT,
   ORDER_STATUS_LABEL,
   ORDER_TYPE_LABEL,
   PAYMENT_LABEL,
+  saveOrder,
 } from "@/lib/order";
-import type { Order } from "@/lib/types";
+import type { Order, OrderStatus } from "@/lib/types";
 import { CheckerRule } from "@/components/ui/Checkerboard";
 import { CheckIcon, ClockIcon, PinIcon, PrintIcon } from "@/components/ui/Icons";
 import { LogoBadge } from "@/components/ui/Logo";
 import { PrintableReceipt } from "./PrintableReceipt";
 
-type State = { status: "loading" } | { status: "empty" } | { status: "ready"; order: Order };
+type State =
+  | { status: "loading" }
+  | { status: "empty" }
+  | { status: "ready"; order: Order; live: boolean };
+
+/** Poradie krokov, ktoré vidí zákazník. */
+const STEPS: { key: OrderStatus; label: (isPickup: boolean) => string }[] = [
+  { key: "received", label: () => "Objednávka prijatá" },
+  { key: "confirmed", label: () => "Pripravujeme" },
+  { key: "ready", label: (p) => (p ? "Pripravené na odber" : "Na ceste k tebe") },
+  { key: "completed", label: () => "Vybavené" },
+];
+
+/** Nadpis potvrdenia sa mení podľa toho, kde objednávka práve je. */
+const HEADLINE: Record<OrderStatus, [string, string]> = {
+  received: ["Objednávka", "prijatá!"],
+  confirmed: ["Už to", "pripravujeme!"],
+  ready: ["Hotovo —", "je pripravená!"],
+  completed: ["Objednávka", "vybavená"],
+  cancelled: ["Objednávka", "zrušená"],
+};
 
 export function OrderConfirmation() {
   const [state, setState] = useState<State>({ status: "loading" });
+  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
+
+  /** Načíta objednávku zo servera; keď sa nedá, siahne po lokálnej kópii. */
+  const load = useCallback(async (first: boolean) => {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("c");
+    const tokenParam = params.get("t");
+
+    const stored = requested ? getStoredOrder(requested) : getLastOrder();
+    const number = requested ?? stored?.order.orderNumber ?? null;
+    const token = tokenParam ?? stored?.token ?? null;
+
+    if (first && params.get("platba") === "zrusena") {
+      setPaymentNotice(
+        "Platbu si zrušil. Objednávku máme uloženú — ozvi sa nám a dohodneme sa na platbe pri prevzatí.",
+      );
+    }
+
+    if (number === null) {
+      setState({ status: "empty" });
+      return;
+    }
+
+    if (token) {
+      try {
+        const { order } = await fetchOrder(number, token);
+        saveOrder(order, token);
+        setState({ status: "ready", order, live: true });
+        return;
+      } catch {
+        // server nedostupný — ukážeme aspoň lokálnu kópiu
+      }
+    }
+
+    if (stored?.order) {
+      setState({ status: "ready", order: stored.order, live: false });
+    } else {
+      setState({ status: "empty" });
+    }
+  }, []);
 
   useEffect(() => {
-    // Číslo objednávky je v adrese (?c=ENZO-1042); čítame ho až tu,
-    // aby stránka mohla byť staticky vyexportovaná.
-    const requested = new URLSearchParams(window.location.search).get("c");
-    const order = requested ? getOrderByNumber(requested) : getLastOrder();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- načítanie objednávky z localStorage po hydratácii
-    setState(order ? { status: "ready", order } : { status: "empty" });
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- prvé načítanie objednávky zo servera po pripojení
+    void load(true);
+  }, [load]);
+
+  /* Kým objednávka beží, doťahujeme stav — zákazník uvidí potvrdený čas. */
+  useEffect(() => {
+    if (state.status !== "ready" || !state.live) return;
+    if (state.order.status === "completed" || state.order.status === "cancelled") return;
+
+    pollRef.current = window.setInterval(() => void load(false), 30000);
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+    };
+  }, [state, load]);
 
   if (state.status === "loading") {
     return (
@@ -47,7 +118,7 @@ export function OrderConfirmation() {
           Objednávka sa nenašla
         </h1>
         <p className="mt-3 max-w-sm text-ink/55">
-          Objednávku sa nepodarilo načítať. Mohla byť vymazaná z tohto zariadenia.
+          Skús otvoriť odkaz z potvrdzovacieho e-mailu — funguje aj na inom zariadení.
         </p>
         <Link
           href="/#menu"
@@ -59,8 +130,12 @@ export function OrderConfirmation() {
     );
   }
 
-  const { order } = state;
+  const { order, live } = state;
   const c = order.customer;
+  const isPickup = order.orderType === "pickup";
+  const readyTime = formatReadyTime(order.readyAt);
+  const currentStep = STEPS.findIndex((s) => s.key === order.status);
+  const cancelled = order.status === "cancelled";
 
   return (
     <>
@@ -77,17 +152,24 @@ export function OrderConfirmation() {
           <div className="container-enzo relative py-14 lg:py-20">
             <div className="flex flex-col items-start gap-7 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <span className="inline-flex h-16 w-16 animate-[pop_0.5s_cubic-bezier(0.34,1.56,0.64,1)_both] items-center justify-center rounded-full bg-gold text-ink">
+                <span
+                  className={
+                    "inline-flex h-16 w-16 animate-[pop_0.5s_cubic-bezier(0.34,1.56,0.64,1)_both] items-center justify-center rounded-full " +
+                    (cancelled ? "bg-cream/20 text-cream" : "bg-gold text-ink")
+                  }
+                >
                   <CheckIcon className="h-8 w-8" strokeWidth={3} />
                 </span>
                 <h1 className="mt-6 font-display text-[2.3rem] leading-[1.04] opacity-0 [animation:reveal_0.7s_cubic-bezier(0.16,1,0.3,1)_0.12s_both] sm:text-[3.2rem] lg:text-[3.8rem]">
-                  Objednávka
-                  <br />
-                  prijatá!
+                  {HEADLINE[order.status].map((line) => (
+                    <span key={line} className="block">
+                      {line}
+                    </span>
+                  ))}
                 </h1>
                 <p className="mt-5 text-[1.1rem] text-cream/80 opacity-0 [animation:reveal_0.7s_cubic-bezier(0.16,1,0.3,1)_0.2s_both]">
-                  Ďakujeme, <strong className="text-cream">{c.firstName}</strong>. Púšťame ju na
-                  platňu.
+                  Ďakujeme, <strong className="text-cream">{c.firstName}</strong>.{" "}
+                  {ORDER_STATUS_HINT[order.status]}
                 </p>
               </div>
 
@@ -98,6 +180,15 @@ export function OrderConfirmation() {
         <CheckerRule className="text-burgundy" size="0.625rem" />
 
         <div className="container-enzo py-10 lg:py-16">
+          {paymentNotice && (
+            <div
+              role="status"
+              className="mb-6 rounded-2xl border border-gold/60 bg-gold/15 px-5 py-4 text-[0.92rem] text-ink/80"
+            >
+              {paymentNotice}
+            </div>
+          )}
+
           <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr] lg:gap-10">
             {/* Stav a údaje */}
             <div className="flex flex-col gap-6">
@@ -106,68 +197,86 @@ export function OrderConfirmation() {
                 <p className="mt-2 font-display text-[2rem] leading-none text-burgundy sm:text-[2.5rem]">
                   #{order.orderNumber}
                 </p>
-                <p className="mt-2 text-[0.85rem] text-ink/50">
-                  {formatDateTime(order.createdAt)}
-                </p>
+                <p className="mt-2 text-[0.85rem] text-ink/50">{formatDateTime(order.createdAt)}</p>
 
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-gold px-4 py-2.5 font-sans text-[0.7rem] font-extrabold tracking-[0.12em] text-ink uppercase">
-                    <span aria-hidden className="h-2 w-2 rounded-full bg-ink" />
-                    {ORDER_STATUS_LABEL[order.status]}
-                  </span>
-                  <span className="inline-flex items-center gap-2 rounded-full bg-cream-200 px-4 py-2.5 font-sans text-[0.7rem] font-extrabold tracking-[0.12em] text-burgundy uppercase">
-                    <ClockIcon className="h-4 w-4" />
-                    {order.estimatedTime}
-                  </span>
-                </div>
-
-                <ol className="mt-7 flex flex-col gap-0">
-                  {[
-                    { label: "Objednávka prijatá", done: true },
-                    { label: "Pripravujeme", done: false },
-                    {
-                      label:
-                        order.orderType === "pickup"
-                          ? "Pripravené na odber"
-                          : "Na ceste k tebe",
-                      done: false,
-                    },
-                  ].map((s, i, arr) => (
-                    <li key={s.label} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <span
-                          className={
-                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 " +
-                            (s.done
-                              ? "border-burgundy bg-burgundy text-cream"
-                              : "border-ink/15 bg-white")
-                          }
-                        >
-                          {s.done ? (
-                            <CheckIcon className="h-3.5 w-3.5" strokeWidth={3} />
-                          ) : (
-                            <span className="h-1.5 w-1.5 rounded-full bg-ink/20" />
-                          )}
-                        </span>
-                        {i < arr.length - 1 && (
-                          <span
-                            aria-hidden
-                            className="my-1 w-0.5 flex-1 rounded bg-ink/10"
-                            style={{ minHeight: "1.5rem" }}
-                          />
-                        )}
-                      </div>
-                      <p
-                        className={
-                          "pb-4 text-[0.95rem] " +
-                          (s.done ? "font-bold text-ink" : "text-ink/45")
-                        }
-                      >
-                        {s.label}
+                {/* Potvrdený čas z prevádzky */}
+                {readyTime && !cancelled ? (
+                  <div className="mt-6 rounded-xl bg-gold px-5 py-4 text-center">
+                    <p className="eyebrow text-ink/70">
+                      {isPickup ? "Hotové o" : "U teba okolo"}
+                    </p>
+                    <p className="mt-1 font-display text-[2.6rem] leading-none text-ink tabular-nums">
+                      {readyTime}
+                    </p>
+                    {order.prepMinutes ? (
+                      <p className="mt-1 text-[0.8rem] text-ink/60">
+                        približne {order.prepMinutes} minút
                       </p>
-                    </li>
-                  ))}
-                </ol>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="mt-6 flex flex-wrap items-center gap-3">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-gold px-4 py-2.5 font-sans text-[0.7rem] font-extrabold tracking-[0.12em] text-ink uppercase">
+                      <span aria-hidden className="h-2 w-2 rounded-full bg-ink" />
+                      {ORDER_STATUS_LABEL[order.status]}
+                    </span>
+                    {order.estimatedTime && (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-cream-200 px-4 py-2.5 font-sans text-[0.7rem] font-extrabold tracking-[0.12em] text-burgundy uppercase">
+                        <ClockIcon className="h-4 w-4" />
+                        {order.estimatedTime}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {!cancelled && (
+                  <ol className="mt-7 flex flex-col gap-0">
+                    {STEPS.map((s, i, arr) => {
+                      const done = currentStep >= i;
+                      return (
+                        <li key={s.key} className="flex gap-4">
+                          <div className="flex flex-col items-center">
+                            <span
+                              className={
+                                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 " +
+                                (done
+                                  ? "border-burgundy bg-burgundy text-cream"
+                                  : "border-ink/15 bg-white")
+                              }
+                            >
+                              {done ? (
+                                <CheckIcon className="h-3.5 w-3.5" strokeWidth={3} />
+                              ) : (
+                                <span className="h-1.5 w-1.5 rounded-full bg-ink/20" />
+                              )}
+                            </span>
+                            {i < arr.length - 1 && (
+                              <span
+                                aria-hidden
+                                className="my-1 w-0.5 flex-1 rounded bg-ink/10"
+                                style={{ minHeight: "1.5rem" }}
+                              />
+                            )}
+                          </div>
+                          <p
+                            className={
+                              "pb-4 text-[0.95rem] " +
+                              (done ? "font-bold text-ink" : "text-ink/45")
+                            }
+                          >
+                            {s.label(isPickup)}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+
+                {live && !cancelled && order.status !== "completed" && (
+                  <p className="mt-2 text-[0.75rem] text-ink/40">
+                    Stav sa obnovuje automaticky. Zmenu ti pošleme aj e-mailom.
+                  </p>
+                )}
               </div>
 
               <div className="rounded-2xl bg-white p-6 ring-1 ring-ink/8">
@@ -194,11 +303,11 @@ export function OrderConfirmation() {
                       )}
                     </dd>
                   </div>
-                  {order.orderType === "pickup" && c.pickupTime && (
+                  {isPickup && c.pickupTime && (
                     <div className="flex gap-3">
                       <dt className="sr-only">Čas odberu</dt>
                       <ClockIcon className="mt-0.5 h-4.5 w-4.5 shrink-0 text-burgundy" />
-                      <dd className="text-ink/75">Čas odberu: {c.pickupTime}</dd>
+                      <dd className="text-ink/75">Požadovaný čas: {c.pickupTime}</dd>
                     </div>
                   )}
                 </dl>
@@ -218,9 +327,9 @@ export function OrderConfirmation() {
 
                 <p className="mt-5 rounded-lg bg-cream-200 px-4 py-3 text-[0.82rem] text-ink/70">
                   <strong>Platba:</strong> {PAYMENT_LABEL[order.paymentMethod]}
-                  {order.paymentState === "demo-paid" && (
-                    <span className="block text-[0.75rem] text-ink/45">
-                      Demo prototyp — reálna platba sa nespracovala.
+                  {order.paymentStatus === "paid" && (
+                    <span className="ml-2 rounded-full bg-burgundy px-2.5 py-1 text-[0.68rem] font-bold text-cream uppercase">
+                      zaplatené
                     </span>
                   )}
                 </p>
@@ -254,7 +363,7 @@ export function OrderConfirmation() {
                         )}
                       </div>
                       <p className="shrink-0 font-display text-[1.05rem] text-burgundy tabular-nums">
-                        {formatPrice(itemLineTotal(item))}
+                        {formatPrice(item.lineTotal)}
                       </p>
                     </li>
                   ))}
@@ -273,6 +382,15 @@ export function OrderConfirmation() {
                       {order.deliveryFee === 0 ? "Zdarma" : formatPrice(order.deliveryFee)}
                     </dd>
                   </div>
+                  {Object.entries(order.vat ?? {}).map(([group, v]) => (
+                    <div key={group} className="flex justify-between text-[0.8rem] text-ink/50">
+                      <dt>
+                        DPH {group === "drinks" ? "nápoje" : "jedlo"} {v.rate} % (základ{" "}
+                        {formatPrice(v.base)})
+                      </dt>
+                      <dd className="tabular-nums">{formatPrice(v.vat)}</dd>
+                    </div>
+                  ))}
                   <div className="mt-2 flex items-baseline justify-between border-t border-ink/10 pt-4">
                     <dt className="font-display text-[1.2rem] text-ink">Celkom</dt>
                     <dd className="font-display text-[1.6rem] text-burgundy tabular-nums">

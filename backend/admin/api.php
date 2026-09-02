@@ -1,0 +1,122 @@
+<?php
+declare(strict_types=1);
+require __DIR__ . '/../api/_bootstrap.php';
+
+/**
+ * Malé JSON API pre admin nástenku — ťahanie stavu a akcie nad objednávkami.
+ * Vyžaduje prihlásenie; zmeny sú chránené CSRF tokenom.
+ */
+
+header('Cache-Control: no-store');
+
+if (!Auth::check()) {
+    Response::fail('Odhlásené.', 401);
+}
+$user = Auth::user();
+
+/* ---------------- Čítanie: stav nástenky ---------------- */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
+    if (($_GET['action'] ?? '') !== 'board') {
+        Response::fail('Neznáma akcia.', 400);
+    }
+
+    $rows = Db::all(
+        "SELECT * FROM orders
+         WHERE status IN ('received','confirmed','ready')
+         ORDER BY CASE status WHEN 'received' THEN 0 WHEN 'confirmed' THEN 1 ELSE 2 END, created_at",
+    );
+
+    $orders = [];
+    foreach ($rows as $o) {
+        $items = [];
+        foreach (Db::all('SELECT * FROM order_items WHERE order_id = ? ORDER BY id', [$o['id']]) as $i) {
+            $extras = $i['extras_json'] ? (json_decode((string) $i['extras_json'], true) ?: []) : [];
+            $items[] = [
+                'name'     => $i['name'],
+                'quantity' => (int) $i['quantity'],
+                'note'     => $i['note'],
+                'extras'   => array_map(static fn ($e) => (string) $e['name'], $extras),
+            ];
+        }
+        $orders[] = [
+            'id'            => (int) $o['id'],
+            'orderNumber'   => $o['order_number'],
+            'status'        => $o['status'],
+            'orderType'     => $o['order_type'],
+            'paymentMethod' => $o['payment_method'],
+            'paymentStatus' => $o['payment_status'],
+            'total'         => Money::toFloat((int) $o['total_cents']),
+            'createdAt'     => str_replace(' ', 'T', (string) $o['created_at']),
+            'readyAt'       => $o['ready_at'] ? str_replace(' ', 'T', (string) $o['ready_at']) : null,
+            'readyAtLabel'  => $o['ready_at'] ? date('H:i', strtotime((string) $o['ready_at'])) : null,
+            'customerName'  => $o['first_name'] . ' ' . $o['last_name'],
+            'phone'         => $o['phone'],
+            'pickupTime'    => $o['pickup_time'],
+            'note'          => $o['note'],
+            'items'         => $items,
+        ];
+    }
+
+    Response::ok(['orders' => $orders, 'serverTime' => date('c')]);
+}
+
+/* ---------------- Zápis: akcie ---------------- */
+Response::requireMethod('POST');
+$body = Response::jsonBody();
+
+if (!Csrf::verify((string) ($body['_csrf'] ?? ''))) {
+    Response::fail('Relácia vypršala. Obnov stránku.', 419);
+}
+
+$id     = (int) ($body['id'] ?? 0);
+$action = (string) ($body['action'] ?? '');
+$order  = $id > 0 ? Db::one('SELECT * FROM orders WHERE id = ?', [$id]) : null;
+
+if ($order === null) {
+    Response::fail('Objednávka sa nenašla.', 404);
+}
+
+$notifier = new Notifier((array) cfg('mail', []), (string) cfg('app.url'));
+
+try {
+    switch ($action) {
+        case 'confirm':
+            $minutes = (int) ($body['minutes'] ?? Settings::int('default_prep_minutes'));
+            $updated = OrderService::confirm($id, $minutes, $user['id']);
+            $notifier->orderConfirmed($updated);
+            break;
+
+        case 'ready':
+            $updated = OrderService::setStatus($id, OrderService::STATUS_READY, $user['id']);
+            $notifier->orderReady($updated);
+            break;
+
+        case 'complete':
+            $updated = OrderService::setStatus($id, OrderService::STATUS_COMPLETED, $user['id']);
+            // hotovosť sa považuje za uhradenú pri prevzatí
+            if ($updated['payment_method'] === 'cash' && $updated['payment_status'] !== 'paid') {
+                OrderService::markPaid($id, 'hotovosť pri prevzatí', 'cash');
+                $updated = OrderService::findById($id);
+            }
+            break;
+
+        case 'cancel':
+            $reason  = Validate::clean($body['reason'] ?? '', 255);
+            $updated = OrderService::setStatus($id, OrderService::STATUS_CANCELLED, $user['id'], $reason);
+            $notifier->orderCancelled($updated, $reason);
+            break;
+
+        case 'mark_paid':
+            OrderService::markPaid($id, Validate::clean($body['reference'] ?? 'ručne označené', 190), (string) $order['payment_method']);
+            $updated = OrderService::findById($id);
+            break;
+
+        default:
+            Response::fail('Neznáma akcia.', 400);
+    }
+} catch (Throwable $e) {
+    error_log('admin/api.php: ' . $e->getMessage());
+    Response::fail('Akciu sa nepodarilo vykonať.', 500);
+}
+
+Response::ok(['order' => OrderService::toPublicArray($updated)]);

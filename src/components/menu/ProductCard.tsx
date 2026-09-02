@@ -25,15 +25,27 @@ export const ProductCard = memo(function ProductCard({
   priority,
 }: ProductCardProps) {
   const hasExtras = (product.extras?.length ?? 0) > 0;
+  // prevádzka môže položku dočasne vypnúť v admine
+  const soldOut = product.available === false;
 
   return (
-    <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl bg-white ring-1 ring-ink/8 transition-[transform,box-shadow] duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_22px_40px_-24px_rgba(58,13,13,0.55)] motion-reduce:hover:translate-y-0">
+    <article
+      className={cn(
+        "group relative flex h-full flex-col overflow-hidden rounded-2xl bg-white ring-1 ring-ink/8 transition-[transform,box-shadow] duration-300 ease-out",
+        soldOut
+          ? "opacity-70"
+          : "hover:-translate-y-1 hover:shadow-[0_22px_40px_-24px_rgba(58,13,13,0.55)] motion-reduce:hover:translate-y-0",
+      )}
+    >
       {/* Médium */}
       <button
         type="button"
         onClick={() => onSelect(product)}
         aria-label={`Zobraziť detail — ${product.name}`}
-        className="relative block aspect-4/3 w-full overflow-hidden bg-cream-200"
+        className={cn(
+          "relative block aspect-4/3 w-full overflow-hidden bg-cream-200",
+          soldOut && "grayscale",
+        )}
       >
         {product.image ? (
           <Image
@@ -60,7 +72,11 @@ export const ProductCard = memo(function ProductCard({
           </div>
         ) : null}
 
-        {product.badge && (
+        {soldOut ? (
+          <span className="absolute top-3 left-3 rounded-full bg-ink px-3 py-1.5 font-sans text-[0.6rem] font-extrabold tracking-[0.14em] text-cream uppercase">
+            Vypredané
+          </span>
+        ) : product.badge && (
           <span className="absolute top-3 left-3 rounded-full bg-gold px-3 py-1.5 font-sans text-[0.6rem] font-extrabold tracking-[0.14em] text-ink uppercase">
             {product.badge}
           </span>
@@ -108,18 +124,25 @@ export const ProductCard = memo(function ProductCard({
           <button
             type="button"
             onClick={() => (hasExtras ? onSelect(product) : onQuickAdd(product))}
+            disabled={soldOut}
             aria-label={
-              hasExtras
-                ? `Prispôsobiť a pridať — ${product.name}`
-                : `Pridať do košíka — ${product.name}`
+              soldOut
+                ? `${product.name} — momentálne vypredané`
+                : hasExtras
+                  ? `Prispôsobiť a pridať — ${product.name}`
+                  : `Pridať do košíka — ${product.name}`
             }
             className={cn(
               "inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-full px-4 font-sans text-[0.7rem] font-extrabold tracking-[0.12em] uppercase transition-colors duration-200 sm:w-auto sm:px-5 sm:text-[0.74rem]",
-              "bg-burgundy text-cream hover:bg-burgundy-700 active:bg-burgundy-800",
+              soldOut
+                ? "cursor-not-allowed bg-ink/12 text-ink/45"
+                : "bg-burgundy text-cream hover:bg-burgundy-700 active:bg-burgundy-800",
             )}
           >
-            <span aria-hidden className="text-base leading-none">+</span>
-            Pridať
+            {!soldOut && (
+              <span aria-hidden className="text-base leading-none">+</span>
+            )}
+            {soldOut ? "Vypredané" : "Pridať"}
           </button>
         </div>
       </div>

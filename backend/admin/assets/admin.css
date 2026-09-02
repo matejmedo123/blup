@@ -1,0 +1,200 @@
+/* ENZO admin — navrhnuté na tablet v kuchyni: veľké ciele, vysoký kontrast */
+
+:root {
+  --burgundy: #7a1e1e;
+  --burgundy-dark: #4a1010;
+  --cream: #f6f0e3;
+  --cream-2: #efe7d5;
+  --ink: #171211;
+  --muted: #6e625b;
+  --line: rgba(23, 18, 17, 0.14);
+  --gold: #e1b12c;
+  --green: #2f6b45;
+  --red: #b3261e;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--cream-2);
+  color: var(--ink);
+  font: 15px/1.55 "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
+h1 { font-size: 26px; text-transform: uppercase; }
+h2 { font-size: 19px; }
+h3 { font-size: 16px; }
+p { margin: 0; }
+a { color: var(--burgundy); }
+
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+/* ---------- Hlavička ---------- */
+.topbar {
+  background: var(--burgundy);
+  color: var(--cream);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.topbar-inner {
+  max-width: 1400px; margin: 0 auto; padding: 12px 20px;
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+}
+.brand {
+  font-family: Rockwell, Georgia, serif; font-weight: 700; font-size: 26px;
+  letter-spacing: 0.5px; color: var(--cream); text-decoration: none; line-height: 1;
+}
+.brand span { display: block; font: 700 9px/1 "Archivo", sans-serif; letter-spacing: 2.4px; opacity: 0.7; margin-top: 3px; }
+.topnav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+.topnav a {
+  color: rgba(246, 240, 227, 0.78); text-decoration: none; padding: 9px 14px;
+  border-radius: 999px; font-weight: 700; font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.topnav a:hover { background: rgba(246, 240, 227, 0.12); color: var(--cream); }
+.topnav a.active { background: var(--cream); color: var(--burgundy); }
+.topbar-user { font-size: 12.5px; color: rgba(246, 240, 227, 0.7); display: flex; align-items: center; gap: 12px; }
+.checkrule {
+  height: 8px;
+  background-image: repeating-conic-gradient(var(--cream) 0% 25%, transparent 0% 50%);
+  background-size: 8px 8px;
+  background-color: var(--burgundy);
+}
+
+/* ---------- Layout ---------- */
+.wrap { max-width: 1400px; margin: 0 auto; padding: 22px 20px 60px; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.eyebrow { font-size: 10.5px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+
+.card { background: #fff; border-radius: var(--radius); border: 1px solid var(--line); padding: 18px; }
+.card + .card { margin-top: 16px; }
+.grid { display: grid; gap: 16px; }
+@media (min-width: 900px) { .grid-2 { grid-template-columns: 1fr 1fr; } .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+
+/* ---------- Tlačidlá ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; cursor: pointer;
+  font: 800 12.5px/1 "Archivo", sans-serif; letter-spacing: 0.1em; text-transform: uppercase;
+  text-decoration: none; background: var(--burgundy); color: var(--cream);
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn:hover { background: var(--burgundy-dark); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn-gold { background: var(--gold); color: var(--ink); }
+.btn-gold:hover { background: #c8991c; }
+.btn-ghost { background: transparent; color: var(--ink); border: 2px solid var(--line); }
+.btn-ghost:hover { background: rgba(23, 18, 17, 0.06); }
+.btn-danger { background: var(--red); }
+.btn-danger:hover { background: #8f1e17; }
+.btn-sm { min-height: 36px; padding: 0 14px; font-size: 11px; }
+.btn-lg { min-height: 56px; padding: 0 26px; font-size: 14px; }
+.btn-block { width: 100%; }
+
+/* ---------- Formuláre ---------- */
+label.field { display: block; margin-bottom: 14px; }
+label.field > span {
+  display: block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 5px;
+}
+input[type="text"], input[type="email"], input[type="password"], input[type="number"],
+input[type="date"], select, textarea {
+  width: 100%; min-height: 46px; padding: 10px 13px; font: inherit;
+  border: 2px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink);
+}
+textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
+input:focus, select:focus, textarea:focus { border-color: var(--burgundy); outline: none; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.row { display: grid; gap: 14px; }
+@media (min-width: 700px) { .row-2 { grid-template-columns: 1fr 1fr; } .row-3 { grid-template-columns: repeat(3, 1fr); } }
+.checkline { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 14px; }
+.checkline input { width: 22px; height: 22px; accent-color: var(--burgundy); }
+
+/* ---------- Hlášky ---------- */
+.alert { border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 14px; }
+.alert-ok { background: rgba(47, 107, 69, 0.12); color: #1f4a2f; }
+.alert-err { background: rgba(179, 38, 30, 0.1); color: #8f1e17; }
+.alert-info { background: rgba(225, 177, 44, 0.18); color: #6b5210; }
+
+/* ---------- Tabuľky ---------- */
+.table-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.data th {
+  text-align: left; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); font-weight: 800; padding: 0 12px 10px 0; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+table.data td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.data tr:last-child td { border-bottom: 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- Odznaky stavov ---------- */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+}
+.badge-received { background: var(--gold); color: var(--ink); }
+.badge-confirmed { background: rgba(122, 30, 30, 0.12); color: var(--burgundy); }
+.badge-ready { background: rgba(47, 107, 69, 0.15); color: var(--green); }
+.badge-completed { background: rgba(23, 18, 17, 0.08); color: var(--muted); }
+.badge-cancelled { background: rgba(179, 38, 30, 0.12); color: var(--red); }
+.badge-paid { background: rgba(47, 107, 69, 0.15); color: var(--green); }
+.badge-unpaid { background: rgba(23, 18, 17, 0.08); color: var(--muted); }
+
+/* ---------- Nástenka objednávok ---------- */
+.board { display: grid; gap: 14px; }
+@media (min-width: 1000px) { .board { grid-template-columns: repeat(3, 1fr); align-items: start; } }
+.column { background: rgba(255, 255, 255, 0.55); border-radius: var(--radius); padding: 12px; min-height: 120px; }
+.column > h2 {
+  font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+  margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+}
+.column .count { background: var(--burgundy); color: var(--cream); border-radius: 999px; padding: 2px 9px; font-size: 11px; }
+
+.order-card {
+  background: #fff; border-radius: 10px; border: 1px solid var(--line);
+  padding: 14px; margin-bottom: 10px; display: block; text-decoration: none; color: inherit;
+}
+.order-card.new { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(225, 177, 44, 0.3); }
+.order-card:hover { border-color: var(--burgundy); }
+.order-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.order-num { font-weight: 800; font-size: 17px; }
+.order-total { font-weight: 800; color: var(--burgundy); font-variant-numeric: tabular-nums; }
+.order-meta { font-size: 12.5px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+.order-items { margin-top: 9px; font-size: 13px; color: var(--ink); }
+.order-items li { list-style: none; }
+.order-items ul { margin: 0; padding: 0; }
+.order-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.countdown { font-weight: 800; font-variant-numeric: tabular-nums; }
+.countdown.late { color: var(--red); }
+
+/* ---------- Výber minutáže ---------- */
+.mins { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.mins button {
+  min-height: 52px; min-width: 66px; border-radius: 10px; border: 2px solid var(--line);
+  background: #fff; cursor: pointer; font: 800 16px/1 "Archivo", sans-serif; color: var(--ink);
+}
+.mins button:hover { border-color: var(--burgundy); }
+.mins button.sel { background: var(--burgundy); border-color: var(--burgundy); color: var(--cream); }
+
+/* ---------- Tlač ---------- */
+.print-only { display: none; }
+@media print {
+  body { background: #fff; }
+  .topbar, .checkrule, .no-print, .order-actions { display: none !important; }
+  .wrap { padding: 0; max-width: none; }
+  .card { border: 0; padding: 0; }
+  .print-only { display: block; }
+}
+
+.receipt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.5; max-width: 76mm; color: #000;
+}
+.receipt hr { border: 0; border-top: 1px dashed #000; margin: 7px 0; }
+.receipt .rrow { display: flex; justify-content: space-between; gap: 8px; }
+.receipt .big { font-size: 15px; font-weight: 700; }
+.receipt .center { text-align: center; }

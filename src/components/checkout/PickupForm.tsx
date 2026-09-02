@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { ORDER_CONFIG, RESTAURANT } from "@/lib/config";
+import { RESTAURANT } from "@/lib/config";
+import { useMenu } from "@/context/MenuContext";
 import { buildPickupSlots, type FieldErrors } from "@/lib/validation";
 import type { CustomerDetails } from "@/lib/types";
 import { SelectField, TextAreaField } from "@/components/ui/Field";
@@ -14,6 +15,7 @@ interface PickupFormProps {
 }
 
 export function PickupForm({ customer, errors, onChange }: PickupFormProps) {
+  const { settings } = useMenu();
   const slots = useMemo(() => buildPickupSlots(), []);
 
   return (
@@ -28,7 +30,7 @@ export function PickupForm({ customer, errors, onChange }: PickupFormProps) {
             {RESTAURANT.address.street}, {RESTAURANT.address.city}
           </p>
           <p className="mt-1 text-[0.82rem] text-ink/55">
-            Objednávku ti pripravíme za {ORDER_CONFIG.estimatedTimePickup}.
+            Objednávku ti pripravíme za {settings.prepTimePickup}.
           </p>
         </div>
       </div>

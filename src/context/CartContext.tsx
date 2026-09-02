@@ -21,6 +21,7 @@ import {
 } from "@/lib/cart";
 import { lockScroll, unlockScroll } from "@/lib/scrollLock";
 import { readJSON, STORAGE_KEYS, writeJSON } from "@/lib/storage";
+import { useMenu } from "./MenuContext";
 import type { CartItem, ExtraOption, OrderTotals, OrderType, Product } from "@/lib/types";
 
 interface CartContextValue {
@@ -45,6 +46,8 @@ interface CartContextValue {
   closeCart: () => void;
   /** Inkrementuje sa pri každom pridaní — používa sa na animáciu odznaku */
   bump: number;
+  /** Aktuálne poplatky a minimálna objednávka (z adminu) */
+  rules: { deliveryFee: number; freeDeliveryFrom: number; minOrder: number };
   /** Posledná pridaná položka pre potvrdzovací toast */
   lastAdded: { name: string; quantity: number; token: number } | null;
   dismissLastAdded: () => void;
@@ -58,6 +61,7 @@ interface PersistedCart {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { settings } = useMenu();
   const [items, setItems] = useState<CartItem[]>([]);
   const [orderType, setOrderTypeState] = useState<OrderType>("delivery");
   const [hydrated, setHydrated] = useState(false);
@@ -128,13 +132,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
   const closeCart = useCallback(() => setCartOpen(false), []);
 
+  // pravidlá (poplatky, minimum) môže prevádzka meniť v admine
+  const rules = useMemo(
+    () => ({
+      deliveryFee: settings.deliveryFee,
+      freeDeliveryFrom: settings.freeDeliveryFrom,
+      minOrder: settings.minOrder,
+    }),
+    [settings.deliveryFee, settings.freeDeliveryFrom, settings.minOrder],
+  );
+
   const value = useMemo<CartContextValue>(() => {
     return {
       items,
       hydrated,
       itemCount: countItems(items),
       subtotal: subtotalPure(items),
-      totals: calcTotals(items, orderType),
+      totals: calcTotals(items, orderType, rules),
       orderType,
       setOrderType,
       addProduct,
@@ -147,8 +161,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       bump,
       lastAdded,
       dismissLastAdded,
+      rules,
     };
   }, [
+    rules,
     items,
     hydrated,
     orderType,

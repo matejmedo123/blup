@@ -1,0 +1,6 @@
+# Tento priečinok nesmie byť dostupný z internetu.
+Require all denied
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

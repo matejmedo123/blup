@@ -64,15 +64,39 @@ export function subtotal(items: CartItem[]): number {
   return round2(items.reduce((sum, i) => sum + itemLineTotal(i), 0));
 }
 
-export function deliveryFeeFor(sub: number, orderType: OrderType): number {
-  if (orderType === "pickup") return 0;
-  if (sub >= ORDER_CONFIG.freeDeliveryFrom) return 0;
-  return ORDER_CONFIG.deliveryFee;
+/**
+ * Podmienky objednávky. Predvolené hodnoty sú v konfigurácii, ale
+ * prevádzka si ich mení v admine — vtedy prídu zo servera.
+ */
+export interface OrderRules {
+  deliveryFee: number;
+  freeDeliveryFrom: number;
+  minOrder: number;
 }
 
-export function calcTotals(items: CartItem[], orderType: OrderType = "delivery"): OrderTotals {
+export const DEFAULT_RULES: OrderRules = {
+  deliveryFee: ORDER_CONFIG.deliveryFee,
+  freeDeliveryFrom: ORDER_CONFIG.freeDeliveryFrom,
+  minOrder: ORDER_CONFIG.minOrder,
+};
+
+export function deliveryFeeFor(
+  sub: number,
+  orderType: OrderType,
+  rules: OrderRules = DEFAULT_RULES,
+): number {
+  if (orderType === "pickup") return 0;
+  if (rules.freeDeliveryFrom > 0 && sub >= rules.freeDeliveryFrom) return 0;
+  return rules.deliveryFee;
+}
+
+export function calcTotals(
+  items: CartItem[],
+  orderType: OrderType = "delivery",
+  rules: OrderRules = DEFAULT_RULES,
+): OrderTotals {
   const sub = subtotal(items);
-  const fee = deliveryFeeFor(sub, orderType);
+  const fee = deliveryFeeFor(sub, orderType, rules);
   return {
     subtotal: sub,
     deliveryFee: fee,
@@ -82,14 +106,14 @@ export function calcTotals(items: CartItem[], orderType: OrderType = "delivery")
 }
 
 /** Splnená minimálna hodnota objednávky? */
-export function meetsMinimum(sub: number): boolean {
-  return sub >= ORDER_CONFIG.minOrder;
+export function meetsMinimum(sub: number, rules: OrderRules = DEFAULT_RULES): boolean {
+  return sub >= rules.minOrder;
 }
 
-export function missingToMinimum(sub: number): number {
-  return round2(Math.max(0, ORDER_CONFIG.minOrder - sub));
+export function missingToMinimum(sub: number, rules: OrderRules = DEFAULT_RULES): number {
+  return round2(Math.max(0, rules.minOrder - sub));
 }
 
-export function missingToFreeDelivery(sub: number): number {
-  return round2(Math.max(0, ORDER_CONFIG.freeDeliveryFrom - sub));
+export function missingToFreeDelivery(sub: number, rules: OrderRules = DEFAULT_RULES): number {
+  return round2(Math.max(0, rules.freeDeliveryFrom - sub));
 }

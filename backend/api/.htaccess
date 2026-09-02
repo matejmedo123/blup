@@ -1,0 +1,22 @@
+# API je verejné, ale konfigurácia, knižnice a SQL nie.
+<FilesMatch "^(config\.php|config\.example\.php)$">
+  Require all denied
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# Trieda pre platobnú bránu nie je koncový bod — volá sa len zvnútra.
+<FilesMatch "^StripeGateway\.php$">
+  Require all denied
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^(lib|sql)/ - [F,L]
+</IfModule>

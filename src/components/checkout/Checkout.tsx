@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "@/context/CartContext";
+import { useMenu } from "@/context/MenuContext";
 import { meetsMinimum, missingToMinimum } from "@/lib/cart";
-import { ORDER_CONFIG } from "@/lib/config";
 import { formatPrice } from "@/lib/format";
-import { createOrder, saveOrder } from "@/lib/order";
+import { createOrder as sendOrder, type ApiError } from "@/lib/api";
+import { createLocalOrder, saveOrder } from "@/lib/order";
 import { readJSON, STORAGE_KEYS, writeJSON } from "@/lib/storage";
 import type { CustomerDetails, OrderType, PaymentMethod } from "@/lib/types";
 import { hasErrors, validateCheckout, type FieldErrors } from "@/lib/validation";
@@ -35,14 +36,17 @@ const EMPTY_CUSTOMER: CustomerDetails = {
 
 export function Checkout() {
   const router = useRouter();
-  const { items, totals, orderType, setOrderType, hydrated, clear, openCart, subtotal } =
+  const { items, totals, orderType, setOrderType, hydrated, clear, openCart, subtotal, rules } =
     useCart();
+  const { settings, payments } = useMenu();
 
   const [customer, setCustomer] = useState<CustomerDetails>(EMPTY_CUSTOMER);
   const [payment, setPayment] = useState<PaymentMethod>("card");
   const [terms, setTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [serverFields, setServerFields] = useState<FieldErrors>({});
   const formRef = useRef<HTMLFormElement>(null);
 
   /* Predvyplnenie z posledného konceptu (údaje z predchádzajúcej objednávky) */
@@ -54,12 +58,23 @@ export function Checkout() {
 
   /* Chyby sú odvodený stav — počítame ich pri renderi, nie v efekte. */
   const errors: FieldErrors = useMemo(
-    () => (attempted ? validateCheckout({ customer, orderType, termsAccepted: terms }) : {}),
-    [attempted, customer, orderType, terms],
+    () => ({
+      ...(attempted ? validateCheckout({ customer, orderType, termsAccepted: terms }) : {}),
+      ...serverFields,
+    }),
+    [attempted, customer, orderType, terms, serverFields],
   );
 
-  const belowMinimum = !meetsMinimum(subtotal);
+  /* Keď prevádzka vypne platbu kartou, prepneme voľbu na hotovosť. */
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reakcia na nastavenia dotiahnuté zo servera
+    if (payment === "card" && !payments.card) setPayment("cash");
+    else if (payment === "cash" && !payments.cash && payments.card) setPayment("card");
+  }, [payment, payments.card, payments.cash]);
+
+  const belowMinimum = !meetsMinimum(subtotal, rules);
   const isEmpty = hydrated && items.length === 0;
+  const closed = !settings.acceptingOrders;
 
   const update = <K extends keyof CustomerDetails>(field: K, value: CustomerDetails[K]) =>
     setCustomer((c) => ({ ...c, [field]: value }));
@@ -80,26 +95,73 @@ export function Checkout() {
       return;
     }
 
-    if (belowMinimum || items.length === 0) return;
+    if (belowMinimum || items.length === 0 || closed) return;
 
     setSubmitting(true);
-    // Simulácia spracovania platby / odoslania na backend
-    await new Promise((r) => setTimeout(r, 900));
+    setServerError(null);
+    setServerFields({});
 
-    const order = createOrder({ items, customer, orderType, paymentMethod: payment });
-    saveOrder(order);
-    writeJSON(STORAGE_KEYS.checkout, {
-      firstName: customer.firstName,
-      lastName: customer.lastName,
-      phone: customer.phone,
-      email: customer.email,
-      street: customer.street,
-      houseNumber: customer.houseNumber,
-      city: customer.city,
-      postalCode: customer.postalCode,
-    });
-    clear();
-    router.push(`/objednavka?c=${encodeURIComponent(order.orderNumber)}`);
+    // údaje si zapamätáme, nech ich zákazník nabudúce nevypisuje znova
+    const rememberCustomer = () =>
+      writeJSON(STORAGE_KEYS.checkout, {
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        phone: customer.phone,
+        email: customer.email,
+        street: customer.street,
+        houseNumber: customer.houseNumber,
+        city: customer.city,
+        postalCode: customer.postalCode,
+      });
+
+    try {
+      const result = await sendOrder({
+        items,
+        customer,
+        orderType,
+        paymentMethod: payment,
+        termsAccepted: terms,
+      });
+
+      saveOrder(result.order, result.token);
+      rememberCustomer();
+      clear();
+
+      // platba kartou → presmerovanie na platobnú bránu
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      router.push(
+        `/objednavka/?c=${encodeURIComponent(result.order.orderNumber)}&t=${encodeURIComponent(result.token)}`,
+      );
+      return;
+    } catch (err) {
+      const api = err as ApiError;
+
+      // server odmietol konkrétne polia — zvýrazníme ich
+      if (api.fields && Object.keys(api.fields).length > 0) {
+        setServerFields(api.fields as FieldErrors);
+        setServerError(api.message);
+        setSubmitting(false);
+        formRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+        return;
+      }
+
+      // server odmietol objednávku (zatvorené, pod minimom, vypredané…)
+      if (api.status >= 400 && api.status < 500) {
+        setServerError(api.message);
+        setSubmitting(false);
+        return;
+      }
+
+      // backend nedostupný — objednávku aspoň uložíme lokálne a povieme to
+      const local = createLocalOrder({ items, customer, orderType, paymentMethod: payment });
+      saveOrder(local);
+      rememberCustomer();
+      clear();
+      router.push(`/objednavka/?c=${encodeURIComponent(local.orderNumber)}&offline=1`);
+    }
   };
 
   /* ---------------- Prázdny košík ---------------- */
@@ -172,14 +234,14 @@ export function Checkout() {
                     {
                       id: "pickup" as OrderType,
                       title: "Osobný odber",
-                      text: `Pripravené za ${ORDER_CONFIG.estimatedTimePickup}`,
+                      text: `Pripravené za ${settings.prepTimePickup}`,
                       badge: "Zdarma",
                     },
                     {
                       id: "delivery" as OrderType,
                       title: "Doručenie",
-                      text: `Doručenie za ${ORDER_CONFIG.estimatedTimeDelivery}`,
-                      badge: formatPrice(ORDER_CONFIG.deliveryFee),
+                      text: `Doručenie za ${settings.prepTimeDelivery}`,
+                      badge: rules.deliveryFee === 0 ? "Zdarma" : formatPrice(rules.deliveryFee),
                     },
                   ] as const
                 ).map((o) => {
@@ -289,7 +351,7 @@ export function Checkout() {
 
             {/* 4 — platba */}
             <Step number="04" title="Platba">
-              <PaymentSelector value={payment} onChange={setPayment} />
+              <PaymentSelector value={payment} onChange={setPayment} allowed={payments} />
             </Step>
 
             {/* Súhlas + odoslanie */}
@@ -339,12 +401,18 @@ export function Checkout() {
                 </p>
               )}
 
+              {closed && (
+                <p role="status" className="mt-4 rounded-xl bg-burgundy/10 px-4 py-3 text-[0.85rem] font-semibold text-burgundy">
+                  {settings.closedMessage}
+                </p>
+              )}
+
               {belowMinimum && (
                 <p role="status" className="mt-4 rounded-xl bg-burgundy/8 px-4 py-3 text-[0.85rem] text-burgundy">
                   Minimálna objednávka je{" "}
-                  <strong className="tabular-nums">{formatPrice(ORDER_CONFIG.minOrder)}</strong>.
+                  <strong className="tabular-nums">{formatPrice(rules.minOrder)}</strong>.
                   Chýba ešte{" "}
-                  <strong className="tabular-nums">{formatPrice(missingToMinimum(subtotal))}</strong>.{" "}
+                  <strong className="tabular-nums">{formatPrice(missingToMinimum(subtotal, rules))}</strong>.{" "}
                   <button
                     type="button"
                     onClick={openCart}
@@ -352,6 +420,12 @@ export function Checkout() {
                   >
                     Upraviť košík
                   </button>
+                </p>
+              )}
+
+              {serverError && (
+                <p role="alert" className="mt-4 rounded-xl bg-burgundy/10 px-4 py-3 text-[0.85rem] font-semibold text-burgundy">
+                  {serverError}
                 </p>
               )}
 
@@ -363,7 +437,7 @@ export function Checkout() {
 
               <button
                 type="submit"
-                disabled={submitting || belowMinimum}
+                disabled={submitting || belowMinimum || closed}
                 className="mt-5 flex h-15 w-full items-center justify-center gap-3 rounded-full bg-burgundy font-sans text-[0.85rem] font-extrabold tracking-[0.12em] text-cream uppercase transition-colors hover:bg-burgundy-700 disabled:cursor-not-allowed disabled:bg-ink/20 disabled:text-ink/45 sm:h-16 sm:text-[0.92rem]"
               >
                 {submitting ? (

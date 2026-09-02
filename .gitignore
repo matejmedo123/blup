@@ -46,3 +46,9 @@ CLAUDE.md
 
 # statický export a balík na nahratie
 /out/
+
+# backend — konfigurácia s heslami a runtime dáta nikdy nepatria do gitu
+/backend/api/config.php
+/backend/storage/*
+!/backend/storage/.htaccess
+*.sqlite

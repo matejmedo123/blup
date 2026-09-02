@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Alfa_Slab_One, Archivo, Archivo_Black } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
+import { MenuProvider } from "@/context/MenuContext";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CartDrawer } from "@/components/cart/CartDrawer";
@@ -134,6 +135,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
         />
+        <MenuProvider>
         <CartProvider>
           <a
             href="#obsah"
@@ -148,6 +150,7 @@ export default function RootLayout({
           <MobileOrderBar />
           <CartToast />
         </CartProvider>
+        </MenuProvider>
       </body>
     </html>
   );

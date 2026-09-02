@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { CATEGORIES, getMenu } from "@/lib/products";
-import { ORDER_CONFIG } from "@/lib/config";
+import { useMenu } from "@/context/MenuContext";
 import { formatPrice } from "@/lib/format";
 import type { CategoryId, ExtraOption, Product } from "@/lib/types";
 import { useCart } from "@/context/CartContext";
@@ -12,20 +11,20 @@ import { MenuCategoryTabs } from "./MenuCategoryTabs";
 import { ProductCard } from "./ProductCard";
 import { ProductModal } from "./ProductModal";
 
-const MENU = getMenu();
-
 export function MenuSection() {
   const { addProduct } = useCart();
+  const { menu, settings } = useMenu();
   const [active, setActive] = useState<CategoryId>("burgers");
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
 
   const counts = useMemo(
     () =>
-      Object.fromEntries(MENU.map(({ category, products }) => [category.id, products.length])),
-    [],
+      Object.fromEntries(menu.map(({ category, products }) => [category.id, products.length])),
+    [menu],
   );
 
-  const current = MENU.find((m) => m.category.id === active) ?? MENU[0];
+  // po zmene menu môže zvolená kategória zmiznúť
+  const current = menu.find((m) => m.category.id === active) ?? menu[0];
 
   const handleQuickAdd = useCallback(
     (product: Product) => addProduct(product),
@@ -39,6 +38,16 @@ export function MenuSection() {
     },
     [addProduct],
   );
+
+  if (!current) {
+    return (
+      <section id="menu" className="bg-cream py-20">
+        <div className="container-enzo text-center">
+          <p className="eyebrow text-ink/40">Menu sa načítava…</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="menu" aria-labelledby="menu-heading" className="bg-cream pb-20 lg:pb-28">
@@ -64,16 +73,16 @@ export function MenuSection() {
             <ul className="mt-3 flex flex-col gap-2 text-[0.85rem] text-ink/65">
               <li className="flex gap-2">
                 <span aria-hidden className="text-gold">■</span>
-                Minimálna objednávka {formatPrice(ORDER_CONFIG.minOrder)}
+                Minimálna objednávka {formatPrice(settings.minOrder)}
               </li>
               <li className="flex gap-2">
                 <span aria-hidden className="text-gold">■</span>
-                Doručenie {formatPrice(ORDER_CONFIG.deliveryFee)} — zdarma od{" "}
-                {formatPrice(ORDER_CONFIG.freeDeliveryFrom)}
+                Doručenie {formatPrice(settings.deliveryFee)} — zdarma od{" "}
+                {formatPrice(settings.freeDeliveryFrom)}
               </li>
               <li className="flex gap-2">
                 <span aria-hidden className="text-gold">■</span>
-                Osobný odber za {ORDER_CONFIG.estimatedTimePickup}
+                Osobný odber za {settings.prepTimePickup}
               </li>
             </ul>
           </div>
@@ -81,8 +90,18 @@ export function MenuSection() {
       </div>
 
       <div className="container-enzo">
+        {!settings.acceptingOrders && (
+          <div
+            role="status"
+            className="mb-6 rounded-2xl border border-burgundy/30 bg-burgundy/8 px-5 py-4 text-[0.95rem] text-burgundy"
+          >
+            <strong>Momentálne neprijímame objednávky.</strong>{" "}
+            {settings.closedMessage}
+          </div>
+        )}
+
         <MenuCategoryTabs
-          categories={CATEGORIES}
+          categories={menu.map((m) => m.category)}
           active={active}
           onChange={setActive}
           counts={counts}

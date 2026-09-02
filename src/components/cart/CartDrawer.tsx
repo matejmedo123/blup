@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useCart } from "@/context/CartContext";
 import { meetsMinimum, missingToFreeDelivery, missingToMinimum } from "@/lib/cart";
-import { ORDER_CONFIG } from "@/lib/config";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ArrowIcon, BagIcon, CloseIcon } from "@/components/ui/Icons";
@@ -24,7 +23,9 @@ export function CartDrawer() {
     orderType,
     setOrderType,
     subtotal,
+    rules,
   } = useCart();
+
   const router = useRouter();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -43,8 +44,8 @@ export function CartDrawer() {
     };
   }, [isCartOpen, closeCart]);
 
-  const belowMinimum = !meetsMinimum(subtotal);
-  const toFree = missingToFreeDelivery(subtotal);
+  const belowMinimum = !meetsMinimum(subtotal, rules);
+  const toFree = missingToFreeDelivery(subtotal, rules);
   const isEmpty = items.length === 0;
 
   const goToCheckout = () => {
@@ -198,8 +199,8 @@ export function CartDrawer() {
             {belowMinimum && (
               <p role="status" className="mt-3 rounded-xl bg-burgundy/8 px-4 py-3 text-[0.8rem] text-burgundy">
                 Minimálna objednávka je{" "}
-                <strong className="tabular-nums">{formatPrice(ORDER_CONFIG.minOrder)}</strong>. Pridaj
-                ešte za <strong className="tabular-nums">{formatPrice(missingToMinimum(subtotal))}</strong>.
+                <strong className="tabular-nums">{formatPrice(rules.minOrder)}</strong>. Pridaj
+                ešte za <strong className="tabular-nums">{formatPrice(missingToMinimum(subtotal, rules))}</strong>.
               </p>
             )}
 

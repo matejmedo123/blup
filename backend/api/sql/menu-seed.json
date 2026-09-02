@@ -1,0 +1,1141 @@
+{
+  "categories": [
+    {
+      "id": "burgers",
+      "label": "Burgers",
+      "title": "SMASH BURGERS",
+      "caption": "Smashujeme čerstvo na platni. Žiadne kompromisy.",
+      "position": 0
+    },
+    {
+      "id": "pizza",
+      "label": "Pizza",
+      "title": "PIZZA",
+      "caption": "Ručne vyťahané cesto, pomodoro a mozzarella.",
+      "position": 1
+    },
+    {
+      "id": "chicken",
+      "label": "Chicken",
+      "title": "CHICKEN",
+      "caption": "Chrumkavé kuracie. Krehké vnútri, zlaté zvonku.",
+      "position": 2
+    },
+    {
+      "id": "pork",
+      "label": "Bravčové",
+      "title": "BRAVČOVÉ",
+      "caption": "Pomaly tiahnuté mäso, ktoré sa rozpadá samo.",
+      "position": 3
+    },
+    {
+      "id": "kombo",
+      "label": "Kombo",
+      "title": "KOMBO FACTORY MENU",
+      "caption": "Burger, hranolky, omáčka a Kofola v jednom.",
+      "position": 4
+    },
+    {
+      "id": "sides",
+      "label": "Prílohy",
+      "title": "PRÍLOHY & OMÁČKY",
+      "caption": "Všetko, čím sa dá jedlo posunúť ďalej.",
+      "position": 5
+    },
+    {
+      "id": "sweets",
+      "label": "Sladké",
+      "title": "SLADKÁ BODKA",
+      "caption": "Na záver niečo teplé a sladké.",
+      "position": 6
+    },
+    {
+      "id": "drinks",
+      "label": "Nápoje",
+      "title": "NÁPOJE",
+      "caption": "Vychladené. Poriadne.",
+      "position": 7
+    }
+  ],
+  "products": [
+    {
+      "id": "the-enzo-smash",
+      "name": "THE ENZO SMASH",
+      "description": "Náš signature smash burger — smashed hovädzie, chedar, ENZO omáčka",
+      "price": 9.9,
+      "category": "burgers",
+      "image": "/images/products/the-enzo-smash.webp",
+      "imageAlt": "Smash burger THE ENZO SMASH s topeným chedarom",
+      "badge": "NAJPREDÁVANEJŠIE",
+      "tags": [
+        "Signature"
+      ],
+      "extras": [
+        {
+          "id": "extra-porcia",
+          "name": "Extra porcia mäsa",
+          "price": 3.5
+        },
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "slaninova-mayo",
+          "name": "Slaninová mayo",
+          "price": 1
+        },
+        {
+          "id": "factory-mayo",
+          "name": "Factory mayo",
+          "price": 1
+        },
+        {
+          "id": "coleslaw-extra",
+          "name": "Coleslaw šalát",
+          "price": 1.8
+        }
+      ],
+      "position": 0
+    },
+    {
+      "id": "bacon-boy",
+      "name": "BACON BOY",
+      "description": "Smashed hovädzie, chrumkavá slanina, chedar, slaninová mayo",
+      "price": 9.9,
+      "category": "burgers",
+      "image": "/images/products/bacon-boy.webp",
+      "imageAlt": "Burger BACON BOY s chrumkavou slaninou",
+      "tags": [
+        "Bacon"
+      ],
+      "extras": [
+        {
+          "id": "extra-porcia",
+          "name": "Extra porcia mäsa",
+          "price": 3.5
+        },
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "slaninova-mayo",
+          "name": "Slaninová mayo",
+          "price": 1
+        },
+        {
+          "id": "factory-mayo",
+          "name": "Factory mayo",
+          "price": 1
+        },
+        {
+          "id": "coleslaw-extra",
+          "name": "Coleslaw šalát",
+          "price": 1.8
+        }
+      ],
+      "position": 1
+    },
+    {
+      "id": "jalapenos-smash",
+      "name": "JALAPEÑOS SMASH",
+      "description": "Smashed hovädzie, chedar, jalapeños, jalapeños dresing",
+      "price": 9.9,
+      "category": "burgers",
+      "image": "/images/products/jalapenos-smash.webp",
+      "imageAlt": "Pikantný burger JALAPEÑOS SMASH",
+      "badge": "PÁLIVÉ",
+      "tags": [
+        "Hot 🌶"
+      ],
+      "extras": [
+        {
+          "id": "extra-porcia",
+          "name": "Extra porcia mäsa",
+          "price": 3.5
+        },
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "slaninova-mayo",
+          "name": "Slaninová mayo",
+          "price": 1
+        },
+        {
+          "id": "factory-mayo",
+          "name": "Factory mayo",
+          "price": 1
+        },
+        {
+          "id": "coleslaw-extra",
+          "name": "Coleslaw šalát",
+          "price": 1.8
+        }
+      ],
+      "position": 2
+    },
+    {
+      "id": "trippple-king-smash",
+      "name": "TRIPPPLE KING SMASH",
+      "description": "Tri smashed hovädzie porcie, trojitý chedar, ENZO omáčka",
+      "price": 12.5,
+      "category": "burgers",
+      "image": "/images/products/trippple-king.webp",
+      "imageAlt": "Trojitý burger TRIPPPLE KING SMASH",
+      "badge": "3× MÄSO",
+      "tags": [
+        "XL"
+      ],
+      "extras": [
+        {
+          "id": "extra-porcia",
+          "name": "Extra porcia mäsa",
+          "price": 3.5
+        },
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "slaninova-mayo",
+          "name": "Slaninová mayo",
+          "price": 1
+        },
+        {
+          "id": "factory-mayo",
+          "name": "Factory mayo",
+          "price": 1
+        },
+        {
+          "id": "coleslaw-extra",
+          "name": "Coleslaw šalát",
+          "price": 1.8
+        }
+      ],
+      "position": 3
+    },
+    {
+      "id": "double-cheeseburger",
+      "name": "DOUBLE CHEESEBURGER",
+      "description": "Dve smashed porcie hovädzieho, dvojitý chedar, uhorky, cibuľa",
+      "price": 9.5,
+      "category": "burgers",
+      "image": "/images/products/double-cheeseburger.webp",
+      "imageAlt": "DOUBLE CHEESEBURGER s dvojitým chedarom",
+      "tags": [
+        "2× mäso"
+      ],
+      "extras": [
+        {
+          "id": "extra-porcia",
+          "name": "Extra porcia mäsa",
+          "price": 3.5
+        },
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "slaninova-mayo",
+          "name": "Slaninová mayo",
+          "price": 1
+        },
+        {
+          "id": "factory-mayo",
+          "name": "Factory mayo",
+          "price": 1
+        },
+        {
+          "id": "coleslaw-extra",
+          "name": "Coleslaw šalát",
+          "price": 1.8
+        }
+      ],
+      "position": 4
+    },
+    {
+      "id": "junior",
+      "name": "JUNIOR",
+      "description": "Menší smash burger — akurát pre menších jedákov",
+      "price": 5.9,
+      "category": "burgers",
+      "image": "/images/products/junior.webp",
+      "imageAlt": "Menší burger JUNIOR",
+      "tags": [
+        "Malý"
+      ],
+      "extras": [
+        {
+          "id": "extra-porcia",
+          "name": "Extra porcia mäsa",
+          "price": 3.5
+        },
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "slaninova-mayo",
+          "name": "Slaninová mayo",
+          "price": 1
+        },
+        {
+          "id": "factory-mayo",
+          "name": "Factory mayo",
+          "price": 1
+        },
+        {
+          "id": "coleslaw-extra",
+          "name": "Coleslaw šalát",
+          "price": 1.8
+        }
+      ],
+      "position": 5
+    },
+    {
+      "id": "extra-porcia",
+      "name": "EXTRA PORCIA",
+      "description": "Jedna smashed porcia hovädzieho navyše",
+      "price": 3.5,
+      "category": "burgers",
+      "image": "/images/products/extra-porcia.webp",
+      "imageAlt": "Smashed hovädzia porcia na platni",
+      "position": 6
+    },
+    {
+      "id": "pizza-margherita",
+      "name": "MARGHERITA",
+      "description": "Pomodoro, mozzarella, bazalka",
+      "price": 8,
+      "category": "pizza",
+      "image": "/images/products/pizza-margherita.webp",
+      "imageAlt": "Pizza Margherita s bazalkou",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 7
+    },
+    {
+      "id": "pizza-corny",
+      "name": "CORNY",
+      "description": "Pomodoro, mozzarella, šunka, kukurica",
+      "price": 8.5,
+      "category": "pizza",
+      "image": "/images/products/pizza-corny.webp",
+      "imageAlt": "Pizza Corny so šunkou a kukuricou",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 8
+    },
+    {
+      "id": "pizza-hawaii",
+      "name": "HAWAII",
+      "description": "Pomodoro, mozzarella, ananás",
+      "price": 8.5,
+      "category": "pizza",
+      "image": "/images/products/pizza-hawaii.webp",
+      "imageAlt": "Pizza Hawaii s ananásom",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 9
+    },
+    {
+      "id": "pizza-quattro-formaggi",
+      "name": "QUATTRO FORMAGGI",
+      "description": "Pomodoro, mozzarella, encián, niva, parmezán",
+      "price": 8.9,
+      "category": "pizza",
+      "image": "/images/products/pizza-quattro.webp",
+      "imageAlt": "Syrová pizza Quattro Formaggi",
+      "tags": [
+        "4 syry"
+      ],
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 10
+    },
+    {
+      "id": "pizza-salami",
+      "name": "SALAMI",
+      "description": "Pomodoro, mozzarella, suchá saláma",
+      "price": 8.5,
+      "category": "pizza",
+      "image": "/images/products/pizza-salami.webp",
+      "imageAlt": "Pizza Salami so suchou salámou",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 11
+    },
+    {
+      "id": "pizza-sedliacka",
+      "name": "SEDLIACKA",
+      "description": "Pomodoro, mozzarella, šunka, suchá saláma, klobása, cibuľa, kukurica, feferóny",
+      "price": 9.5,
+      "category": "pizza",
+      "image": "/images/products/pizza-sedliacka.webp",
+      "imageAlt": "Sedliacka pizza s klobásou a feferónmi",
+      "badge": "VÝDATNÁ",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 12
+    },
+    {
+      "id": "pizza-funghi",
+      "name": "FUNGHI",
+      "description": "Pomodoro, mozzarella, šampiňóny",
+      "price": 8.9,
+      "category": "pizza",
+      "image": "/images/products/pizza-funghi.webp",
+      "imageAlt": "Pizza Funghi so šampiňónmi",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 13
+    },
+    {
+      "id": "pizza-vegetariana",
+      "name": "VEGETARIANA",
+      "description": "Pomodoro, mozzarella, šampiňóny, brokolica, kukurica, paradajky, rukola",
+      "price": 9.2,
+      "category": "pizza",
+      "image": "/images/products/pizza-vegetariana.webp",
+      "imageAlt": "Zeleninová pizza Vegetariana",
+      "tags": [
+        "Vegetariánska"
+      ],
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 14
+    },
+    {
+      "id": "pizza-enzo",
+      "name": "ENZO",
+      "description": "Smotanový základ, mozzarella, kuracie mäso, kukurica, jalapeños",
+      "price": 9.5,
+      "category": "pizza",
+      "image": "/images/products/pizza-enzo.webp",
+      "imageAlt": "Pizza ENZO s kuracím mäsom a jalapeños",
+      "badge": "SIGNATURE",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 15
+    },
+    {
+      "id": "pizza-tuniakova",
+      "name": "TUNIAKOVÁ",
+      "description": "Pomodoro, mozzarella, tuniak, čierne olivy, cibuľa",
+      "price": 9.5,
+      "category": "pizza",
+      "image": "/images/products/pizza-tuniakova.webp",
+      "imageAlt": "Tuniaková pizza s olivami",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 16
+    },
+    {
+      "id": "pizza-diabol",
+      "name": "DIABOL",
+      "description": "Pomodoro, mozzarella, pikantná saláma, jalapeños, cibuľa, chilli",
+      "price": 9.2,
+      "category": "pizza",
+      "image": "/images/products/pizza-diabol.webp",
+      "imageAlt": "Pálivá pizza Diabol s chilli",
+      "badge": "PÁLIVÉ",
+      "tags": [
+        "Hot 🌶"
+      ],
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 17
+    },
+    {
+      "id": "pizza-skaja",
+      "name": "SKAJA",
+      "description": "Pomodoro, mozzarella, prosciutto crudo, rukola, cherry paradajky, parmezán",
+      "price": 10.8,
+      "category": "pizza",
+      "image": "/images/products/pizza-skaja.webp",
+      "imageAlt": "Pizza Skaja s prosciutto crudo a rukolou",
+      "extras": [
+        {
+          "id": "extra-mozzarella",
+          "name": "Extra mozzarella",
+          "price": 1.5
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "feferony",
+          "name": "Feferóny",
+          "price": 0.8
+        },
+        {
+          "id": "rukola",
+          "name": "Rukola",
+          "price": 1
+        },
+        {
+          "id": "parmezan",
+          "name": "Parmezán",
+          "price": 1.5
+        }
+      ],
+      "position": 18
+    },
+    {
+      "id": "crispy-chicken-burger",
+      "name": "CRISPY CHICKEN BURGER",
+      "description": "Chrumkavé kuracie prsia, chedar, ľadový šalát, Factory mayo",
+      "price": 9.5,
+      "category": "chicken",
+      "image": "/images/products/crispy-chicken-burger.webp",
+      "imageAlt": "Crispy chicken burger s chrumkavým kuracím mäsom",
+      "tags": [
+        "Crispy"
+      ],
+      "extras": [
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "cesnakovy-dresing",
+          "name": "Cesnakový dresing",
+          "price": 1
+        },
+        {
+          "id": "factory-mayo",
+          "name": "Factory mayo",
+          "price": 1
+        }
+      ],
+      "position": 19
+    },
+    {
+      "id": "stripsy-3",
+      "name": "DOMÁCE STRIPSY 3 KS",
+      "description": "Tri kusy domácich kuracích stripsov",
+      "price": 3.9,
+      "category": "chicken",
+      "image": "/images/products/stripsy.webp",
+      "imageAlt": "Domáce kuracie stripsy",
+      "position": 20
+    },
+    {
+      "id": "stripsy-6",
+      "name": "DOMÁCE STRIPSY 6 KS",
+      "description": "Šesť kusov domácich kuracích stripsov",
+      "price": 6.9,
+      "category": "chicken",
+      "image": "/images/products/stripsy.webp",
+      "imageAlt": "Domáce kuracie stripsy",
+      "position": 21
+    },
+    {
+      "id": "stripsy-9",
+      "name": "DOMÁCE STRIPSY 9 KS",
+      "description": "Deväť kusov domácich kuracích stripsov",
+      "price": 9.9,
+      "category": "chicken",
+      "image": "/images/products/stripsy.webp",
+      "imageAlt": "Domáce kuracie stripsy",
+      "badge": "NA ZDIEĽANIE",
+      "position": 22
+    },
+    {
+      "id": "trhane-bravcove",
+      "name": "TRHANÉ BRAVČOVÉ",
+      "description": "Pomaly tiahnuté bravčové mäso s omáčkou podľa výberu",
+      "price": 10.9,
+      "category": "pork",
+      "image": "/images/products/trhane-bravcove.webp",
+      "imageAlt": "Trhané bravčové mäso",
+      "tags": [
+        "Slow cooked"
+      ],
+      "position": 23
+    },
+    {
+      "id": "pulled-pork-burger",
+      "name": "PULLED PORK BURGER",
+      "description": "Trhané bravčové, coleslaw, BBQ omáčka v brioške",
+      "price": 9.9,
+      "category": "pork",
+      "image": "/images/products/pulled-pork-burger.webp",
+      "imageAlt": "Pulled pork burger s coleslaw",
+      "extras": [
+        {
+          "id": "extra-porcia",
+          "name": "Extra porcia mäsa",
+          "price": 3.5
+        },
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        },
+        {
+          "id": "jalapenos",
+          "name": "Jalapeños",
+          "price": 0.8
+        },
+        {
+          "id": "slaninova-mayo",
+          "name": "Slaninová mayo",
+          "price": 1
+        },
+        {
+          "id": "factory-mayo",
+          "name": "Factory mayo",
+          "price": 1
+        },
+        {
+          "id": "coleslaw-extra",
+          "name": "Coleslaw šalát",
+          "price": 1.8
+        }
+      ],
+      "position": 24
+    },
+    {
+      "id": "kombo-factory-menu",
+      "name": "KOMBO FACTORY MENU",
+      "description": "Burger podľa vlastného výberu + domáce hranolky, omáčka podľa výberu, Kofola Original 0,33 l",
+      "price": 4.9,
+      "category": "kombo",
+      "image": "/images/products/kombo.webp",
+      "imageAlt": "Kombo menu — burger, hranolky a nápoj",
+      "badge": "LEN NA ROZVOZ",
+      "tags": [
+        "Príplatok k burgeru"
+      ],
+      "position": 25
+    },
+    {
+      "id": "domace-hranolky",
+      "name": "DOMÁCE HRANOLKY (180 G)",
+      "description": "S možnosťou údenej papriky alebo cesnaku",
+      "price": 2.9,
+      "category": "sides",
+      "image": "/images/products/domace-hranolky.webp",
+      "imageAlt": "Domáce hranolky",
+      "extras": [
+        {
+          "id": "udena-paprika",
+          "name": "Údená paprika",
+          "price": 0
+        },
+        {
+          "id": "cesnak",
+          "name": "Cesnak",
+          "price": 0
+        },
+        {
+          "id": "horuci-chedar",
+          "name": "Horúci chedar",
+          "price": 2.8
+        }
+      ],
+      "position": 26
+    },
+    {
+      "id": "batatove-hranolky",
+      "name": "BATÁTOVÉ HRANOLKY (180 G)",
+      "description": "Sladké zemiaky, chrumkavé zvonku",
+      "price": 4.5,
+      "category": "sides",
+      "image": "/images/products/batatove-hranolky.webp",
+      "imageAlt": "Batátové hranolky",
+      "position": 27
+    },
+    {
+      "id": "cibulove-kruzky",
+      "name": "CIBUĽOVÉ KRÚŽKY (120 G)",
+      "description": "Cibuľové krúžky v chrumkavom cestíčku",
+      "price": 4.5,
+      "category": "sides",
+      "image": "/images/products/cibulove-kruzky.webp",
+      "imageAlt": "Chrumkavé cibuľové krúžky",
+      "position": 28
+    },
+    {
+      "id": "coleslaw",
+      "name": "COLESLAW ŠALÁT (80 G)",
+      "description": "Chrumkavá kapusta, mrkva a krémový dresing",
+      "price": 1.8,
+      "category": "sides",
+      "image": "/images/products/coleslaw.webp",
+      "imageAlt": "Coleslaw šalát",
+      "position": 29
+    },
+    {
+      "id": "horuci-chedar",
+      "name": "HORÚCI CHEDAR",
+      "description": "Roztopený chedar na preliatie hranoliek alebo burgera",
+      "price": 2.8,
+      "category": "sides",
+      "image": "/images/products/horuci-chedar.webp",
+      "imageAlt": "Horúci chedar na hranolkách",
+      "position": 30
+    },
+    {
+      "id": "omacka-slaninova-mayo",
+      "name": "SLANINOVÁ MAYO (50 G)",
+      "description": "Majonéza s praženou slaninou",
+      "price": 1,
+      "category": "sides",
+      "lid": {
+        "accent": "cream",
+        "lines": [
+          "BACON",
+          "MAYO"
+        ]
+      },
+      "position": 31
+    },
+    {
+      "id": "omacka-factory-mayo",
+      "name": "FACTORY MAYO (50 G)",
+      "description": "Naša domáca signature majonéza",
+      "price": 1,
+      "category": "sides",
+      "lid": {
+        "accent": "cream",
+        "lines": [
+          "FACTORY",
+          "MAYO"
+        ]
+      },
+      "position": 32
+    },
+    {
+      "id": "omacka-bbq",
+      "name": "BBQ (50 G)",
+      "description": "Sladko-dymová BBQ omáčka",
+      "price": 1,
+      "category": "sides",
+      "lid": {
+        "accent": "burgundy",
+        "lines": [
+          "BBQ",
+          "SAUCE"
+        ]
+      },
+      "position": 33
+    },
+    {
+      "id": "omacka-kecup",
+      "name": "KEČUP (50 G)",
+      "description": "Klasika, ktorá nesklame",
+      "price": 1,
+      "category": "sides",
+      "lid": {
+        "accent": "red",
+        "lines": [
+          "KEČUP",
+          ""
+        ]
+      },
+      "position": 34
+    },
+    {
+      "id": "omacka-tatarska",
+      "name": "TATÁRSKA (50 G)",
+      "description": "Krémová tatárska omáčka",
+      "price": 1,
+      "category": "sides",
+      "lid": {
+        "accent": "cream",
+        "lines": [
+          "TATÁRSKA",
+          ""
+        ]
+      },
+      "position": 35
+    },
+    {
+      "id": "omacka-cesnakovy-dresing",
+      "name": "CESNAKOVÝ DRESING (50 G)",
+      "description": "Cesnak, jogurt a bylinky",
+      "price": 1,
+      "category": "sides",
+      "lid": {
+        "accent": "cream",
+        "lines": [
+          "CESNAK",
+          "DRESING"
+        ]
+      },
+      "position": 36
+    },
+    {
+      "id": "omacka-jalapenos-dresing",
+      "name": "JALAPEÑOS DRESING (50 G)",
+      "description": "Pikantný dresing s jalapeños",
+      "price": 1,
+      "category": "sides",
+      "lid": {
+        "accent": "gold",
+        "lines": [
+          "JALAPEÑOS",
+          "DRESING"
+        ]
+      },
+      "position": 37
+    },
+    {
+      "id": "churros",
+      "name": "ŠKORICOVÉ CHURROS",
+      "description": "10 ks (150 g) — jahodový džem alebo karamelový toping podľa výberu",
+      "price": 5.5,
+      "category": "sweets",
+      "image": "/images/products/churros.webp",
+      "imageAlt": "Škoricové churros",
+      "badge": "NOVINKA",
+      "extras": [
+        {
+          "id": "jahodovy-dzem",
+          "name": "Jahodový džem",
+          "price": 0
+        },
+        {
+          "id": "karamelovy-toping",
+          "name": "Karamelový toping",
+          "price": 0
+        }
+      ],
+      "position": 38
+    },
+    {
+      "id": "kofola-original",
+      "name": "KOFOLA ORIGINAL 0,33 L",
+      "description": "Vychladená klasika",
+      "price": 2,
+      "category": "drinks",
+      "image": "/images/products/kofola.webp",
+      "imageAlt": "Pohár Kofoly s ľadom",
+      "position": 39
+    }
+  ]
+}

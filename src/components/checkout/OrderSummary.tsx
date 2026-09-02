@@ -1,8 +1,8 @@
 "use client";
 
-import { ORDER_CONFIG } from "@/lib/config";
 import { formatPrice } from "@/lib/format";
 import { missingToFreeDelivery } from "@/lib/cart";
+import { useCart } from "@/context/CartContext";
 import type { CartItem, OrderTotals, OrderType } from "@/lib/types";
 import { CartItemRow } from "@/components/cart/CartItemRow";
 
@@ -15,7 +15,8 @@ interface OrderSummaryProps {
 }
 
 export function OrderSummary({ items, totals, orderType, onEdit }: OrderSummaryProps) {
-  const toFree = missingToFreeDelivery(totals.subtotal);
+  const { rules } = useCart();
+  const toFree = missingToFreeDelivery(totals.subtotal, rules);
 
   return (
     <div className="rounded-2xl bg-white p-5 ring-1 ring-ink/8 sm:p-6">
@@ -73,7 +74,7 @@ export function OrderSummary({ items, totals, orderType, onEdit }: OrderSummaryP
 
       <p className="mt-4 text-[0.72rem] leading-relaxed text-ink/45">
         Ceny sú vrátane DPH. Minimálna hodnota objednávky je{" "}
-        {formatPrice(ORDER_CONFIG.minOrder)}.
+        {formatPrice(rules.minOrder)}.
       </p>
     </div>
   );

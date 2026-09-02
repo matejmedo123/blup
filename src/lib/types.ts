@@ -48,6 +48,8 @@ export interface Product {
   extras?: ExtraOption[];
   /** Grafická náhrada fotky (omáčky) — dizajn viečka podľa brand boardu */
   lid?: { accent: LidAccent; lines: [string, string] };
+  /** false = prevádzka položku dočasne vypla v admine. Chýbajúce = dostupné. */
+  available?: boolean;
 }
 
 /** Položka v košíku — snapshot produktu, aby objednávka ostala stabilná. */
@@ -88,19 +90,55 @@ export interface OrderTotals {
   itemCount: number;
 }
 
-export type OrderStatus = "received" | "preparing" | "ready" | "delivering";
+export type OrderStatus =
+  | "received"    // prijatá, čaká na prevádzku
+  | "confirmed"   // prevádzka potvrdila čas prípravy
+  | "ready"       // hotové / kuriér vyrazil
+  | "completed"   // vybavená
+  | "cancelled";
+
+export type PaymentStatus = "unpaid" | "pending" | "paid";
+
+/** Položka objednávky — snapshot v čase objednania. */
+export interface OrderItem {
+  key: string;
+  productId: string;
+  name: string;
+  basePrice: number;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  extras: ExtraOption[];
+  note?: string | null;
+  image?: string | null;
+}
+
+export interface VatLine {
+  rate: number;
+  base: number;
+  vat: number;
+  gross: number;
+}
 
 export interface Order {
   orderNumber: string;
-  createdAt: string;
+  /** Účtovný doklad — prideľuje sa až pri vybavení objednávky */
+  docNumber?: string | null;
+  status: OrderStatus;
+  statusLabel?: string;
   orderType: OrderType;
   paymentMethod: PaymentMethod;
-  paymentState: "demo-paid" | "pay-on-spot";
+  paymentStatus: PaymentStatus;
+  createdAt: string;
+  /** Kedy bude hotové — nastaví prevádzka v admine */
+  readyAt?: string | null;
+  prepMinutes?: number | null;
   customer: CustomerDetails;
-  items: CartItem[];
+  items: OrderItem[];
   subtotal: number;
   deliveryFee: number;
   total: number;
-  estimatedTime: string;
-  status: OrderStatus;
+  vat?: Record<string, VatLine>;
+  /** Orientačný text, kým prevádzka nepotvrdí presný čas */
+  estimatedTime?: string;
 }

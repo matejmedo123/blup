@@ -26,15 +26,21 @@ const OPTIONS: {
 export function PaymentSelector({
   value,
   onChange,
+  allowed,
 }: {
   value: PaymentMethod;
   onChange: (v: PaymentMethod) => void;
+  /** Ktoré platby má prevádzka zapnuté (z nastavení na serveri) */
+  allowed?: { cash: boolean; card: boolean };
 }) {
+  const enabled = OPTIONS.filter((o) => allowed?.[o.id] ?? true);
+  const list = enabled.length > 0 ? enabled : OPTIONS.filter((o) => o.id === "cash");
+
   return (
     <fieldset>
       <legend className="sr-only">Spôsob platby</legend>
       <div className="grid gap-3 sm:grid-cols-2">
-        {OPTIONS.map((o) => {
+        {list.map((o) => {
           const active = value === o.id;
           return (
             <label
@@ -76,8 +82,8 @@ export function PaymentSelector({
         <p className="mt-3 flex gap-2.5 rounded-xl border border-gold/50 bg-gold/12 px-4 py-3 text-[0.8rem] leading-relaxed text-ink/75">
           <span aria-hidden className="text-gold-600">●</span>
           <span>
-            <strong>Demo prototyp.</strong> Platobná brána nie je napojená — objednávka
-            sa označí ako &bdquo;zaplatená (demo)&ldquo; a žiadne peniaze sa nestrhnú.
+            Po odoslaní ťa presmerujeme na zabezpečenú platobnú bránu. Objednávku
+            pustíme na platňu hneď po zaplatení.
           </span>
         </p>
       )}
