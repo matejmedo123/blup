@@ -49,3 +49,6 @@ CLAUDE.md
 
 # test database
 /.pglite-test/
+
+# generated screenshot gallery (published as an artifact, not source)
+/.gallery/
