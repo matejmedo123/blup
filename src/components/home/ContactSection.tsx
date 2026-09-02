@@ -12,15 +12,15 @@ export function ContactSection() {
             <p className="eyebrow text-burgundy">Kontakt</p>
             <h2
               id="kontakt-heading"
-              className="mt-5 font-display text-[2.8rem] leading-[1.02] text-ink sm:text-[4rem]"
+              className="mt-5 font-display text-[2.2rem] leading-[1.05] text-ink sm:text-[3.2rem]"
             >
               Smashed in
               <br />
               <span className="text-burgundy">{RESTAURANT.place}</span>
             </h2>
             <p className="mt-6 max-w-md text-[1rem] leading-relaxed text-ink/60">
-              Nájdeš nás na hlavnej. Prídi si sadnúť alebo si objednaj domov —
-              doručujeme do {RESTAURANT.deliveryZones.length} obcí v okolí.
+              Nájdeš nás v centre obce. Prídi si sadnúť alebo si objednaj domov —
+              rozvážame do {RESTAURANT.deliveryZones.length} obcí v okolí.
             </p>
 
             <dl className="mt-9 flex flex-col gap-6">
@@ -83,7 +83,7 @@ export function ContactSection() {
               />
               <div aria-hidden className="absolute inset-0 bg-burgundy/12 mix-blend-multiply" />
               <div className="absolute bottom-5 left-5 rounded-xl bg-burgundy px-5 py-4 text-cream">
-                <p className="font-display text-[1.5rem] leading-[1.05]">
+                <p className="font-display text-[1.15rem] leading-[1.1]">
                   Smashed in {RESTAURANT.place}
                 </p>
                 <p className="mt-1 text-[0.7rem] font-bold tracking-[0.18em] text-cream/60 uppercase">

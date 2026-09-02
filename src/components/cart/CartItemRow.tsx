@@ -50,8 +50,8 @@ export function CartItemRow({
       {/* Detail */}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="font-display text-[1.05rem] leading-tight text-ink">{item.name}</h3>
-          <p className="shrink-0 font-display text-[1.05rem] leading-tight text-burgundy tabular-nums">
+          <h3 className="font-display text-[0.9rem] leading-[1.18] text-ink">{item.name}</h3>
+          <p className="shrink-0 font-display text-[0.95rem] leading-[1.18] text-burgundy tabular-nums">
             {formatPrice(itemLineTotal(item))}
           </p>
         </div>

@@ -28,7 +28,7 @@ const EMPTY_CUSTOMER: CustomerDetails = {
   pickupTime: "",
   street: "",
   houseNumber: "",
-  city: "Preseľany",
+  city: "Koniarovce",
   postalCode: "",
   note: "",
 };
@@ -146,7 +146,7 @@ export function Checkout() {
               ← Späť do menu
             </Link>
           </nav>
-          <h1 className="mt-4 font-display text-[2.8rem] leading-none sm:text-[4rem] lg:text-[4.5rem]">
+          <h1 className="mt-4 font-display text-[2.4rem] leading-[1.02] sm:text-[3.2rem] lg:text-[3.6rem]">
             Pokladňa
           </h1>
           <p className="mt-3 max-w-md text-cream/70">
@@ -197,7 +197,7 @@ export function Checkout() {
                       )}
                     >
                       <span className="flex w-full items-start justify-between gap-3">
-                        <span className="font-display text-[1.35rem] leading-none text-ink">
+                        <span className="font-display text-[1.05rem] leading-[1.1] text-ink">
                           {o.title}
                         </span>
                         <span
@@ -253,7 +253,7 @@ export function Checkout() {
                     type="tel"
                     inputMode="tel"
                     autoComplete="tel"
-                    placeholder="+421 902 118 240"
+                    placeholder="0948 238 346"
                     value={customer.phone}
                     onChange={(e) => update("phone", e.target.value)}
                     error={errors.phone}
@@ -418,7 +418,7 @@ function Step({
     <section className="rounded-2xl bg-white p-5 ring-1 ring-ink/8 sm:p-6">
       <h2 className="flex items-baseline gap-3">
         <span className="font-display text-[1.1rem] text-burgundy/35 tabular-nums">{number}</span>
-        <span className="font-display text-[1.6rem] leading-none text-ink sm:text-[1.85rem]">
+        <span className="font-display text-[1.2rem] leading-[1.08] text-ink sm:text-[1.4rem]">
           {title}
         </span>
       </h2>

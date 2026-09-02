@@ -20,7 +20,7 @@ export function DeliveryForm({ customer, errors, onChange }: DeliveryFormProps) 
           label="Ulica"
           required
           autoComplete="address-line1"
-          placeholder="Hlavná"
+          placeholder="Koniarovce"
           value={customer.street ?? ""}
           onChange={(e) => onChange("street", e.target.value)}
           error={errors.street}
@@ -30,7 +30,7 @@ export function DeliveryForm({ customer, errors, onChange }: DeliveryFormProps) 
           label="Číslo domu"
           required
           autoComplete="address-line2"
-          placeholder="128"
+          placeholder="290"
           value={customer.houseNumber ?? ""}
           onChange={(e) => onChange("houseNumber", e.target.value)}
           error={errors.houseNumber}
@@ -43,7 +43,7 @@ export function DeliveryForm({ customer, errors, onChange }: DeliveryFormProps) 
           label="Mesto / obec"
           required
           autoComplete="address-level2"
-          placeholder="Preseľany"
+          placeholder="Koniarovce"
           value={customer.city ?? ""}
           onChange={(e) => onChange("city", e.target.value)}
           error={errors.city}
@@ -55,7 +55,7 @@ export function DeliveryForm({ customer, errors, onChange }: DeliveryFormProps) 
           required
           inputMode="numeric"
           autoComplete="postal-code"
-          placeholder="956 12"
+          placeholder="956 13"
           value={customer.postalCode ?? ""}
           onChange={(e) => onChange("postalCode", e.target.value)}
           error={errors.postalCode}

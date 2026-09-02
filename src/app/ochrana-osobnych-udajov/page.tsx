@@ -4,7 +4,7 @@ import { RESTAURANT } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: "Ochrana osobných údajov",
-  description: "Informácie o spracovaní osobných údajov v ENZO Smash Burgers & Fries.",
+  description: "Informácie o spracovaní osobných údajov v ENZO Smash Burgers & Pizza.",
 };
 
 export default function PrivacyPage() {

@@ -108,10 +108,37 @@ export function Footer() {
         </div>
       </div>
 
+      {/* Fakturačné údaje prevádzkovateľa */}
+      <div className="border-t border-cream/15">
+        <div className="container-enzo grid gap-x-10 gap-y-4 py-7 text-xs text-cream/60 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="eyebrow text-cream/40">Prevádzkovateľ</p>
+            <p className="mt-2 font-semibold text-cream/85">{RESTAURANT.company.name}</p>
+            <p>IČO {RESTAURANT.company.ico}</p>
+            <p>DIČ {RESTAURANT.company.dic}</p>
+          </div>
+          <div>
+            <p className="eyebrow text-cream/40">Sídlo firmy</p>
+            <p className="mt-2">{RESTAURANT.company.seat}</p>
+          </div>
+          <div>
+            <p className="eyebrow text-cream/40">Prevádzka</p>
+            <p className="mt-2">{RESTAURANT.company.branch}</p>
+          </div>
+          <div>
+            <p className="eyebrow text-cream/40">Zodpovedný vedúci</p>
+            <p className="mt-2">{RESTAURANT.company.manager}</p>
+            <a href={`tel:${RESTAURANT.phoneHref}`} className="font-semibold text-gold">
+              {RESTAURANT.phone}
+            </a>
+          </div>
+        </div>
+      </div>
+
       <div className="border-t border-cream/15">
         <div className="container-enzo flex flex-col gap-3 py-6 text-xs text-cream/55 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            © {new Date().getFullYear()} {RESTAURANT.legalName} — {RESTAURANT.since},{" "}
+            © {new Date().getFullYear()} {RESTAURANT.company.name} — {RESTAURANT.since},{" "}
             {RESTAURANT.place}
           </p>
           <p className="font-sans font-bold tracking-[0.2em] text-cream/70 uppercase">

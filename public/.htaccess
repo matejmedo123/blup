@@ -1,0 +1,57 @@
+# ============================================================
+#  ENZO — Smash Burgers & Pizza
+#  Konfigurácia pre Apache / LiteSpeed (Websupport)
+#  Súbor nahraj spolu so zvyškom obsahu do priečinka `web`.
+# ============================================================
+
+Options -Indexes
+DirectoryIndex index.html
+
+# ---------- Presmerovanie na HTTPS ----------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# ---------- Vlastná stránka 404 ----------
+ErrorDocument 404 /404.html
+
+# ---------- MIME typy ----------
+<IfModule mod_mime.c>
+  AddType image/webp                  .webp
+  AddType image/svg+xml               .svg
+  AddType font/woff2                  .woff2
+  AddType application/manifest+json   .webmanifest
+</IfModule>
+
+# ---------- Kompresia ----------
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml
+  AddOutputFilterByType DEFLATE application/javascript application/x-javascript
+  AddOutputFilterByType DEFLATE application/json application/xml
+  AddOutputFilterByType DEFLATE image/svg+xml font/woff2
+</IfModule>
+
+# ---------- Cache ----------
+<IfModule mod_headers.c>
+  # Súbory v /_next/static/ majú v názve hash → môžu sa cachovať navždy.
+  SetEnvIf Request_URI "^/_next/static/" ENZO_IMMUTABLE
+  Header set Cache-Control "public, max-age=31536000, immutable" env=ENZO_IMMUTABLE
+
+  # Obrázky a logá — mesiac.
+  <FilesMatch "\.(webp|jpg|jpeg|png|svg|ico|woff2)$">
+    Header set Cache-Control "public, max-age=2592000"
+  </FilesMatch>
+
+  # HTML sa nikdy necachuje natvrdo, aby sa zmeny prejavili hneď.
+  <FilesMatch "\.html$">
+    Header set Cache-Control "public, max-age=0, must-revalidate"
+  </FilesMatch>
+
+  # Základné bezpečnostné hlavičky.
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

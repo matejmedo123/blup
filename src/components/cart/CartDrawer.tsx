@@ -83,7 +83,7 @@ export function CartDrawer() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="eyebrow text-cream/55">Tvoja objednávka</p>
-              <h2 className="mt-1.5 font-display text-[2.2rem] leading-none">Košík</h2>
+              <h2 className="mt-1.5 font-display text-[1.75rem] leading-none">Košík</h2>
             </div>
             <button
               ref={closeRef}
@@ -188,8 +188,8 @@ export function CartDrawer() {
                 </dd>
               </div>
               <div className="mt-2 flex items-baseline justify-between border-t border-ink/10 pt-3">
-                <dt className="font-display text-xl text-ink">Celkom</dt>
-                <dd className="font-display text-2xl text-burgundy tabular-nums">
+                <dt className="font-display text-[1.05rem] text-ink">Celkom</dt>
+                <dd className="font-display text-[1.3rem] text-burgundy tabular-nums">
                   {formatPrice(totals.total)}
                 </dd>
               </div>

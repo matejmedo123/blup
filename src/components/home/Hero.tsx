@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { RESTAURANT } from "@/lib/config";
+import { ORDER_CONFIG, RESTAURANT } from "@/lib/config";
 import { LogoBadge } from "@/components/ui/Logo";
 
 /**
@@ -25,10 +25,10 @@ export function Hero() {
 
             <h1
               id="hero-heading"
-              className="mt-5 font-display text-[4.5rem] leading-[0.82] text-burgundy opacity-0 [animation:reveal_0.75s_cubic-bezier(0.16,1,0.3,1)_0.12s_both] sm:text-[6.5rem] lg:text-[7.5rem] xl:text-[8.5rem]"
+              className="mt-5 font-slab text-[4.2rem] leading-[0.92] text-burgundy opacity-0 [animation:reveal_0.75s_cubic-bezier(0.16,1,0.3,1)_0.12s_both] sm:text-[6rem] lg:text-[6.8rem] xl:text-[7.6rem]"
             >
               Enzo
-              <span className="sr-only"> — Smash Burgers &amp; Fries</span>
+              <span className="sr-only"> — Smash Burgers &amp; Pizza</span>
             </h1>
 
             <p
@@ -39,7 +39,7 @@ export function Hero() {
                 className="checkerboard h-3 w-9 shrink-0 text-burgundy"
                 style={{ ["--checker-size" as string]: "0.75rem" }}
               />
-              Smash Burgers &amp; Fries
+              Smash Burgers &amp; Pizza
               <span
                 className="checkerboard h-3 w-9 shrink-0 text-burgundy"
                 style={{ ["--checker-size" as string]: "0.75rem" }}
@@ -47,7 +47,7 @@ export function Hero() {
             </p>
 
             <p className="mt-8 max-w-md text-[1.05rem] leading-relaxed text-ink/65 opacity-0 [animation:reveal_0.7s_cubic-bezier(0.16,1,0.3,1)_0.28s_both] sm:text-[1.15rem]">
-              Poctivý smash burger, chrumkavé hranolky a dobrá atmosféra.
+              Poctivý smash burger, pizza z vlastného cesta a domáce hranolky.
               Smashujeme čerstvo. Servírujeme horúce.{" "}
               <strong className="font-bold text-burgundy">Žiadne kompromisy.</strong>
             </p>
@@ -69,13 +69,13 @@ export function Hero() {
 
             <dl className="mt-10 flex flex-wrap gap-x-8 gap-y-4 opacity-0 [animation:reveal_0.7s_cubic-bezier(0.16,1,0.3,1)_0.44s_both]">
               {[
-                { k: "Odber do", v: "15 min" },
-                { k: "Doručenie", v: "30 — 45 min" },
+                { k: "Osobný odber", v: ORDER_CONFIG.estimatedTimePickup },
+                { k: "Rozvoz", v: ORDER_CONFIG.estimatedTimeDelivery },
                 { k: "Smashujeme", v: "100 % hovädzie" },
               ].map((s) => (
                 <div key={s.k}>
                   <dt className="eyebrow text-ink/40">{s.k}</dt>
-                  <dd className="mt-1 font-display text-xl text-ink">{s.v}</dd>
+                  <dd className="mt-1 font-display text-[1.05rem] whitespace-nowrap text-ink">{s.v}</dd>
                 </div>
               ))}
             </dl>
@@ -102,9 +102,9 @@ export function Hero() {
 
               {/* Claim */}
               <p className="absolute bottom-6 left-5 max-w-[16rem] font-display text-[1.6rem] leading-[0.95] text-cream opacity-0 [animation:reveal_0.7s_cubic-bezier(0.16,1,0.3,1)_0.6s_both] sm:bottom-8 sm:left-8 sm:text-[2.1rem]">
-                Good burgers.
+                <span className="whitespace-nowrap">Good burgers.</span>
                 <br />
-                <span className="text-gold">No bullshit.</span>
+                <span className="whitespace-nowrap text-gold">No bullshit.</span>
               </p>
             </div>
           </div>
@@ -120,9 +120,10 @@ export function Hero() {
 const MARQUEE_ITEMS = [
   "SMASHED FRESH. SERVED HOT.",
   "DOUBLE IS BETTER.",
+  "BURGER AJ PIZZA.",
   "GET SMASHED.",
   "MEET THE ENZO.",
-  "SMASHED IN PRESEĽANY.",
+  "SMASHED IN KONIAROVCE.",
   "GOOD BURGERS. NO BULLSHIT.",
 ];
 
@@ -137,7 +138,7 @@ function Marquee() {
       >
         {items.map((t, i) => (
           <span key={i} className="flex items-center gap-10">
-            <span className="font-display text-[1.05rem] text-cream sm:text-[1.3rem]">{t}</span>
+            <span className="font-display text-[0.95rem] text-cream sm:text-[1.15rem]">{t}</span>
             <span
               className="checkerboard h-3 w-8 shrink-0 text-gold"
               style={{ ["--checker-size" as string]: "0.75rem" }}

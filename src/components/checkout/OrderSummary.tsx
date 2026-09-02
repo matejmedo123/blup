@@ -20,7 +20,7 @@ export function OrderSummary({ items, totals, orderType, onEdit }: OrderSummaryP
   return (
     <div className="rounded-2xl bg-white p-5 ring-1 ring-ink/8 sm:p-6">
       <div className="flex items-baseline justify-between gap-4">
-        <h2 className="font-display text-[1.6rem] leading-[1.05] text-ink">Tvoja objednávka</h2>
+        <h2 className="font-display text-[1.2rem] leading-[1.1] text-ink">Tvoja objednávka</h2>
         {onEdit && (
           <button
             type="button"
@@ -64,8 +64,8 @@ export function OrderSummary({ items, totals, orderType, onEdit }: OrderSummaryP
           </p>
         )}
         <div className="mt-2 flex items-baseline justify-between border-t border-ink/10 pt-4">
-          <dt className="font-display text-[1.5rem] text-ink">Celkom</dt>
-          <dd className="font-display text-[1.85rem] text-burgundy tabular-nums">
+          <dt className="font-display text-[1.15rem] text-ink">Celkom</dt>
+          <dd className="font-display text-[1.5rem] text-burgundy tabular-nums">
             {formatPrice(totals.total)}
           </dd>
         </div>

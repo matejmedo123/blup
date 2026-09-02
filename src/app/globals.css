@@ -24,8 +24,12 @@
   --color-gold: #e1b12c;
   --color-gold-600: #c8991c;
 
-  /* Typografia */
-  --font-display: var(--font-anton), "Arial Narrow", "Haettenschweiler", sans-serif;
+  /* Typografia
+     --font-slab    : ENZO wordmark (Alfa Slab One) — používa sa IBA na logo
+     --font-display : nadpisy, ceny, ceduľky (Archivo Black)
+     --font-sans    : bežný text a UI (Archivo) */
+  --font-slab: var(--font-alfa), "Rockwell", "Clarendon", Georgia, serif;
+  --font-display: var(--font-archivo-black), "Archivo", Impact, Helvetica, Arial, sans-serif;
   --font-sans: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
 
@@ -125,8 +129,8 @@
   h1, h2, h3, h4 {
     font-family: var(--font-display);
     font-weight: 400;
-    letter-spacing: 0.005em;
-    line-height: 1.02;
+    letter-spacing: -0.015em;
+    line-height: 1.05;
     text-transform: uppercase;
   }
 

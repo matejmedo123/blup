@@ -6,9 +6,11 @@
 export type CategoryId =
   | "burgers"
   | "chicken"
-  | "fries"
+  | "pork"
+  | "pizza"
+  | "kombo"
   | "sides"
-  | "sauces"
+  | "sweets"
   | "drinks";
 
 export interface Category {

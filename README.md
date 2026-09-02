@@ -1,11 +1,13 @@
-# ENZO — Smash Burgers & Fries
+# ENZO — Smash Burgers & Pizza, Koniarovce
 
-Responzívny prototyp webu slovenskej smash-burger prevádzky **ENZO** s plne funkčným
-online objednávkovým procesom. Vizuálna identita je odvodená z priloženého brand boardu
-(bordová, krémová, čierna + horčicová; Anton ako display písmo, šachovnicový vzor,
-packaging ENZO).
+Web s online objednávkovým procesom pre prevádzku ENZO v Koniarovciach.
+Vizuál vychádza z brand boardu: bordová, krémová, čierna a horčicová,
+slab-serifový wordmark, šachovnicový motív.
 
 **Smashed fresh. Served hot.**
+
+> **Nasadenie:** kompletný návod je v [`NAVOD-WEBSUPPORT.md`](./NAVOD-WEBSUPPORT.md).
+> Hotový balík na nahratie: **`enzo-web.zip`**.
 
 ---
 
@@ -13,47 +15,63 @@ packaging ENZO).
 
 | | |
 |---|---|
-| Framework | Next.js 16 (App Router, Turbopack) |
+| Framework | Next.js 16 (App Router) so **statickým exportom** |
 | Jazyk | TypeScript (strict) |
 | Štýly | Tailwind CSS v4 (`@theme` tokeny v `src/app/globals.css`) |
-| Písma | Anton (display) + Archivo (UI) cez `next/font/google`, subset `latin-ext` |
-| Stav | React Context + `localStorage`, žiadne ďalšie závislosti |
+| Písma | Alfa Slab One (wordmark), Archivo Black (nadpisy), Archivo (text) |
+| Stav | React Context + `localStorage` |
 
-Žiadna UI knižnica, žiadny state manager, žiadna animačná knižnica — všetko je
-v komponentoch projektu.
+Žiadna UI knižnica, žiadny state manager, žiadna animačná knižnica.
+Výstup je čisté HTML/CSS/JS — beží na obyčajnom webhostingu bez Node.js.
 
-## Spustenie
+## Príkazy
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000
-npm run build    # produkčný build
-npm run lint     # ESLint
-npx tsc --noEmit # typová kontrola
+npm run dev        # vývoj na http://localhost:3000
+npm run build      # statický export do out/
+npm run zip        # build + zabalenie do enzo-web.zip
+npm run lint
+npm run typecheck
 ```
 
 ## Používateľská cesta
 
 ```
-Úvod → Menu → Detail produktu (extra + množstvo + poznámka)
-     → Košík (drawer) → Pokladňa (odber/doručenie, platba, validácia)
+Úvod → Menu → Detail produktu (doplnky, množstvo, poznámka)
+     → Košík → Pokladňa (odber/rozvoz, platba, validácia)
      → Potvrdenie objednávky → Tlač účtenky
 ```
 
-Košík sa ukladá do `localStorage` a prežije reload. Objednávka dostane číslo
-`ENZO-1042`, uloží sa do histórie a košík sa vyprázdni.
+Košík sa ukladá do `localStorage` a prežije obnovenie stránky.
+Objednávka dostane číslo `ENZO-1042` a uloží sa do histórie v prehliadači.
+
+## Menu
+
+8 kategórií, 41 položiek podľa tlačeného menu prevádzky:
+
+| Kategória | Položiek |
+|---|---|
+| Smash burgers | 7 |
+| Pizza | 12 |
+| Chicken | 4 |
+| Bravčové | 2 |
+| Kombo | 1 |
+| Prílohy a omáčky | 12 |
+| Sladká bodka | 1 |
+| Nápoje | 1 |
 
 ## Štruktúra
 
 ```
 src/
 ├── app/
-│   ├── layout.tsx                  # metadata, OG, JSON-LD, providery, skip link
-│   ├── page.tsx                    # úvodná stránka
-│   ├── globals.css                 # dizajnové tokeny, utility, tlačové štýly
-│   ├── pokladna/                   # checkout
-│   ├── objednavka/                 # potvrdenie objednávky (?c=ENZO-1042)
-│   ├── podmienky/                  # obchodné podmienky
+│   ├── layout.tsx                  metadata, OG, JSON-LD, providery
+│   ├── page.tsx                    úvodná stránka
+│   ├── globals.css                 dizajnové tokeny, utility, tlačové štýly
+│   ├── pokladna/                   checkout
+│   ├── objednavka/                 potvrdenie objednávky
+│   ├── podmienky/                  obchodné podmienky
 │   └── ochrana-osobnych-udajov/
 ├── components/
 │   ├── layout/    Header, MobileNavigation, Footer, LegalPage
@@ -63,83 +81,83 @@ src/
 │   ├── checkout/  Checkout, OrderSummary, PickupForm, DeliveryForm, PaymentSelector
 │   ├── order/     OrderConfirmation, PrintableReceipt
 │   └── ui/        Button, Field, Logo, Icons, QuantityStepper, Checkerboard, Reveal
-├── context/CartContext.tsx         # jediný zdroj pravdy pre košík
+├── context/CartContext.tsx         stav košíka
 └── lib/
-    ├── types.ts        # doménové typy (Product, CartItem, Order, …)
-    ├── config.ts       # údaje prevádzky, poplatky, limity  ← tu sa mení najviac
-    ├── products.ts     # katalóg produktov a kategórií
-    ├── cart.ts         # čisté funkcie: pridanie, množstvo, súčty
-    ├── order.ts        # model objednávky, číslovanie, perzistencia
-    ├── validation.ts   # validácia pokladne + slovenské hlášky
-    ├── format.ts       # formátovanie cien a dátumov (sk-SK)
-    ├── scrollLock.ts   # zamknutie scrollu bez „poskočenia" stránky
-    └── storage.ts      # bezpečná obálka nad localStorage
+    ├── types.ts        doménové typy (Product, CartItem, Order, …)
+    ├── config.ts       prevádzka, poplatky, limity  ← tu sa mení najviac
+    ├── products.ts     katalóg menu
+    ├── cart.ts         čisté funkcie: pridanie, množstvo, súčty
+    ├── order.ts        model objednávky, číslovanie, perzistencia
+    ├── validation.ts   validácia pokladne + slovenské hlášky
+    ├── format.ts       formátovanie cien a dátumov (sk-SK)
+    ├── scrollLock.ts   zamknutie scrollu bez „poskočenia" stránky
+    └── storage.ts      bezpečná obálka nad localStorage
 ```
 
-Doménová logika je oddelená od UI — `lib/` neobsahuje žiadny JSX a dá sa
-bez zmien nahradiť volaniami na API.
+`lib/` neobsahuje žiadny JSX — dá sa bez zmien nahradiť volaniami na API.
 
-## Čo sa mení najčastejšie
+## Kde sa čo mení
 
 | Chcem zmeniť | Súbor |
 |---|---|
-| Adresu, telefón, otváracie hodiny, rozvozové obce | `src/lib/config.ts` → `RESTAURANT` |
-| Poplatok za doručenie, minimálnu objednávku, časy | `src/lib/config.ts` → `ORDER_CONFIG` |
-| Produkty, ceny, popisy, doplnky, kategórie | `src/lib/products.ts` |
-| Fotky produktov | `public/images/products/` + pole `image` v produkte |
-| Farby, písma, šachovnicu | `src/app/globals.css` → blok `@theme` |
+| Adresa, telefón, hodiny, rozvozové obce, fakturačné údaje | `src/lib/config.ts` → `RESTAURANT` |
+| Poplatok za rozvoz, minimálna objednávka, časy | `src/lib/config.ts` → `ORDER_CONFIG` |
+| Menu, ceny, popisy, doplnky | `src/lib/products.ts` |
+| Fotografie | `public/images/products/` |
+| Farby, písma, šachovnica | `src/app/globals.css` → `@theme` |
 
-Pridanie produktu = jeden objekt v `PRODUCTS`; kategórie, taby aj počty
-sa dopočítajú samé.
+## Logo a značka
 
-## Napojenie na backend
+Zdrojové súbory sú v `public/brand/` — SVG (skutočné krivky) aj PNG
+v ~2 400 px s priehľadným pozadím:
 
-Prototyp je pripravený na výmenu perzistencie za API:
+- `enzo-wordmark-{burgundy,cream,black,white}` + `-transparent` varianty
+- `enzo-badge-{burgundy,cream}` — kruhový odznak na obaly
+- `enzo-lockup-horizontal{,-cream}` — vodorovná verzia
 
-- `getProducts()` / `getProductById()` / `getMenu()` v `lib/products.ts` — nahradiť `fetch`.
-- `createOrder()` + `saveOrder()` v `lib/order.ts` — nahradiť `POST /api/orders`.
-- `CartContext` pracuje výhradne s čistými funkciami z `lib/cart.ts`, takže
-  serverový prepočet cien sa dá zapojiť bez zásahu do komponentov.
+Logo v samotnom webe **nie je obrázok** — je vyskladané typograficky
+a v CSS (`src/components/ui/Logo.tsx`), takže je ostré v akejkoľvek veľkosti.
 
-## Platba
+| Farba | HEX |
+|---|---|
+| Bordová | `#7A1E1E` |
+| Krémová | `#F6F0E3` |
+| Čierna | `#111111` |
+| Horčicová | `#E1B12C` |
+
+## Platba a objednávky
 
 Platobná brána **nie je** napojená. Pri platbe kartou sa objednávka označí ako
-`paymentState: "demo-paid"` a používateľ je na to explicitne upozornený
-v pokladni aj na potvrdení. Nič sa nestrháva.
+`paymentState: "demo-paid"` a zákazník je na to upozornený v pokladni aj na
+potvrdení. Objednávka sa **neodosiela na server** — ukladá sa lokálne
+v prehliadači zákazníka. Napojenie backendu je popísané v návode.
 
 ## Tlač účtenky
 
 Tlačidlo *Vytlačiť potvrdenie* volá `window.print()`. Tlačová vrstva
-(`PrintableReceipt`) je v prehliadači skrytá a pri tlači je jediným viditeľným
-obsahom — hlavička, pätička aj zvyšok UI sa skryjú. Formát `80 mm`, monospace,
-so všetkými položkami, doplnkami, poznámkami a súčtami.
+(`PrintableReceipt`) je v prehliadači skrytá a pri tlači je jediným
+viditeľným obsahom — formát 80 mm, monospace, s položkami, doplnkami,
+poznámkami, súčtami a fakturačnými údajmi prevádzkovateľa.
 
 ## Prístupnosť
 
 - sémantické HTML, jeden `h1` na stránku, korektná hierarchia nadpisov
-- skip link, viditeľné focus stavy (horčicový outline), focus pasca v modáloch
+- skip link, viditeľné focus stavy, focus pasca v modáloch
 - `Escape` zatvára modal, košík aj mobilnú navigáciu
-- popisky a `aria-describedby` pri chybách formulára, `role="alert"` pri hláškach
+- popisky a `aria-describedby` pri chybách, `role="alert"` pri hláškach
 - dotykové ciele min. 44 px, `alt` texty na všetkých fotkách
 - rešpektuje `prefers-reduced-motion`; bez JavaScriptu sa obsah zobrazí okamžite
 
 ## Overené
 
-Manuálne aj automatizovane (Playwright) prejdené na šírkach
-375 / 390 / 430 / 640 / 768 / 820 / 1024 / 1180 / 1280 / 1440 / 1920 px:
-žiadne horizontálne pretečenie, žiadne chyby v konzole, kompletná objednávková
-cesta vrátane validácie, perzistencie košíka a tlače.
+Statický export otestovaný automatizovaným priechodom celej objednávkovej
+cesty (desktop aj mobil) a kontrolou rozloženia na šírkach
+320 / 360 / 375 / 390 / 430 / 640 / 768 / 820 / 1024 / 1180 / 1280 / 1440 / 1920 px
+na štyroch stránkach — bez horizontálneho pretečenia, bez chýb v konzole
+a bez chýbajúcich súborov.
 
-## Obrázky
+## Fotografie
 
-- `public/images/products/`, `public/images/editorial/` — fotografie z Unsplash
-  (Unsplash License, voľné na komerčné použitie), zmenšené a prevedené do WebP.
-  Ide o zástupné fotky — pred ostrým nasadením ich treba nahradiť skutočnou
-  produktovou fotografiou ENZO.
-- `public/images/brand/` — výrezy packagingu priamo z dodaného ENZO brand boardu.
-- Logo, kruhový odznak a šachovnica sú vyskladané typograficky / v CSS,
-  takže sú ostré v akejkoľvek veľkosti.
-
----
-
-Demo prototyp. Objednávky sa ukladajú výhradne lokálne v prehliadači.
+`public/images/` — fotografie z Unsplash (Unsplash License, voľné na
+komerčné použitie), zmenšené a prevedené do WebP. Ide o **zástupné** fotky;
+pred ostrým spustením ich treba nahradiť skutočnou fotografiou prevádzky.

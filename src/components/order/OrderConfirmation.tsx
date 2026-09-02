@@ -20,14 +20,17 @@ import { PrintableReceipt } from "./PrintableReceipt";
 
 type State = { status: "loading" } | { status: "empty" } | { status: "ready"; order: Order };
 
-export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
+export function OrderConfirmation() {
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
-    const order = orderNumber ? getOrderByNumber(orderNumber) : getLastOrder();
+    // Číslo objednávky je v adrese (?c=ENZO-1042); čítame ho až tu,
+    // aby stránka mohla byť staticky vyexportovaná.
+    const requested = new URLSearchParams(window.location.search).get("c");
+    const order = requested ? getOrderByNumber(requested) : getLastOrder();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- načítanie objednávky z localStorage po hydratácii
     setState(order ? { status: "ready", order } : { status: "empty" });
-  }, [orderNumber]);
+  }, []);
 
   if (state.status === "loading") {
     return (
@@ -77,7 +80,7 @@ export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
                 <span className="inline-flex h-16 w-16 animate-[pop_0.5s_cubic-bezier(0.34,1.56,0.64,1)_both] items-center justify-center rounded-full bg-gold text-ink">
                   <CheckIcon className="h-8 w-8" strokeWidth={3} />
                 </span>
-                <h1 className="mt-6 font-display text-[2.8rem] leading-[1.02] opacity-0 [animation:reveal_0.7s_cubic-bezier(0.16,1,0.3,1)_0.12s_both] sm:text-[4.2rem] lg:text-[5rem]">
+                <h1 className="mt-6 font-display text-[2.3rem] leading-[1.04] opacity-0 [animation:reveal_0.7s_cubic-bezier(0.16,1,0.3,1)_0.12s_both] sm:text-[3.2rem] lg:text-[3.8rem]">
                   Objednávka
                   <br />
                   prijatá!
@@ -88,7 +91,7 @@ export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
                 </p>
               </div>
 
-              <LogoBadge className="hidden w-36 shrink-0 text-[9rem] opacity-0 [animation:pop_0.5s_cubic-bezier(0.34,1.56,0.64,1)_0.3s_both] lg:inline-flex" />
+              <LogoBadge className="hidden w-36 shrink-0 text-[9rem] opacity-0 ring-2 ring-cream/25 [animation:pop_0.5s_cubic-bezier(0.34,1.56,0.64,1)_0.3s_both] lg:inline-flex" />
             </div>
           </div>
         </div>
@@ -100,7 +103,7 @@ export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
             <div className="flex flex-col gap-6">
               <div className="rounded-2xl bg-white p-6 ring-1 ring-ink/8">
                 <p className="eyebrow text-ink/45">Číslo objednávky</p>
-                <p className="mt-2 font-display text-[2.6rem] leading-none text-burgundy sm:text-[3.2rem]">
+                <p className="mt-2 font-display text-[2rem] leading-none text-burgundy sm:text-[2.5rem]">
                   #{order.orderNumber}
                 </p>
                 <p className="mt-2 text-[0.85rem] text-ink/50">
@@ -168,7 +171,7 @@ export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
               </div>
 
               <div className="rounded-2xl bg-white p-6 ring-1 ring-ink/8">
-                <h2 className="font-display text-[1.5rem] leading-none text-ink">
+                <h2 className="font-display text-[1.15rem] leading-[1.1] text-ink">
                   {ORDER_TYPE_LABEL[order.orderType]}
                 </h2>
                 <dl className="mt-4 flex flex-col gap-3 text-[0.92rem]">
@@ -227,7 +230,7 @@ export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
             {/* Rekapitulácia */}
             <div className="lg:sticky lg:top-28">
               <div className="rounded-2xl bg-white p-6 ring-1 ring-ink/8">
-                <h2 className="font-display text-[1.6rem] leading-none text-ink">Objednávka</h2>
+                <h2 className="font-display text-[1.2rem] leading-[1.1] text-ink">Objednávka</h2>
 
                 <ul className="mt-5 flex flex-col divide-y divide-ink/8 border-y border-ink/8">
                   {order.items.map((item) => (
@@ -236,7 +239,7 @@ export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
                         {item.quantity}×
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="font-display text-[1.05rem] leading-tight text-ink">
+                        <p className="font-display text-[0.92rem] leading-[1.18] text-ink">
                           {item.name}
                         </p>
                         {item.extras.length > 0 && (
@@ -271,8 +274,8 @@ export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
                     </dd>
                   </div>
                   <div className="mt-2 flex items-baseline justify-between border-t border-ink/10 pt-4">
-                    <dt className="font-display text-[1.6rem] text-ink">Celkom</dt>
-                    <dd className="font-display text-[2rem] text-burgundy tabular-nums">
+                    <dt className="font-display text-[1.2rem] text-ink">Celkom</dt>
+                    <dd className="font-display text-[1.6rem] text-burgundy tabular-nums">
                       {formatPrice(order.total)}
                     </dd>
                   </div>
@@ -297,7 +300,7 @@ export function OrderConfirmation({ orderNumber }: { orderNumber?: string }) {
               </div>
 
               <div className="mt-6 overflow-hidden rounded-2xl bg-ink p-6 text-cream">
-                <p className="font-display text-[1.7rem] leading-none text-gold">
+                <p className="font-display text-[1.25rem] leading-[1.12] text-gold">
                   {RESTAURANT.claim}
                 </p>
                 <p className="mt-3 text-[0.88rem] text-cream/65">

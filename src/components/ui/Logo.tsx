@@ -12,7 +12,7 @@ interface LogoProps {
   tone?: LogoTone;
   /** Veľkosť wordmarku v CSS jednotkách (font-size) */
   className?: string;
-  /** Zobraziť riadok SMASH BURGERS & FRIES so šachovnicou */
+  /** Zobraziť riadok SMASH BURGERS & PIZZA so šachovnicou */
   withDescriptor?: boolean;
   /** Zobraziť ® */
   withMark?: boolean;
@@ -34,7 +34,7 @@ export function Logo({
     <span className={cn("inline-flex flex-col items-start leading-none", t.text, className)}>
       <span className="relative inline-flex items-start">
         <span
-          className="font-display leading-[0.8] tracking-[0.01em]"
+          className="font-slab leading-[0.86] tracking-[-0.005em]"
           style={{ fontSize: "1em" }}
         >
           ENZO
@@ -43,7 +43,7 @@ export function Logo({
           <span
             aria-hidden
             className="font-sans font-bold leading-none"
-            style={{ fontSize: "0.22em", marginTop: "0.12em", marginLeft: "0.06em" }}
+            style={{ fontSize: "0.19em", marginTop: "0.16em", marginLeft: "0.05em" }}
           >
             ®
           </span>
@@ -59,7 +59,7 @@ export function Logo({
             style={{ ["--checker-size" as string]: "0.55em" }}
           />
           <span className={cn("font-sans font-bold tracking-[0.2em] whitespace-nowrap", t.sub)}>
-            SMASH BURGERS &amp; FRIES
+            SMASH BURGERS &amp; PIZZA
           </span>
           <span aria-hidden className={cn("checkerboard h-[1.05em] w-[2.4em] shrink-0", t.checker)}
             style={{ ["--checker-size" as string]: "0.55em" }}
@@ -80,7 +80,7 @@ export function LogoBadge({ className }: { className?: string }) {
         className,
       )}
     >
-      <span className="font-display leading-none" style={{ fontSize: "0.34em" }}>
+      <span className="font-slab leading-none" style={{ fontSize: "0.3em" }}>
         ENZO
       </span>
       <span
@@ -90,7 +90,7 @@ export function LogoBadge({ className }: { className?: string }) {
         SMASH
         <br />
         BURGERS
-        <br />&amp; FRIES
+        <br />&amp; PIZZA
       </span>
     </span>
   );

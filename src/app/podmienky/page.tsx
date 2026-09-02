@@ -5,7 +5,7 @@ import { formatPrice } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "Obchodné podmienky",
-  description: "Obchodné podmienky objednávania v ENZO Smash Burgers & Fries.",
+  description: "Obchodné podmienky objednávania v ENZO Smash Burgers & Pizza.",
 };
 
 export default function TermsPage() {

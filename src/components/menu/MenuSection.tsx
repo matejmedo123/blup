@@ -49,13 +49,13 @@ export function MenuSection() {
             <p className="eyebrow text-burgundy">Objednaj online</p>
             <h2
               id="menu-heading"
-              className="mt-4 font-display text-[3.2rem] leading-[0.85] text-ink sm:text-[4.5rem] lg:text-[5.5rem]"
+              className="mt-4 font-display text-[2.8rem] leading-[1.02] text-ink sm:text-[3.8rem] lg:text-[4.4rem]"
             >
               Menu
             </h2>
             <p className="mt-5 max-w-lg text-[1rem] leading-relaxed text-ink/60 sm:text-[1.05rem]">
               Vyber si, prispôsob a objednaj. Pripravujeme až po objednávke —
-              každý burger smashujeme čerstvo na platni.
+              burgery smashujeme na platni, pizzu pečieme na kameni.
             </p>
           </div>
 
@@ -98,7 +98,7 @@ export function MenuSection() {
         >
           <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h3 className="font-display text-[2rem] leading-[1.02] text-burgundy sm:text-[2.6rem]">
+              <h3 className="font-display text-[1.55rem] leading-[1.06] text-burgundy sm:text-[2.1rem]">
                 {current.category.title}
               </h3>
               <p className="mt-2 text-[0.9rem] text-ink/55">{current.category.caption}</p>

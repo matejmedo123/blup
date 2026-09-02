@@ -130,14 +130,14 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
               <div className="p-5 sm:p-8">
                 <h2
                   id="product-modal-title"
-                  className="font-display text-[2.1rem] leading-[1.02] text-ink sm:text-[2.6rem]"
+                  className="font-display text-[1.6rem] leading-[1.06] text-ink sm:text-[2rem]"
                 >
                   {product.name}
                 </h2>
                 <p className="mt-3 text-[0.95rem] leading-relaxed text-ink/65">
                   {product.description}
                 </p>
-                <p className="mt-4 font-display text-[1.75rem] leading-none text-burgundy tabular-nums">
+                <p className="mt-4 font-display text-[1.4rem] leading-none text-burgundy tabular-nums">
                   {formatPrice(product.price)}
                 </p>
 

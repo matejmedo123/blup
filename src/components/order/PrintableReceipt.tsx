@@ -30,13 +30,17 @@ export function PrintableReceipt({ order }: { order: Order }) {
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "3px" }}>ENZO</div>
         <div style={{ fontSize: "9px", letterSpacing: "2px", marginTop: "2px" }}>
-          SMASH BURGERS &amp; FRIES
+          SMASH BURGERS &amp; PIZZA
         </div>
         <div style={{ fontSize: "9px", marginTop: "6px" }}>
           {RESTAURANT.address.street}, {RESTAURANT.address.postalCode}{" "}
           {RESTAURANT.address.city}
         </div>
         <div style={{ fontSize: "9px" }}>{RESTAURANT.phone}</div>
+        <div style={{ fontSize: "8px", marginTop: "4px" }}>
+          {RESTAURANT.company.name} · IČO {RESTAURANT.company.ico} · DIČ{" "}
+          {RESTAURANT.company.dic}
+        </div>
       </div>
 
       <Divider />
@@ -123,7 +127,11 @@ export function PrintableReceipt({ order }: { order: Order }) {
         </div>
         <div style={{ fontSize: "9px", marginTop: "6px" }}>{RESTAURANT.claim}</div>
         <div style={{ fontSize: "8px", marginTop: "8px", color: "#444" }}>
-          Demo prototyp — doklad nie je daňovým dokladom.
+          {RESTAURANT.company.name}, {RESTAURANT.company.seat}
+          <br />
+          Zodpovedný vedúci: {RESTAURANT.company.manager}
+          <br />
+          Doklad nie je daňovým dokladom.
         </div>
       </div>
     </div>

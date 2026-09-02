@@ -1,5 +1,5 @@
 {
-  "name": "enzo-smash-burgers",
+  "name": "enzo-koniarovce",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "export": "next build",
+    "zip": "next build && cd out && rm -f ../enzo-web.zip && zip -r -q ../enzo-web.zip . && cd .. && echo \"Hotovo: enzo-web.zip\""
   },
   "dependencies": {
     "next": "16.3.3",

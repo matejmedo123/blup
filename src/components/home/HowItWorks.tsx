@@ -6,12 +6,12 @@ const STEPS = [
   {
     n: "01",
     title: "Vyber si",
-    text: "Prejdi menu, otvor produkt a prispôsob si ho. Extra patty, slanina, jalapeños — je to na tebe.",
+    text: "Prejdi menu, otvor produkt a prispôsob si ho. Extra porcia, horúci chedar, jalapeños — je to na tebe.",
   },
   {
     n: "02",
     title: "Odber alebo doručenie",
-    text: "V pokladni si zvolíš osobný odber alebo doručenie domov. Doručujeme po Preseľanoch a okolí.",
+    text: "V pokladni si zvolíš osobný odber alebo doručenie domov. Doručujeme po Koniarovciach a okolí.",
   },
   {
     n: "03",
@@ -21,7 +21,7 @@ const STEPS = [
   {
     n: "04",
     title: "Smashujeme",
-    text: "Objednávku pustíme na platňu až keď dorazí. Preto je vždy horúca a čerstvá.",
+    text: "Objednávku pustíme na platňu a do pece až keď dorazí. Preto je vždy horúca a čerstvá.",
   },
 ];
 
@@ -37,10 +37,10 @@ export function HowItWorks() {
           <p className="eyebrow text-burgundy">Ako to funguje</p>
           <h2
             id="ako-heading"
-            className="mt-5 font-display text-[2.8rem] leading-[1.02] text-ink sm:text-[4rem] lg:text-[4.5rem]"
+            className="mt-5 font-display text-[2.2rem] leading-[1.05] text-ink sm:text-[3rem] lg:text-[3.5rem]"
           >
             Štyri kroky
-            <br />k horúcemu burgeru
+            <br />k horúcemu jedlu
           </h2>
         </Reveal>
 
@@ -51,7 +51,7 @@ export function HowItWorks() {
                 <span className="font-display text-[3.2rem] leading-none text-burgundy/22 tabular-nums lg:text-[4rem]">
                   {s.n}
                 </span>
-                <h3 className="mt-4 font-display text-[1.5rem] leading-[1.05] text-ink lg:text-[1.75rem]">
+                <h3 className="mt-4 font-display text-[1.2rem] leading-[1.1] text-ink lg:text-[1.35rem]">
                   {s.title}
                 </h3>
                 <p className="mt-3 text-[0.9rem] leading-relaxed text-ink/60">{s.text}</p>

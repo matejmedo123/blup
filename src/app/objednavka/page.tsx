@@ -1,22 +1,16 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { OrderConfirmation } from "@/components/order/OrderConfirmation";
 
 export const metadata: Metadata = {
   title: "Objednávka prijatá",
-  description: "Potvrdenie objednávky ENZO Smash Burgers & Fries.",
+  description: "Potvrdenie objednávky ENZO Smash Burgers & Pizza.",
   robots: { index: false, follow: false },
 };
 
-export default async function OrderPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ c?: string }>;
-}) {
-  const { c } = await searchParams;
-  return (
-    <Suspense fallback={null}>
-      <OrderConfirmation orderNumber={c} />
-    </Suspense>
-  );
+/**
+ * Stránka je staticky vyexportovaná — číslo objednávky sa načíta
+ * z adresy až na klientovi, aby fungoval `output: "export"`.
+ */
+export default function OrderPage() {
+  return <OrderConfirmation />;
 }

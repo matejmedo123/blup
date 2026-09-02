@@ -54,7 +54,7 @@ export function Header() {
           {/* Logo */}
           <Link
             href="/"
-            aria-label="ENZO Smash Burgers & Fries — domovská stránka"
+            aria-label="ENZO Smash Burgers & Pizza — domovská stránka"
             className="shrink-0 py-2"
           >
             <Logo tone="cream" className="text-[1.85rem] sm:text-[2.15rem]" />

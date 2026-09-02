@@ -74,7 +74,7 @@ export const ProductCard = memo(function ProductCard({
           onClick={() => onSelect(product)}
           className="text-left"
         >
-          <h3 className="font-display text-[1.15rem] leading-[1.05] text-ink sm:text-[1.35rem]">
+          <h3 className="font-display text-[0.98rem] leading-[1.12] text-ink sm:text-[1.12rem]">
             {product.name}
           </h3>
         </button>
@@ -101,7 +101,7 @@ export const ProductCard = memo(function ProductCard({
         )}
 
         <div className="mt-auto flex flex-col gap-2.5 pt-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
-          <p className="font-display text-[1.35rem] leading-none text-burgundy tabular-nums sm:text-[1.55rem]">
+          <p className="font-display text-[1.15rem] leading-none text-burgundy tabular-nums sm:text-[1.3rem]">
             {formatPrice(product.price)}
           </p>
 

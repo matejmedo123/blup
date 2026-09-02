@@ -7,21 +7,21 @@ const TILES = [
     src: "/images/editorial/promo-combo.webp",
     alt: "ENZO burger s hranolkami a nápojom",
     title: "Double is better.",
-    text: "Pridaj druhé patty a rozdiel pocítiš hneď pri prvom hryzení.",
+    text: "Pridaj extra porciu mäsa a rozdiel pocítiš hneď pri prvom hryzení.",
     tone: "gold" as const,
   },
   {
     src: "/images/editorial/dark-burger.webp",
     alt: "Detail smash burgera na tmavom pozadí",
     title: "Meet the Enzo.",
-    text: "Náš signature burger. Dvojitý cheddar, chrumkavá cibuľka, ENZO sauce.",
+    text: "Náš signature smash burger. Chedar, ENZO omáčka, žiadne kompromisy.",
     tone: "cream" as const,
   },
   {
-    src: "/images/editorial/promo-sliders.webp",
-    alt: "Séria malých burgerov s hranolkami",
-    title: "Get smashed.",
-    text: "Loaded fries s hovädzím, cheddar omáčkou a jalapeños.",
+    src: "/images/editorial/promo-pizza.webp",
+    alt: "Pizza s ťahajúcou sa mozzarellou",
+    title: "Burger aj pizza.",
+    text: "Dvanásť druhov pizze z vlastného cesta — v tej istej objednávke.",
     tone: "burgundy" as const,
   },
 ];
@@ -35,7 +35,7 @@ export function PromoSection() {
             <p className="eyebrow text-gold">Sociálne siete</p>
             <h2
               id="promo-heading"
-              className="mt-5 font-display text-[2.8rem] leading-[1.02] sm:text-[4rem]"
+              className="mt-5 font-display text-[2.2rem] leading-[1.05] sm:text-[3.2rem]"
             >
               Smashed daily
             </h2>
