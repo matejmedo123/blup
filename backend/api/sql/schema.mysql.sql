@@ -109,9 +109,6 @@ CREATE TABLE IF NOT EXISTS orders (
   updated_at   DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (created_at);
-CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders (status);
-
 CREATE TABLE IF NOT EXISTS order_items (
   id             INT AUTO_INCREMENT PRIMARY KEY,
   order_id       INT NOT NULL,
@@ -156,4 +153,3 @@ CREATE TABLE IF NOT EXISTS rate_limit (
   created_at DATETIME    NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_rate ON rate_limit (ip, action, created_at);

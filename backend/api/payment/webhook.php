@@ -7,6 +7,14 @@ require __DIR__ . '/../_bootstrap.php';
  * Adresu nastav v Stripe → Developers → Webhooks:
  *   https://tvojadomena.sk/api/payment/webhook.php
  * Udalosť: checkout.session.completed
+ *
+ * Webhook nikdy nespracujeme dvakrát. Stripe doručuje opakovane, kým
+ * nedostane 200, a pri výpadku môžu dve doručenia dobehnúť naraz —
+ * preto o jedinečnosti rozhoduje unikátny index v databáze, nie
+ * kontrola v PHP, ktorú by dva súbežné procesy prešli obidva.
+ *
+ * Frontendu sa neverí nikdy: zaplatené je len to, čo potvrdí Stripe
+ * podpísanou správou sem.
  */
 
 Response::requireMethod('POST');
@@ -22,8 +30,11 @@ try {
     Response::fail('Neplatný podpis.', 400);
 }
 
-if (($event['type'] ?? '') !== 'checkout.session.completed') {
-    Response::ok(['ignored' => $event['type'] ?? '']);
+$eventId   = (string) ($event['id'] ?? '');
+$eventType = (string) ($event['type'] ?? '');
+
+if ($eventType !== 'checkout.session.completed') {
+    Response::ok(['ignored' => $eventType]);
 }
 
 $session   = $event['data']['object'] ?? [];
@@ -35,26 +46,30 @@ if ($orderNum === '' || $paidState !== 'paid') {
     Response::ok(['skipped' => true]);
 }
 
+// Túto udalosť sme už raz spracovali — Stripe ju len posiela znova.
+if (!Payments::claimEvent('stripe', $eventId, $eventType)) {
+    Response::ok(['already' => true]);
+}
+
 $order = Db::one('SELECT * FROM orders WHERE order_number = ?', [$orderNum]);
 if ($order === null) {
     error_log("webhook: objednávka $orderNum sa nenašla");
     Response::ok(['skipped' => 'not found']);
 }
 
-// webhook môže doraziť viackrát — spracujeme ho iba raz
-if (($order['payment_status'] ?? '') === 'paid') {
-    Response::ok(['already' => true]);
+// markPaid vráti false, keď platba už bola zaevidovaná (napr. iným
+// doručením toho istého webhooku) — vtedy e-maily druhýkrát neposielame.
+$justPaid = OrderService::markPaid((int) $order['id'], $sessionId, 'card');
+
+if ($justPaid) {
+    try {
+        $full = OrderService::findById((int) $order['id']);
+        $n    = new Notifier((array) cfg('mail', []), (string) cfg('app.url'));
+        $n->orderReceived($full);
+        $n->shopNewOrder($full);
+    } catch (Throwable $e) {
+        error_log('webhook mail: ' . $e->getMessage());
+    }
 }
 
-OrderService::markPaid((int) $order['id'], $sessionId, 'card');
-
-try {
-    $full = OrderService::findById((int) $order['id']);
-    $n = new Notifier((array) cfg('mail', []), (string) cfg('app.url'));
-    $n->orderReceived($full);
-    $n->shopNewOrder($full);
-} catch (Throwable $e) {
-    error_log('webhook mail: ' . $e->getMessage());
-}
-
-Response::ok(['paid' => $orderNum]);
+Response::ok(['paid' => $orderNum, 'firstTime' => $justPaid]);

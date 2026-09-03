@@ -122,6 +122,31 @@ final class Db
         }
     }
 
+    /**
+     * Existuje stĺpec? Potrebné pri migráciách — `ADD COLUMN IF NOT EXISTS`
+     * pozná MariaDB, ale MySQL 8 ani SQLite nie.
+     */
+    public static function columnExists(string $table, string $column): bool
+    {
+        try {
+            if (self::driver() === 'sqlite') {
+                foreach (self::all("PRAGMA table_info(" . $table . ")") as $col) {
+                    if (strcasecmp((string) $col['name'], $column) === 0) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            return (int) (self::value(
+                'SELECT COUNT(*) FROM information_schema.columns
+                 WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
+                [$table, $column]
+            ) ?? 0) > 0;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     /** Existuje už tabuľka? Slúži na rozhodnutie, či treba spustiť inštaláciu. */
     public static function tableExists(string $table): bool
     {

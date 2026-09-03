@@ -40,6 +40,24 @@ final class Response
         self::json(['ok' => false, 'error' => $message, 'fields' => $fields], $status);
     }
 
+    /**
+     * Chyba s kódom — frontend podľa neho vie zareagovať inak než len
+     * vypísaním textu. HTTP číslo sa odvodí z kódu, ak ho nezadáme.
+     *
+     * @param array<string,string> $fields
+     */
+    public static function failCode(
+        string $code,
+        string $message,
+        array $fields = [],
+        ?int $status = null
+    ): never {
+        self::json(
+            ['ok' => false, 'code' => $code, 'error' => $message, 'fields' => $fields],
+            $status ?? ErrorCode::httpStatus($code)
+        );
+    }
+
     /** @return array<string,mixed> */
     public static function jsonBody(): array
     {
@@ -51,7 +69,7 @@ final class Response
     public static function requireMethod(string $method): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== $method) {
-            self::fail('Nepovolená metóda.', 405);
+            self::failCode(ErrorCode::METHOD_NOT_ALLOWED, 'Nepovolená metóda.');
         }
     }
 

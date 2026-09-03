@@ -65,7 +65,7 @@ Response::requireMethod('POST');
 $body = Response::jsonBody();
 
 if (!Csrf::verify((string) ($body['_csrf'] ?? ''))) {
-    Response::fail('Relácia vypršala. Obnov stránku.', 419);
+    Response::failCode(ErrorCode::SESSION_EXPIRED, 'Relácia vypršala. Obnov stránku.', [], 419);
 }
 
 $id     = (int) ($body['id'] ?? 0);
@@ -73,37 +73,77 @@ $action = (string) ($body['action'] ?? '');
 $order  = $id > 0 ? Db::one('SELECT * FROM orders WHERE id = ?', [$id]) : null;
 
 if ($order === null) {
-    Response::fail('Objednávka sa nenašla.', 404);
+    Response::failCode(ErrorCode::NOT_FOUND, 'Objednávka sa nenašla.');
 }
 
 $notifier = new Notifier((array) cfg('mail', []), (string) cfg('app.url'));
 
 try {
     switch ($action) {
+        case 'accept':
         case 'confirm':
             $minutes = (int) ($body['minutes'] ?? Settings::int('default_prep_minutes'));
-            $updated = OrderService::confirm($id, $minutes, $user['id']);
-            $notifier->orderConfirmed($updated);
+            $updated = OrderService::accept($id, $minutes, $user['id']);
+            if ($updated['_changed']) {
+                $notifier->orderConfirmed($updated);
+            }
+            break;
+
+        case 'preparing':
+            $updated = OrderService::transition($id, OrderStatus::PREPARING, [
+                'userId' => $user['id'], 'actor' => $user['role'],
+            ]);
             break;
 
         case 'ready':
-            $updated = OrderService::setStatus($id, OrderService::STATUS_READY, $user['id']);
-            $notifier->orderReady($updated);
+            $updated = OrderService::transition($id, OrderStatus::READY, [
+                'userId' => $user['id'], 'actor' => $user['role'],
+            ]);
+            if ($updated['_changed']) {
+                $notifier->orderReady($updated);
+            }
+            break;
+
+        case 'delivering':
+            $updated = OrderService::transition($id, OrderStatus::DELIVERING, [
+                'userId' => $user['id'], 'actor' => $user['role'],
+            ]);
+            if ($updated['_changed']) {
+                $notifier->orderDelivering($updated);
+            }
+            break;
+
+        case 'picked_up':
+            $updated = OrderService::transition($id, OrderStatus::PICKED_UP, [
+                'userId' => $user['id'], 'actor' => $user['role'],
+            ]);
             break;
 
         case 'complete':
-            $updated = OrderService::setStatus($id, OrderService::STATUS_COMPLETED, $user['id']);
-            // hotovosť sa považuje za uhradenú pri prevzatí
-            if ($updated['payment_method'] === 'cash' && $updated['payment_status'] !== 'paid') {
-                OrderService::markPaid($id, 'hotovosť pri prevzatí', 'cash');
-                $updated = OrderService::findById($id);
+            // hotovosť sa označí ako uhradená vnútri prechodu
+            $updated = OrderService::transition($id, OrderStatus::COMPLETED, [
+                'userId' => $user['id'], 'actor' => $user['role'],
+            ]);
+            break;
+
+        case 'reject':
+            $reason  = Validate::clean($body['reason'] ?? '', 255);
+            $updated = OrderService::transition($id, OrderStatus::REJECTED, [
+                'userId' => $user['id'], 'actor' => $user['role'], 'reason' => $reason,
+            ]);
+            if ($updated['_changed']) {
+                $notifier->orderCancelled($updated, $reason);
             }
             break;
 
         case 'cancel':
             $reason  = Validate::clean($body['reason'] ?? '', 255);
-            $updated = OrderService::setStatus($id, OrderService::STATUS_CANCELLED, $user['id'], $reason);
-            $notifier->orderCancelled($updated, $reason);
+            $updated = OrderService::transition($id, OrderStatus::CANCELLED, [
+                'userId' => $user['id'], 'actor' => $user['role'], 'reason' => $reason,
+            ]);
+            if ($updated['_changed']) {
+                $notifier->orderCancelled($updated, $reason);
+            }
             break;
 
         case 'mark_paid':
@@ -112,11 +152,15 @@ try {
             break;
 
         default:
-            Response::fail('Neznáma akcia.', 400);
+            Response::failCode(ErrorCode::VALIDATION_ERROR, 'Neznáma akcia.');
     }
+} catch (OrderException $e) {
+    // Neplatný prechod alebo súbeh dvoch pracovníkov — obsluha sa musí
+    // dozvedieť, čo sa stalo, nie dostať „niečo sa pokazilo“.
+    $e->respond();
 } catch (Throwable $e) {
     error_log('admin/api.php: ' . $e->getMessage());
-    Response::fail('Akciu sa nepodarilo vykonať.', 500);
+    Response::failCode(ErrorCode::SERVER_ERROR, 'Akciu sa nepodarilo vykonať.');
 }
 
 Response::ok(['order' => OrderService::toPublicArray($updated)]);

@@ -32,6 +32,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && !$alreadyInstalled) {
             Installer::seedSettings();
             $done[] = 'Nastavenia prevádzky sú predvyplnené.';
 
+            Installer::seedOperations();
+            $done[] = 'Otváracie hodiny a doručovacie zóny sú predvyplnené.';
+
             $counts = Installer::seedMenu();
             $done[] = sprintf(
                 'Menu je naplnené: %d kategórií, %d položiek, %d doplnkov.',

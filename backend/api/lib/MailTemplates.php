@@ -115,10 +115,10 @@ final class MailTemplates
         $num      = $o['order_number'];
         $isPickup = $o['order_type'] === 'pickup';
 
-        $headline = $isPickup ? 'Pripravené na odber' : 'Kuriér vyrazil';
+        $headline = $isPickup ? 'Pripravené na odber' : 'Hotové, balíme';
         $text     = $isPickup
             ? 'Objednávka je hotová a čaká na teba na prevádzke — ' . $this->shopAddress() . '.'
-            : 'Objednávka je na ceste k tebe. Ak nedvíhaš telefón, kuriér ti zazvoní.';
+            : 'Objednávka je hotová a o chvíľu vyráža k tebe. Dáme ti vedieť, keď kuriér vyrazí.';
 
         $body = $this->heroBlock($headline, '#' . $num)
             . $this->paragraph($this->esc($text))
@@ -137,6 +137,29 @@ final class MailTemplates
     /* ================================================================
        Zákazník — zrušená
        ================================================================ */
+
+    /** Kuriér vyrazil — jediný e-mail, na ktorý zákazník naozaj čaká. */
+    public function orderDelivering(array $o): array
+    {
+        $num  = $o['order_number'];
+        $eta  = !empty($o['ready_at']) ? date('H:i', strtotime((string) $o['ready_at'])) : null;
+
+        $text = $eta !== null
+            ? "Kuriér vyrazil a mal by byť u teba okolo $eta."
+            : 'Kuriér vyrazil a je na ceste k tebe.';
+
+        $body = $this->heroBlock('Kuriér je na ceste', '#' . $num)
+            . $this->paragraph($this->esc($text))
+            . $this->paragraph($this->esc('Ak by nevedel nájsť vchod, zazvoní ti na telefón.'))
+            . $this->totalsTable($o)
+            . $this->paymentBlock($o);
+
+        return [
+            'subject' => "Objednávka #$num je na ceste — ENZO",
+            'html'    => $this->wrap($body, 'Kuriér je na ceste'),
+            'text'    => "ENZO — objednávka #$num\n\nKuriér je na ceste\n$text\n",
+        ];
+    }
 
     public function orderCancelled(array $o, string $reason): array
     {

@@ -14,8 +14,60 @@ final class Installer
 
     public static function migrate(): void
     {
-        $file = __DIR__ . '/../sql/schema.' . (Db::driver() === 'sqlite' ? 'sqlite' : 'mysql') . '.sql';
-        Db::runSqlFile($file);
+        Migrations::run();
+    }
+
+    /**
+     * Predvyplní otváracie hodiny a jednu doručovaciu zónu.
+     * Existujúce riadky nechá tak — pri aktualizácii sa nič neprepíše.
+     */
+    public static function seedOperations(): void
+    {
+        $now = date('Y-m-d H:i:s');
+
+        // 1 = pondelok … 7 = nedeľa; podľa hodín z tlačeného menu
+        $hours = [
+            1 => ['11:00', '21:00'],
+            2 => ['11:00', '21:00'],
+            3 => ['11:00', '21:00'],
+            4 => ['11:00', '21:00'],
+            5 => ['11:00', '22:00'],
+            6 => ['11:00', '22:00'],
+            7 => ['12:00', '21:00'],
+        ];
+        foreach ($hours as $day => [$open, $close]) {
+            $exists = Db::value('SELECT 1 FROM opening_hours WHERE weekday = ?', [$day]);
+            if (!$exists) {
+                Db::insert('opening_hours', [
+                    'weekday'           => $day,
+                    'is_open'           => 1,
+                    'open_time'         => $open,
+                    'close_time'        => $close,
+                    'last_order_offset' => 30,
+                ]);
+            }
+        }
+
+        if ((int) (Db::value('SELECT COUNT(*) FROM delivery_zones') ?? 0) === 0) {
+            $fee     = Settings::cents('delivery_fee');
+            $min     = Settings::cents('min_order');
+            $free    = Settings::cents('free_delivery_from');
+            $position = 0;
+            foreach (Settings::zones() as $name) {
+                Db::insert('delivery_zones', [
+                    'name'            => $name,
+                    'postal_codes'    => null,
+                    'fee_cents'       => $fee,
+                    'min_order_cents' => $min,
+                    'free_from_cents' => $free,
+                    'eta_minutes'     => 45,
+                    'is_active'       => 1,
+                    'position'        => $position++,
+                ]);
+            }
+        }
+
+        unset($now);
     }
 
     /** Naplní nastavenia predvolenými hodnotami (existujúce neprepíše). */

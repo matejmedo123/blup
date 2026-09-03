@@ -42,7 +42,6 @@ next-env.d.ts
 
 # Next.js auto-generated agent rules
 AGENTS.md
-CLAUDE.md
 
 # statický export a balík na nahratie
 /out/

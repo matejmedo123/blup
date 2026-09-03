@@ -52,6 +52,11 @@ final class Notifier
         $this->deliver((string) $o['email'], $this->t->orderReady($o), 'order_ready', (int) $o['id']);
     }
 
+    public function orderDelivering(array $o): void
+    {
+        $this->deliver((string) $o['email'], $this->t->orderDelivering($o), 'order_delivering', (int) $o['id']);
+    }
+
     public function orderCancelled(array $o, string $reason): void
     {
         $this->deliver((string) $o['email'], $this->t->orderCancelled($o, $reason), 'order_cancelled', (int) $o['id']);

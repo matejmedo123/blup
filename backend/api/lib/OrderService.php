@@ -9,19 +9,19 @@ declare(strict_types=1);
  */
 final class OrderService
 {
-    public const STATUS_RECEIVED  = 'received';   // prijatá, čaká na prevádzku
-    public const STATUS_CONFIRMED = 'confirmed';  // prevádzka potvrdila čas
-    public const STATUS_READY     = 'ready';      // hotové / kuriér vyrazil
-    public const STATUS_COMPLETED = 'completed';  // vybavená
-    public const STATUS_CANCELLED = 'cancelled';
+    /* Stavy a povolené prechody sú v OrderStatus — tu len skratky,
+       aby sa staršie volania nemuseli prepisovať naraz. */
+    public const STATUS_RECEIVED   = OrderStatus::RECEIVED;
+    public const STATUS_ACCEPTED   = OrderStatus::ACCEPTED;
+    public const STATUS_PREPARING  = OrderStatus::PREPARING;
+    public const STATUS_READY      = OrderStatus::READY;
+    public const STATUS_DELIVERING = OrderStatus::DELIVERING;
+    public const STATUS_PICKED_UP  = OrderStatus::PICKED_UP;
+    public const STATUS_COMPLETED  = OrderStatus::COMPLETED;
+    public const STATUS_REJECTED   = OrderStatus::REJECTED;
+    public const STATUS_CANCELLED  = OrderStatus::CANCELLED;
 
-    public const STATUS_LABELS = [
-        self::STATUS_RECEIVED  => 'Prijatá',
-        self::STATUS_CONFIRMED => 'Potvrdená',
-        self::STATUS_READY     => 'Pripravená',
-        self::STATUS_COMPLETED => 'Vybavená',
-        self::STATUS_CANCELLED => 'Zrušená',
-    ];
+    public const STATUS_LABELS = OrderStatus::LABEL;
 
     /**
      * Prepočíta košík podľa cien v databáze.
@@ -170,13 +170,20 @@ final class OrderService
         int $subtotal,
         int $deliveryFee,
         array $vatBreakdown,
+        int $discount = 0,
+        ?array $coupon = null,
+        ?string $zoneName = null,
     ): array {
-        $now   = date('Y-m-d H:i:s');
-        $total = $subtotal + $deliveryFee;
+        $now = date('Y-m-d H:i:s');
+        // Zľava sa odpočítava od jedla; doručenie zdarma sa už premietlo
+        // do $deliveryFee, tak sa tu neodpočítava druhýkrát.
+        $discount = max(0, min($discount, $subtotal));
+        $total    = $subtotal - $discount + $deliveryFee;
 
         return Db::transaction(static function () use (
             $pricedItems, $customer, $orderType, $paymentMethod,
-            $subtotal, $deliveryFee, $total, $vatBreakdown, $now
+            $subtotal, $deliveryFee, $total, $vatBreakdown, $now,
+            $discount, $coupon, $zoneName
         ) {
             $orderId = Db::insert('orders', [
                 'order_number'       => OrderNumber::nextOrderNumber(),
@@ -197,6 +204,9 @@ final class OrderService
                 'pickup_time'        => Validate::clean($customer['pickupTime'] ?? '', 60) ?: null,
                 'subtotal_cents'     => $subtotal,
                 'delivery_fee_cents' => $deliveryFee,
+                'discount_cents'     => $discount,
+                'coupon_code'        => $coupon !== null ? (string) $coupon['code'] : null,
+                'zone_name'          => $zoneName,
                 'total_cents'        => $total,
                 'vat_breakdown'      => $vatBreakdown ? json_encode($vatBreakdown, JSON_UNESCAPED_UNICODE) : null,
                 'customer_ip'        => Response::clientIp(),
@@ -221,7 +231,22 @@ final class OrderService
                 ]);
             }
 
+            // V tej istej transakcii — aby sa kód nevyčerpal pri objednávke,
+            // ktorá napokon nevznikla.
+            if ($coupon !== null) {
+                Coupons::markUsed((int) $coupon['id']);
+            }
+
             self::logEvent($orderId, 'created', 'Objednávka prijatá z webu');
+            Db::insert('order_status_history', [
+                'order_id'    => $orderId,
+                'from_status' => null,
+                'to_status'   => OrderStatus::RECEIVED,
+                'changed_by'  => null,
+                'actor'       => 'customer',
+                'reason'      => null,
+                'created_at'  => $now,
+            ]);
             return self::findById($orderId);
         });
     }
@@ -275,49 +300,209 @@ final class OrderService
      * Prevádzka potvrdí objednávku a nastaví, o koľko minút bude hotová.
      * @return array<string,mixed> aktualizovaná objednávka
      */
+    /**
+     * Prevádzka objednávku prijala a povedala, o koľko minút bude hotová.
+     * Zákazníkovi to hneď posielame e-mailom, tak nech je čas uložený
+     * spolu so stavom v jednej transakcii.
+     *
+     * @return array<string,mixed>
+     */
+    public static function accept(int $orderId, int $prepMinutes, ?int $userId = null): array
+    {
+        return self::transition($orderId, OrderStatus::ACCEPTED, [
+            'userId'      => $userId,
+            'actor'       => 'staff',
+            'prepMinutes' => $prepMinutes,
+        ]);
+    }
+
+    /** Staršie pomenovanie — prijatie objednávky s časom prípravy. */
     public static function confirm(int $orderId, int $prepMinutes, ?int $userId = null): array
     {
-        $prepMinutes = max(5, min(180, $prepMinutes));
-        $readyAt     = date('Y-m-d H:i:s', time() + $prepMinutes * 60);
-        Db::run(
-            'UPDATE orders SET status = ?, prep_minutes = ?, ready_at = ?, confirmed_at = ?, updated_at = ? WHERE id = ?',
-            [self::STATUS_CONFIRMED, $prepMinutes, $readyAt, date('Y-m-d H:i:s'), date('Y-m-d H:i:s'), $orderId]
-        );
-        self::logEvent($orderId, 'confirmed', "Potvrdené, hotové o " . date('H:i', strtotime($readyAt)), $userId);
-        return self::findById($orderId);
+        return self::accept($orderId, $prepMinutes, $userId);
     }
 
-    /** @return array<string,mixed> */
-    public static function setStatus(int $orderId, string $status, ?int $userId = null, ?string $detail = null): array
+    /**
+     * Jediná cesta, ako sa mení stav objednávky.
+     *
+     * Prechod, ktorý state machine nepozná, sa odmietne. Samotná zmena je
+     * podmienený UPDATE (`WHERE status = pôvodný`), takže keď dvaja
+     * pracovníci kliknú naraz, druhému sa zmena nepodarí a dozvie sa to —
+     * namiesto toho, aby objednávku potichu prepísal.
+     *
+     * Vrátená objednávka nesie kľúč `_changed` — `false` znamená, že už
+     * v cieľovom stave bola a nič sa nedialo (obsluha klikla dvakrát).
+     *
+     * @param array{userId?:int|null, actor?:string, reason?:string|null, prepMinutes?:int|null} $opts
+     * @return array<string,mixed>
+     * @throws OrderException
+     */
+    public static function transition(int $orderId, string $to, array $opts = []): array
     {
-        $fields = ['status' => $status, 'updated_at' => date('Y-m-d H:i:s')];
-        if ($status === self::STATUS_COMPLETED) {
-            $fields['completed_at'] = date('Y-m-d H:i:s');
-        }
-        if ($status === self::STATUS_CANCELLED) {
-            $fields['cancelled_at']  = date('Y-m-d H:i:s');
-            $fields['cancel_reason'] = $detail !== null ? mb_substr($detail, 0, 255) : null;
-        }
-        Db::update('orders', $fields, 'id = :id', ['id' => $orderId]);
-        self::logEvent($orderId, $status, $detail, $userId);
+        $userId      = $opts['userId'] ?? null;
+        $actor       = $opts['actor'] ?? 'system';
+        $reason      = $opts['reason'] ?? null;
+        $prepMinutes = $opts['prepMinutes'] ?? null;
 
-        // účtovný doklad prideľujeme až pri vybavení — v rade nevznikajú diery
-        if ($status === self::STATUS_COMPLETED) {
-            $current = Db::value('SELECT doc_number FROM orders WHERE id = ?', [$orderId]);
-            if (!$current) {
-                Db::run('UPDATE orders SET doc_number = ? WHERE id = ?', [OrderNumber::nextDocNumber(), $orderId]);
+        $result = Db::transaction(static function () use ($orderId, $to, $userId, $actor, $reason, $prepMinutes): array {
+            $order = Db::one(
+                'SELECT id, status, order_type, payment_method, payment_status, doc_number FROM orders WHERE id = ?',
+                [$orderId]
+            );
+            if ($order === null) {
+                throw new OrderException(ErrorCode::NOT_FOUND, 'Objednávka sa nenašla.');
+            }
+
+            $from = (string) $order['status'];
+            $type = (string) $order['order_type'];
+
+            // Rovnaký stav nie je chyba — obsluha len klikla dvakrát.
+            if ($from === $to) {
+                return ['changed' => false, 'from' => $from];
+            }
+
+            if (!OrderStatus::canTransition($from, $to, $type)) {
+                throw new OrderException(
+                    OrderStatus::isTerminal($from)
+                        ? ErrorCode::ORDER_ALREADY_HANDLED
+                        : ErrorCode::INVALID_STATUS_TRANSITION,
+                    OrderStatus::explainRefusal($from, $to, $type)
+                );
+            }
+
+            $now    = date('Y-m-d H:i:s');
+            $set    = ['status = ?', 'updated_at = ?'];
+            $params = [$to, $now];
+
+            if ($to === OrderStatus::ACCEPTED && $prepMinutes !== null) {
+                $minutes = max(5, min(180, (int) $prepMinutes));
+                $set[]    = 'prep_minutes = ?';
+                $params[] = $minutes;
+                $set[]    = 'ready_at = ?';
+                $params[] = date('Y-m-d H:i:s', time() + $minutes * 60);
+                $set[]    = 'confirmed_at = ?';
+                $params[] = $now;
+            }
+            if ($to === OrderStatus::COMPLETED) {
+                $set[]    = 'completed_at = ?';
+                $params[] = $now;
+            }
+            if ($to === OrderStatus::CANCELLED || $to === OrderStatus::REJECTED) {
+                $set[]    = 'cancelled_at = ?';
+                $params[] = $now;
+                $set[]    = 'cancel_reason = ?';
+                $params[] = $reason !== null ? mb_substr($reason, 0, 255) : null;
+            }
+
+            $params[] = $orderId;
+            $params[] = $from;   // podmienka — bráni prepísaniu cudzej zmeny
+
+            $affected = Db::run(
+                'UPDATE orders SET ' . implode(', ', $set) . ' WHERE id = ? AND status = ?',
+                $params
+            )->rowCount();
+
+            if ($affected === 0) {
+                throw new OrderException(
+                    ErrorCode::ORDER_ALREADY_HANDLED,
+                    'Objednávku medzitým spracoval niekto iný. Obnov si prehľad.'
+                );
+            }
+
+            Db::insert('order_status_history', [
+                'order_id'    => $orderId,
+                'from_status' => $from,
+                'to_status'   => $to,
+                'changed_by'  => $userId,
+                'actor'       => mb_substr($actor, 0, 20),
+                'reason'      => $reason !== null ? mb_substr($reason, 0, 255) : null,
+                'created_at'  => $now,
+            ]);
+
+            // Doklad prideľujeme až pri vybavení, aby v číselnom rade
+            // nevznikali diery po zrušených objednávkach.
+            if ($to === OrderStatus::COMPLETED && empty($order['doc_number'])) {
+                Db::run('UPDATE orders SET doc_number = ? WHERE id = ? AND doc_number IS NULL', [
+                    OrderNumber::nextDocNumber(),
+                    $orderId,
+                ]);
+            }
+
+            return ['changed' => true, 'from' => $from];
+        });
+
+        // Hotovosť je zaplatená vo chvíli prevzatia — zapíšeme to až po
+        // úspešnom prechode, nech sa platba nezaeviduje k neúspešnej zmene.
+        if ($result['changed'] && $to === OrderStatus::COMPLETED) {
+            $order = Db::one('SELECT payment_method, payment_status FROM orders WHERE id = ?', [$orderId]);
+            if ($order !== null
+                && (string) $order['payment_method'] === 'cash'
+                && (string) $order['payment_status'] !== 'paid'
+            ) {
+                self::markPaid($orderId, 'hotovosť pri prevzatí', 'cash');
             }
         }
-        return self::findById($orderId);
+
+        $fresh = self::findById($orderId);
+        if ($fresh === null) {
+            throw new OrderException(ErrorCode::NOT_FOUND, 'Objednávka sa nenašla.');
+        }
+
+        // Volajúci podľa toho vie, či má poslať zákazníkovi e-mail. Bez toho
+        // by opakovaný klik obsluhy poslal tú istú správu druhýkrát.
+        $fresh['_changed'] = $result['changed'];
+        return $fresh;
     }
 
-    public static function markPaid(int $orderId, string $reference, string $method = 'card'): void
+    /**
+     * Staršie rozhranie na zmenu stavu. Prechod sa aj tak overí.
+     *
+     * @return array<string,mixed>
+     */
+    public static function setStatus(int $orderId, string $status, ?int $userId = null, ?string $detail = null): array
     {
+        return self::transition($orderId, $status, [
+            'userId' => $userId,
+            'actor'  => $userId !== null ? 'staff' : 'system',
+            'reason' => $detail,
+        ]);
+    }
+
+    /** História stavov objednávky, od najstaršieho. @return list<array<string,mixed>> */
+    public static function statusHistory(int $orderId): array
+    {
+        return Db::all(
+            'SELECT h.*, u.name AS user_name
+             FROM order_status_history h
+             LEFT JOIN users u ON u.id = h.changed_by
+             WHERE h.order_id = ?
+             ORDER BY h.created_at, h.id',
+            [$orderId]
+        );
+    }
+
+    /**
+     * Označí objednávku ako zaplatenú.
+     *
+     * Skutočnú evidenciu vedie `Payments`; tu sa len dorovná rýchly
+     * stĺpec v `orders`, z ktorého čítajú prehľady a export.
+     *
+     * @return bool true = platba sa teraz naozaj zaevidovala
+     */
+    public static function markPaid(int $orderId, string $reference, string $method = 'card'): bool
+    {
+        $fresh = Payments::markPaid($orderId, $reference, $method);
+        if (!$fresh) {
+            return false;
+        }
+
         Db::run(
-            'UPDATE orders SET payment_status = ?, payment_reference = ?, payment_method = ?, paid_at = ?, updated_at = ? WHERE id = ?',
+            'UPDATE orders SET payment_status = ?, payment_reference = ?, payment_method = ?, paid_at = ?, updated_at = ?
+             WHERE id = ?',
             ['paid', mb_substr($reference, 0, 190), $method, date('Y-m-d H:i:s'), date('Y-m-d H:i:s'), $orderId]
         );
         self::logEvent($orderId, 'paid', "Platba prijatá ($method)");
+        return true;
     }
 
     /** Prevod objednávky do tvaru, ktorý číta frontend. */
@@ -363,6 +548,9 @@ final class OrderService
             'items'       => $items,
             'subtotal'    => Money::toFloat((int) $o['subtotal_cents']),
             'deliveryFee' => Money::toFloat((int) $o['delivery_fee_cents']),
+            'discount'    => Money::toFloat((int) ($o['discount_cents'] ?? 0)),
+            'couponCode'  => $o['coupon_code'] ?? null,
+            'zoneName'    => $o['zone_name'] ?? null,
             'total'       => Money::toFloat((int) $o['total_cents']),
             'vat'         => $o['vat'] ?? [],
         ];
