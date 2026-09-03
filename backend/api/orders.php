@@ -112,7 +112,12 @@ if ($errors !== []) {
 }
 
 /* ---------- Prepočet košíka podľa databázy ---------- */
-$priced = OrderService::priceCart($rawItems, $orderType);
+try {
+    $priced = OrderService::priceCart($rawItems, $orderType);
+} catch (OrderException $e) {
+    // Napr. nevyplnená povinná veľkosť — zákazník musí vedieť, čo doplniť.
+    $reject($e->errorCode(), $e->getMessage(), $e->fields());
+}
 if ($priced['items'] === []) {
     $reject(
         ErrorCode::PRODUCT_UNAVAILABLE,

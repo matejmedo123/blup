@@ -7,7 +7,8 @@ import { useCart } from "@/context/CartContext";
 import { useMenu } from "@/context/MenuContext";
 import { meetsMinimum, missingToMinimum } from "@/lib/cart";
 import { formatPrice } from "@/lib/format";
-import { createOrder as sendOrder, type ApiError } from "@/lib/api";
+import { createOrder as sendOrder, needsCartFix, type ApiError } from "@/lib/api";
+import { clearIdempotencyKey, idempotencyKeyFor } from "@/lib/idempotency";
 import { createLocalOrder, saveOrder } from "@/lib/order";
 import { readJSON, STORAGE_KEYS, writeJSON } from "@/lib/storage";
 import type { CustomerDetails, OrderType, PaymentMethod } from "@/lib/types";
@@ -43,6 +44,7 @@ export function Checkout() {
   const [customer, setCustomer] = useState<CustomerDetails>(EMPTY_CUSTOMER);
   const [payment, setPayment] = useState<PaymentMethod>("card");
   const [terms, setTerms] = useState(false);
+  const [coupon, setCoupon] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -114,6 +116,16 @@ export function Checkout() {
         postalCode: customer.postalCode,
       });
 
+    // Kľúč drží objednávku pri opakovanom odoslaní — pri zaseknutom
+    // spojení nevznikne druhá rovnaká.
+    const idempotencyKey = idempotencyKeyFor({
+      items,
+      customer,
+      orderType,
+      paymentMethod: payment,
+      coupon,
+    });
+
     try {
       const result = await sendOrder({
         items,
@@ -121,11 +133,14 @@ export function Checkout() {
         orderType,
         paymentMethod: payment,
         termsAccepted: terms,
+        coupon: coupon.trim() || undefined,
+        idempotencyKey,
       });
 
       saveOrder(result.order, result.token);
       rememberCustomer();
       clear();
+      clearIdempotencyKey();
 
       // platba kartou → presmerovanie na platobnú bránu
       if (result.checkoutUrl) {
@@ -148,10 +163,14 @@ export function Checkout() {
         return;
       }
 
-      // server odmietol objednávku (zatvorené, pod minimom, vypredané…)
+      // Server odmietol objednávku (zatvorené, pod minimom, vypredané…).
+      // Podľa kódu vieme, kam zákazníka poslať ďalej.
       if (api.status >= 400 && api.status < 500) {
         setServerError(api.message);
         setSubmitting(false);
+        if (needsCartFix(api.code)) {
+          openCart();
+        }
         return;
       }
 
@@ -352,6 +371,54 @@ export function Checkout() {
             {/* 4 — platba */}
             <Step number="04" title="Platba">
               <PaymentSelector value={payment} onChange={setPayment} allowed={payments} />
+
+              {/* Zľavový kód overuje server až pri odoslaní — tu ho len zbierame. */}
+              <div className="mt-5">
+                <label
+                  htmlFor="coupon"
+                  className="block text-[0.72rem] font-bold tracking-[0.14em] text-ink/45 uppercase"
+                >
+                  Zľavový kód
+                </label>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    id="coupon"
+                    name="coupon"
+                    type="text"
+                    inputMode="text"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    value={coupon}
+                    onChange={(e) => setCoupon(e.target.value.toUpperCase())}
+                    placeholder="Máš kód? Zadaj ho sem"
+                    aria-invalid={errors.coupon ? true : undefined}
+                    className={cn(
+                      "h-12 min-w-0 flex-1 rounded-xl border-2 bg-white px-4 text-[0.95rem] tracking-[0.08em] uppercase outline-none transition-colors",
+                      errors.coupon
+                        ? "border-burgundy"
+                        : "border-ink/10 focus:border-burgundy",
+                    )}
+                  />
+                  {coupon !== "" && (
+                    <button
+                      type="button"
+                      onClick={() => setCoupon("")}
+                      className="h-12 shrink-0 rounded-xl px-4 text-[0.75rem] font-bold tracking-[0.1em] text-ink/50 uppercase hover:text-burgundy"
+                    >
+                      Zrušiť
+                    </button>
+                  )}
+                </div>
+                {errors.coupon ? (
+                  <p role="alert" className="mt-2 text-xs font-semibold text-burgundy">
+                    ▲ {errors.coupon}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[0.75rem] text-ink/45">
+                    Zľavu prepočítame pri odoslaní objednávky.
+                  </p>
+                )}
+              </div>
             </Step>
 
             {/* Súhlas + odoslanie */}

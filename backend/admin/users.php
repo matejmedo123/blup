@@ -60,6 +60,7 @@ flash_render();
 ?>
 <div class="page-head">
   <div><p class="eyebrow">Prístupy</p><h1>Používatelia</h1></div>
+  <a class="btn btn-ghost" href="audit.php">Denník zmien</a>
 </div>
 
 <div class="alert alert-info">

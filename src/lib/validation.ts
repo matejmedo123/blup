@@ -1,6 +1,12 @@
 import type { CustomerDetails, OrderType } from "./types";
 
-export type FieldErrors = Partial<Record<keyof CustomerDetails | "terms", string>>;
+/**
+ * Chyby polí vo formulári. Okrem údajov zákazníka sem patrí súhlas
+ * s podmienkami a zľavový kód — oba odmieta server, nie klient.
+ */
+export type FieldErrors = Partial<
+  Record<keyof CustomerDetails | "terms" | "coupon", string>
+>;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 // SK/CZ mobil aj pevná linka, s medzerami alebo bez

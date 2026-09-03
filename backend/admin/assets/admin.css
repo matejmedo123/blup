@@ -274,3 +274,24 @@ table.data tr:last-child td { border-bottom: 0; }
 .statusbar #lastUpdate { margin-left: auto; }
 /* Na telefóne je vysvetľujúca veta navyše — obsluha ju už pozná. */
 @media (max-width: 640px) { .refresh-note { display: none; } }
+
+/* ---------- Prehľad prevádzky ---------- */
+.stats { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 900px) { .stats { grid-template-columns: repeat(4, 1fr); } }
+.stat {
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; display: flex; flex-direction: column; gap: 4px;
+}
+.stat-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.stat-value { font-size: 24px; font-weight: 800; color: var(--burgundy); font-variant-numeric: tabular-nums; line-height: 1.1; }
+@media (min-width: 700px) { .stat-value { font-size: 28px; } }
+
+/* Stĺpcový graf bez knižnice — pár divov spraví tú istú prácu. */
+.chart { display: flex; align-items: flex-end; gap: 4px; height: 150px; overflow-x: auto; }
+.chart-col { flex: 1 1 0; min-width: 22px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.chart-bar { width: 100%; background: var(--burgundy); border-radius: 4px 4px 0 0; min-height: 2px; }
+.chart-label { font-size: 9.5px; color: var(--muted); margin-top: 5px; white-space: nowrap; }
+
+/* Na telefóne sa nezmestí všetko — vedľajšie stĺpce tabuliek skryjeme,
+   namiesto vodorovného posúvania celej stránky. */
+@media (max-width: 640px) { .hide-sm { display: none; } }

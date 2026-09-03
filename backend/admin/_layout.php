@@ -12,6 +12,7 @@ function layout_start(string $title, string $active = '', ?array $user = null): 
     // by inak klikala na odkazy, ktoré ju odpália na 403.
     $nav = [
         'dashboard'  => ['dashboard.php',  'Objednávky',   null],
+        'analytics'  => ['analytics.php',  'Prehľad',      'accounting.view'],
         'menu'       => ['menu.php',       'Menu',         'menu.edit'],
         'settings'   => ['settings.php',   'Nastavenia',   'settings.edit'],
         'accounting' => ['accounting.php', 'Účtovníctvo',  'accounting.view'],
@@ -29,7 +30,7 @@ function layout_start(string $title, string $active = '', ?array $user = null): 
 <meta name="robots" content="noindex, nofollow">
 <title><?= htmlspecialchars($title) ?> · ENZO admin</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/admin.css?v=3">
+<link rel="stylesheet" href="assets/admin.css?v=4">
 </head>
 <body>
 <header class="topbar no-print">

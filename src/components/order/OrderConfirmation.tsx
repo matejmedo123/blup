@@ -26,20 +26,33 @@ type State =
   | { status: "empty" }
   | { status: "ready"; order: Order; live: boolean };
 
-/** Poradie krokov, ktoré vidí zákazník. */
-const STEPS: { key: OrderStatus; label: (isPickup: boolean) => string }[] = [
-  { key: "received", label: () => "Objednávka prijatá" },
-  { key: "confirmed", label: () => "Pripravujeme" },
-  { key: "ready", label: (p) => (p ? "Pripravené na odber" : "Na ceste k tebe") },
-  { key: "completed", label: () => "Vybavené" },
+/**
+ * Poradie krokov, ktoré vidí zákazník.
+ *
+ * Stavov je na serveri viac než krokov — zákazníka nezaujíma rozdiel
+ * medzi „prijatá“ a „na platni“, chce vedieť, či sa to už robí.
+ */
+const STEPS: { key: OrderStatus; covers: OrderStatus[]; label: (isPickup: boolean) => string }[] = [
+  { key: "received", covers: ["received"], label: () => "Objednávka prijatá" },
+  { key: "preparing", covers: ["accepted", "preparing"], label: () => "Pripravujeme" },
+  {
+    key: "ready",
+    covers: ["ready", "delivering"],
+    label: (p) => (p ? "Pripravené na odber" : "Na ceste k tebe"),
+  },
+  { key: "completed", covers: ["picked_up", "completed"], label: () => "Vybavené" },
 ];
 
 /** Nadpis potvrdenia sa mení podľa toho, kde objednávka práve je. */
 const HEADLINE: Record<OrderStatus, [string, string]> = {
   received: ["Objednávka", "prijatá!"],
-  confirmed: ["Už to", "pripravujeme!"],
+  accepted: ["Objednávka", "potvrdená!"],
+  preparing: ["Už to", "pripravujeme!"],
   ready: ["Hotovo —", "je pripravená!"],
+  delivering: ["Kuriér", "je na ceste!"],
+  picked_up: ["Objednávka", "odovzdaná"],
   completed: ["Objednávka", "vybavená"],
+  rejected: ["Objednávka", "odmietnutá"],
   cancelled: ["Objednávka", "zrušená"],
 };
 
@@ -134,8 +147,8 @@ export function OrderConfirmation() {
   const c = order.customer;
   const isPickup = order.orderType === "pickup";
   const readyTime = formatReadyTime(order.readyAt);
-  const currentStep = STEPS.findIndex((s) => s.key === order.status);
-  const cancelled = order.status === "cancelled";
+  const currentStep = STEPS.findIndex((s) => s.covers.includes(order.status));
+  const cancelled = order.status === "cancelled" || order.status === "rejected";
 
   return (
     <>
@@ -374,9 +387,27 @@ export function OrderConfirmation() {
                     <dt className="text-ink/60">Medzisúčet</dt>
                     <dd className="font-semibold tabular-nums">{formatPrice(order.subtotal)}</dd>
                   </div>
+                  {(order.discount ?? 0) > 0 && (
+                    <div className="flex justify-between text-burgundy">
+                      <dt>
+                        Zľava
+                        {order.couponCode ? (
+                          <span className="ml-1.5 rounded bg-burgundy/10 px-1.5 py-0.5 text-[0.7rem] font-bold tracking-[0.08em] uppercase">
+                            {order.couponCode}
+                          </span>
+                        ) : null}
+                      </dt>
+                      <dd className="font-semibold tabular-nums">
+                        −{formatPrice(order.discount ?? 0)}
+                      </dd>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <dt className="text-ink/60">
                       {order.orderType === "delivery" ? "Doručenie" : "Osobný odber"}
+                      {order.zoneName ? (
+                        <span className="ml-1.5 text-[0.8rem] text-ink/40">{order.zoneName}</span>
+                      ) : null}
                     </dt>
                     <dd className="font-semibold tabular-nums">
                       {order.deliveryFee === 0 ? "Zdarma" : formatPrice(order.deliveryFee)}

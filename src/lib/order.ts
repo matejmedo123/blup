@@ -108,18 +108,26 @@ export function clearLastOrder(): void {
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   received: "OBJEDNÁVKA PRIJATÁ",
-  confirmed: "PRIPRAVUJEME",
+  accepted: "POTVRDENÁ",
+  preparing: "PRIPRAVUJEME",
   ready: "PRIPRAVENÉ",
+  delivering: "NA CESTE",
+  picked_up: "VYZDVIHNUTÉ",
   completed: "VYBAVENÉ",
+  rejected: "ODMIETNUTÉ",
   cancelled: "ZRUŠENÉ",
 };
 
 /** Krátky popis pod stavom — čo sa práve deje. */
 export const ORDER_STATUS_HINT: Record<OrderStatus, string> = {
   received: "Čakáme, kým prevádzka potvrdí čas prípravy.",
-  confirmed: "Objednávka je na platni.",
-  ready: "Hotovo — vyzdvihni si ju alebo už je na ceste.",
+  accepted: "Prevádzka objednávku prijala a už ju chystá.",
+  preparing: "Objednávka je na platni.",
+  ready: "Hotovo — vyzdvihni si ju alebo o chvíľu vyrazí kuriér.",
+  delivering: "Kuriér je na ceste k tebe.",
+  picked_up: "Objednávku sme odovzdali. Dobrú chuť!",
   completed: "Objednávka je vybavená. Dobrú chuť!",
+  rejected: "Prevádzka objednávku nestihla prijať. Peniaze ti nestrhli.",
   cancelled: "Objednávka bola zrušená.",
 };
 

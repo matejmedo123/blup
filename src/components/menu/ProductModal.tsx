@@ -55,9 +55,16 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
   }, [onClose]);
 
   const extras = useMemo(() => product.extras ?? [], [product.extras]);
+  const groups = useMemo(() => product.modifierGroups ?? [], [product.modifierGroups]);
+
+  /** Všetky voliteľné veci dokopy — skupiny aj voľné doplnky. */
+  const allOptions = useMemo(
+    () => [...groups.flatMap((g) => g.options), ...extras],
+    [groups, extras],
+  );
   const chosen = useMemo(
-    () => extras.filter((e) => selected.includes(e.id)),
-    [extras, selected],
+    () => allOptions.filter((e) => selected.includes(e.id)),
+    [allOptions, selected],
   );
   const unitPrice = round2(
     product.price + chosen.reduce((sum, e) => sum + e.price, 0),
@@ -65,8 +72,48 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
   const total = round2(unitPrice * quantity);
   const soldOut = product.available === false;
 
+  /**
+   * Skupina, ktorá ešte nie je vyplnená. To isté kontroluje server —
+   * tu to je preto, aby sa zákazník nedozvedel o chybe až po odoslaní.
+   */
+  const missingGroup = useMemo(
+    () =>
+      groups.find((g) => {
+        const count = g.options.filter((o) => selected.includes(o.id)).length;
+        const min = g.required ? Math.max(1, g.minSelect) : g.minSelect;
+        return count < min;
+      }) ?? null,
+    [groups, selected],
+  );
+
+  const countIn = (group: (typeof groups)[number]) =>
+    group.options.filter((o) => selected.includes(o.id)).length;
+
   const toggle = (id: string) =>
     setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+
+  /**
+   * Voľba v skupine. Keď skupina dovolí len jednu možnosť, výber sa
+   * správa ako prepínač — kliknutie na druhú tú prvú odznačí.
+   */
+  const selectInGroup = (group: (typeof groups)[number], id: string) => {
+    setSelected((cur) => {
+      const ids = group.options.map((o) => o.id);
+      const isOn = cur.includes(id);
+      const single = group.maxSelect === 1;
+
+      if (isOn) {
+        // Povinnú skupinu s jedinou voľbou nedáva zmysel odznačiť.
+        if (single && group.required) return cur;
+        return cur.filter((x) => x !== id);
+      }
+      const cleared = single ? cur.filter((x) => !ids.includes(x)) : cur;
+      if (group.maxSelect > 0 && cleared.filter((x) => ids.includes(x)).length >= group.maxSelect) {
+        return cleared;
+      }
+      return [...cleared, id];
+    });
+  };
 
   return (
     <div className="no-print fixed inset-0 z-[80]" role="presentation">
@@ -141,6 +188,90 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
                 <p className="mt-4 font-display text-[1.4rem] leading-none text-burgundy tabular-nums">
                   {formatPrice(product.price)}
                 </p>
+
+                {/* Varianty s pravidlami — veľkosť, počet omáčok a podobne. */}
+                {groups.map((group) => {
+                  const count = countIn(group);
+                  const single = group.maxSelect === 1;
+                  const min = group.required ? Math.max(1, group.minSelect) : group.minSelect;
+                  // Pri jednej voľbe sa ostatné možnosti nesmú zamknúť —
+                  // kliknutie na inú má veľkosť prepnúť, nie ju uväzniť.
+                  const full = !single && group.maxSelect > 0 && count >= group.maxSelect;
+
+                  return (
+                    <fieldset key={group.id} className="mt-7">
+                      <legend className="eyebrow text-ink/55">
+                        {group.name}{" "}
+                        <span className="font-normal normal-case tracking-normal text-ink/35">
+                          {group.required
+                            ? single
+                              ? "(vyber si jednu)"
+                              : `(vyber aspoň ${min})`
+                            : group.maxSelect > 0
+                              ? `(najviac ${group.maxSelect})`
+                              : "(voliteľné)"}
+                        </span>
+                      </legend>
+                      {group.hint && (
+                        <p className="mt-1 text-[0.82rem] text-ink/45">{group.hint}</p>
+                      )}
+
+                      <div className="mt-3 flex flex-col gap-2">
+                        {group.options.map((option) => {
+                          const isOn = selected.includes(option.id);
+                          const blocked = !isOn && full;
+                          return (
+                            <label
+                              key={option.id}
+                              className={cn(
+                                "flex items-center gap-3 rounded-xl border-2 bg-white px-4 py-3 transition-colors",
+                                isOn
+                                  ? "border-burgundy bg-burgundy/5"
+                                  : blocked
+                                    ? "cursor-not-allowed border-ink/8 opacity-45"
+                                    : "cursor-pointer border-ink/10 hover:border-ink/25",
+                              )}
+                            >
+                              <input
+                                type={single ? "radio" : "checkbox"}
+                                name={`group-${group.id}`}
+                                checked={isOn}
+                                disabled={blocked}
+                                onChange={() => selectInGroup(group, option.id)}
+                                className="sr-only"
+                              />
+                              <span
+                                aria-hidden
+                                className={cn(
+                                  "flex h-6 w-6 shrink-0 items-center justify-center border-2 transition-colors",
+                                  single ? "rounded-full" : "rounded-md",
+                                  isOn
+                                    ? "border-burgundy bg-burgundy text-cream"
+                                    : "border-ink/20 bg-white",
+                                )}
+                              >
+                                {isOn &&
+                                  (single ? (
+                                    <span className="h-2.5 w-2.5 rounded-full bg-cream" />
+                                  ) : (
+                                    <CheckIcon className="h-3.5 w-3.5" strokeWidth={3} />
+                                  ))}
+                              </span>
+                              <span className="flex-1 text-[0.92rem] font-semibold text-ink">
+                                {option.name}
+                              </span>
+                              {option.price > 0 && (
+                                <span className="font-sans text-[0.88rem] font-bold text-burgundy tabular-nums">
+                                  +{formatPrice(option.price)}
+                                </span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  );
+                })}
 
                 {extras.length > 0 && (
                   <fieldset className="mt-7">
@@ -225,16 +356,18 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
               <button
                 type="button"
                 onClick={() => onAdd(product, chosen, quantity, note)}
-                disabled={soldOut}
+                disabled={soldOut || missingGroup !== null}
                 className={cn(
                   "flex h-13 flex-1 items-center justify-center gap-1.5 rounded-full px-3 font-sans text-[0.75rem] font-extrabold tracking-[0.08em] uppercase transition-colors sm:h-14 sm:gap-2 sm:px-4 sm:text-[0.85rem] sm:tracking-[0.1em]",
-                  soldOut
+                  soldOut || missingGroup !== null
                     ? "cursor-not-allowed bg-ink/12 text-ink/45"
                     : "bg-burgundy text-cream hover:bg-burgundy-700 active:bg-burgundy-800",
                 )}
               >
                 {soldOut ? (
                   <span>Momentálne vypredané</span>
+                ) : missingGroup !== null ? (
+                  <span>Vyber {missingGroup.name.toLowerCase()}</span>
                 ) : (
                   <>
                     <span>

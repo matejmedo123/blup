@@ -98,6 +98,12 @@ export function PrintableReceipt({ order }: { order: Order }) {
       <Divider />
 
       <Row label="Medzisúčet" value={formatPriceCompact(order.subtotal)} />
+      {(order.discount ?? 0) > 0 && (
+        <Row
+          label={order.couponCode ? `Zľava ${order.couponCode}` : "Zľava"}
+          value={`-${formatPriceCompact(order.discount ?? 0)}`}
+        />
+      )}
       <Row
         label={order.orderType === "delivery" ? "Doručenie" : "Osobný odber"}
         value={order.deliveryFee === 0 ? "0.00 €" : formatPriceCompact(order.deliveryFee)}

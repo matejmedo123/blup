@@ -35,4 +35,5 @@ export const STORAGE_KEYS = {
   lastOrder: "enzo.lastOrder.v1",
   orderCounter: "enzo.orderCounter.v1",
   checkout: "enzo.checkoutDraft.v1",
+  idempotency: "enzo.idempotency.v1",
 } as const;
