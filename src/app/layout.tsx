@@ -3,6 +3,7 @@ import { Alfa_Slab_One, Archivo, Archivo_Black } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
 import { MenuProvider } from "@/context/MenuContext";
 import { Header } from "@/components/layout/Header";
+import { ClosedBanner } from "@/components/ui/ClosedBanner";
 import { Footer } from "@/components/layout/Footer";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { MobileOrderBar } from "@/components/cart/MobileOrderBar";
@@ -144,6 +145,8 @@ export default function RootLayout({
             Preskočiť na obsah
           </a>
           <Header />
+          {/* Zatvorené hlásime hneď pod hlavičkou, na každej stránke. */}
+          <ClosedBanner />
           <main id="obsah">{children}</main>
           <Footer />
           <CartDrawer />

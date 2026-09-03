@@ -9,8 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { CATEGORIES as STATIC_CATEGORIES, PRODUCTS as STATIC_PRODUCTS } from "@/lib/products";
-import { fetchMenu, fetchSettings, type ShopSettings } from "@/lib/api";
-import { ORDER_CONFIG } from "@/lib/config";
+import { fetchMenu, fetchSettings, type DeliveryZone, type ShopSettings } from "@/lib/api";
+import { ORDER_CONFIG, RESTAURANT } from "@/lib/config";
 import type { Category, CategoryId, Product } from "@/lib/types";
 
 /**
@@ -34,6 +34,15 @@ interface MenuContextValue {
     closedMessage: string;
   };
   payments: { cash: boolean; card: boolean };
+  /** Obce, kam sa rozváža. Prázdne = rozvoz sa podľa obce neobmedzuje. */
+  zones: DeliveryZone[];
+  /**
+   * Či sa práve dá objednať. Rozhoduje server podľa otváracích hodín —
+   * web to len zobrazuje, aby zákazník neplnil košík nadarmo.
+   */
+  open: { now: boolean; reason: string; opensAt: string | null };
+  /** Otváracie hodiny na zobrazenie. */
+  hours: { days: string; time: string }[];
 }
 
 const FALLBACK_SETTINGS: MenuContextValue["settings"] = {
@@ -54,6 +63,11 @@ export function MenuProvider({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [payments, setPayments] = useState({ cash: true, card: false });
+  const [zones, setZones] = useState<DeliveryZone[]>([]);
+  const [hours, setHours] = useState<{ days: string; time: string }[]>(() => RESTAURANT.hours.map((h) => ({ ...h })));
+  // Kým sa neozve server, tvárime sa otvorene — objednávku aj tak
+  // nakoniec posúdi on, a zbytočná hláška „zatvorené“ by len odohnala ľudí.
+  const [open, setOpen] = useState({ now: true, reason: "", opensAt: null as string | null });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -80,6 +94,15 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           prepTimeDelivery: shop.order.prepTimeDelivery,
         });
         setPayments(shop.payments);
+        setZones(shop.zones ?? []);
+        if (shop.hours && shop.hours.length > 0) {
+          setHours(shop.hours);
+        }
+        setOpen({
+          now: shop.open?.now ?? true,
+          reason: shop.open?.reason ?? "",
+          opensAt: shop.open?.opensAt ?? null,
+        });
         setLive(true);
       } catch {
         // backend nedostupný — ostávame na statickej kópii
@@ -106,8 +129,11 @@ export function MenuProvider({ children }: { children: ReactNode }) {
       live,
       settings,
       payments,
+      zones,
+      open,
+      hours,
     };
-  }, [categories, products, live, settings, payments]);
+  }, [categories, products, live, settings, payments, zones, open, hours]);
 
   return <MenuContext.Provider value={value}>{children}</MenuContext.Provider>;
 }

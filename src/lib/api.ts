@@ -130,7 +130,24 @@ export interface ShopSettings {
   };
   payments: { cash: boolean; card: boolean };
   hours: { days: string; time: string }[];
-  zones: string[];
+  /** Obce, kam sa rozváža — každá s vlastným poplatkom a minimom. */
+  zones: DeliveryZone[];
+  /** Či sa práve dá objednať, a ak nie, prečo. */
+  open: {
+    now: boolean;
+    reason: string;
+    code: string;
+    opensAt: string | null;
+    closesAt: string | null;
+  };
+}
+
+export interface DeliveryZone {
+  name: string;
+  fee: number;
+  minOrder: number;
+  freeFrom: number | null;
+  etaMinutes: number;
 }
 
 export function fetchSettings(signal?: AbortSignal): Promise<ShopSettings> {

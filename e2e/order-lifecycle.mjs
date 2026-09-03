@@ -62,6 +62,40 @@ async function main() {
   admin.on("dialog", (d) => d.accept());
 
   try {
+  /**
+   * Pridá položku z karty do košíka. Keď má položka povinný variant
+   * (napr. veľkosť), vyberie prvú možnosť — inak sa pridať nedá.
+   */
+  const addToCart = async (index) => {
+    const button = page.locator("#menu article").nth(index)
+      .getByRole("button", { name: /pridať|prispôsobiť/i });
+    if ((await button.count()) === 0 || (await button.isDisabled())) return false;
+
+    await button.click();
+    await wait(500);
+
+    const modal = page.getByRole("dialog");
+    if ((await modal.count()) === 0) return true;   // pridalo sa priamo z karty
+
+    const cta = modal.getByRole("button").last();
+    if (await cta.isDisabled()) {
+      const option = modal.locator('input[name^="group-"]').first();
+      if ((await option.count()) > 0) {
+        await option.locator("..").click();
+        await wait(300);
+      }
+    }
+    if (await cta.isDisabled()) {
+      // Vypredané alebo iné pravidlo — modal zavrieme a ideme ďalej.
+      await page.keyboard.press("Escape");
+      await wait(300);
+      return false;
+    }
+    await cta.click();
+    await wait(500);
+    return true;
+  };
+
     /* ---------------------------------------------------------------- */
     step("1. Zákazník si prezerá menu na mobile");
 
@@ -82,24 +116,8 @@ async function main() {
     step("2. Vloží položky do košíka");
 
     // Toľko, aby sme prebili minimálnu objednávku
-    for (let i = 0; i < 3; i++) {
-      const card = page.locator("#menu article").nth(i);
-      const button = card.getByRole("button", { name: /pridať|prispôsobiť/i });
-      if ((await button.count()) === 0 || (await button.isDisabled())) continue;
-      await button.click();
-      await wait(500);
-
-      const modal = page.getByRole("dialog");
-      if (await modal.count()) {
-        const cta = modal.getByRole("button").last();
-        if (await cta.isDisabled()) {
-          // Povinná skupina (napr. veľkosť) — vyberieme prvú možnosť.
-          await modal.locator('input[name^="group-"]').first().locator("..").click();
-          await wait(250);
-        }
-        await cta.click();
-        await wait(500);
-      }
+    for (let i = 0; i < 4; i++) {
+      await addToCart(i);
     }
 
     await page.getByRole("button", { name: /košík/i }).first().click();
@@ -221,7 +239,80 @@ async function main() {
     ok(historyText.includes(orderNumber), "vybavená objednávka je v histórii");
 
     /* ---------------------------------------------------------------- */
-    step("9. Bez chýb v prehliadači");
+    step("9. Rozvoz: obec sa vyberá zo zón a poplatok je vidieť dopredu");
+
+    // Košík je po objednávke prázdny — pokladňa bez položiek zobrazí
+    // „Košík je prázdny“, tak doň najprv niečo dáme.
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await wait(1200);
+    for (let i = 0; i < 3; i++) {
+      await addToCart(i);
+    }
+
+    await page.goto(`${BASE}/pokladna/`, { waitUntil: "networkidle" });
+    await wait(1200);
+
+    const deliveryRadio = page.getByRole("radio", { name: /doručenie/i });
+    if ((await deliveryRadio.count()) > 0) {
+      await deliveryRadio.click();
+      await wait(600);
+
+      const citySelect = page.locator("select#city");
+      const hasZones = (await citySelect.count()) > 0;
+      ok(hasZones, "obec je zoznam, nie voľný text");
+
+      if (hasZones) {
+        const options = await citySelect.locator("option").evaluateAll((n) =>
+          n.map((o) => o.textContent.trim()).filter((t) => !t.startsWith("—")),
+        );
+        ok(options.length > 0, `v zozname sú obce (${options.length})`);
+        ok(
+          options.some((o) => /€|zdarma/i.test(o)),
+          "pri obci je vidieť poplatok",
+          options.slice(0, 2).join(" | "),
+        );
+
+        await citySelect.selectOption({ index: 1 });
+        await wait(400);
+        const hint = await page.locator("#city").locator("..").locator("..").innerText();
+        ok(/doručenie|zdarma/i.test(hint), "po výbere obce sa ukáže poplatok a čas");
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
+    step("10. Zatvorená prevádzka: web to povie a nepustí do pokladne");
+
+    // Zavrieme prevádzku priamo v admine a pozrieme sa, čo urobí web.
+    await admin.goto(`${BASE}/admin/hours.php`, { waitUntil: "networkidle" });
+    const today = new Date().getDay() === 0 ? 7 : new Date().getDay();
+    const todayToggle = admin.locator(`input[name="day[${today}][is_open]"]`);
+    ok((await todayToggle.count()) > 0, "admin má prepínač pre dnešný deň");
+    if (await todayToggle.isChecked()) await todayToggle.uncheck();
+    await admin.getByRole("button", { name: /uložiť hodiny/i }).click();
+    await admin.waitForURL("**/hours.php*", { timeout: 15000 });
+    // Nastavenia sú 5 s v cache prehliadača — počkáme, kým vyprší.
+    await wait(6000);
+
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await wait(1800);
+    const closedText = await page.locator("body").innerText();
+    ok(/neprijímame objednávky/i.test(closedText), "na webe je vidieť, že je zatvorené");
+
+    // A vrátime to, nech ostane inštancia použiteľná.
+    await admin.goto(`${BASE}/admin/hours.php`, { waitUntil: "networkidle" });
+    const back = admin.locator(`input[name="day[${today}][is_open]"]`);
+    if (!(await back.isChecked())) await back.check();
+    await admin.getByRole("button", { name: /uložiť hodiny/i }).click();
+    await admin.waitForURL("**/hours.php*", { timeout: 15000 });
+    await wait(6000);
+
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await wait(1800);
+    const reopened = await page.locator("body").innerText();
+    ok(!/neprijímame objednávky/i.test(reopened), "po otvorení hláška zmizne");
+
+    /* ---------------------------------------------------------------- */
+    step("11. Bez chýb v prehliadači");
     ok(jsErrors.length === 0, "žiadne chyby v konzole", jsErrors.join(" | "));
   } finally {
     await browser.close();

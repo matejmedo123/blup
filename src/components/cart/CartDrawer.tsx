@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useCart } from "@/context/CartContext";
+import { useMenu } from "@/context/MenuContext";
 import { meetsMinimum, missingToFreeDelivery, missingToMinimum } from "@/lib/cart";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,11 @@ export function CartDrawer() {
       window.clearTimeout(t);
     };
   }, [isCartOpen, closeCart]);
+
+  const { open, live } = useMenu();
+  // Keď je zatvorené, nemá zmysel posielať zákazníka do pokladne —
+  // server by objednávku aj tak odmietol.
+  const closed = live && !open.now;
 
   const belowMinimum = !meetsMinimum(subtotal, rules);
   const toFree = missingToFreeDelivery(subtotal, rules);
@@ -196,7 +202,14 @@ export function CartDrawer() {
               </div>
             </dl>
 
-            {belowMinimum && (
+            {closed && (
+              <p role="status" className="mt-3 rounded-xl bg-ink/8 px-4 py-3 text-[0.8rem] text-ink/75">
+                <strong>Teraz neprijímame objednávky.</strong>{" "}
+                {open.reason} Košík ti zostane, nemusíš ho plniť odznova.
+              </p>
+            )}
+
+            {!closed && belowMinimum && (
               <p role="status" className="mt-3 rounded-xl bg-burgundy/8 px-4 py-3 text-[0.8rem] text-burgundy">
                 Minimálna objednávka je{" "}
                 <strong className="tabular-nums">{formatPrice(rules.minOrder)}</strong>. Pridaj
@@ -207,11 +220,11 @@ export function CartDrawer() {
             <button
               type="button"
               onClick={goToCheckout}
-              disabled={belowMinimum}
+              disabled={belowMinimum || closed}
               className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-burgundy font-sans text-[0.85rem] font-extrabold tracking-[0.14em] text-cream uppercase transition-colors hover:bg-burgundy-700 disabled:cursor-not-allowed disabled:bg-ink/20 disabled:text-ink/45"
             >
-              Pokladňa
-              <ArrowIcon className="h-4.5 w-4.5" />
+              {closed ? "Teraz zatvorené" : "Pokladňa"}
+              {!closed && <ArrowIcon className="h-4.5 w-4.5" />}
             </button>
           </div>
         )}

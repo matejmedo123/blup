@@ -85,7 +85,11 @@ export interface SelectFieldProps extends Omit<SelectHTMLAttributes<HTMLSelectEl
   error?: string;
   hint?: string;
   wrapperClassName?: string;
-  options: string[];
+  /**
+   * Buď rovno texty, alebo hodnota s inou nálepkou — napr. obec „Ludanice“
+   * s nálepkou „Ludanice — 2,50 €“.
+   */
+  options: (string | { value: string; label: string })[];
   placeholder?: string;
 }
 
@@ -118,11 +122,15 @@ export function SelectField({
           {...props}
         >
           {placeholder && <option value="">{placeholder}</option>}
-          {options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
+          {options.map((o) => {
+            const value = typeof o === "string" ? o : o.value;
+            const label = typeof o === "string" ? o : o.label;
+            return (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            );
+          })}
         </select>
         <span
           aria-hidden

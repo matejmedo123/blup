@@ -4,10 +4,13 @@ require __DIR__ . '/_bootstrap.php';
 
 Response::cors((array) cfg('security.allowed_origins', []));
 Response::requireMethod('GET');
-header('Cache-Control: public, max-age=30');
+// Nastavenia sa menia zriedka, ale stav otvorené/zatvorené na kliknutie —
+// päť sekúnd ušetrí väčšinu dotazov a zmena je aj tak takmer okamžite vidieť.
+header('Cache-Control: public, max-age=5');
 
 try {
     $stripe = (array) cfg('payments.stripe', []);
+    $status = OpeningHours::status();
     Response::ok([
         'shop' => [
             'name'       => Settings::get('shop_name'),
@@ -39,8 +42,17 @@ try {
             'cash' => (bool) cfg('payments.cash_enabled', true),
             'card' => (bool) ($stripe['enabled'] ?? false) && ($stripe['secret_key'] ?? '') !== '',
         ],
-        'hours' => Settings::hours(),
-        'zones' => Settings::zones(),
+        // Hodiny aj zóny berieme z tabuliek, ktoré systém naozaj vynucuje —
+        // aby web nesľuboval niečo iné, než potom pri objednávke platí.
+        'hours' => OpeningHours::grouped(),
+        'zones' => DeliveryZones::publicList(),
+        'open'  => [
+            'now'      => $status['open'],
+            'reason'   => $status['reason'],
+            'code'     => $status['code'],
+            'opensAt'  => $status['opensAt'],
+            'closesAt' => $status['closesAt'],
+        ],
     ]);
 } catch (Throwable $e) {
     error_log('settings.php: ' . $e->getMessage());

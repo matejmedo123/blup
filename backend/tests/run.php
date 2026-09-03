@@ -408,4 +408,61 @@ is(AuditLog::count(), $before + 1, 'zmena na tú istú hodnotu sa nezapisuje');
 $last = AuditLog::recent(1)[0];
 ok(str_contains((string) $last['summary'], '8,90 € → 9,90 €'), 'v zázname je pôvodná aj nová hodnota');
 
+/* ══════════════════════════════════════════════════════════════════ */
+describe('Zóny riadia poplatok aj minimum');
+/* ══════════════════════════════════════════════════════════════════ */
+
+// Vzdialenejšia obec s vyšším poplatkom a vyšším minimom
+Db::insert('delivery_zones', [
+    'name' => 'Topoľčany-test', 'postal_codes' => '955 01',
+    'fee_cents' => 400, 'min_order_cents' => 2000, 'free_from_cents' => 5000,
+    'eta_minutes' => 60, 'is_active' => 1, 'position' => 99,
+]);
+
+$near = DeliveryZones::match('Koniarovce', '');
+$far  = DeliveryZones::match('Topoľčany-test', '');
+
+is(DeliveryZones::feeFor($far, 1000), 400, 'vzdialená obec má vlastný poplatok');
+is(DeliveryZones::minOrderFor($far), 2000, 'aj vlastné minimum');
+is(DeliveryZones::feeFor($far, 5000), 0, 'nad hranicou zóny je aj tam zdarma');
+is(DeliveryZones::feeFor($far, 4999), 400, 'o cent nižšie sa ešte platí');
+is(DeliveryZones::minOrderFor($near), Settings::cents('min_order'), 'zóna bez vlastného minima berie celoplošné');
+is($zoneName('Topoľčany-test', '955 01'), 'Topoľčany-test', 'zóna sa nájde aj podľa PSČ');
+
+Db::run('DELETE FROM delivery_zones WHERE name = ?', ['Topoľčany-test']);
+
+/* ══════════════════════════════════════════════════════════════════ */
+describe('Vypnutá zóna sa neponúka');
+/* ══════════════════════════════════════════════════════════════════ */
+
+Db::run('UPDATE delivery_zones SET is_active = 0 WHERE name = ?', ['Chrabrany']);
+is($zoneName('Chrabrany'), null, 'vypnutá obec sa nenájde');
+ok(
+    !in_array('Chrabrany', array_column(DeliveryZones::publicList(), 'name'), true),
+    'a nedostane sa ani do zoznamu pre web'
+);
+Db::run('UPDATE delivery_zones SET is_active = 1 WHERE name = ?', ['Chrabrany']);
+
+/* ══════════════════════════════════════════════════════════════════ */
+describe('Hodiny pre web aj pre server hovoria to isté');
+/* ══════════════════════════════════════════════════════════════════ */
+
+Db::run('UPDATE opening_hours SET is_open = 1, open_time = ?, close_time = ?, last_order_offset = 30', ['11:00', '21:00']);
+Db::run('UPDATE opening_hours SET is_open = 0 WHERE weekday = ?', [(int) date('N')]);
+Settings::flush();
+
+$grouped = OpeningHours::grouped();
+ok($grouped !== [], 'web dostane hodiny na zobrazenie');
+ok(
+    in_array('zatvorené', array_column($grouped, 'time'), true),
+    'zatvorený deň je v nich označený'
+);
+ok(!OpeningHours::status()['open'], 'a server v ten deň objednávku neprijme');
+
+Db::run('UPDATE opening_hours SET is_open = 1');
+Settings::flush();
+ok(OpeningHours::status(strtotime(date('Y-m-d') . ' 12:00'))['open'], 'po zapnutí dňa sa opäť objednáva');
+
+test_open_shop();
+
 exit(test_summary());

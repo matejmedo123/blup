@@ -303,3 +303,20 @@ table.data tr:last-child td { border-bottom: 0; }
 /* Na telefóne sa nezmestí všetko — vedľajšie stĺpce tabuliek skryjeme,
    namiesto vodorovného posúvania celej stránky. */
 @media (max-width: 640px) { .hide-sm { display: none; } }
+
+/* ---------- Rozcestník v nastaveniach ---------- */
+.linkcard {
+  display: flex; flex-direction: column; gap: 6px;
+  text-decoration: none; color: inherit; transition: border-color .15s, transform .15s;
+}
+.linkcard:hover { border-color: var(--burgundy); transform: translateY(-2px); }
+.linkcard-go {
+  margin-top: auto; padding-top: 8px;
+  font: 800 11.5px/1 "Archivo", sans-serif; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--burgundy);
+}
+@media (min-width: 900px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+
+/* Tabuľka s hodinami — na telefóne nech sa polia nezlepia. */
+.hours-table input[type="time"] { min-width: 106px; }
+.hours-table td { vertical-align: middle; }

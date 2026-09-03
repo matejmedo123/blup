@@ -39,7 +39,7 @@ export function Checkout() {
   const router = useRouter();
   const { items, totals, orderType, setOrderType, hydrated, clear, openCart, subtotal, rules } =
     useCart();
-  const { settings, payments } = useMenu();
+  const { settings, payments, open, live } = useMenu();
 
   const [customer, setCustomer] = useState<CustomerDetails>(EMPTY_CUSTOMER);
   const [payment, setPayment] = useState<PaymentMethod>("card");
@@ -76,7 +76,10 @@ export function Checkout() {
 
   const belowMinimum = !meetsMinimum(subtotal, rules);
   const isEmpty = hydrated && items.length === 0;
-  const closed = !settings.acceptingOrders;
+  // Zatvorené podľa otváracích hodín aj podľa vypnutého príjmu —
+  // rozhoduje server, web to len rešpektuje.
+  const closed = !settings.acceptingOrders || (live && !open.now);
+  const closedReason = open.reason || settings.closedMessage;
 
   const update = <K extends keyof CustomerDetails>(field: K, value: CustomerDetails[K]) =>
     setCustomer((c) => ({ ...c, [field]: value }));
@@ -470,7 +473,7 @@ export function Checkout() {
 
               {closed && (
                 <p role="status" className="mt-4 rounded-xl bg-burgundy/10 px-4 py-3 text-[0.85rem] font-semibold text-burgundy">
-                  {settings.closedMessage}
+                  {closedReason}
                 </p>
               )}
 

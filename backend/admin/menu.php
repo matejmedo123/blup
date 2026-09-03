@@ -61,6 +61,7 @@ flash_render();
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a class="btn btn-ghost" href="categories.php">Kategórie</a>
     <a class="btn btn-ghost" href="extras.php">Doplnky</a>
+    <a class="btn btn-ghost" href="modifiers.php">Varianty</a>
     <a class="btn" href="product.php">+ Nová položka</a>
   </div>
 </div>

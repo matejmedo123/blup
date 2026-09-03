@@ -33,10 +33,6 @@ $FIELDS = [
         'default_prep_minutes' => ['Predvolená minutáž v admine', 'number'],
         'closed_message'       => ['Hláška pri zastavenom príjme', 'textarea'],
     ],
-    'Rozvoz a otváracie hodiny' => [
-        'delivery_zones' => ['Rozvozové obce (každá na nový riadok)', 'textarea'],
-        'opening_hours'  => ['Otváracie hodiny (Dni|Čas na každom riadku)', 'textarea'],
-    ],
 ];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
@@ -73,6 +69,27 @@ flash_render();
   <button class="btn" type="submit" form="settingsForm">Uložiť zmeny</button>
 </div>
 
+<div class="grid grid-3" style="margin-bottom:18px">
+  <a class="card linkcard" href="hours.php">
+    <h2>Otváracie hodiny</h2>
+    <p class="hint">Hodiny po dňoch, posledná objednávka pred zatvorením
+      a mimoriadne zatvorenia. Systém ich naozaj vynucuje.</p>
+    <span class="linkcard-go">Nastaviť →</span>
+  </a>
+  <a class="card linkcard" href="zones.php">
+    <h2>Doručovacie zóny</h2>
+    <p class="hint">Obce, kam vozíš — každá s vlastným poplatkom, minimom
+      a časom. Adresu mimo zón systém odmietne.</p>
+    <span class="linkcard-go">Nastaviť →</span>
+  </a>
+  <a class="card linkcard" href="coupons.php">
+    <h2>Zľavové kódy</h2>
+    <p class="hint">Percentá, pevná suma alebo doručenie zdarma;
+      s obmedzením počtu použití a platnosti.</p>
+    <span class="linkcard-go">Nastaviť →</span>
+  </a>
+</div>
+
 <form method="post" id="settingsForm">
   <?= Csrf::field() ?>
   <div class="grid grid-2">
@@ -85,7 +102,7 @@ flash_render();
               <span><?= e($label) ?></span>
               <?php $v = (string) Settings::get($key); ?>
               <?php if ($type === 'textarea'): ?>
-                <textarea name="<?= e($key) ?>" rows="<?= $key === 'opening_hours' ? 4 : 6 ?>"><?= e($v) ?></textarea>
+                <textarea name="<?= e($key) ?>" rows="4"><?= e($v) ?></textarea>
               <?php elseif ($type === 'money'): ?>
                 <input type="text" name="<?= e($key) ?>" inputmode="decimal"
                        value="<?= e(number_format((float) $v, 2, ',', '')) ?>">
@@ -93,9 +110,6 @@ flash_render();
                 <input type="number" name="<?= e($key) ?>" min="5" max="180" value="<?= e($v) ?>">
               <?php else: ?>
                 <input type="text" name="<?= e($key) ?>" value="<?= e($v) ?>">
-              <?php endif; ?>
-              <?php if ($key === 'opening_hours'): ?>
-                <div class="hint">Napr. <code>Pondelok — Štvrtok|11:00 — 21:00</code></div>
               <?php endif; ?>
             </label>
           <?php endforeach; ?>
