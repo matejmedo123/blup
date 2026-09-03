@@ -58,14 +58,23 @@ final class OrderService
                 continue;
             }
 
-            // doplnky — akceptujeme len tie, ktoré sú k produktu naozaj priradené
+            // Doplnky — akceptujeme len tie, ktoré sú k produktu naozaj
+            // priradené, či už priamo alebo cez skupinu variantov.
             $allowed = [];
-            foreach (Db::all(
-                'SELECT e.slug, e.name, e.price_cents FROM extras e
-                 JOIN product_extras pe ON pe.extra_id = e.id
-                 WHERE pe.product_id = ? AND e.is_active = 1',
-                [$product['id']]
-            ) as $e) {
+            $sql = 'SELECT e.slug, e.name, e.price_cents FROM extras e
+                    JOIN product_extras pe ON pe.extra_id = e.id
+                    WHERE pe.product_id = ? AND e.is_active = 1';
+            $params = [$product['id']];
+
+            if (Db::columnExists('extras', 'group_id') && Db::tableExists('product_modifier_groups')) {
+                $sql .= ' UNION
+                    SELECT e.slug, e.name, e.price_cents FROM extras e
+                    JOIN product_modifier_groups pmg ON pmg.group_id = e.group_id
+                    WHERE pmg.product_id = ? AND e.is_active = 1';
+                $params[] = $product['id'];
+            }
+
+            foreach (Db::all($sql, $params) as $e) {
                 $allowed[$e['slug']] = $e;
             }
 
@@ -82,6 +91,14 @@ final class OrderService
                     $extrasCents += (int) $allowed[$exSlug]['price_cents'];
                 }
             }
+
+            // Pravidlá skupín (povinná veľkosť, najviac dve omáčky…) sa
+            // kontrolujú tu, nie na frontende.
+            ModifierGroups::validateSelection(
+                (int) $product['id'],
+                (string) $product['name'],
+                array_map(static fn (array $c): string => $c['id'], $chosen)
+            );
 
             $base = (int) $product['price_cents'];
             $unit = $base + $extrasCents;

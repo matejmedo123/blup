@@ -35,26 +35,39 @@ flash_render();
   </div>
 <?php endif; ?>
 
-<div class="card no-print" style="margin-bottom:16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+<div class="card no-print statusbar">
   <label class="checkline" style="margin:0">
     <input type="checkbox" id="soundOn" checked>
     <span>Zvuk pri novej objednávke</span>
   </label>
-  <span class="hint" style="margin:0">Stránka sa sama obnovuje každých 10 sekúnd.</span>
-  <span class="hint" style="margin:0;margin-left:auto" id="lastUpdate"></span>
+  <span class="hint refresh-note">Stránka sa sama obnovuje každých 10 sekúnd.</span>
+  <span class="hint" id="lastUpdate"></span>
 </div>
 
-<div class="board" id="board">
-  <div class="column">
+<?php /* Na telefóne slúžia záložky namiesto troch stĺpcov pod sebou. */ ?>
+<div class="board-tabs no-print" id="boardTabs" role="tablist" aria-label="Stĺpce objednávok">
+  <button type="button" role="tab" data-tab="received" class="active" aria-selected="true">
+    Nové <span class="count" id="t-received">0</span>
+  </button>
+  <button type="button" role="tab" data-tab="working" aria-selected="false">
+    V príprave <span class="count" id="t-working">0</span>
+  </button>
+  <button type="button" role="tab" data-tab="ready" aria-selected="false">
+    Hotové <span class="count" id="t-ready">0</span>
+  </button>
+</div>
+
+<div class="board" id="board" data-active="received">
+  <div class="column" data-col="received">
     <h2>Nové <span class="count" id="c-received">0</span></h2>
     <div id="col-received"></div>
   </div>
-  <div class="column">
-    <h2>V príprave <span class="count" id="c-confirmed">0</span></h2>
-    <div id="col-confirmed"></div>
+  <div class="column" data-col="working">
+    <h2>V príprave <span class="count" id="c-working">0</span></h2>
+    <div id="col-working"></div>
   </div>
-  <div class="column">
-    <h2>Pripravené <span class="count" id="c-ready">0</span></h2>
+  <div class="column" data-col="ready">
+    <h2>Hotové <span class="count" id="c-ready">0</span></h2>
     <div id="col-ready"></div>
   </div>
 </div>
@@ -67,6 +80,6 @@ flash_render();
 const DEFAULT_MINS = <?= (int) $defaultMins ?>;
 const CSRF = <?= json_encode(Csrf::token()) ?>;
 </script>
-<script src="assets/board.js?v=2"></script>
+<script src="assets/board.js?v=3"></script>
 
 <?php layout_end(); ?>

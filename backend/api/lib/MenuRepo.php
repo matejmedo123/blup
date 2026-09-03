@@ -33,6 +33,17 @@ final class MenuRepo
             ];
         }
 
+        $rawProducts = Db::all(
+            'SELECT p.*, c.slug AS category_slug
+             FROM products p
+             JOIN categories c ON c.id = p.category_id
+             WHERE c.is_active = 1
+             ORDER BY p.position, p.id'
+        );
+        $groupsByProduct = ModifierGroups::forProducts(
+            array_map(static fn (array $p): int => (int) $p['id'], $rawProducts)
+        );
+
         $products = [];
         foreach (Db::all(
             'SELECT p.*, c.slug AS category_slug
@@ -64,6 +75,10 @@ final class MenuRepo
                     'accent' => $p['lid_accent'],
                     'lines'  => [(string) ($p['lid_line1'] ?? ''), (string) ($p['lid_line2'] ?? '')],
                 ];
+            }
+            $groups = $groupsByProduct[(int) $p['id']] ?? [];
+            if ($groups !== []) {
+                $item['modifierGroups'] = $groups;
             }
             $extras = $extrasByProduct[(int) $p['id']] ?? [];
             if ($extras !== []) {

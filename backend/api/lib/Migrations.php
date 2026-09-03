@@ -43,6 +43,7 @@ final class Migrations
         ['uq_pay_reference',    'payments',             'reference',                 true],
         ['idx_audit_created',   'audit_log',            'created_at',                false],
         ['idx_idem_created',    'idempotency_keys',     'created_at',                false],
+        ['idx_extras_group',    'extras',               'group_id',                  false],
     ];
 
     /** Spustí všetky nespustené migrácie a dorovná indexy. */
@@ -134,6 +135,7 @@ final class Migrations
         ['orders', 'discount_cents', 'INT NOT NULL DEFAULT 0',  'INTEGER NOT NULL DEFAULT 0'],
         ['orders', 'coupon_code',    'VARCHAR(40) NULL',        'TEXT'],
         ['orders', 'zone_name',      'VARCHAR(120) NULL',       'TEXT'],
+        ['extras', 'group_id',        'INT NULL',                'INTEGER'],
     ];
 
     private static function ensureColumns(): void

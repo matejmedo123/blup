@@ -3,7 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/../api/_bootstrap.php';
 require __DIR__ . '/_layout.php';
 
-$user = Auth::requireLogin();
+$user = Auth::requireRole(Auth::ROLE_ADMIN);
 
 $id      = (int) ($_GET['id'] ?? 0);
 $product = $id > 0 ? Db::one('SELECT * FROM products WHERE id = ?', [$id]) : null;
@@ -62,6 +62,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 
     if ($errors === []) {
+        // Pôvodný stav si zapamätáme kvôli auditu — pri spätnom
+        // dohľadávaní sa najčastejšie hľadá práve zmena ceny.
+        $before = $isNew ? null : Db::one('SELECT name, price_cents, is_available FROM products WHERE id = ?', [$id]);
+
         $now  = date('Y-m-d H:i:s');
         $data = [
             'slug'         => $slug,
@@ -91,6 +95,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 Db::insert('product_extras', ['product_id' => $id, 'extra_id' => $eid, 'position' => $pos++]);
             }
         });
+
+        if ($isNew) {
+            AuditLog::record($user, 'create', 'product', $slug, "Položka „$name“ pridaná za " . Money::format((int) $data['price_cents']));
+        } else {
+            AuditLog::change(
+                $user, 'product', $slug, "cena položky „$name“",
+                Money::format((int) ($before['price_cents'] ?? 0)),
+                Money::format((int) $data['price_cents'])
+            );
+            AuditLog::change(
+                $user, 'product', $slug, "dostupnosť „$name“",
+                (int) ($before['is_available'] ?? 1) === 1 ? 'dostupné' : 'vypredané',
+                $available === 1 ? 'dostupné' : 'vypredané'
+            );
+        }
 
         flash_redirect('menu.php', 'ok', $isNew ? "Položka „$name“ bola pridaná." : "Položka „$name“ bola uložená.");
     }

@@ -34,6 +34,8 @@ final class Auth
         // rovnaký čas odpovede aj pri neexistujúcom používateľovi
         $hash = $user['password_hash'] ?? '$2y$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidiu';
         if (!password_verify($password, $hash) || $user === null) {
+            // Zapisujeme len e-mail, nikdy zadané heslo.
+            AuditLog::record(null, 'login_failed', 'user', $email, 'Neúspešné prihlásenie');
             return ['ok' => false, 'error' => 'Nesprávny e-mail alebo heslo.'];
         }
 
@@ -42,6 +44,13 @@ final class Auth
         $_SESSION['user_role'] = $user['role'];
         $_SESSION['user_name'] = $user['name'];
         Db::run('UPDATE users SET last_login_at = ? WHERE id = ?', [date('Y-m-d H:i:s'), $user['id']]);
+        AuditLog::record(
+            ['id' => (int) $user['id'], 'name' => (string) $user['name']],
+            'login',
+            'user',
+            (string) $user['id'],
+            'Prihlásenie do adminu'
+        );
 
         return ['ok' => true, 'error' => null];
     }
@@ -95,12 +104,52 @@ final class Auth
 
     public static function requireAdmin(): array
     {
+        return self::requireRole(self::ROLE_ADMIN);
+    }
+
+    /**
+     * Vpustí len používateľa s danou rolou.
+     *
+     * Skryť odkaz v menu nestačí — kto pozná adresu, otvorí si stránku
+     * priamo, takže sa práva kontrolujú tu, na serveri.
+     *
+     * @return array<string,mixed>
+     */
+    public static function requireRole(string $role): array
+    {
         $user = self::requireLogin();
-        if ($user['role'] !== self::ROLE_ADMIN) {
+        if ($role === self::ROLE_ADMIN && $user['role'] !== self::ROLE_ADMIN) {
             http_response_code(403);
+            // Admin stránky majú vlastnú hlášku v layoute; API vrstva ho
+            // načítaný nemá, tak tam vypíšeme jednoduchý text.
+            if (function_exists('layout_denied')) {
+                layout_denied();
+            }
             exit('Na túto sekciu potrebuješ oprávnenie správcu.');
         }
         return $user;
+    }
+
+    /** Čo smie daná rola. Jediné miesto, kde je to napísané. */
+    public static function can(?array $user, string $ability): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        $role = (string) ($user['role'] ?? self::ROLE_STAFF);
+
+        // Obsluha vybavuje objednávky; meniť ponuku, ceny, nastavenia
+        // a používateľov smie len správca.
+        $adminOnly = [
+            'menu.edit', 'settings.edit', 'users.manage',
+            'zones.edit', 'hours.edit', 'coupons.edit',
+            'accounting.view', 'audit.view', 'orders.cancel',
+        ];
+
+        if ($role === self::ROLE_ADMIN) {
+            return true;
+        }
+        return !in_array($ability, $adminOnly, true);
     }
 
     public static function hash(string $password): string

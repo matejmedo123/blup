@@ -1,5 +1,10 @@
 /* ENZO admin — živá nástenka objednávok.
-   Ťahá stav každých 10 sekúnd, pri novej objednávke pípne. */
+   Ťahá stav každých 10 sekúnd, pri novej objednávke pípne.
+
+   Na telefóne sa tri stĺpce nezmestia vedľa seba a pod sebou by obsluha
+   k „pripraveným“ scrollovala cez celú obrazovku. Preto sú na úzkom
+   displeji stĺpce záložky s počtami a vidno vždy jednu. Na tablete
+   a počítači ostávajú tri stĺpce vedľa seba. */
 (function () {
   "use strict";
 
@@ -8,19 +13,37 @@
   var firstLoad = true;
   var audioCtx = null;
 
+  /* Stav objednávky → stĺpec nástenky. Stavov je viac než stĺpcov:
+     obsluhu zaujíma, či sa objednávka ešte robí, nie jemný odtieň. */
+  var COLUMN_OF = {
+    received: "received",
+    accepted: "working",
+    preparing: "working",
+    ready: "ready",
+    delivering: "ready",
+    picked_up: "ready",
+  };
+
   var el = {
     pulse: document.getElementById("pulse"),
     last: document.getElementById("lastUpdate"),
     sound: document.getElementById("soundOn"),
+    board: document.getElementById("board"),
+    tabs: document.getElementById("boardTabs"),
     cols: {
       received: document.getElementById("col-received"),
-      confirmed: document.getElementById("col-confirmed"),
+      working: document.getElementById("col-working"),
       ready: document.getElementById("col-ready"),
     },
     counts: {
       received: document.getElementById("c-received"),
-      confirmed: document.getElementById("c-confirmed"),
+      working: document.getElementById("c-working"),
       ready: document.getElementById("c-ready"),
+    },
+    tabCounts: {
+      received: document.getElementById("t-received"),
+      working: document.getElementById("t-working"),
+      ready: document.getElementById("t-ready"),
     },
   };
 
@@ -43,6 +66,7 @@
         osc.start(audioCtx.currentTime + offset);
         osc.stop(audioCtx.currentTime + offset + 0.18);
       });
+      if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
     } catch (e) {
       /* zvuk je len pomôcka — keď sa nedá, nič sa nedeje */
     }
@@ -71,17 +95,82 @@
     return "pred " + Math.floor(mins / 60) + " h";
   }
 
+  /* ---------- akcie podľa stavu ---------- */
+  function actionsHtml(o) {
+    var detail = '<a class="btn btn-sm btn-ghost" href="order.php?id=' + o.id + '">Detail</a>';
+
+    if (o.status === "received") {
+      var mins = [15, 20, 25, 30, 45, 60]
+        .map(function (m) {
+          return '<button type="button" data-mins="' + m + '">' + m + "′</button>";
+        })
+        .join("");
+      return (
+        '<div class="mins" data-order="' + o.id + '">' + mins + "</div>" +
+        '<div class="order-actions">' +
+        '<button class="btn btn-gold" data-act="accept" data-order="' + o.id + '">Prijať</button>' +
+        '<button class="btn btn-sm btn-danger" data-act="reject" data-order="' + o.id + '">Odmietnuť</button>' +
+        detail +
+        "</div>"
+      );
+    }
+
+    if (o.status === "accepted") {
+      return (
+        '<div class="order-actions">' +
+        '<button class="btn" data-act="preparing" data-order="' + o.id + '">Na platni</button>' +
+        '<button class="btn btn-gold" data-act="ready" data-order="' + o.id + '">Hotové</button>' +
+        detail +
+        "</div>"
+      );
+    }
+
+    if (o.status === "preparing") {
+      return (
+        '<div class="order-actions">' +
+        '<button class="btn btn-gold" data-act="ready" data-order="' + o.id + '">Hotové</button>' +
+        detail +
+        "</div>"
+      );
+    }
+
+    if (o.status === "ready") {
+      // Ďalší krok závisí od toho, či si to zákazník vyzdvihne alebo vezieme.
+      var next =
+        o.orderType === "pickup"
+          ? '<button class="btn btn-gold" data-act="picked_up" data-order="' + o.id + '">Vyzdvihnuté</button>'
+          : '<button class="btn btn-gold" data-act="delivering" data-order="' + o.id + '">Kuriér vyrazil</button>';
+      return (
+        '<div class="order-actions">' +
+        next +
+        '<button class="btn" data-act="complete" data-order="' + o.id + '">Vybavené</button>' +
+        detail +
+        "</div>"
+      );
+    }
+
+    if (o.status === "delivering" || o.status === "picked_up") {
+      return (
+        '<div class="order-actions">' +
+        '<button class="btn btn-gold" data-act="complete" data-order="' + o.id + '">Vybavené</button>' +
+        detail +
+        "</div>"
+      );
+    }
+
+    return '<div class="order-actions">' + detail + "</div>";
+  }
+
   /* ---------- vykreslenie karty ---------- */
   function cardHtml(o) {
     var isNew = o.status === "received";
+
     var items = o.items
       .map(function (i) {
         var extras = i.extras.length
-          ? '<div style="font-size:12px;color:#6E625B">+ ' + esc(i.extras.join(", ")) + "</div>"
+          ? '<div class="item-extra">+ ' + esc(i.extras.join(", ")) + "</div>"
           : "";
-        var note = i.note
-          ? '<div style="font-size:12px;color:#7A1E1E;font-style:italic">„' + esc(i.note) + "“</div>"
-          : "";
+        var note = i.note ? '<div class="item-note">„' + esc(i.note) + "“</div>" : "";
         return "<li><strong>" + i.quantity + "×</strong> " + esc(i.name) + extras + note + "</li>";
       })
       .join("");
@@ -91,117 +180,91 @@
       var left = minutesUntil(o.readyAt);
       var late = left < 0;
       timing =
-        '<span class="countdown' +
-        (late ? " late" : "") +
-        '">' +
+        '<span class="countdown' + (late ? " late" : "") + '">' +
         (late ? "meškáme " + Math.abs(left) + " min" : "o " + left + " min") +
-        " · " +
-        esc(o.readyAtLabel) +
+        " · " + esc(o.readyAtLabel) +
         "</span>";
     }
 
-    var actions = "";
-    if (o.status === "received") {
-      actions =
-        '<div class="mins" data-order="' +
-        o.id +
-        '">' +
-        [15, 20, 25, 30, 45, 60]
-          .map(function (m) {
-            return '<button type="button" data-mins="' + m + '">' + m + "′</button>";
-          })
-          .join("") +
-        "</div>" +
-        '<div class="order-actions">' +
-        '<button class="btn btn-gold" data-act="confirm" data-order="' +
-        o.id +
-        '">Potvrdiť čas</button>' +
-        '<a class="btn btn-sm btn-ghost" href="order.php?id=' +
-        o.id +
-        '">Detail</a>' +
-        "</div>";
-    } else if (o.status === "confirmed") {
-      actions =
-        '<div class="order-actions">' +
-        '<button class="btn btn-gold" data-act="ready" data-order="' +
-        o.id +
-        '">' +
-        (o.orderType === "pickup" ? "Pripravené" : "Kuriér vyrazil") +
-        "</button>" +
-        '<a class="btn btn-sm btn-ghost" href="order.php?id=' +
-        o.id +
-        '">Detail</a>' +
-        "</div>";
-    } else if (o.status === "ready") {
-      actions =
-        '<div class="order-actions">' +
-        '<button class="btn" data-act="complete" data-order="' +
-        o.id +
-        '">Vybavené</button>' +
-        '<a class="btn btn-sm btn-ghost" href="order.php?id=' +
-        o.id +
-        '">Detail</a>' +
-        "</div>";
-    }
+    var statusNote =
+      o.status === "delivering"
+        ? '<span class="badge badge-ready">Na ceste</span>'
+        : o.status === "picked_up"
+        ? '<span class="badge badge-ready">Vyzdvihnuté</span>'
+        : "";
+
+    var pay =
+      o.paymentMethod === "card"
+        ? o.paymentStatus === "paid"
+          ? "Karta · zaplatené"
+          : "Karta · čaká"
+        : "Hotovosť";
 
     return (
-      '<div class="order-card' +
-      (isNew ? " new" : "") +
-      '" id="ord-' +
-      o.id +
-      '">' +
+      '<div class="order-card' + (isNew ? " new" : "") + '" id="ord-' + o.id + '">' +
       '<div class="order-card-head">' +
-      '<span class="order-num">#' +
-      esc(o.orderNumber) +
-      "</span>" +
-      '<span class="order-total">' +
-      money(o.total) +
-      "</span>" +
+      '<span class="order-num">#' + esc(o.orderNumber) + "</span>" +
+      '<span class="order-total">' + money(o.total) + "</span>" +
       "</div>" +
       '<div class="order-meta">' +
-      "<span>" +
-      (o.orderType === "pickup" ? "Osobný odber" : "Rozvoz") +
-      "</span>" +
-      '<span class="badge badge-' +
-      (o.paymentStatus === "paid" ? "paid" : "unpaid") +
-      '">' +
-      (o.paymentMethod === "card" ? (o.paymentStatus === "paid" ? "Karta · zaplatené" : "Karta · čaká") : "Hotovosť") +
-      "</span>" +
-      "<span>" +
-      esc(timeAgo(o.createdAt)) +
-      "</span>" +
+      "<span>" + (o.orderType === "pickup" ? "Osobný odber" : "Rozvoz") + "</span>" +
+      '<span class="badge badge-' + (o.paymentStatus === "paid" ? "paid" : "unpaid") + '">' + pay + "</span>" +
+      statusNote +
+      "<span>" + esc(timeAgo(o.createdAt)) + "</span>" +
       timing +
       "</div>" +
-      '<div class="order-items"><ul>' +
-      items +
-      "</ul></div>" +
+      '<div class="order-items"><ul>' + items + "</ul></div>" +
       '<div class="order-meta" style="margin-top:8px">' +
-      "<span>" +
-      esc(o.customerName) +
-      "</span><span>" +
-      esc(o.phone) +
-      "</span>" +
+      "<span>" + esc(o.customerName) + "</span>" +
+      '<a href="tel:' + esc(o.phone) + '" class="phone-link">' + esc(o.phone) + "</a>" +
       (o.pickupTime ? "<span>Odber: " + esc(o.pickupTime) + "</span>" : "") +
       "</div>" +
-      (o.note ? '<div style="margin-top:6px;font-size:13px;color:#7A1E1E">„' + esc(o.note) + "“</div>" : "") +
-      actions +
+      (o.note ? '<div class="order-note">„' + esc(o.note) + "“</div>" : "") +
+      actionsHtml(o) +
       "</div>"
     );
   }
 
+  /* ---------- záložky na telefóne ---------- */
+  var activeTab = "received";
+
+  function applyTab() {
+    if (!el.board) return;
+    el.board.setAttribute("data-active", activeTab);
+    if (!el.tabs) return;
+    el.tabs.querySelectorAll("button").forEach(function (b) {
+      var on = b.getAttribute("data-tab") === activeTab;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+
+  if (el.tabs) {
+    el.tabs.addEventListener("click", function (ev) {
+      var btn = ev.target.closest("button[data-tab]");
+      if (!btn) return;
+      activeTab = btn.getAttribute("data-tab");
+      applyTab();
+    });
+  }
+
   /* ---------- načítanie ---------- */
   function render(orders) {
-    var groups = { received: [], confirmed: [], ready: [] };
+    var groups = { received: [], working: [], ready: [] };
     orders.forEach(function (o) {
-      if (groups[o.status]) groups[o.status].push(o);
+      var col = COLUMN_OF[o.status];
+      if (col) groups[col].push(o);
     });
 
     Object.keys(groups).forEach(function (key) {
       var list = groups[key];
-      el.counts[key].textContent = String(list.length);
-      el.cols[key].innerHTML = list.length
-        ? list.map(cardHtml).join("")
-        : '<p class="hint" style="padding:10px 4px">Zatiaľ nič.</p>';
+      if (el.counts[key]) el.counts[key].textContent = String(list.length);
+      if (el.tabCounts[key]) el.tabCounts[key].textContent = String(list.length);
+      if (el.cols[key]) {
+        el.cols[key].innerHTML = list.length
+          ? list.map(cardHtml).join("")
+          : '<p class="hint" style="padding:10px 4px">Zatiaľ nič.</p>';
+      }
     });
 
     // nová objednávka od minulého ťahania → pípni
@@ -214,6 +277,10 @@
     if (!firstLoad && fresh.length) {
       beep();
       document.title = "(" + fresh.length + ") Nová objednávka · ENZO admin";
+      // Na telefóne prehodíme na stĺpec s novými — inak by ju obsluha
+      // nemusela vôbec zbadať.
+      activeTab = "received";
+      applyTab();
     }
     firstLoad = false;
   }
@@ -241,6 +308,11 @@
   }
 
   /* ---------- akcie ---------- */
+  var CONFIRM_TEXT = {
+    reject: "Naozaj odmietnuť objednávku? Zákazníkovi pošleme e-mail.",
+    complete: "Označiť objednávku ako vybavenú?",
+  };
+
   document.addEventListener("click", function (ev) {
     var minBtn = ev.target.closest(".mins button");
     if (minBtn) {
@@ -258,12 +330,18 @@
     var act = btn.getAttribute("data-act");
     var body = { action: act, id: Number(id), _csrf: CSRF };
 
-    if (act === "confirm") {
+    if (act === "accept") {
       var picker = document.querySelector('.mins[data-order="' + id + '"] button.sel');
       body.minutes = picker ? Number(picker.getAttribute("data-mins")) : DEFAULT_MINS;
     }
-    if (act === "complete" && !confirm("Označiť objednávku ako vybavenú?")) return;
+    if (act === "reject") {
+      var reason = prompt("Prečo objednávku odmietame? (zákazník to uvidí)", "Máme plno, nestíhame");
+      if (reason === null) return;
+      body.reason = reason;
+    }
+    if (CONFIRM_TEXT[act] && act !== "reject" && !confirm(CONFIRM_TEXT[act])) return;
 
+    var original = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Ukladám…";
 
@@ -277,21 +355,30 @@
         return r.json();
       })
       .then(function (res) {
-        if (!res.ok) throw new Error(res.error || "Nepodarilo sa uložiť.");
+        if (!res.ok) {
+          // Keď objednávku medzitým spracoval kolega, netreba paniku —
+          // stačí povedať čo sa stalo a načítať aktuálny stav.
+          throw new Error(res.error || "Nepodarilo sa uložiť.");
+        }
         poll();
       })
       .catch(function (e) {
         alert(e.message);
         btn.disabled = false;
+        btn.textContent = original;
         poll();
       });
   });
 
   // po interakcii vyčistíme počítadlo v titulku
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden) document.title = "Objednávky · ENZO admin";
+    if (!document.hidden) {
+      document.title = "Objednávky · ENZO admin";
+      poll();
+    }
   });
 
+  applyTab();
   poll();
   setInterval(poll, POLL_MS);
 })();

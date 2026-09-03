@@ -37,27 +37,45 @@ a { color: var(--burgundy); }
 .topbar {
   background: var(--burgundy);
   color: var(--cream);
-  position: sticky;
-  top: 0;
   z-index: 30;
 }
+/* Na telefóne je lepivá hlavička luxus — dôležitejšie je, aby ostali
+   na očiach záložky stĺpcov. Na väčších displejoch je miesta dosť. */
+@media (min-width: 1000px) { .topbar { position: sticky; top: 0; } }
 .topbar-inner {
-  max-width: 1400px; margin: 0 auto; padding: 12px 20px;
-  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  max-width: 1400px; margin: 0 auto; padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
 .brand {
   font-family: Rockwell, Georgia, serif; font-weight: 700; font-size: 26px;
   letter-spacing: 0.5px; color: var(--cream); text-decoration: none; line-height: 1;
 }
 .brand span { display: block; font: 700 9px/1 "Archivo", sans-serif; letter-spacing: 2.4px; opacity: 0.7; margin-top: 3px; }
-.topnav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+/* Na telefóne sa navigácia posúva do strany. Lámanie do troch riadkov
+   zabralo pol obrazovky práve tam, kde je jej najmenej. */
+.topnav {
+  display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
+  max-width: 1400px; margin: 0 auto; padding: 0 16px 10px;
+  -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
+}
+.topnav::-webkit-scrollbar { display: none; }
 .topnav a {
-  color: rgba(246, 240, 227, 0.78); text-decoration: none; padding: 9px 14px;
-  border-radius: 999px; font-weight: 700; font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: rgba(246, 240, 227, 0.78); text-decoration: none;
+  padding: 13px 15px; border-radius: 999px; white-space: nowrap;
+  font-weight: 700; font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase;
 }
 .topnav a:hover { background: rgba(246, 240, 227, 0.12); color: var(--cream); }
 .topnav a.active { background: var(--cream); color: var(--burgundy); }
-.topbar-user { font-size: 12.5px; color: rgba(246, 240, 227, 0.7); display: flex; align-items: center; gap: 12px; }
+
+.topbar-user { font-size: 12.5px; color: rgba(246, 240, 227, 0.7); display: flex; align-items: center; gap: 10px; }
+.topbar-logout { border-color: rgba(246, 240, 227, 0.35); color: var(--cream); }
+
+@media (min-width: 900px) {
+  .topbar-inner { padding: 12px 20px; gap: 20px; justify-content: flex-start; }
+  .topnav { padding: 0 20px 10px; }
+}
+/* Na úzkych displejoch je meno navyše — dôležité je tlačidlo odhlásiť. */
+@media (max-width: 420px) { .topbar-name { display: none; } }
 .checkrule {
   height: 8px;
   background-image: repeating-conic-gradient(var(--cream) 0% 25%, transparent 0% 50%);
@@ -145,8 +163,43 @@ table.data tr:last-child td { border-bottom: 0; }
 .badge-unpaid { background: rgba(23, 18, 17, 0.08); color: var(--muted); }
 
 /* ---------- Nástenka objednávok ---------- */
+
+/* Záložky sú len pre úzke displeje — na tablete a počítači sú stĺpce
+   vedľa seba a prepínať niet čo. */
+.board-tabs {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  background: rgba(255, 255, 255, 0.6); border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px; margin-bottom: 14px;
+  position: sticky; top: 0; z-index: 20;
+}
+.board-tabs button {
+  min-height: 46px; border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--muted); white-space: nowrap;
+  font: 800 11.5px/1 "Archivo", sans-serif; letter-spacing: 0.04em; text-transform: uppercase;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+@media (min-width: 400px) { .board-tabs button { font-size: 12.5px; letter-spacing: 0.06em; } }
+.board-tabs button.active { background: var(--burgundy); color: var(--cream); }
+.board-tabs .count {
+  background: rgba(23, 18, 17, 0.12); color: inherit;
+  border-radius: 999px; padding: 1px 7px; font-size: 11px;
+}
+.board-tabs button.active .count { background: rgba(246, 240, 227, 0.25); }
+
 .board { display: grid; gap: 14px; }
-@media (min-width: 1000px) { .board { grid-template-columns: repeat(3, 1fr); align-items: start; } }
+/* Na telefóne je vidieť len stĺpec zvolený záložkou. */
+.board > .column { display: none; }
+.board[data-active="received"] > [data-col="received"],
+.board[data-active="working"]  > [data-col="working"],
+.board[data-active="ready"]    > [data-col="ready"] { display: block; }
+.board > .column > h2 { display: none; }
+
+@media (min-width: 1000px) {
+  .board-tabs { display: none; }
+  .board { grid-template-columns: repeat(3, 1fr); align-items: start; }
+  .board > .column { display: block; }
+  .board > .column > h2 { display: flex; }
+}
 .column { background: rgba(255, 255, 255, 0.55); border-radius: var(--radius); padding: 12px; min-height: 120px; }
 .column > h2 {
   font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
@@ -168,13 +221,26 @@ table.data tr:last-child td { border-bottom: 0; }
 .order-items li { list-style: none; }
 .order-items ul { margin: 0; padding: 0; }
 .order-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+/* Kuchyňa klikáva mokrými prstami — tlačidlá na nástenke sú preto
+   väčšie než všade inde a na úzkom displeji na celú šírku. */
+.order-actions .btn { min-height: 46px; flex: 1 1 auto; }
+.order-actions .btn.btn-sm { flex: 0 0 auto; }
+.item-extra { font-size: 12px; color: var(--muted); }
+.item-note { font-size: 12px; color: var(--burgundy); font-style: italic; }
+.order-note { margin-top: 6px; font-size: 13px; color: var(--burgundy); }
+.phone-link { color: var(--burgundy); font-weight: 700; text-decoration: none; }
+@media (max-width: 640px) {
+  .order-actions { flex-direction: column; }
+  .order-actions .btn { width: 100%; }
+}
 .countdown { font-weight: 800; font-variant-numeric: tabular-nums; }
 .countdown.late { color: var(--red); }
 
 /* ---------- Výber minutáže ---------- */
-.mins { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.mins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+@media (min-width: 480px) { .mins { grid-template-columns: repeat(6, 1fr); } }
 .mins button {
-  min-height: 52px; min-width: 66px; border-radius: 10px; border: 2px solid var(--line);
+  min-height: 52px; border-radius: 10px; border: 2px solid var(--line);
   background: #fff; cursor: pointer; font: 800 16px/1 "Archivo", sans-serif; color: var(--ink);
 }
 .mins button:hover { border-color: var(--burgundy); }
@@ -198,3 +264,13 @@ table.data tr:last-child td { border-bottom: 0; }
 .receipt .rrow { display: flex; justify-content: space-between; gap: 8px; }
 .receipt .big { font-size: 15px; font-weight: 700; }
 .receipt .center { text-align: center; }
+
+/* ---------- Pruh so stavom pripojenia ---------- */
+.statusbar {
+  margin-bottom: 14px; padding: 12px 14px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.statusbar .hint { margin: 0; }
+.statusbar #lastUpdate { margin-left: auto; }
+/* Na telefóne je vysvetľujúca veta navyše — obsluha ju už pozná. */
+@media (max-width: 640px) { .refresh-note { display: none; } }

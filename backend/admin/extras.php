@@ -3,7 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/../api/_bootstrap.php';
 require __DIR__ . '/_layout.php';
 
-$user = Auth::requireLogin();
+$user = Auth::requireRole(Auth::ROLE_ADMIN);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     Csrf::require();

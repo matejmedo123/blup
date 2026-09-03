@@ -17,13 +17,20 @@ $user = Auth::user();
 /* ---------------- Čítanie: stav nástenky ---------------- */
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
     if (($_GET['action'] ?? '') !== 'board') {
-        Response::fail('Neznáma akcia.', 400);
+        Response::failCode(ErrorCode::VALIDATION_ERROR, 'Neznáma akcia.');
     }
 
+    // Nástenka ukazuje len rozrobené objednávky. Vybavené, odmietnuté
+    // a zrušené patria do histórie, nie pred oči obsluhy.
     $rows = Db::all(
         "SELECT * FROM orders
-         WHERE status IN ('received','confirmed','ready')
-         ORDER BY CASE status WHEN 'received' THEN 0 WHEN 'confirmed' THEN 1 ELSE 2 END, created_at",
+         WHERE status IN ('received','accepted','preparing','ready','delivering','picked_up')
+         ORDER BY CASE status
+                    WHEN 'received' THEN 0
+                    WHEN 'accepted' THEN 1
+                    WHEN 'preparing' THEN 2
+                    ELSE 3
+                  END, created_at",
     );
 
     $orders = [];
@@ -161,6 +168,16 @@ try {
 } catch (Throwable $e) {
     error_log('admin/api.php: ' . $e->getMessage());
     Response::failCode(ErrorCode::SERVER_ERROR, 'Akciu sa nepodarilo vykonať.');
+}
+
+if ($updated['_changed'] ?? false) {
+    AuditLog::record(
+        $user,
+        'status',
+        'order',
+        (string) $updated['order_number'],
+        'Stav zmenený na ' . (OrderStatus::LABEL[$updated['status']] ?? $updated['status'])
+    );
 }
 
 Response::ok(['order' => OrderService::toPublicArray($updated)]);

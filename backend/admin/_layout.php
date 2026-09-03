@@ -8,14 +8,19 @@ declare(strict_types=1);
 
 function layout_start(string $title, string $active = '', ?array $user = null): void
 {
+    // Položka sa zobrazí len tomu, kto na ňu naozaj má právo — obsluha
+    // by inak klikala na odkazy, ktoré ju odpália na 403.
     $nav = [
-        'dashboard'  => ['dashboard.php',  'Objednávky'],
-        'menu'       => ['menu.php',       'Menu'],
-        'settings'   => ['settings.php',   'Nastavenia'],
-        'accounting' => ['accounting.php', 'Účtovníctvo'],
-        'users'      => ['users.php',      'Používatelia'],
+        'dashboard'  => ['dashboard.php',  'Objednávky',   null],
+        'menu'       => ['menu.php',       'Menu',         'menu.edit'],
+        'settings'   => ['settings.php',   'Nastavenia',   'settings.edit'],
+        'accounting' => ['accounting.php', 'Účtovníctvo',  'accounting.view'],
+        'users'      => ['users.php',      'Používatelia', 'users.manage'],
     ];
-    $isAdmin = ($user['role'] ?? '') === 'admin';
+    $nav = array_filter(
+        $nav,
+        static fn (array $item): bool => $item[2] === null || Auth::can($user, $item[2])
+    );
     ?><!doctype html>
 <html lang="sk">
 <head>
@@ -24,29 +29,45 @@ function layout_start(string $title, string $active = '', ?array $user = null): 
 <meta name="robots" content="noindex, nofollow">
 <title><?= htmlspecialchars($title) ?> · ENZO admin</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/admin.css?v=2">
+<link rel="stylesheet" href="assets/admin.css?v=3">
 </head>
 <body>
 <header class="topbar no-print">
   <div class="topbar-inner">
     <a class="brand" href="dashboard.php">ENZO<span>ADMIN</span></a>
     <?php if ($user !== null): ?>
-      <nav class="topnav">
-        <?php foreach ($nav as $key => [$href, $label]): ?>
-          <?php if (in_array($key, ['settings', 'users'], true) && !$isAdmin) { continue; } ?>
-          <a href="<?= $href ?>"<?= $active === $key ? ' class="active"' : '' ?>><?= $label ?></a>
-        <?php endforeach; ?>
-      </nav>
       <div class="topbar-user">
-        <span><?= htmlspecialchars((string) $user['name']) ?></span>
-        <a class="btn btn-sm btn-ghost" style="border-color:rgba(246,240,227,.35);color:#F6F0E3" href="logout.php">Odhlásiť</a>
+        <span class="topbar-name"><?= htmlspecialchars((string) $user['name']) ?></span>
+        <a class="btn btn-sm btn-ghost topbar-logout" href="logout.php">Odhlásiť</a>
       </div>
     <?php endif; ?>
   </div>
+  <?php if ($user !== null): ?>
+    <?php /* Na telefóne sa navigácia posúva do strany namiesto lámania do troch riadkov. */ ?>
+    <nav class="topnav" aria-label="Hlavné menu">
+      <?php foreach ($nav as $key => [$href, $label, $ability]): ?>
+        <a href="<?= $href ?>"<?= $active === $key ? ' class="active" aria-current="page"' : '' ?>><?= $label ?></a>
+      <?php endforeach; ?>
+    </nav>
+  <?php endif; ?>
 </header>
 <div class="checkrule no-print"></div>
 <main class="wrap">
 <?php
+}
+
+/** Slušné odmietnutie namiesto holého 403. */
+function layout_denied(): never
+{
+    $user = Auth::user();
+    layout_start('Bez prístupu', '', $user);
+    echo '<div class="card"><p class="eyebrow">403</p>'
+       . '<h1>Sem nemáš prístup</h1>'
+       . '<p style="margin-top:12px">Túto časť môže otvoriť len správca. '
+       . 'Ak ju potrebuješ, povedz si o oprávnenie.</p>'
+       . '<a class="btn" href="dashboard.php" style="margin-top:16px">Späť na objednávky</a></div>';
+    layout_end();
+    exit;
 }
 
 function layout_end(): void
