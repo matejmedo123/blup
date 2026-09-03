@@ -295,7 +295,10 @@ table.data tr:last-child td { border-bottom: 0; }
 @media (min-width: 700px) { .stat-value { font-size: 28px; } }
 
 /* Stĺpcový graf bez knižnice — pár divov spraví tú istú prácu. */
-.chart { display: flex; align-items: flex-end; gap: 4px; height: 150px; overflow-x: auto; }
+/* Karta s grafom je v mriežke rovnako vysoká ako susedná tabuľka —
+   nech graf to miesto využije namiesto toho, aby pod ním zívala diera. */
+.grid-2 > .card { display: flex; flex-direction: column; }
+.chart { display: flex; align-items: flex-end; gap: 4px; flex: 1; min-height: 150px; overflow-x: auto; }
 .chart-col { flex: 1 1 0; min-width: 18px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
 .chart-bar { width: 100%; background: var(--burgundy); border-radius: 4px 4px 0 0; min-height: 2px; }
 .chart-label { font-size: 9.5px; color: var(--muted); margin-top: 5px; white-space: nowrap; }
