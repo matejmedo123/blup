@@ -96,6 +96,13 @@ function human_secs(?int $s): string
         </div>
       <?php endforeach; ?>
     </div>
+    <?php /* Zaujíma nás koniec grafu — dnešok, nie čo bolo pred dvoma týždňami. */ ?>
+    <script>
+      (function () {
+        var c = document.currentScript.previousElementSibling;
+        if (c) c.scrollLeft = c.scrollWidth;
+      })();
+    </script>
   </div>
 
   <div class="card">

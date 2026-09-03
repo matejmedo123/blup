@@ -30,7 +30,7 @@ function layout_start(string $title, string $active = '', ?array $user = null): 
 <meta name="robots" content="noindex, nofollow">
 <title><?= htmlspecialchars($title) ?> · ENZO admin</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/admin.css?v=4">
+<link rel="stylesheet" href="assets/admin.css?v=5">
 </head>
 <body>
 <header class="topbar no-print">

@@ -10,7 +10,7 @@ require __DIR__ . '/../api/_bootstrap.php';
 header('Cache-Control: no-store');
 
 if (!Auth::check()) {
-    Response::fail('Odhlásené.', 401);
+    Response::failCode(ErrorCode::UNAUTHORIZED, 'Odhlásené.');
 }
 $user = Auth::user();
 

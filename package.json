@@ -9,7 +9,12 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "export": "next build",
-    "zip": "next build && cd out && rm -f ../enzo-web.zip && zip -r -q ../enzo-web.zip . && cd .. && echo \"Hotovo: enzo-web.zip\""
+    "zip": "next build && cd out && rm -f ../enzo-web.zip && zip -r -q ../enzo-web.zip . && cd .. && echo \"Hotovo: enzo-web.zip\"",
+    "test:php": "php backend/tests/run.php",
+    "test:e2e": "node e2e/order-lifecycle.mjs",
+    "test:all": "npx tsc --noEmit && npx eslint src --max-warnings=0 && npm run test:php && npm run build",
+    "dev:server": "bash scripts/dev-server.sh",
+    "pack": "bash scripts/pack.sh"
   },
   "dependencies": {
     "next": "16.3.3",

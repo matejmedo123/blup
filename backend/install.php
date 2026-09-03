@@ -56,6 +56,67 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && !$alreadyInstalled) {
     }
 }
 
+/**
+ * Skúsi si sám stiahnuť súbor z priečinka storage.
+ *
+ * Na Apache aj LiteSpeed (teda aj na Websupporte) ho zamkne `.htaccess`.
+ * Keby hosting `.htaccess` ignoroval — napríklad nginx — bola by cez web
+ * stiahnuteľná celá databáza aj s údajmi zákazníkov. Radšej to overíme
+ * naozaj, než aby sme sa spoliehali na to, že to tak asi bude.
+ *
+ * @return bool|null true = zamknuté, false = dostupné zvonku, null = nevieme
+ */
+function storage_is_locked(): ?bool
+{
+    $probe = __DIR__ . '/storage/.pristupnost-test';
+    $token = bin2hex(random_bytes(8));
+    if (@file_put_contents($probe, $token) === false) {
+        return null;
+    }
+
+    $scheme = (($_SERVER['HTTPS'] ?? '') === 'on' || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        ? 'https' : 'http';
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    $base = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/'))), '/');
+    if ($host === '') {
+        @unlink($probe);
+        return null;
+    }
+
+    $url = "$scheme://$host$base/storage/.pristupnost-test";
+    $ctx = stream_context_create([
+        'http' => ['timeout' => 4, 'ignore_errors' => true],
+        'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false],
+    ]);
+
+    $http_response_header = [];
+    $body = @file_get_contents($url, false, $ctx);
+    @unlink($probe);
+
+    // Keď sa spojenie vôbec nepodarilo, nevieme nič. Tváriť sa, že je
+    // teda všetko v poriadku, by bola tá horšia z dvoch možných chýb.
+    if ($body === false && $http_response_header === []) {
+        return null;
+    }
+
+    $status = 0;
+    foreach ($http_response_header as $line) {
+        if (preg_match('~^HTTP/\S+\s+(\d{3})~', $line, $m) === 1) {
+            $status = (int) $m[1];
+        }
+    }
+    if ($status === 0) {
+        return null;
+    }
+    if ($status === 403 || $status === 401 || $status === 404) {
+        return true;
+    }
+    // Server obsah vydal — a je to naozaj náš súbor.
+    return trim((string) $body) !== $token;
+}
+
+$storageLocked = storage_is_locked();
+
 /* ---------- Kontrola prostredia ---------- */
 $checks = [
     'PHP 8.1 alebo novšie'      => PHP_VERSION_ID >= 80100,
@@ -125,7 +186,38 @@ $envOk = !in_array(false, $checks, true);
           </td>
         </tr>
       <?php endforeach; ?>
+      <tr>
+        <td>Priečinok storage nie je dostupný z internetu</td>
+        <td class="num">
+          <?php if ($storageLocked === true): ?>
+            <span class="badge badge-ready">zamknutý</span>
+          <?php elseif ($storageLocked === false): ?>
+            <span class="badge badge-cancelled">dostupný zvonku</span>
+          <?php else: ?>
+            <span class="badge badge-completed">nedá sa overiť</span>
+          <?php endif; ?>
+        </td>
+      </tr>
     </table>
+    <?php if ($storageLocked === false): ?>
+      <div class="alert alert-err" style="margin-top:16px">
+        <strong>Priečinok <code>storage</code> je stiahnuteľný z internetu.</strong>
+        Tvoj hosting zrejme neberie do úvahy súbor <code>.htaccess</code>.
+        Keď použiješ SQLite, dala by sa takto stiahnuť celá databáza aj
+        s údajmi zákazníkov.
+        <br><br>
+        Rieši sa to jedným z týchto spôsobov:
+        <br>· prepni sa v <code>api/config.php</code> na <strong>MySQL</strong> (na Websupporte je v základe),
+        <br>· alebo daj <code>sqlite_path</code> mimo verejného priečinka (napr. <code>__DIR__ . '/../../enzo.sqlite'</code>),
+        <br>· alebo si u hostingu vypýtaj zamknutie priečinka <code>storage</code>.
+      </div>
+    <?php elseif ($storageLocked === null): ?>
+      <div class="alert alert-info" style="margin-top:16px">
+        Dostupnosť priečinka <code>storage</code> sa nedala overiť. Po inštalácii
+        si skús otvoriť <code>/storage/</code> v prehliadači — nemal by si vidieť nič.
+      </div>
+    <?php endif; ?>
+
     <?php if (!$envOk): ?>
       <div class="alert alert-err" style="margin-top:16px">
         Niečo chýba. Skontroluj údaje v <code>api/config.php</code> a nastavenia hostingu.

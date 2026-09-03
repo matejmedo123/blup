@@ -90,6 +90,12 @@ final class Settings
         self::$cache = null;
     }
 
+    /** Zahodí pamäť nastavení — po zmene priamo v databáze. */
+    public static function flush(): void
+    {
+        self::$cache = null;
+    }
+
     /** @return list<array{days:string,time:string}> */
     public static function hours(): array
     {

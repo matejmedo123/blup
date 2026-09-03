@@ -86,11 +86,19 @@ a { color: var(--burgundy); }
 /* ---------- Layout ---------- */
 .wrap { max-width: 1400px; margin: 0 auto; padding: 22px 20px 60px; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+/* Na telefóne nech nadpis a ovládanie nesedia vedľa seba natlačené. */
+@media (max-width: 640px) {
+  .page-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .page-head form, .page-head .btn { width: 100%; }
+}
 .eyebrow { font-size: 10.5px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
 
 .card { background: #fff; border-radius: var(--radius); border: 1px solid var(--line); padding: 18px; }
 .card + .card { margin-top: 16px; }
 .grid { display: grid; gap: 16px; }
+/* Potomkovia gridu majú v základe min-width:auto, takže široký obsah
+   (graf, tabuľka) roztiahne kartu a s ňou celú stránku. */
+.grid > *, .stats > * { min-width: 0; }
 @media (min-width: 900px) { .grid-2 { grid-template-columns: 1fr 1fr; } .grid-3 { grid-template-columns: repeat(3, 1fr); } }
 
 /* ---------- Tlačidlá ---------- */
@@ -288,7 +296,7 @@ table.data tr:last-child td { border-bottom: 0; }
 
 /* Stĺpcový graf bez knižnice — pár divov spraví tú istú prácu. */
 .chart { display: flex; align-items: flex-end; gap: 4px; height: 150px; overflow-x: auto; }
-.chart-col { flex: 1 1 0; min-width: 22px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.chart-col { flex: 1 1 0; min-width: 18px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
 .chart-bar { width: 100%; background: var(--burgundy); border-radius: 4px 4px 0 0; min-height: 2px; }
 .chart-label { font-size: 9.5px; color: var(--muted); margin-top: 5px; white-space: nowrap; }
 

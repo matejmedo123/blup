@@ -25,19 +25,26 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
-$configFile = __DIR__ . '/config.php';
-if (!is_file($configFile)) {
-    http_response_code(500);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode([
-        'ok'    => false,
-        'error' => 'Chýba api/config.php. Skopíruj config.example.php a vyplň údaje.',
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+// Testy si konfiguráciu podstrčia cez globálnu premennú, aby nesiahali
+// na ostrú databázu ani neposielali skutočné e-maily.
+if (isset($GLOBALS['ENZO_TEST_CONFIG']) && is_array($GLOBALS['ENZO_TEST_CONFIG'])) {
+    /** @var array<string,mixed> $config */
+    $config = $GLOBALS['ENZO_TEST_CONFIG'];
+} else {
+    $configFile = __DIR__ . '/config.php';
+    if (!is_file($configFile)) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok'    => false,
+            'error' => 'Chýba api/config.php. Skopíruj config.example.php a vyplň údaje.',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
-/** @var array<string,mixed> $config */
-$config = require $configFile;
+    /** @var array<string,mixed> $config */
+    $config = require $configFile;
+}
 
 date_default_timezone_set($config['app']['timezone'] ?? 'Europe/Bratislava');
 

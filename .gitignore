@@ -51,3 +51,6 @@ AGENTS.md
 /backend/storage/*
 !/backend/storage/.htaccess
 *.sqlite
+
+# dočasná testovacia databáza
+/backend/tests/.tmp/

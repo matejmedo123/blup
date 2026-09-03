@@ -25,9 +25,11 @@ enzo-web.zip
 │
 ├── admin/          ← prihlásenie pre prevádzku
 │   ├── index.php (prihlásenie), dashboard.php (živý prehľad objednávok)
-│   ├── menu.php, product.php (úprava menu), settings.php (nastavenia webu)
+│   ├── analytics.php (tržby, najpredávanejšie, ako stíhame)
+│   ├── menu.php, product.php (úprava menu), modifiers.php (varianty)
+│   ├── settings.php (nastavenia webu)
 │   ├── accounting.php, export.php (podklady pre účtovníctvo)
-│   └── users.php (ďalší používatelia)
+│   └── users.php, audit.php (prístupy a denník zmien)
 │
 ├── storage/        ← denníky, databáza pri SQLite (zvonku neprístupné)
 ├── install.php     ← jednorazová inštalácia, po nej ju ZMAŽ
@@ -235,9 +237,18 @@ podľa toho, ako si zaneprázdnený. Zákazníkovi okamžite odletí e‑mail
 **V PRÍPRAVE** → robí sa. Keď je jedlo hotové, klikneš **Pripravené** —
 zákazník dostane mail, že si môže prísť / že kuriér vyráža.
 
-**PRIPRAVENÉ** → keď si zákazník prevezme a zaplatí, klikneš **Vybavené**.
-Vtedy sa objednávke pridelí **číslo dokladu** (napr. `2026/000042`) a pri platbe
-v hotovosti sa označí ako zaplatená.
+**HOTOVÉ** → pri osobnom odbere klikneš **Vyzdvihnuté**, keď si zákazník príde,
+pri rozvoze **Kuriér vyrazil** (vtedy mu odletí mail, že je jedlo na ceste).
+Nakoniec **Vybavené** — vtedy sa objednávke pridelí **číslo dokladu**
+(napr. `2026/000042`) a pri platbe v hotovosti sa označí ako zaplatená.
+
+Poradie krokov systém stráži: z novej objednávky sa nedá skočiť rovno na
+vybavenú a vybavená sa už nedá vrátiť späť. Keď na tú istú objednávku klikne
+kolega o sekundu skôr, druhému sa ukáže, že ho niekto predbehol — namiesto
+toho, aby mu potichu prepísal prácu.
+
+**Na telefóne** sú tri stĺpce záložky s počtami (Nové / V príprave / Hotové).
+Pri novej objednávke to pípne, telefón zavibruje a prehodí sa na Nové.
 
 Na detaile objednávky je tlačidlo **Tlačiť** — vytlačí bloček na 80 mm
 termotlačiarni (aj na obyčajnej A4 to vyzerá dobre).
@@ -264,11 +275,43 @@ Všetko je v admine, žiadne súbory sa už neupravujú.
 ### Menu → kategórie
 Poradie kategórií, názvy, popisky sekcií, skrytie celej kategórie.
 
+### Menu → varianty
+Keď si má zákazník **povinne niečo vybrať** — napríklad veľkosť pizze —
+založíš skupinu v **Menu → Varianty**:
+
+| Pole | Čo znamená |
+|------|------------|
+| Povinná | bez výberu sa položka nedá objednať |
+| Najmenej | koľko možností musí vybrať aspoň |
+| Najviac | koľko najviac (`0` = koľko chce) |
+
+Príklad *Veľkosť*: povinná, najmenej 1, najviac 1 → zákazník vyberie
+práve jednu. Príklad *Omáčky*: nepovinná, najviac 2.
+
+Pravidlá stráži server, takže ich nikto neobíde ani keď si pohrá
+s prehliadačom.
+
 ### Nastavenia
 - adresa, telefón, e‑mail, otváracie hodiny, obce kam rozvážaš
 - **poplatok za doručenie**, **doručenie zdarma od**, **minimálna objednávka**
 - predpokladané časy prípravy
 - text, ktorý sa ukáže, keď neprijímaš objednávky
+
+### Otváracie hodiny
+Systém sám odmieta objednávky mimo otváracích hodín a zákazníkovi povie,
+kedy otváraš. Nastavuje sa to po dňoch a dá sa zadať aj **posledná
+objednávka pred zatvorením** (napr. 30 minút, aby kuchyňa stihla dovariť).
+
+### Prehľad prevádzky
+Záložka **Prehľad** ukazuje dnešnú tržbu, priemernú objednávku, čo sa práve
+robí, najpredávanejšie položky a tržbu po dňoch. Je tam aj to, ako rýchlo
+objednávky prijímaš a v koľkých percentách stíhaš sľúbený čas — keď je to
+číslo vysoké, netreba variť rýchlejšie, stačí sľubovať realistickejší čas.
+
+### Denník zmien
+V **Používatelia → Denník zmien** je vidieť, kto zmenil cenu (aj z akej na
+akú), kto menil stavy objednávok a kto sa prihlásil. Heslá sa tam nikdy
+nezapisujú.
 
 Zmeny sú na webe **okamžite**, netreba nič znova nahrávať.
 
@@ -377,11 +420,42 @@ vytvoril navyše, je `api/config.php` a nahraté fotky.
 | Zaplavenie falošnými objednávkami | limit objednávok na IP za hodinu (`rate_limit_per_hour`) |
 | Prelomenie hesla do adminu | heslá cez bcrypt, obmedzený počet pokusov |
 | Cudzí formulár odošle akciu za teba | CSRF token v každom formulári aj v akciách adminu |
+| Dvakrát odoslaná objednávka | idempotenčný kľúč — retry vráti pôvodnú objednávku, nevytvorí druhú |
+| Opakovane doručený platobný webhook | platba sa zaúčtuje raz, rozhoduje o tom unikátny index v databáze |
+| Dvaja pracovníci kliknú naraz | druhý sa dozvie, že ho niekto predbehol, namiesto tichého prepísania |
+| Obsluha zmení ceny | správu menu, nastavení a účtovníctva vidí len správca |
+| Nedá sa dohľadať, kto čo zmenil | denník zmien s pôvodnou aj novou hodnotou |
 | Stiahnutie `config.php` s heslami | `.htaccess` v `api/` prístup zakazuje |
 | Prezretie databázy pri SQLite | `.htaccess` zamyká celý priečinok `storage/` |
 
 Čo musíš spraviť ty: **dlhé heslo do adminu**, **zmazať `install.php`**
 a **nikomu neposielať `config.php`**.
+
+### Ak inštalácia hlási „storage je dostupný z internetu“
+
+Znamená to, že hosting neberie do úvahy `.htaccess`. Na Websupporte sa to
+stať nemá, ale keby áno, dala by sa pri SQLite stiahnuť celá databáza aj
+s údajmi zákazníkov. Rieši sa to jedným z troch spôsobov:
+
+1. prepni sa v `api/config.php` na **MySQL** (na Websupporte je v základe),
+2. alebo daj `sqlite_path` mimo verejného priečinka,
+3. alebo si u hostingu vypýtaj zamknutie priečinka `storage`.
+
+---
+
+## Pre technicky zdatných
+
+Keď si niekto bude chcieť systém rozbehať lokálne alebo upraviť:
+
+```bash
+npm install
+bash scripts/dev-server.sh   # web + backend na SQLite, bez MySQL
+npm run test:all             # typecheck, lint, testy backendu, build
+npm run test:e2e             # celý cyklus objednávky cez prehliadač
+bash scripts/pack.sh         # zabalí nový enzo-web.zip
+```
+
+Pravidlá projektu sú v `CLAUDE.md`, stav prác v `progress.md`.
 
 ---
 

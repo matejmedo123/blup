@@ -18,20 +18,22 @@ exportom, inštalátor, bezpečnostné opatrenia. Otestované end-to-end
 z čistej inštalácie.
 
 ### Kolo 3 — dotiahnutie na špecifikáciu + mobil
-Prebieha. Stav jednotlivých úloh nižšie.
 
 - [x] Audit oproti zadaniu, `CLAUDE.md`, `progress.md`
-- [ ] Migrácia databázy v2 (história stavov, platby, zóny, hodiny, audit,
-      idempotencia, kupóny, modifier groups, indexy)
-- [ ] State machine s validáciou prechodov + ochrana proti súbehu
-- [ ] Idempotencia objednávky a platobného webhooku
-- [ ] Otváracie hodiny, doručovacie zóny, kupóny
-- [ ] Modifier groups s povinnosťou a min/max
-- [ ] RBAC admin/staff, audit log, jednotné chybové kódy
-- [ ] Platby ako samostatná entita + analytika
-- [ ] Mobilná verzia adminu, doladenie webu na telefóne
-- [ ] Testy — unit, integračné, E2E
-- [ ] Finálny audit, build, zabalenie
+- [x] Migrácie databázy s evidenciou; nové tabuľky pre históriu stavov,
+      platby, zóny, hodiny, kupóny, varianty, audit a idempotenciu
+- [x] Stavový automat s validáciou prechodov + ochrana proti súbehu
+- [x] Idempotencia objednávky aj platobného webhooku
+- [x] Otváracie hodiny, doručovacie zóny, kupóny
+- [x] Varianty s povinnosťou a min/max výberom
+- [x] RBAC admin/obsluha, audit log, jednotné chybové kódy
+- [x] Platby ako samostatná entita + analytika prevádzky
+- [x] Mobilná verzia adminu, doladenie webu na telefóne
+- [x] Testy: 93 backendových + 18 E2E kontrol cez celý cyklus objednávky
+- [x] Finálny audit, build, zabalenie
+
+Overené: čistá inštalácia z balíka, objednávka cez prehliadač na mobile,
+prijatie a preklikanie objednávky v admine, e-maily, doklad, CSV export.
 
 ## Ako pokračovať
 
