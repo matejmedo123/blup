@@ -53,6 +53,32 @@ async function main() {
   const customer = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true });
   const shop = await browser.newContext({ viewport: TABLET });
 
+  /* Pípanie v teste nepočujeme, tak si Web Audio podstrčíme vlastné a
+     počítame, koľkokrát sa oscilátor spustil. Titulok karty sledujeme
+     tiež — pri vypnutom zvuku je jediným upozornením. */
+  await shop.addInitScript(() => {
+    window.__beeps = 0;
+    window.__titles = [];
+    function Fake() {
+      this.state = "running";
+      this.currentTime = 0;
+      this.destination = {};
+    }
+    Fake.prototype.resume = function () {};
+    Fake.prototype.createGain = function () {
+      return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
+    };
+    Fake.prototype.createOscillator = function () {
+      return { frequency: {}, connect() {}, start() { window.__beeps++; }, stop() {} };
+    };
+    window.AudioContext = Fake;
+    window.webkitAudioContext = Fake;
+    document.addEventListener("DOMContentLoaded", () => {
+      const node = document.querySelector("title");
+      if (node) new MutationObserver(() => window.__titles.push(document.title)).observe(node, { childList: true });
+    });
+  });
+
   const page = await customer.newPage();
   const admin = await shop.newPage();
 
@@ -174,9 +200,41 @@ async function main() {
     const card = admin.locator(".order-card").filter({ hasText: orderNumber });
     ok((await card.count()) > 0, "objednávka je na nástenke medzi novými");
 
+    /* Jedno pípnutie sa v prevádzke stratí, tak alarm drží, kým objednávku
+       niekto neprijme alebo neodmietne. */
+    const beeps = () => admin.evaluate(() => window.__beeps);
+    ok(await admin.evaluate(() => document.body.classList.contains("has-waiting")),
+      "nástenka je v stave alarmu, kým je objednávka nepotvrdená");
+
+    const firstBeeps = await beeps();
+    ok(firstBeeps > 0, "pípne hneď, nečaká sa na ďalšie ťahanie", `pípnutí: ${firstBeeps}`);
+
+    let repeated = false;
+    for (let i = 0; i < 16 && !repeated; i++) {
+      await wait(1000);
+      repeated = (await beeps()) > firstBeeps;
+    }
+    ok(repeated, "pípa opakovane, kým sa objednávka nepotvrdí");
+    ok((await admin.evaluate(() => window.__titles)).some((t) => /ČAKÁ NA POTVRDENIE/.test(t)),
+      "názov karty bliká upozornením aj pri vypnutom zvuku");
+
     await card.locator('.mins button[data-mins="20"]').click();
     await card.locator('button[data-act="accept"]').click();
     await wait(2500);
+
+    /* Ak medzi novými nič neostalo, alarm musí stíchnuť. Keď v inštancii
+       visia ďalšie nepotvrdené objednávky, má naopak pípať ďalej. */
+    const stillWaiting = await admin.locator("#col-received .order-card").count();
+    const alarmOn = await admin.evaluate(() => document.body.classList.contains("has-waiting"));
+    if (stillWaiting === 0) {
+      ok(!alarmOn, "po prijatí alarm zhasne");
+      const quiet = await beeps();
+      await wait(8000);
+      is(await beeps(), quiet, "a viac už nepípne");
+      is(await admin.evaluate(() => document.title), "Objednávky · ENZO admin", "názov karty je späť v pokoji");
+    } else {
+      ok(alarmOn, `alarm drží ďalej, lebo čaká ešte ${stillWaiting} objednávok`);
+    }
 
     /* ---------------------------------------------------------------- */
     step("5. Zákazníkovi sa ukáže potvrdený čas");

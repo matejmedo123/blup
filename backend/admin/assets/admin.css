@@ -215,6 +215,19 @@ table.data tr:last-child td { border-bottom: 0; }
 }
 .column .count { background: var(--burgundy); color: var(--cream); border-radius: 999px; padding: 2px 9px; font-size: 11px; }
 
+/* Kým je čo potvrdiť, nástenka nielen pípa — počet nových aj pulzuje.
+   Zvuk sa dá stlmiť alebo prehlušiť, farba nie. */
+@keyframes waiting-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(225, 177, 44, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(225, 177, 44, 0.6); }
+}
+.has-waiting .board-tabs button[data-tab="received"] .count,
+.has-waiting #c-received { animation: waiting-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .has-waiting .board-tabs button[data-tab="received"] .count,
+  .has-waiting #c-received { animation: none; outline: 2px solid var(--gold); outline-offset: 2px; }
+}
+
 .order-card {
   background: #fff; border-radius: 10px; border: 1px solid var(--line);
   padding: 14px; margin-bottom: 10px; display: block; text-decoration: none; color: inherit;

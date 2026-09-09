@@ -38,9 +38,9 @@ flash_render();
 <div class="card no-print statusbar">
   <label class="checkline" style="margin:0">
     <input type="checkbox" id="soundOn" checked>
-    <span>Zvuk pri novej objednávke</span>
+    <span>Zvuk, kým je objednávka nepotvrdená</span>
   </label>
-  <span class="hint refresh-note">Stránka sa sama obnovuje každých 10 sekúnd.</span>
+  <span class="hint refresh-note">Obnovuje sa každých 10 s. Pípa, kým novú objednávku neprijmeš alebo neodmietneš.</span>
   <span class="hint" id="lastUpdate"></span>
 </div>
 

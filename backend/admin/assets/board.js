@@ -1,5 +1,9 @@
 /* ENZO admin — živá nástenka objednávok.
-   Ťahá stav každých 10 sekúnd, pri novej objednávke pípne.
+   Ťahá stav každých 10 sekúnd a kým je v stĺpci Nové čo i len jedna
+   nepotvrdená objednávka, opakovane pípa. Jedno pípnutie sa v prevádzke
+   ľahko stratí — v hluku, keď je obsluha vzadu, alebo keď má telefón
+   vo vrecku. Alarm prestane až vtedy, keď je objednávka prijatá alebo
+   odmietnutá; dovtedy bliká aj názov karty v prehliadači.
 
    Na telefóne sa tri stĺpce nezmestia vedľa seba a pod sebou by obsluha
    k „pripraveným“ scrollovala cez celú obrazovku. Preto sú na úzkom
@@ -9,9 +13,14 @@
   "use strict";
 
   var POLL_MS = 10000;
+  var ALARM_MS = 6000;          // ako často sa alarm zopakuje
+  var TITLE = "Objednávky · ENZO admin";
   var seen = new Set();
   var firstLoad = true;
   var audioCtx = null;
+  var alarmTimer = null;
+  var alarmBlink = false;
+  var alarmWaiting = 0;
 
   /* Stav objednávky → stĺpec nástenky. Stavov je viac než stĺpcov:
      obsluhu zaujíma, či sa objednávka ešte robí, nie jemný odtieň. */
@@ -70,6 +79,52 @@
     } catch (e) {
       /* zvuk je len pomôcka — keď sa nedá, nič sa nedeje */
     }
+  }
+
+  /* Prehliadač nepustí zvuk, kým používateľ na stránke niečo neurobí.
+     Pri prvom kliknutí či dotyku zvuk odomkneme a keď už alarm beží,
+     rovno pípneme — inak by obsluha čakala do ďalšieho opakovania. */
+  function unlockAudio() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      if (alarmTimer) beep();
+    } catch (e) {
+      /* bez zvuku sa dá žiť, blikanie titulku ostáva */
+    }
+  }
+  ["pointerdown", "keydown", "touchstart"].forEach(function (ev) {
+    document.addEventListener(ev, unlockAudio, { once: true, passive: true });
+  });
+
+  /* ---------- alarm pri nepotvrdených objednávkach ---------- */
+  function alarmTick() {
+    beep();
+    // Titulok bliká aj s vypnutým zvukom — na inej karte je to jediný signál.
+    alarmBlink = !alarmBlink;
+    document.title = alarmBlink
+      ? "(" + alarmWaiting + ") ČAKÁ NA POTVRDENIE"
+      : TITLE;
+  }
+
+  function startAlarm(waiting) {
+    alarmWaiting = waiting;
+    document.body.classList.add("has-waiting");
+    // Ak alarm už beží, necháme ho bežať. Reštartovať ho pri každom
+    // ťahaní by odsúvalo pípnutie a v praxi by zaznelo len raz za 10 sekúnd.
+    if (alarmTimer) return;
+    alarmTick();
+    alarmTimer = setInterval(alarmTick, ALARM_MS);
+  }
+
+  function stopAlarm() {
+    if (alarmTimer) {
+      clearInterval(alarmTimer);
+      alarmTimer = null;
+    }
+    alarmBlink = false;
+    document.body.classList.remove("has-waiting");
+    document.title = TITLE;
   }
 
   /* ---------- pomocné ---------- */
@@ -267,7 +322,9 @@
       }
     });
 
-    // nová objednávka od minulého ťahania → pípni
+    // Na telefóne prehodíme na stĺpec s novými, keď nejaká pribudla —
+    // inak by ju obsluha nemusela vôbec zbadať. Robíme to len pri novej
+    // objednávke, nie pri každom ťahaní, nech to obsluhe neuteká pod rukami.
     var fresh = orders.filter(function (o) {
       return o.status === "received" && !seen.has(o.id);
     });
@@ -275,14 +332,14 @@
       seen.add(o.id);
     });
     if (!firstLoad && fresh.length) {
-      beep();
-      document.title = "(" + fresh.length + ") Nová objednávka · ENZO admin";
-      // Na telefóne prehodíme na stĺpec s novými — inak by ju obsluha
-      // nemusela vôbec zbadať.
       activeTab = "received";
       applyTab();
     }
     firstLoad = false;
+
+    // Alarm drží, kým je čo potvrdiť — nie kým je objednávka nová.
+    if (groups.received.length) startAlarm(groups.received.length);
+    else stopAlarm();
   }
 
   function poll() {
@@ -370,12 +427,10 @@
       });
   });
 
-  // po interakcii vyčistíme počítadlo v titulku
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden) {
-      document.title = "Objednávky · ENZO admin";
-      poll();
-    }
+    if (document.hidden) return;
+    if (!alarmTimer) document.title = TITLE;
+    poll();
   });
 
   applyTab();
