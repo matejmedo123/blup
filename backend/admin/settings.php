@@ -69,7 +69,8 @@ flash_render();
   <button class="btn" type="submit" form="settingsForm">Uložiť zmeny</button>
 </div>
 
-<div class="grid grid-3" style="margin-bottom:18px">
+<?php /* Rozcestník sa sám poskladá podľa šírky — kariet pribúda. */ ?>
+<div class="grid" style="margin-bottom:18px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))">
   <a class="card linkcard" href="hours.php">
     <h2>Otváracie hodiny</h2>
     <p class="hint">Hodiny po dňoch, posledná objednávka pred zatvorením
@@ -86,6 +87,12 @@ flash_render();
     <h2>Zľavové kódy</h2>
     <p class="hint">Percentá, pevná suma alebo doručenie zdarma;
       s obmedzením počtu použití a platnosti.</p>
+    <span class="linkcard-go">Nastaviť →</span>
+  </a>
+  <a class="card linkcard" href="load.php">
+    <h2>Automatické časy</h2>
+    <p class="hint">Keď je kuchyňa zavalená, web sám predĺži sľúbené časy.
+      Nastav, koľko objednávok zvládaš naraz a o koľko sa pridáva.</p>
     <span class="linkcard-go">Nastaviť →</span>
   </a>
 </div>

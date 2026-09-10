@@ -16,6 +16,7 @@ import { hasErrors, validateCheckout, type FieldErrors } from "@/lib/validation"
 import { cn } from "@/lib/utils";
 import { TextField } from "@/components/ui/Field";
 import { ArrowIcon, BagIcon, CheckIcon } from "@/components/ui/Icons";
+import { BusyNote } from "@/components/ui/BusyNote";
 import { CheckerRule } from "@/components/ui/Checkerboard";
 import { DeliveryForm } from "./DeliveryForm";
 import { OrderSummary } from "./OrderSummary";
@@ -246,6 +247,7 @@ export function Checkout() {
           <form ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-8">
             {/* 1 — spôsob */}
             <Step number="01" title="Spôsob prevzatia">
+              <BusyNote className="mb-4" />
               <div
                 role="radiogroup"
                 aria-label="Spôsob prevzatia objednávky"

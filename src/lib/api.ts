@@ -132,6 +132,12 @@ export interface ShopSettings {
   hours: { days: string; time: string }[];
   /** Obce, kam sa rozváža — každá s vlastným poplatkom a minimom. */
   zones: DeliveryZone[];
+  /** Ako je vyťažená kuchyňa. Server podľa toho sám predlžuje časy. */
+  load: {
+    busy: boolean;
+    extraMinutes: number;
+    note: string;
+  };
   /** Či sa práve dá objednať, a ak nie, prečo. */
   open: {
     now: boolean;

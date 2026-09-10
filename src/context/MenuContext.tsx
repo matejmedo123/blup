@@ -43,6 +43,11 @@ interface MenuContextValue {
   open: { now: boolean; reason: string; opensAt: string | null };
   /** Otváracie hodiny na zobrazenie. */
   hours: { days: string; time: string }[];
+  /**
+   * Keď je v kuchyni nabité, server sám predĺži časy a povie o koľko.
+   * Časy v `settings` sú už predĺžené — toto je len na vysvetlenie.
+   */
+  load: { busy: boolean; extraMinutes: number; note: string };
 }
 
 const FALLBACK_SETTINGS: MenuContextValue["settings"] = {
@@ -68,6 +73,7 @@ export function MenuProvider({ children }: { children: ReactNode }) {
   // Kým sa neozve server, tvárime sa otvorene — objednávku aj tak
   // nakoniec posúdi on, a zbytočná hláška „zatvorené“ by len odohnala ľudí.
   const [open, setOpen] = useState({ now: true, reason: "", opensAt: null as string | null });
+  const [load, setLoad] = useState({ busy: false, extraMinutes: 0, note: "" });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,6 +104,11 @@ export function MenuProvider({ children }: { children: ReactNode }) {
         if (shop.hours && shop.hours.length > 0) {
           setHours(shop.hours);
         }
+        setLoad({
+          busy: shop.load?.busy ?? false,
+          extraMinutes: shop.load?.extraMinutes ?? 0,
+          note: shop.load?.note ?? "",
+        });
         setOpen({
           now: shop.open?.now ?? true,
           reason: shop.open?.reason ?? "",
@@ -132,8 +143,9 @@ export function MenuProvider({ children }: { children: ReactNode }) {
       zones,
       open,
       hours,
+      load,
     };
-  }, [categories, products, live, settings, payments, zones, open, hours]);
+  }, [categories, products, live, settings, payments, zones, open, hours, load]);
 
   return <MenuContext.Provider value={value}>{children}</MenuContext.Provider>;
 }

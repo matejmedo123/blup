@@ -296,6 +296,15 @@ table.data tr:last-child td { border-bottom: 0; }
 /* Na telefóne je vysvetľujúca veta navyše — obsluha ju už pozná. */
 @media (max-width: 640px) { .refresh-note { display: none; } }
 
+/* Koľko web práve sľubuje navyše. Ukazuje sa len keď sa časy naozaj
+   predlžujú — inak by to bol ďalší večne svietiaci údaj. */
+.load-note {
+  border-radius: 999px; padding: 4px 12px;
+  font-size: 12px; font-weight: 700; line-height: 1.3;
+  background: rgba(225, 177, 44, 0.22); color: #6B4E06;
+}
+.load-note.load-slammed { background: rgba(176, 32, 32, 0.14); color: var(--red); }
+
 /* ---------- Prehľad prevádzky ---------- */
 .stats { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
 @media (min-width: 900px) { .stats { grid-template-columns: repeat(4, 1fr); } }

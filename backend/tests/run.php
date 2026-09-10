@@ -463,6 +463,84 @@ Db::run('UPDATE opening_hours SET is_open = 1');
 Settings::flush();
 ok(OpeningHours::status(strtotime(date('Y-m-d') . ' 12:00'))['open'], 'po zapnutí dňa sa opäť objednáva');
 
+/* ══════════════════════════════════════════════════════════════════ */
+describe('Časy sa predlžujú podľa toho, koľko je rozrobené');
+/* ══════════════════════════════════════════════════════════════════ */
+
+// Čistý stôl: všetko doterajšie odpraceme, nech počítame len to svoje.
+Db::run("UPDATE orders SET status = 'completed' WHERE status IN ('received','accepted','preparing','ready','delivering','picked_up')");
+Settings::set('auto_prep_enabled', '1');
+Settings::set('auto_prep_capacity', '3');
+Settings::set('auto_prep_step', '5');
+Settings::set('auto_prep_max', '15');
+Settings::set('prep_time_pickup', '15 — 25 min');
+Settings::set('prep_time_delivery', '35 — 50 min');
+Settings::set('default_prep_minutes', '25');
+Settings::flush();
+Workload::forget();
+
+$item = [['productId' => 'the-enzo-smash', 'quantity' => 1, 'extras' => []]];
+$made = [];
+$load = static function (): array {
+    Workload::forget();
+    return Workload::snapshot();
+};
+
+is($load()['inFlight'], 0, 'prázdna kuchyňa nemá čo počítať');
+is($load()['extraMinutes'], 0, 'a nič nepripočítava');
+
+for ($i = 0; $i < 3; $i++) {
+    $made[] = test_order($item);
+}
+is($load()['inFlight'], 3, 'tri objednávky v kuchyni systém vidí');
+is($load()['extraMinutes'], 0, 'do kapacity sa časy nepredlžujú');
+
+$made[] = test_order($item);
+is($load()['extraMinutes'], 5, 'štvrtá objednávka pridá prvý krok');
+is(Workload::stretchText('15 — 25 min', 5), '20 — 30 min', 'text s rozsahom sa posunie celý');
+is(Workload::suggestedMinutes(), 30, 'nástenka navrhne o krok viac');
+
+for ($i = 0; $i < 3; $i++) {
+    $made[] = test_order($item);
+}
+is($load()['inFlight'], 7, 'sedem rozrobených');
+is($load()['extraMinutes'], 10, 'druhá dávka pridá druhý krok');
+
+for ($i = 0; $i < 20; $i++) {
+    $made[] = test_order($item);
+}
+is($load()['extraMinutes'], 15, 'strop sa neprekročí ani pri nápore');
+
+// Hotové jedlo čakajúce na kuriéra už kuchyňu nezdržuje.
+Db::run("UPDATE orders SET status = 'ready' WHERE status IN ('received','accepted','preparing')");
+is($load()['inFlight'], 0, 'hotové objednávky sa do vyťaženia nerátajú');
+is($load()['extraMinutes'], 0, 'a časy sa vrátia na svoje');
+
+// Historickú objednávku predĺženie nemení — má svoj vlastný odklikaný čas.
+$first = Db::one('SELECT prep_minutes, ready_at FROM orders WHERE id = ?', [(int) $made[0]['id']]);
+ok($first['ready_at'] === null, 'neprijatá objednávka nemá sľúbený čas');
+
+Db::run("UPDATE orders SET status = 'received' WHERE id = ?", [(int) $made[0]['id']]);
+Workload::forget();
+$accepted = OrderService::accept((int) $made[0]['id'], 20);
+is((int) $accepted['prep_minutes'], 20, 'odklikaný čas platí presne tak, ako ho obsluha dala');
+
+Settings::set('auto_prep_enabled', '0');
+Settings::flush();
+Db::run("UPDATE orders SET status = 'received' WHERE id IN (SELECT id FROM orders WHERE status = 'ready')");
+Workload::forget();
+ok(Workload::inKitchen() > 3, 'kuchyňa je opäť plná');
+is(Workload::extraMinutes(), 0, 'vypnutá automatika nepredlžuje nič');
+is(Workload::stretchText('15 — 25 min', 0), '15 — 25 min', 'a text ostáva nedotknutý');
+
+// Po sebe upraceme, nech ďalšie testy nerátajú naše objednávky.
+Db::run("UPDATE orders SET status = 'completed' WHERE status IN ('received','accepted','preparing','ready','delivering','picked_up')");
+Settings::set('auto_prep_enabled', '1');
+Settings::set('auto_prep_capacity', '5');
+Settings::flush();
+Workload::forget();
+
+
 test_open_shop();
 
 exit(test_summary());

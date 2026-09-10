@@ -11,6 +11,10 @@ header('Cache-Control: public, max-age=5');
 try {
     $stripe = (array) cfg('payments.stripe', []);
     $status = OpeningHours::status();
+    // Keď je kuchyňa zavalená, časy na webe sa predĺžia samy. Web nesmie
+    // sľubovať 20 minút, keď je na platni desať objednávok.
+    $load  = Workload::snapshot();
+    $extra = (int) $load['extraMinutes'];
     Response::ok([
         'shop' => [
             'name'       => Settings::get('shop_name'),
@@ -35,8 +39,8 @@ try {
             'deliveryFee'        => Money::toFloat(Settings::cents('delivery_fee')),
             'freeDeliveryFrom'   => Money::toFloat(Settings::cents('free_delivery_from')),
             'minOrder'           => Money::toFloat(Settings::cents('min_order')),
-            'prepTimePickup'     => Settings::get('prep_time_pickup'),
-            'prepTimeDelivery'   => Settings::get('prep_time_delivery'),
+            'prepTimePickup'     => Workload::stretchText((string) Settings::get('prep_time_pickup'), $extra),
+            'prepTimeDelivery'   => Workload::stretchText((string) Settings::get('prep_time_delivery'), $extra),
         ],
         'payments' => [
             'cash' => (bool) cfg('payments.cash_enabled', true),
@@ -45,7 +49,18 @@ try {
         // Hodiny aj zóny berieme z tabuliek, ktoré systém naozaj vynucuje —
         // aby web nesľuboval niečo iné, než potom pri objednávke platí.
         'hours' => OpeningHours::grouped(),
-        'zones' => DeliveryZones::publicList(),
+        'zones' => array_map(
+            static function (array $z) use ($extra): array {
+                $z['etaMinutes'] = Workload::stretchMinutes((int) $z['etaMinutes'], $extra);
+                return $z;
+            },
+            DeliveryZones::publicList(),
+        ),
+        'load'  => [
+            'busy'         => $extra > 0,
+            'extraMinutes' => $extra,
+            'note'         => $load['note'],
+        ],
         'open'  => [
             'now'      => $status['open'],
             'reason'   => $status['reason'],

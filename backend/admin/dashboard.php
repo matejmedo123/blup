@@ -5,7 +5,7 @@ require __DIR__ . '/_layout.php';
 
 $user = Auth::requireLogin();
 $accepting = Settings::bool('accepting_orders');
-$defaultMins = max(5, Settings::int('default_prep_minutes'));
+$defaultMins = Workload::suggestedMinutes();
 
 layout_start('Objednávky', 'dashboard', $user);
 flash_render();
@@ -41,6 +41,7 @@ flash_render();
     <span>Zvuk, kým je objednávka nepotvrdená</span>
   </label>
   <span class="hint refresh-note">Obnovuje sa každých 10 s. Pípa, kým novú objednávku neprijmeš alebo neodmietneš.</span>
+  <span class="load-note" id="loadNote" hidden></span>
   <span class="hint" id="lastUpdate"></span>
 </div>
 

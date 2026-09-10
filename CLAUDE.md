@@ -68,7 +68,8 @@ bash scripts/pack.sh   # zabalí out/ + backend do enzo-web.zip
 4. **Ceny sú celé centy (`int`).** Nikdy float. Prevod cez `Money`.
 5. **Objednávka ukladá cenu v čase objednania** (`base_cents`, `unit_cents`,
    `extras_json`). Historickú objednávku nikdy neprepočítavaj podľa
-   aktuálneho cenníka.
+   aktuálneho cenníka. To isté platí pre sľúbený čas: `Workload` predlžuje
+   len to, čo web sľubuje odteraz, nikdy `ready_at` už prijatej objednávky.
 6. **Vytvorenie objednávky aj zmena stavu bežia v transakcii.**
 7. **Neplatný prechod stavu server odmietne** — pozri state machine nižšie.
 8. **Históriu stavov nikdy nemaž.**

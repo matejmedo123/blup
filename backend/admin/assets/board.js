@@ -21,6 +21,10 @@
   var alarmTimer = null;
   var alarmBlink = false;
   var alarmWaiting = 0;
+  var suggestedMins = DEFAULT_MINS;
+  /* Obsluhou odklikaná minutáž. Nástenka sa prekresľuje každých 10 sekúnd
+     a bez tohto by voľba zmizla pod rukami skôr, než stihne dať Prijať. */
+  var chosenMins = {};
 
   /* Stav objednávky → stĺpec nástenky. Stavov je viac než stĺpcov:
      obsluhu zaujíma, či sa objednávka ešte robí, nie jemný odtieň. */
@@ -38,6 +42,7 @@
     last: document.getElementById("lastUpdate"),
     sound: document.getElementById("soundOn"),
     board: document.getElementById("board"),
+    load: document.getElementById("loadNote"),
     tabs: document.getElementById("boardTabs"),
     cols: {
       received: document.getElementById("col-received"),
@@ -143,6 +148,13 @@
     return Math.round((new Date(iso).getTime() - Date.now()) / 60000);
   }
 
+  /** Najbližšia ponúkaná minutáž k navrhovanej. */
+  function nearest(choices, value) {
+    return choices.reduce(function (best, m) {
+      return Math.abs(m - value) < Math.abs(best - value) ? m : best;
+    }, choices[0]);
+  }
+
   function timeAgo(iso) {
     var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
     if (mins < 1) return "práve teraz";
@@ -155,9 +167,13 @@
     var detail = '<a class="btn btn-sm btn-ghost" href="order.php?id=' + o.id + '">Detail</a>';
 
     if (o.status === "received") {
-      var mins = [15, 20, 25, 30, 45, 60]
+      var choices = [15, 20, 25, 30, 45, 60];
+      // Predvyberieme to, čo obsluha klikla; inak návrh podľa vyťaženia.
+      var want = chosenMins[o.id] || nearest(choices, suggestedMins);
+      var mins = choices
         .map(function (m) {
-          return '<button type="button" data-mins="' + m + '">' + m + "′</button>";
+          return '<button type="button" data-mins="' + m + '"' +
+            (m === want ? ' class="sel"' : "") + ">" + m + "′</button>";
         })
         .join("");
       return (
@@ -303,6 +319,24 @@
     });
   }
 
+  /* ---------- vyťaženie ---------- */
+  function renderLoad(load) {
+    if (!load) return;
+    suggestedMins = load.suggestedMinutes || DEFAULT_MINS;
+    if (!el.load) return;
+
+    if (!load.enabled || !load.extraMinutes) {
+      el.load.hidden = true;
+      el.load.textContent = "";
+      return;
+    }
+    el.load.hidden = false;
+    el.load.className = "load-note load-" + load.level;
+    el.load.textContent =
+      "V kuchyni " + load.inFlight + " objednávok — web sľubuje o " +
+      load.extraMinutes + " min dlhšie.";
+  }
+
   /* ---------- načítanie ---------- */
   function render(orders) {
     var groups = { received: [], working: [], ready: [] };
@@ -353,6 +387,7 @@
       })
       .then(function (res) {
         if (!res.ok) throw new Error(res.error || "chyba");
+        renderLoad(res.data.load);
         render(res.data.orders);
         el.pulse.className = "badge badge-ready";
         el.pulse.textContent = "Spojenie v poriadku";
@@ -377,6 +412,8 @@
         b.classList.remove("sel");
       });
       minBtn.classList.add("sel");
+      chosenMins[minBtn.parentElement.getAttribute("data-order")] =
+        Number(minBtn.getAttribute("data-mins"));
       return;
     }
 
@@ -389,7 +426,7 @@
 
     if (act === "accept") {
       var picker = document.querySelector('.mins[data-order="' + id + '"] button.sel');
-      body.minutes = picker ? Number(picker.getAttribute("data-mins")) : DEFAULT_MINS;
+      body.minutes = picker ? Number(picker.getAttribute("data-mins")) : suggestedMins;
     }
     if (act === "reject") {
       var reason = prompt("Prečo objednávku odmietame? (zákazník to uvidí)", "Máme plno, nestíhame");
@@ -417,6 +454,7 @@
           // stačí povedať čo sa stalo a načítať aktuálny stav.
           throw new Error(res.error || "Nepodarilo sa uložiť.");
         }
+        delete chosenMins[id];
         poll();
       })
       .catch(function (e) {

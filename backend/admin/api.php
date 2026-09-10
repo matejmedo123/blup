@@ -64,7 +64,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
         ];
     }
 
-    Response::ok(['orders' => $orders, 'serverTime' => date('c')]);
+    // Vyťaženie posielame s nástenkou, nech obsluha vidí, prečo systém
+    // navrhuje dlhšie časy — a koľko web práve sľubuje zákazníkom.
+    $load = Workload::snapshot();
+    Response::ok([
+        'orders'     => $orders,
+        'serverTime' => date('c'),
+        'load'       => [
+            'enabled'          => $load['enabled'],
+            'inFlight'         => $load['inFlight'],
+            'capacity'         => $load['capacity'],
+            'extraMinutes'     => $load['extraMinutes'],
+            'level'            => $load['level'],
+            'suggestedMinutes' => Workload::suggestedMinutes(),
+        ],
+    ]);
 }
 
 /* ---------------- Zápis: akcie ---------------- */
@@ -89,7 +103,8 @@ try {
     switch ($action) {
         case 'accept':
         case 'confirm':
-            $minutes = (int) ($body['minutes'] ?? Settings::int('default_prep_minutes'));
+            // Keď obsluha minutáž neodklikne, vezmeme návrh podľa vyťaženia.
+            $minutes = (int) ($body['minutes'] ?? Workload::suggestedMinutes());
             $updated = OrderService::accept($id, $minutes, $user['id']);
             if ($updated['_changed']) {
                 $notifier->orderConfirmed($updated);

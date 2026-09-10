@@ -33,6 +33,12 @@ final class Settings
         'prep_time_delivery'   => '35 — 50 min',
         'default_prep_minutes' => '25',
 
+        // Automatické predlžovanie časov podľa toho, koľko je rozrobené.
+        'auto_prep_enabled'    => '1',
+        'auto_prep_capacity'   => '5',
+        'auto_prep_step'       => '5',
+        'auto_prep_max'        => '30',
+
         'delivery_zones'       => "Koniarovce\nPreseľany\nLudanice\nChrabrany\nTopoľčany\nNitrianska Streda",
         'opening_hours'        => "Pondelok — Štvrtok|11:00 — 21:00\nPiatok — Sobota|11:00 — 22:00\nNedeľa|12:00 — 21:00",
 

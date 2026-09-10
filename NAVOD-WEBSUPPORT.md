@@ -226,12 +226,16 @@ Ak mail nepríde, pozri sa do adminu na detail objednávky — dole je
 ## Denná prevádzka — čo robí obsluha
 
 Nechaj si na prevádzke otvorené `tvojadomena.sk/admin/dashboard.php`.
-Stránka sa sama obnovuje každých 10 sekúnd a pri novej objednávke **pípne**.
+Stránka sa sama obnovuje každých 10 sekúnd a **pípa dovtedy, kým novú
+objednávku neprijmeš alebo neodmietneš** — jedno pípnutie sa v prevádzke
+ľahko stratí. Popri tom bliká aj názov karty v prehliadači, takže to vidno,
+aj keď máš zvuk stlmený alebo otvorenú inú stránku.
 
 Sú tam tri stĺpce:
 
 **NOVÉ** → objednávka práve prišla. Klikneš na minúty (15 / 20 / 25 / 30 / 45 / 60)
-podľa toho, ako si zaneprázdnený. Zákazníkovi okamžite odletí e‑mail
+podľa toho, ako si zaneprázdnený — jedna je predvybraná podľa toho, koľko máš
+práve rozrobené. Zákazníkovi okamžite odletí e‑mail
 *„Hotové o 18:35 (približne 20 minút)“* a objednávka sa presunie ďalej.
 
 **V PRÍPRAVE** → robí sa. Keď je jedlo hotové, klikneš **Pripravené** —
@@ -252,6 +256,22 @@ Pri novej objednávke to pípne, telefón zavibruje a prehodí sa na Nové.
 
 Na detaile objednávky je tlačidlo **Tlačiť** — vytlačí bloček na 80 mm
 termotlačiarni (aj na obyčajnej A4 to vyzerá dobre).
+
+### Keď je nabité
+
+Systém sleduje, koľko objednávok má kuchyňa rozrobených, a keď ich je viac,
+než zvládaš naraz, **sám predĺži časy, ktoré web sľubuje** — v menu, v pokladni
+aj pri jednotlivých obciach. Zákazník k tomu uvidí vetu, že je nabité, takže
+to nevyzerá, že si pomalý. Na nástenke hore je vtedy vidieť, o koľko minút web
+práve pridáva.
+
+Nastavuje sa to v **Nastavenia → Automatické časy**: koľko objednávok zvládaš
+naraz (do toho počtu sa nepredlžuje nič), o koľko minút sa má pridať za každú
+ďalšiu dávku a aký je strop. Je tam aj tabuľka, čo presne to spraví pri
+rôznom počte objednávok, a dá sa to celé vypnúť.
+
+**Už prijatých objednávok sa to nedotkne** — každá si nesie ten čas, ktorý si
+jej odklikol.
 
 ### Keď zrovna nestíhaš
 
@@ -294,7 +314,7 @@ s prehliadačom.
 ### Nastavenia
 - adresa, telefón, e‑mail, otváracie hodiny, obce kam rozvážaš
 - **poplatok za doručenie**, **doručenie zdarma od**, **minimálna objednávka**
-- predpokladané časy prípravy
+- predpokladané časy prípravy (základ, ku ktorému sa pripočítava vyťaženie)
 - text, ktorý sa ukáže, keď neprijímaš objednávky
 
 ### Otváracie hodiny

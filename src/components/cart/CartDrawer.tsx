@@ -9,6 +9,7 @@ import { meetsMinimum, missingToFreeDelivery, missingToMinimum } from "@/lib/car
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ArrowIcon, BagIcon, CloseIcon } from "@/components/ui/Icons";
+import { BusyNote } from "@/components/ui/BusyNote";
 import { trapFocus } from "@/components/layout/MobileNavigation";
 import { CartItemRow } from "./CartItemRow";
 
@@ -208,6 +209,8 @@ export function CartDrawer() {
                 {open.reason} Košík ti zostane, nemusíš ho plniť odznova.
               </p>
             )}
+
+            {!closed && <BusyNote className="mt-3" />}
 
             {!closed && belowMinimum && (
               <p role="status" className="mt-3 rounded-xl bg-burgundy/8 px-4 py-3 text-[0.8rem] text-burgundy">
