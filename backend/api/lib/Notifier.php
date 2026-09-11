@@ -75,24 +75,11 @@ final class Notifier
             return;
         }
 
-        // vývojový režim: e-maily sa neposielajú, iba ukladajú na disk
-        if (($this->mailCfg['transport'] ?? '') === 'log') {
-            $dir = __DIR__ . '/../../storage/mail';
-            if (!is_dir($dir)) {
-                @mkdir($dir, 0775, true);
-            }
-            $file = $dir . '/' . date('Ymd-His') . '-' . $template . '-' . bin2hex(random_bytes(3));
-            file_put_contents($file . '.html', $m['html']);
-            file_put_contents(
-                $file . '.txt',
-                "To: $to\nSubject: {$m['subject']}\n\n{$m['text']}"
-            );
-            $this->log($orderId, $to, $m['subject'], $template, 'logged', null);
-            return;
-        }
-
+        // Vývojový režim (transport = log) rieši Mailer sám — správa
+        // skončí v storage/mail/ a do denníka sa zapíše ako „logged“.
         $res = $this->mailer->send($to, $m['subject'], $m['html'], $m['text'], $replyTo, $bcc ?: null);
-        $this->log($orderId, $to, $m['subject'], $template, $res['ok'] ? 'sent' : 'failed', $res['error']);
+        $status = $res['ok'] ? ($res['logged'] ? 'logged' : 'sent') : 'failed';
+        $this->log($orderId, $to, $m['subject'], $template, $status, $res['error']);
         if (!$res['ok']) {
             error_log("Mail $template pre $to zlyhal: " . (string) $res['error']);
         }

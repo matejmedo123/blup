@@ -122,6 +122,10 @@ ho nedávaj. Keď ho neskôr zmeníš, všetci sa odhlásia z adminu — nič in
 > ⚠️ **`config.php` nikdy nikam neposielaj a nedávaj na GitHub.** Sú v ňom heslá.
 > Do balíka, ktorý si sťahoval, sa nikdy nepribalí — je tam len vzor.
 
+> **Skúška bez objednávania:** v admine v **Nastavenia** je dole tlačidlo
+> *Poslať skúšobný e-mail*. Pošle správu na adresu tvojho účtu a keď to
+> nevyjde, ukáže presnú odpoveď servera — netreba to skúšať objednávkami.
+
 ### E‑mailová schránka
 
 Aby maily naozaj chodili, potrebuješ na Websupporte vytvorenú schránku

@@ -35,7 +35,29 @@ $FIELDS = [
     ],
 ];
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+$mailTest = null;
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'test_mail') {
+    Csrf::require();
+
+    // Skúšobný e-mail ide vždy na adresu prihláseného — nikam inam sa
+    // odtiaľto poslať nedá, aby sa z adminu nedal robiť rozosielač.
+    // Adresu berieme z databázy, v relácii je len id, meno a rola.
+    $testTo = (string) (Db::value('SELECT email FROM users WHERE id = ?', [(int) $user['id']]) ?? '');
+
+    $mailer = new Mailer((array) cfg('mail', []));
+    $mailTest = $mailer->send(
+        $testTo,
+        'Skúšobný e-mail z ENZO',
+        '<p>Toto je skúšobný e-mail z tvojho objednávkového systému.'
+            . ' Keď ti prišiel, odosielanie funguje.</p>',
+        "Toto je skúšobný e-mail z tvojho objednávkového systému.\n"
+            . "Keď ti prišiel, odosielanie funguje.\n",
+    );
+    AuditLog::record($user, 'test', 'mail', null, $mailTest['ok'] ? 'Skúšobný e-mail odoslaný' : 'Skúšobný e-mail zlyhal');
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') !== 'test_mail') {
     Csrf::require();
     foreach ($FIELDS as $group) {
         foreach ($group as $key => [$label, $type]) {
@@ -170,6 +192,45 @@ flash_render();
               Upozornenia na nové objednávky: <?= e((string) ($mail['shop_notify'] ?? '')) ?>
             <?php endif; ?>
           </div>
+        </td>
+      </tr>
+      <tr>
+        <th>Skúška odosielania</th>
+        <td>
+          <form method="post" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <?= Csrf::field() ?>
+            <input type="hidden" name="action" value="test_mail">
+            <button class="btn btn-sm" type="submit">Poslať skúšobný e-mail</button>
+            <span class="hint" style="margin:0">Príde na adresu tvojho účtu.</span>
+          </form>
+          <?php if ($mailTest !== null && $mailTest['ok'] && $mailTest['logged']): ?>
+            <div class="alert alert-info" style="margin-top:12px">
+              Systém beží v testovacom režime, takže sa nič neodoslalo —
+              správa je uložená v <code>storage/mail/</code>. Pred spustením
+              naostro prepni <code>transport</code> v <code>api/config.php</code>
+              na <code>smtp</code>.
+            </div>
+          <?php elseif ($mailTest !== null && $mailTest['ok']): ?>
+            <div class="alert alert-ok" style="margin-top:12px">
+              E-mail odoslaný. Ak nie je v schránke, pozri sa do spamu.
+            </div>
+          <?php elseif ($mailTest !== null): ?>
+            <div class="alert alert-err" style="margin-top:12px">
+              <strong>Odoslanie zlyhalo.</strong>
+              <div style="margin-top:6px"><code><?= e((string) $mailTest['error']) ?></code></div>
+              <?php if (str_contains((string) $mailTest['error'], '535')): ?>
+                <div style="margin-top:10px">
+                  Server odmietol prihlásenie do schránky. Spojenie aj port sú
+                  v poriadku, nesedí meno alebo heslo v <code>api/config.php</code>:
+                  <br>· <code>username</code> musí byť <strong>celá adresa</strong>
+                  (napr. <code>objednavky@tvojadomena.sk</code>), nie len časť pred zavináčom,
+                  <br>· <code>password</code> je heslo <strong>k schránke</strong>, nie k hostingu,
+                  <br>· heslo v <code>config.php</code> daj do <strong>jednoduchých</strong> úvodzoviek —
+                  v dvojitých by PHP znaky <code>$</code> a <code>\</code> premenilo na niečo iné.
+                </div>
+              <?php endif; ?>
+            </div>
+          <?php endif; ?>
         </td>
       </tr>
       <tr>

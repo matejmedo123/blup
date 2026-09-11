@@ -15,7 +15,7 @@ final class Mailer
 
     /**
      * @param string|list<string> $to
-     * @return array{ok:bool,error:?string}
+     * @return array{ok:bool,error:?string,logged:bool}
      */
     public function send(
         string|array $to,
@@ -28,7 +28,7 @@ final class Mailer
         $recipients = is_array($to) ? $to : array_map('trim', explode(',', $to));
         $recipients = array_values(array_filter($recipients, static fn ($e) => filter_var($e, FILTER_VALIDATE_EMAIL)));
         if ($recipients === []) {
-            return ['ok' => false, 'error' => 'Chýba platný príjemca.'];
+            return ['ok' => false, 'error' => 'Chýba platný príjemca.', 'logged' => false];
         }
         $bccList = [];
         if ($bcc !== null) {
@@ -40,15 +40,24 @@ final class Mailer
         $headers  = $this->headers($recipients, $subject, $boundary, $replyTo);
         $body     = $this->body($html, $text, $boundary);
 
+        $transport = (string) ($this->cfg['transport'] ?? 'smtp');
+
         try {
-            if (($this->cfg['transport'] ?? 'smtp') === 'smtp') {
+            if ($transport === 'log') {
+                // Vývojový režim: e-mail sa neodošle, odloží sa na disk.
+                // Patrí to sem, nie do volajúceho — inak by každé miesto,
+                // ktoré posiela poštu, muselo na tento režim myslieť samo.
+                $this->sendToFile($recipients, $subject, $html, $text);
+                return ['ok' => true, 'error' => null, 'logged' => true];
+            }
+            if ($transport === 'smtp') {
                 $this->sendSmtp(array_merge($recipients, $bccList), $headers, $body);
             } else {
                 $this->sendMailFunction($recipients, $subject, $headers, $body, $bccList);
             }
-            return ['ok' => true, 'error' => null];
+            return ['ok' => true, 'error' => null, 'logged' => false];
         } catch (Throwable $e) {
-            return ['ok' => false, 'error' => $e->getMessage()];
+            return ['ok' => false, 'error' => $e->getMessage(), 'logged' => false];
         }
     }
 
@@ -162,6 +171,21 @@ final class Mailer
         $expect([250]);
         $cmd('QUIT');
         fclose($fp);
+    }
+
+    /** @param list<string> $recipients */
+    private function sendToFile(array $recipients, string $subject, string $html, string $text): void
+    {
+        $dir = __DIR__ . '/../../storage/mail';
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new RuntimeException('Priečinok storage/mail sa nedá vytvoriť.');
+        }
+        $slug = trim(preg_replace('/[^a-z0-9]+/i', '-', $subject) ?? '', '-');
+        $file = $dir . '/' . date('Ymd-His') . '-' . mb_strtolower(mb_substr($slug, 0, 40)) . '-' . bin2hex(random_bytes(3));
+        if (@file_put_contents($file . '.html', $html) === false) {
+            throw new RuntimeException('Do storage/mail sa nedá zapisovať.');
+        }
+        file_put_contents($file . '.txt', 'To: ' . implode(', ', $recipients) . "\nSubject: $subject\n\n" . $text);
     }
 
     /** @param list<string> $recipients @param list<string> $bcc */
