@@ -1,0 +1,5 @@
+# Admin je PHP, nie statické HTML. Vlastný DirectoryIndex tu je preto,
+# aby prihlásenie fungovalo aj vtedy, keď koreňový .htaccess niekto
+# prepíše alebo ho hosting nahradí svojím.
+DirectoryIndex index.php
+Options -Indexes

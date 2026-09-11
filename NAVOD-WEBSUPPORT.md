@@ -159,6 +159,14 @@ Port:      21
 Vo FileZille zapni *Server → Vynútiť zobrazenie skrytých súborov*, aby sa
 `.htaccess` naozaj nahral.
 
+### Skryté súbory `.htaccess` sa musia nahrať tiež
+
+V balíku je šesť súborov začínajúcich bodkou — v koreni, v `admin/`, v `api/`,
+`api/lib/`, `api/sql/` a v `storage/`. **FTP klienti ich v základe nezobrazujú
+a teda ani nenahrajú.** Vo FileZille je to *Server → Vynútiť zobrazenie skrytých
+súborov*. Bez nich admin vráti **403 Forbidden** a priečinok `storage` by bol
+stiahnuteľný z internetu.
+
 ### Práva na priečinok `storage`
 
 `storage/` musí byť **zapisovateľný** — systém doň píše denníky. Ak inštalácia

@@ -115,7 +115,43 @@ function storage_is_locked(): ?bool
     return trim((string) $body) !== $token;
 }
 
+/**
+ * Skúsi otvoriť /admin/ tak, ako to spraví obsluha z prehliadača.
+ *
+ * Admin je PHP a má `index.php`. Keď hosting hľadá v priečinku len
+ * `index.html` a výpis priečinka má zakázaný, vráti 403 Forbidden —
+ * a vyzerá to, akoby bol admin pokazený. Radšej to zistíme tu než na
+ * prevádzke pri prvej objednávke.
+ *
+ * @return int|null stavový kód, alebo null keď sa to nedá overiť
+ */
+function admin_status(): ?int
+{
+    $scheme = (($_SERVER['HTTPS'] ?? '') === 'on' || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        ? 'https' : 'http';
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    if ($host === '') {
+        return null;
+    }
+    $base = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/'))), '/');
+
+    $ctx = stream_context_create([
+        'http' => ['timeout' => 4, 'ignore_errors' => true, 'follow_location' => 0],
+        'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false],
+    ]);
+    $http_response_header = [];
+    @file_get_contents("$scheme://$host$base/admin/", false, $ctx);
+
+    foreach ($http_response_header as $line) {
+        if (preg_match('~^HTTP/\S+\s+(\d{3})~', $line, $m) === 1) {
+            return (int) $m[1];
+        }
+    }
+    return null;
+}
+
 $storageLocked = storage_is_locked();
+$adminStatus   = admin_status();
 
 /* ---------- Kontrola prostredia ---------- */
 $checks = [
@@ -187,6 +223,20 @@ $envOk = !in_array(false, $checks, true);
         </tr>
       <?php endforeach; ?>
       <tr>
+        <td>Admin sa dá otvoriť</td>
+        <td class="num">
+          <?php if ($adminStatus === null): ?>
+            <span class="badge badge-completed">nedá sa overiť</span>
+          <?php elseif ($adminStatus === 403): ?>
+            <span class="badge badge-cancelled">403 Forbidden</span>
+          <?php elseif ($adminStatus < 400): ?>
+            <span class="badge badge-ready">v poriadku</span>
+          <?php else: ?>
+            <span class="badge badge-cancelled"><?= (int) $adminStatus ?></span>
+          <?php endif; ?>
+        </td>
+      </tr>
+      <tr>
         <td>Priečinok storage nie je dostupný z internetu</td>
         <td class="num">
           <?php if ($storageLocked === true): ?>
@@ -199,6 +249,20 @@ $envOk = !in_array(false, $checks, true);
         </td>
       </tr>
     </table>
+    <?php if ($adminStatus === 403): ?>
+      <div class="alert alert-err" style="margin-top:16px">
+        <strong>Admin vracia 403 Forbidden.</strong>
+        Server v priečinku <code>admin/</code> nehľadá <code>index.php</code>
+        a výpis priečinka má zakázaný.
+        <br><br>
+        Oprav to tak, že v koreňovom súbore <code>.htaccess</code> bude riadok:
+        <br><code>DirectoryIndex index.html index.php</code>
+        <br>a v priečinku <code>admin/</code> súbor <code>.htaccess</code> s riadkom
+        <code>DirectoryIndex index.php</code>. Oba sú v balíku — ak chýbajú,
+        nenahrali sa skryté súbory (v FTP klientovi zapni zobrazovanie skrytých súborov).
+      </div>
+    <?php endif; ?>
+
     <?php if ($storageLocked === false): ?>
       <div class="alert alert-err" style="margin-top:16px">
         <strong>Priečinok <code>storage</code> je stiahnuteľný z internetu.</strong>

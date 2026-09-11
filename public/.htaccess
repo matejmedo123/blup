@@ -5,7 +5,11 @@
 # ============================================================
 
 Options -Indexes
-DirectoryIndex index.html
+
+# Statický web má index.html, ale admin je PHP a má index.php. Keby tu
+# index.php nebol, Apache by v /admin/ nenašiel žiadny index, výpis
+# priečinka má zakázaný — a vrátil by 403 Forbidden namiesto prihlásenia.
+DirectoryIndex index.html index.php
 
 # ---------- Presmerovanie na HTTPS ----------
 <IfModule mod_rewrite.c>
