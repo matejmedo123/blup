@@ -28,7 +28,7 @@ VAPID keys generated.
   Edge Functions   supabase secrets set \\
                      VAPID_PUBLIC_KEY=${publicKey} \\
                      VAPID_PRIVATE_KEY=${jwk.d} \\
-                     VAPID_SUBJECT=mailto:hello@blup.app
+                     VAPID_SUBJECT=mailto:hello@blup.sk
 
   Web client       EXPO_PUBLIC_VAPID_PUBLIC_KEY=${publicKey}
 

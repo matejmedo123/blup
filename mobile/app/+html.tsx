@@ -15,7 +15,7 @@ const TITLE = 'Blup — eventy okolo teba';
 const DESCRIPTION =
   'Nájdi, čo sa dnes deje v tvojom meste, kúp si lístok na jednom mieste a choď tam s ľuďmi, ' +
   'ktorých poznáš.';
-const URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://blup.app';
+const URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://blup.sk';
 
 export default function Root({ children }: PropsWithChildren) {
   return (

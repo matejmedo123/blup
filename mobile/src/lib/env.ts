@@ -42,7 +42,7 @@ export const env = {
    * for `expo start`, where both paths are live.
    */
   /** Origin the web build is served from; used for shareable links. */
-  webUrl: extra.webUrl || process.env.EXPO_PUBLIC_WEB_URL || '',
+  webUrl: extra.webUrl || process.env.EXPO_PUBLIC_WEB_URL || 'https://blup.sk',
   /** VAPID public key for Web Push. Public by design — it identifies us to the
    *  push service and cannot be used to send anything. */
   vapidPublicKey: extra.vapidPublicKey || process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY || '',

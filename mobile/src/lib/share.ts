@@ -22,7 +22,7 @@ import { env } from '@/lib/env';
  */
 export function eventUrl(event: { id: string; slug?: string | null } | string): string {
   const ref = typeof event === 'string' ? event : event.slug || event.id;
-  return `${(env.webUrl || 'https://blup.app').replace(/\/+$/, '')}/event/${ref}`;
+  return `${(env.webUrl || 'https://blup.sk').replace(/\/+$/, '')}/event/${ref}`;
 }
 
 export interface ShareResult {

@@ -43,7 +43,7 @@ export async function addEventToCalendar(event: {
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
       'BEGIN:VEVENT',
-      `UID:${crypto.randomUUID()}@blup.app`,
+      `UID:${crypto.randomUUID()}@blup.sk`,
       `DTSTAMP:${icsDate(new Date().toISOString())}`,
       `DTSTART:${icsDate(event.start_at)}`,
       `DTEND:${icsDate(end.toISOString())}`,

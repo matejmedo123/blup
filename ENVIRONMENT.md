@@ -30,7 +30,7 @@ app — treat them as published.
 | `EXPO_PUBLIC_PREMIUM_PRODUCT_ID_YEARLY` | for premium | " |
 | `EXPO_PUBLIC_IOS_BUNDLE_ID` | for builds | default `com.blup.app` |
 | `EXPO_PUBLIC_ANDROID_PACKAGE` | for builds | default `com.blup.app` |
-| `EXPO_PUBLIC_DEEPLINK_DOMAIN` | no | e.g. `blup.app`; enables universal/app links |
+| `EXPO_PUBLIC_DEEPLINK_DOMAIN` | no | e.g. `blup.sk`; enables universal/app links |
 | `EXPO_PUBLIC_ROUTING_API_KEY` | no | real walking times; without it, straight-line estimates |
 | `EXPO_PUBLIC_DEBUG_AI` | no | `true` shows the AI debug screen in release builds |
 | `EAS_PROJECT_ID` | for push | written by `eas init` |
@@ -111,9 +111,9 @@ immediately, then redeploy every function.
 | Variable | Required | What it is |
 |---|---|---|
 | `RESEND_API_KEY` | for email | Resend API key. Without it, deliveries are recorded as `skipped` and the ticket still lives in the app. |
-| `EMAIL_FROM` | no | Sender, e.g. `Blup <tickets@blup.app>`. The domain must be verified with the provider or mail lands in spam. |
+| `EMAIL_FROM` | no | Sender, e.g. `Blup <tickets@blup.sk>`. The domain must be verified with the provider or mail lands in spam. |
 | `EMAIL_REPLY_TO` | no | Where replies go — usually support, not the sending address. |
-| `APP_PUBLIC_URL` | no | Base URL used in email links. Defaults to `https://blup.app`. |
+| `APP_PUBLIC_URL` | no | Base URL used in email links. Defaults to `https://blup.sk`. |
 
 Ticket emails are queued by `fulfill_order()` inside the transaction that mints
 the tickets, and sent by the `ticket-email` function. Run it on a schedule as

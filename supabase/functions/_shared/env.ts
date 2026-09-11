@@ -50,9 +50,9 @@ export const env = {
   expoAccessToken: () => optionalEnv('EXPO_ACCESS_TOKEN'),
 
   resendApiKey: () => requireEnv('RESEND_API_KEY', 'EMAIL_NOT_CONFIGURED'),
-  emailFrom: () => optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.app>',
+  emailFrom: () => optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.sk>',
   emailReplyTo: () => optionalEnv('EMAIL_REPLY_TO'),
-  appUrl: () => optionalEnv('APP_PUBLIC_URL') ?? 'https://blup.app',
+  appUrl: () => optionalEnv('APP_PUBLIC_URL') ?? 'https://blup.sk',
 
   // Web subscriptions. Apple's cut does not apply outside the App Store, so the
   // web build sells Premium through Stripe at the same shelf price.
@@ -64,7 +64,7 @@ export const env = {
   // cannot send anything on its own. The private key never leaves here.
   vapidPublicKey: () => requireEnv('VAPID_PUBLIC_KEY', 'WEB_PUSH_NOT_CONFIGURED'),
   vapidPrivateKey: () => requireEnv('VAPID_PRIVATE_KEY', 'WEB_PUSH_NOT_CONFIGURED'),
-  vapidSubject: () => optionalEnv('VAPID_SUBJECT') ?? 'mailto:hello@blup.app',
+  vapidSubject: () => optionalEnv('VAPID_SUBJECT') ?? 'mailto:hello@blup.sk',
 };
 
 /** True when a provider has everything it needs — used for health reporting. */

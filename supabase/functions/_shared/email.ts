@@ -27,7 +27,7 @@ export interface EmailMessage {
 
 export const emailConfigured = (): boolean => Boolean(optionalEnv('RESEND_API_KEY'));
 
-const fromAddress = () => optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.app>';
+const fromAddress = () => optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.sk>';
 
 /** Base64 for arbitrary bytes, chunked so a large PDF cannot blow the stack. */
 export function toBase64(bytes: Uint8Array): string {

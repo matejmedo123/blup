@@ -71,7 +71,7 @@
     "build:prod": "eas build --profile production --platform all",
     "web": "expo start --web",
     "web:clear": "expo start --web --clear",
-    "build:web": "rm -rf .expo node_modules/.cache && expo export --platform web --output-dir dist && node ../scripts/make-host-config.mjs dist",
+    "build:web": "node ../scripts/check-origin.mjs && rm -rf .expo node_modules/.cache && expo export --platform web --output-dir dist && node ../scripts/make-host-config.mjs dist && node ../scripts/check-origin.mjs --dist",
     "serve:web": "node ../scripts/serve-web.mjs dist 4321"
   },
   "private": true

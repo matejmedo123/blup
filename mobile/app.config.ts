@@ -175,7 +175,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // a component reading process.env directly gets undefined at runtime and
     // silently falls back to its default, which is exactly what happened to the
     // map: the tiles URL was set, the build was clean, and nothing changed.
-    webUrl: process.env.EXPO_PUBLIC_WEB_URL ?? '',
+    // The real origin, not an empty string. Every URL the app hands out — the
+    // share link, the OG card, the link in a ticket e-mail — is built from
+    // this, so an unset value does not degrade gracefully: it produces a link
+    // to a domain that is not ours.
+    webUrl: process.env.EXPO_PUBLIC_WEB_URL || 'https://blup.sk',
     vapidPublicKey: process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY ?? '',
 
     mapTilesUrl: process.env.EXPO_PUBLIC_MAP_TILES_URL ?? '',

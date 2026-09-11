@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
       },
       email: {
         configured: configured.email(),
-        from: configured.email() ? (optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.app>') : null,
+        from: configured.email() ? (optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.sk>') : null,
       },
     });
   } catch (error) {

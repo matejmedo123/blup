@@ -107,7 +107,7 @@ Client (`mobile/.env`, all public):
 ```
 EXPO_PUBLIC_SUPABASE_URL=…
 EXPO_PUBLIC_SUPABASE_ANON_KEY=…
-EXPO_PUBLIC_WEB_URL=https://blup.app       # used for share cards
+EXPO_PUBLIC_WEB_URL=https://blup.sk       # used for share cards
 ```
 
 Server (`supabase secrets set …`):
@@ -117,7 +117,7 @@ STRIPE_SECRET_KEY=…
 STRIPE_WEBHOOK_SECRET=…
 STRIPE_PRICE_PREMIUM_MONTHLY=price_…       # web Premium
 STRIPE_PRICE_PREMIUM_YEARLY=price_…
-APP_PUBLIC_URL=https://blup.app            # where Checkout returns to
+APP_PUBLIC_URL=https://blup.sk            # where Checkout returns to
 RESEND_API_KEY=…                           # ticket emails
 ```
 
