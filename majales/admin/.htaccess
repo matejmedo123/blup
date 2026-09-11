@@ -1,0 +1,4 @@
+# Priečinok so správou webu nepatrí do vyhľadávačov.
+<IfModule mod_headers.c>
+  Header set X-Robots-Tag "noindex, nofollow"
+</IfModule>

@@ -1,3 +1,11 @@
+> **V tomto repozitári sú dva samostatné weby.**
+> Tento súbor popisuje **ENZO**. Web festivalu **Majáles Nitra 2027**
+> je celý v priečinku [`majales/`](./majales/) a má vlastný
+> [README](./majales/README.md) aj [návod na nasadenie](./majales/NAVOD-WEBSUPPORT.md).
+> Nasadzujú sa nezávisle na seba a nič nezdieľajú.
+
+---
+
 # ENZO — Smash Burgers & Pizza, Koniarovce
 
 Web s online objednávkovým procesom pre prevádzku ENZO v Koniarovciach.

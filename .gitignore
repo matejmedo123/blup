@@ -54,3 +54,15 @@ AGENTS.md
 
 # dočasná testovacia databáza
 /backend/tests/.tmp/
+
+# Majáles — vygenerované a citlivé
+majales/config.php
+majales/storage/*.sqlite
+majales/storage/*.sqlite-*
+majales/storage/logs/*
+majales/storage/mail/*
+majales/uploads/*
+!majales/uploads/.htaccess
+!majales/uploads/.gitkeep
+majales/tests/.test.sqlite*
+majales-web.zip

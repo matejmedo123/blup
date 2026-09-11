@@ -1,0 +1,71 @@
+# Majáles Nitra — nastavenia pre Apache na Websupporte
+
+# --- Predvolený súbor -------------------------------------------------------
+DirectoryIndex index.php index.html
+
+# --- Kódovanie --------------------------------------------------------------
+AddDefaultCharset UTF-8
+
+# --- Výpis obsahu priečinkov je vypnutý ------------------------------------
+Options -Indexes
+
+# --- Súbory, ku ktorým sa nikto nesmie dostať z prehliadača -----------------
+<FilesMatch "^(config\.php|config\.example\.php|\.gitignore|.*\.md|.*\.sqlite|.*\.sqlite-wal|.*\.sqlite-shm|.*\.log|.*\.eml)$">
+  Require all denied
+</FilesMatch>
+
+# --- Presmerovanie na HTTPS a www ------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Websupport ukončuje HTTPS na proxy — pravá schéma je v tejto hlavičke.
+  RewriteCond %{HTTP:X-Forwarded-Proto} =http [OR]
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP_HOST} !^localhost [NC]
+  RewriteCond %{HTTP_HOST} !^127\. [NC]
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Vyhľadávače chcú robots.txt a sitemap.xml — generujú sa v PHP,
+  # lebo ich obsah závisí od nastavení v admine.
+  RewriteRule ^robots\.txt$  /robots.php  [L]
+  RewriteRule ^sitemap\.xml$ /sitemap.php [L]
+
+  # Pekné adresy: /vstupenky namiesto /index.php#vstupenky
+  RewriteRule ^lineup/?$      /index.php#lineup      [L,R=302]
+  RewriteRule ^vstupenky/?$   /index.php#vstupenky   [L,R=302]
+  RewriteRule ^partneri/?$    /index.php#partneri    [L,R=302]
+</IfModule>
+
+# --- Bezpečnostné hlavičky --------------------------------------------------
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+  # Vlož až keď web beží na HTTPS s platným certifikátom:
+  # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+</IfModule>
+
+# --- Vypršanie cache pre statické súbory ------------------------------------
+# Súbory majú v adrese číslo verzie, takže sa dajú držať dlho.
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/webp             "access plus 1 year"
+  ExpiresByType image/png              "access plus 1 year"
+  ExpiresByType image/jpeg             "access plus 1 year"
+  ExpiresByType image/svg+xml          "access plus 1 year"
+  ExpiresByType video/mp4              "access plus 1 year"
+  ExpiresByType font/woff2             "access plus 1 year"
+  ExpiresByType text/css               "access plus 1 month"
+  ExpiresByType application/javascript "access plus 1 month"
+</IfModule>
+
+# --- Komprimovanie ----------------------------------------------------------
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml
+  AddOutputFilterByType DEFLATE application/javascript application/json application/xml
+  AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# --- Chybové stránky --------------------------------------------------------
+ErrorDocument 404 /404.php

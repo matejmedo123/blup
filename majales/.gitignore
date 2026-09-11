@@ -1,0 +1,22 @@
+# Konfigurácia s heslami sa nikdy nedostane do gitu ani do ZIP balíka.
+config.php
+
+# Runtime dáta
+storage/*.sqlite
+storage/*.sqlite-wal
+storage/*.sqlite-shm
+storage/logs/*
+storage/mail/*
+!storage/logs/.gitkeep
+!storage/mail/.gitkeep
+
+# Nahraté fotky patria zákazníkovi, nie do repozitára
+uploads/*
+!uploads/.htaccess
+!uploads/.gitkeep
+
+# Testovacia databáza
+tests/.test.sqlite*
+
+# Nástroje
+node_modules/

@@ -38,6 +38,32 @@ Overené: čistá inštalácia z balíka (rozbalený ZIP, vlastný config, migr�
 seed, beh pod `php -S`), objednávka cez prehliadač na mobile, prijatie
 a preklikanie objednávky v admine, e-maily, doklad, CSV export.
 
+### Kolo 4 — Majáles Nitra 2027 (nový web v `majales/`)
+
+Druhý, samostatný web v tom istom repozitári: festivalová stránka
+Majáles Nitra podľa dizajnového zadania `Festival_branding_2027`.
+
+Postavený ako **PHP monolit renderovaný z MySQL** — nie ako statický
+export. Dôvod: zadanie znelo „admin a databáza cez Websupport, aby sa
+dali meniť veci". Pri statickom exporte by sa po každej zmene textu
+musel web nanovo postaviť a nahrať; takto je zmena z adminu na webe
+okamžite.
+
+- [x] Schéma (MySQL aj SQLite), migrácie, inštalátor, počiatočný obsah z návrhu
+- [x] Celá stránka podľa zadania: hero s videom a odpočtom, bežiace pásy,
+      galéria s lightboxom, zóny, lineup s modálom, vstupenky, aftermovie,
+      FAQ, mapa, partneri, pätička s newsletterom a konfetami
+- [x] Admin: texty po sekciách, 6 zoznamov cez jeden spoločný CRUD,
+      knižnica fotiek s prevodom na WEBP, nastavenia, role, denník zmien
+- [x] Newsletter so zberom e-mailov, odhlásením a exportom do CSV
+- [x] Bezpečnosť: CSRF, brzda pokusov, RBAC na serveri, ochrana priečinkov,
+      pascička na roboty, prekreslenie nahratých obrázkov
+- [x] Web funguje aj bez JavaScriptu; video sa na telefóne vôbec nesťahuje
+- [x] Testy: 129 backendových + 32 bezpečnostných + 5 prehliadačových scenárov
+- [x] Overené čistou inštaláciou z balíka `majales-web.zip`
+
+Otvorené otázky sú v [`majales/README.md`](./majales/README.md) na konci.
+
 ## Ako pokračovať
 
 ```bash

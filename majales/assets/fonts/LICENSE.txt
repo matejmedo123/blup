@@ -1,0 +1,9 @@
+Anton — Copyright (c) Vernon Adams, Cyreal
+Inter  — Copyright (c) The Inter Project Authors
+
+Obe písma sú uvoľnené pod SIL Open Font License, Version 1.1.
+Plné znenie licencie: https://openfontlicense.org
+
+Licencia dovoľuje používať, upravovať aj šíriť písma vrátane komerčného
+použitia. Písma sa nesmú predávať samostatne a odvodené verzie nesmú
+používať pôvodný názov bez povolenia autorov.

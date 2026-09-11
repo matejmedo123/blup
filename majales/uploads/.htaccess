@@ -1,0 +1,12 @@
+# Obrázky sa smú zobrazovať, skripty sa tu nikdy nesmú spustiť —
+# aj keby sa cez chybu podarilo nahrať súbor s kódom.
+php_flag engine off
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .pht .phar
+AddType text/plain .php .phtml .php3 .php4 .php5 .php7 .php8 .pht .phar
+
+<FilesMatch "\.(webp|jpe?g|png|gif|svg)$">
+  Require all granted
+</FilesMatch>

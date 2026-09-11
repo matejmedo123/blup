@@ -1,0 +1,359 @@
+/* ==========================================================================
+   Správa webu Majáles — rozhranie pre obsluhu
+   Tmavé, pokojné a čitateľné. Dotykové ciele majú aspoň 44 px, aby sa
+   s tým dalo pracovať aj z telefónu.
+   ========================================================================== */
+
+:root {
+  --bg:      #0d1b2a;
+  --panel:   #14273b;
+  --panel-2: #1b3450;
+  --line:    #294a6b;
+  --text:    #eaf2f9;
+  --muted:   #9bb3c8;
+  --sun:     #FFF200;
+  --leaf:    #8DC63F;
+  --red:     #ff6b6b;
+  --blue:    #2BA9E1;
+  --radius:  14px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+
+a { color: var(--blue); }
+a:hover { color: var(--sun); }
+
+img { max-width: 100%; height: auto; }
+
+:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; border-radius: 6px; }
+
+.vh {
+  position: absolute !important; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+.skip {
+  position: absolute; left: 12px; top: -60px; z-index: 100;
+  background: var(--sun); color: #101418; padding: 10px 18px;
+  border-radius: 0 0 10px 10px; font-weight: 700;
+}
+.skip:focus { top: 0; color: #101418; }
+
+/* ----------------------------------------------------------- Horná lišta */
+
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  min-height: 60px;
+}
+.topbar__brand { font-weight: 800; font-size: 17px; color: var(--text); text-decoration: none; }
+.topbar__brand span { font-weight: 500; color: var(--muted); font-size: 14px; margin-left: 6px; }
+.topbar__right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.topbar__user { color: var(--muted); font-size: 14px; }
+.topbar__burger {
+  display: none;
+  width: 44px; height: 44px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px;
+  font-size: 18px; cursor: pointer;
+}
+
+/* --------------------------------------------------------- Bočné menu */
+
+.shell { display: grid; grid-template-columns: 240px 1fr; align-items: start; }
+
+.side {
+  position: sticky; top: 60px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--line);
+  min-height: calc(100vh - 60px);
+  background: var(--panel);
+}
+.side a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  min-height: 44px;
+  border-radius: 10px;
+  color: var(--text); text-decoration: none;
+  font-weight: 600; font-size: 14.5px;
+}
+.side a:hover { background: var(--panel-2); color: var(--text); }
+.side a.is-active { background: var(--sun); color: #101418; }
+.side__icon { width: 20px; text-align: center; opacity: 0.8; }
+.side a.is-active .side__icon { opacity: 1; }
+
+.main { padding: 26px clamp(16px, 3vw, 34px) 70px; min-width: 0; }
+.page-title { margin: 0 0 20px; font-size: clamp(22px, 3vw, 28px); line-height: 1.2; }
+
+/* ------------------------------------------------------------- Hlášky */
+
+.flash {
+  margin: 0 0 16px;
+  padding: 13px 18px;
+  border-radius: var(--radius);
+  border-left: 4px solid var(--blue);
+  background: var(--panel);
+  font-weight: 600;
+}
+.flash--ok  { border-left-color: var(--leaf); }
+.flash--err { border-left-color: var(--red); }
+
+/* ------------------------------------------------------------ Tlačidlá */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--sun); color: #101418;
+  font-family: var(--font); font-weight: 700; font-size: 14.5px;
+  text-decoration: none; cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.btn:hover { filter: brightness(1.08); color: #101418; }
+.btn--ghost { background: transparent; color: var(--text); border-color: var(--line); }
+.btn--ghost:hover { background: var(--panel-2); color: var(--text); }
+.btn--danger { background: transparent; color: var(--red); border-color: var(--red); }
+.btn--danger:hover { background: var(--red); color: #0d1b2a; }
+.btn--small { min-height: 38px; padding: 7px 13px; font-size: 13.5px; }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+.actions--end { justify-content: flex-end; }
+
+/* -------------------------------------------------------------- Panely */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  margin-bottom: 18px;
+}
+.panel__title { margin: 0 0 4px; font-size: 17px; }
+.panel__intro { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+.stat { background: var(--panel-2); border-radius: var(--radius); padding: 18px 20px; }
+.stat b { display: block; font-size: 30px; line-height: 1.1; }
+.stat span { color: var(--muted); font-size: 13.5px; }
+.stat a { display: inline-block; margin-top: 6px; font-size: 13.5px; }
+
+/* -------------------------------------------------------------- Tabuľka */
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 540px; }
+th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; }
+tr:last-child td { border-bottom: none; }
+td.tight { width: 1%; white-space: nowrap; }
+
+.thumb {
+  width: 64px; height: 48px; object-fit: cover;
+  border-radius: 8px; background: var(--panel-2); display: block;
+}
+.thumb--empty {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 11px; border: 1px dashed var(--line);
+}
+
+.tag {
+  display: inline-block;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 700;
+  background: var(--panel-2); color: var(--muted);
+}
+.tag--on  { background: rgba(141, 198, 63, 0.18); color: var(--leaf); }
+.tag--off { background: rgba(255, 107, 107, 0.15); color: var(--red); }
+.tag--star { background: rgba(255, 242, 0, 0.18); color: var(--sun); }
+
+.rowbtns { display: flex; gap: 6px; align-items: center; }
+.iconbtn {
+  width: 38px; height: 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 9px;
+  cursor: pointer; font-size: 15px; text-decoration: none;
+}
+.iconbtn:hover { background: var(--line); color: var(--text); }
+.iconbtn[disabled] { opacity: 0.35; cursor: default; }
+
+/* ------------------------------------------------------------ Formuláre */
+
+.form { display: flex; flex-direction: column; gap: 18px; max-width: 760px; }
+.form--wide { max-width: none; }
+
+.field label, .field > .field__label {
+  display: block; margin-bottom: 6px;
+  font-weight: 700; font-size: 14px;
+}
+.field__hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+.field__err { color: var(--red); font-size: 13.5px; font-weight: 600; margin: 6px 0 0; }
+
+input[type="text"], input[type="email"], input[type="url"], input[type="password"],
+input[type="number"], input[type="datetime-local"], input[type="search"], select, textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+}
+textarea { min-height: 120px; resize: vertical; }
+textarea.tall { min-height: 200px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--sun); box-shadow: 0 0 0 3px rgba(255, 242, 0, 0.2); }
+input.is-err, textarea.is-err, select.is-err { border-color: var(--red); }
+input::placeholder, textarea::placeholder { color: #5f7a93; }
+
+.check { display: flex; align-items: flex-start; gap: 10px; }
+.check input { width: 22px; height: 22px; min-height: 0; margin-top: 2px; flex-shrink: 0; accent-color: var(--sun); }
+.check label { margin: 0; font-weight: 600; }
+
+.form__cols { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.form__foot {
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+  padding-top: 8px; border-top: 1px solid var(--line);
+}
+
+/* ----------------------------------------------------- Výber fotografie */
+
+.mediapick { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.mediapick__preview {
+  width: 160px; height: 120px;
+  border-radius: 10px; object-fit: cover;
+  background: var(--panel-2);
+  border: 1px dashed var(--line);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 12px; text-align: center; padding: 8px;
+}
+.mediapick__side { display: flex; flex-direction: column; gap: 10px; flex: 1 1 240px; min-width: 220px; }
+
+.mediagrid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.mediacard {
+  background: var(--panel-2);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  font-family: var(--font);
+  display: flex; flex-direction: column;
+}
+.mediacard:hover { border-color: var(--line); }
+.mediacard.is-picked { border-color: var(--sun); }
+.mediacard img { width: 100%; height: 110px; object-fit: cover; display: block; }
+.mediacard span { padding: 8px 10px; font-size: 12px; color: var(--muted); word-break: break-word; }
+
+/* Vyskakovacie okno s knižnicou fotiek. */
+.modal-back {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(4, 12, 22, 0.82);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  width: min(900px, 100%);
+  max-height: 86vh;
+  display: flex; flex-direction: column;
+}
+.modal-box__head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 20px; border-bottom: 1px solid var(--line);
+}
+.modal-box__head h2 { margin: 0; font-size: 17px; flex: 1; }
+.modal-box__body { padding: 18px 20px; overflow-y: auto; }
+
+/* -------------------------------------------------------------- Prihlásenie */
+
+.login-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(1000px 600px at 20% 10%, rgba(43, 169, 225, 0.2), transparent 60%),
+    var(--bg);
+}
+.login {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 34px;
+}
+.login h1 { margin: 0 0 4px; font-size: 24px; }
+.login p.sub { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+.login .btn { width: 100%; }
+
+/* ------------------------------------------------------------ Nastavenia */
+
+.settings-group { margin-bottom: 26px; }
+.settings-group > h2 {
+  margin: 0 0 14px; padding-bottom: 8px;
+  font-size: 16px; border-bottom: 1px solid var(--line);
+}
+
+.blocks-section { margin-bottom: 26px; }
+.blocks-section > h2 { margin: 0 0 14px; font-size: 16px; }
+
+.muted { color: var(--muted); }
+.small { font-size: 13.5px; }
+.nowrap { white-space: nowrap; }
+.empty {
+  padding: 30px; text-align: center; color: var(--muted);
+  border: 1px dashed var(--line); border-radius: var(--radius);
+}
+
+.pager { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+
+/* --------------------------------------------------------------- Telefón */
+
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; }
+  .topbar__burger { display: inline-flex; align-items: center; justify-content: center; }
+  .topbar__user { display: none; }
+  .side {
+    position: fixed; top: 60px; left: 0; bottom: 0; z-index: 45;
+    width: 260px;
+    transform: translateX(-102%);
+    transition: transform 0.2s ease;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  .side.is-open { transform: none; }
+  .main { padding: 20px 16px 60px; }
+}
+
+@media (max-width: 520px) {
+  .topbar__brand span { display: none; }
+  .form__foot .btn { flex: 1 1 auto; }
+}

@@ -1,0 +1,452 @@
+{
+  "settings": {
+    "site_title": "Majáles Nitra 2027",
+    "site_tagline": "7. – 8. máj 2027, Agrokomplex Nitra",
+    "meta_description": "Majáles Nitra 2027 — dva dni hudby, zábavy a zážitkov v areáli Agrokomplex Nitra. 7. a 8. mája 2027.",
+    "event_start": "2027-05-07T14:00:00",
+    "event_end": "2027-05-08T23:59:00",
+    "countdown_target": "2027-05-07T14:00:00",
+    "show_countdown": "1",
+    "sale_live": "0",
+    "sale_label_soon": "ČOSKORO",
+    "sale_label_live": "V PREDAJI",
+    "tickets_url": "",
+    "spotify_url": "",
+    "aftermovie_url": "",
+    "show_aftermovie": "1",
+    "venue_name": "Areál Agrokomplex",
+    "venue_city": "Nitra, Slovensko",
+    "venue_address": "Výstavná 4, 949 01 Nitra",
+    "maps_embed_query": "Agrokomplex, Výstavná 4, Nitra",
+    "maps_link": "https://maps.google.com/?q=Agrokomplex+Nitra",
+    "contact_email": "info@majalesnitra.sk",
+    "social_facebook": "",
+    "social_instagram": "",
+    "social_tiktok": "",
+    "social_spotify": "",
+    "social_youtube": "",
+    "newsletter_enabled": "1",
+    "newsletter_notify_email": "",
+    "hero_video": "assets/img/hero-video.mp4",
+    "analytics_head": "",
+    "content_version": "1",
+    "og_image": "",
+    "aftermovie_media_id": "",
+    "robots_index": "1",
+    "hero_poster_media_id": ""
+  },
+  "blocks": [
+    {
+      "skey": "nav_cta",
+      "label": "Text tlačidla v menu",
+      "section": "Navigácia",
+      "kind": "text",
+      "value": "VSTUPENKY"
+    },
+    {
+      "skey": "hero_badge",
+      "label": "Žltý odznak v hero",
+      "section": "Hero",
+      "kind": "text",
+      "value": "OTVÁRAME FESTIVALOVÚ SEZÓNU"
+    },
+    {
+      "skey": "hero_cta_primary",
+      "label": "Hlavné tlačidlo v hero",
+      "section": "Hero",
+      "kind": "text",
+      "value": "KÚPIŤ VSTUPENKY"
+    },
+    {
+      "skey": "hero_cta_secondary",
+      "label": "Druhé tlačidlo v hero",
+      "section": "Hero",
+      "kind": "text",
+      "value": "POZRI LINEUP"
+    },
+    {
+      "skey": "hero_date_line1",
+      "label": "Dátum — prvý riadok",
+      "section": "Hero",
+      "kind": "text",
+      "value": "7. – 8."
+    },
+    {
+      "skey": "hero_date_line2",
+      "label": "Dátum — druhý riadok",
+      "section": "Hero",
+      "kind": "text",
+      "value": "MÁJ 2027"
+    },
+    {
+      "skey": "marquee_date",
+      "label": "Bežiaci pás — dátum",
+      "section": "Bežiace pásy",
+      "kind": "text",
+      "hint": "Text sa opakuje dokola.",
+      "value": "7. – 8. MÁJ"
+    },
+    {
+      "skey": "marquee_brand",
+      "label": "Bežiaci pás — názov (obrys)",
+      "section": "Bežiace pásy",
+      "kind": "text",
+      "value": "MAJÁLES NITRA"
+    },
+    {
+      "skey": "marquee_lineup",
+      "label": "Bežiaci pás — lineup",
+      "section": "Bežiace pásy",
+      "kind": "text",
+      "value": "LINEUP"
+    },
+    {
+      "skey": "marquee_tickets",
+      "label": "Bežiaci pás — vstupenky",
+      "section": "Bežiace pásy",
+      "kind": "text",
+      "value": "VSTUPENKY"
+    },
+    {
+      "skey": "marquee_partners",
+      "label": "Bežiaci pás — partneri",
+      "section": "Bežiace pásy",
+      "kind": "text",
+      "value": "PARTNERI"
+    },
+    {
+      "skey": "intro_heading",
+      "label": "Nadpis úvodného textu",
+      "section": "Úvodný text",
+      "kind": "text",
+      "value": "HUDBA, ZÁŽITKY A ZÁBAVA!"
+    },
+    {
+      "skey": "intro_body",
+      "label": "Úvodný text",
+      "section": "Úvodný text",
+      "kind": "richtext",
+      "hint": "Prázdny riadok oddeľuje odseky.",
+      "value": "Majáles Nitra je jedným z najväčších hudobných podujatí v regióne, ktoré každoročne otvára letnú festivalovú sezónu.\n\nFestival sa koná v areáli Agrokomplexu a prináša dva dni plné hudby, zábavy a nezabudnuteľných zážitkov pre tisíce návštevníkov z celého Slovenska.\n\nProgram každoročne tvorí pestrý výber najväčších mien slovenskej a českej hudobnej scény. Čakajú vás sprievodné aktivity, gastro zóny, kolotoče a oddychové chillout zóny.\n\nRočník 2027 bude ešte väčší a pestrejší!"
+    },
+    {
+      "skey": "intro_signature",
+      "label": "Podpis pod úvodným textom",
+      "section": "Úvodný text",
+      "kind": "text",
+      "value": "– Tím Majáles Nitra"
+    },
+    {
+      "skey": "zones_heading",
+      "label": "Nadpis sekcie zón",
+      "section": "Viac než koncerty",
+      "kind": "text",
+      "value": "VIAC NEŽ KONCERTY"
+    },
+    {
+      "skey": "zones_subheading",
+      "label": "Podnadpis sekcie zón",
+      "section": "Viac než koncerty",
+      "kind": "text",
+      "value": "Celý areál Agrokomplexu žije dva dni — od stageov až po chill zóny."
+    },
+    {
+      "skey": "lineup_more",
+      "label": "Text pod lineupom",
+      "section": "Lineup",
+      "kind": "text",
+      "value": "+ ĎALŠIE MENÁ ČOSKORO"
+    },
+    {
+      "skey": "lineup_spotify_label",
+      "label": "Text tlačidla na Spotify",
+      "section": "Lineup",
+      "kind": "text",
+      "value": "VYPOČUJ SI LINEUP NA SPOTIFY"
+    },
+    {
+      "skey": "tickets_note_kids",
+      "label": "Zelený odznak — deti",
+      "section": "Vstupenky",
+      "kind": "text",
+      "value": "DETI DO 12 ROKOV — VSTUP ZDARMA"
+    },
+    {
+      "skey": "tickets_note_students",
+      "label": "Zelený odznak — študenti",
+      "section": "Vstupenky",
+      "kind": "text",
+      "value": "ŠTUDENTI DO 26 ROKOV S ISIC — ZVÝHODNENÉ VSTUPNÉ"
+    },
+    {
+      "skey": "tickets_note",
+      "label": "Poznámka pod vstupenkami",
+      "section": "Vstupenky",
+      "kind": "text",
+      "value": "Predaj spustíme čoskoro — sleduj naše sociálne siete, nech ti neujde early bird cena."
+    },
+    {
+      "skey": "aftermovie_caption",
+      "label": "Popis aftermovie",
+      "section": "Aftermovie",
+      "kind": "text",
+      "value": "AFTERMOVIE 2026"
+    },
+    {
+      "skey": "faq_heading",
+      "label": "Nadpis sekcie otázok",
+      "section": "Časté otázky",
+      "kind": "text",
+      "value": "ČASTO SA PÝTATE"
+    },
+    {
+      "skey": "travel_heading",
+      "label": "Nadpis sekcie dopravy",
+      "section": "Ako sa k nám dostaneš",
+      "kind": "text",
+      "value": "AKO SA K NÁM DOSTANEŠ"
+    },
+    {
+      "skey": "travel_car_label",
+      "label": "Doprava — popisok 1",
+      "section": "Ako sa k nám dostaneš",
+      "kind": "text",
+      "value": "AUTOM"
+    },
+    {
+      "skey": "travel_car",
+      "label": "Doprava — text 1",
+      "section": "Ako sa k nám dostaneš",
+      "kind": "text",
+      "value": "parkovanie priamo pri areáli Agrokomplexu, vjazd z Výstavnej ulice."
+    },
+    {
+      "skey": "travel_bus_label",
+      "label": "Doprava — popisok 2",
+      "section": "Ako sa k nám dostaneš",
+      "kind": "text",
+      "value": "MHD"
+    },
+    {
+      "skey": "travel_bus",
+      "label": "Doprava — text 2",
+      "section": "Ako sa k nám dostaneš",
+      "kind": "text",
+      "value": "autobusové zastávky pár minút od vstupu, posilnené spoje počas festivalu."
+    },
+    {
+      "skey": "travel_walk_label",
+      "label": "Doprava — popisok 3",
+      "section": "Ako sa k nám dostaneš",
+      "kind": "text",
+      "value": "PEŠO"
+    },
+    {
+      "skey": "travel_walk",
+      "label": "Doprava — text 3",
+      "section": "Ako sa k nám dostaneš",
+      "kind": "text",
+      "value": "z centra Nitry pohodlná prechádzka do 20 minút."
+    },
+    {
+      "skey": "travel_maps_label",
+      "label": "Text tlačidla na mapu",
+      "section": "Ako sa k nám dostaneš",
+      "kind": "text",
+      "value": "OTVORIŤ V GOOGLE MAPS"
+    },
+    {
+      "skey": "partners_body",
+      "label": "Text o partnerstve",
+      "section": "Partneri",
+      "kind": "richtext",
+      "value": "Staňte sa partnerom najväčšieho open-air festivalu v regióne a spojte svoju značku s energiou, hudbou a tisíckami ľudí, ktorí vytvárajú pulzujúcu atmosféru každú jar v Nitre.\n\nAj vďaka podpore našich partnerov môže byť Majáles bohatší, pestrejší a kvalitnejší – od silného hudobného programu až po nové zážitkové zóny, služby a vizuálne riešenia. Spoločnými silami prinášame návštevníkom viac než len koncerty – vytvárame víkend plný emócií a momentov, na ktoré sa nezabúda."
+    },
+    {
+      "skey": "newsletter_label",
+      "label": "Text tlačidla odberu",
+      "section": "Pätička",
+      "kind": "text",
+      "value": "ODOBERAŤ"
+    },
+    {
+      "skey": "newsletter_hint",
+      "label": "Text pod odberom",
+      "section": "Pätička",
+      "kind": "text",
+      "value": "Novinky o lineupe a predaji vstupeniek priamo do schránky."
+    },
+    {
+      "skey": "footer_supporter",
+      "label": "Riadok o podpore",
+      "section": "Pätička",
+      "kind": "text",
+      "value": "PODUJATIE SA KONÁ S PODPOROU SLOVENSKEJ POĽNOHOSPODÁRSKEJ UNIVERZITY V NITRE"
+    },
+    {
+      "skey": "footer_copyright",
+      "label": "Copyright",
+      "section": "Pätička",
+      "kind": "text",
+      "value": "© 2027 Majáles Nitra. Všetky práva vyhradené."
+    }
+  ],
+  "artists": [
+    {
+      "slug": "vengaboys",
+      "name": "VENGABOYS",
+      "tag": "EURODANCE",
+      "bio": "Holandská eurodance legenda deväťdesiatok, ktorej hity pozná každá generácia. Ich live show je jedna veľká párty od prvej sekundy.",
+      "is_headliner": 1,
+      "badge": "HEADLINER 2027"
+    },
+    {
+      "slug": "separ",
+      "name": "SEPAR",
+      "tag": "RAP",
+      "bio": "Jedno z najväčších mien slovenského rapu s energickou live show."
+    },
+    {
+      "slug": "sima",
+      "name": "SIMA",
+      "tag": "POP / RAP",
+      "bio": "Hitová speváčka spájajúca pop, rap a R&B."
+    },
+    {
+      "slug": "kali",
+      "name": "KALI",
+      "tag": "RAP",
+      "bio": "Rapper s hitmi, ktoré pozná celé Slovensko."
+    },
+    {
+      "slug": "alan-murin",
+      "name": "ALAN MURIN",
+      "tag": "POP / RAP",
+      "bio": "Jeden z najstreamovanejších mladých interpretov súčasnosti."
+    },
+    {
+      "slug": "helenine-oci",
+      "name": "HEĽENINE OČI",
+      "tag": "ROCK / POP",
+      "bio": "Východniarska párty klasika, ktorá roztancuje každý festival."
+    },
+    {
+      "slug": "hex",
+      "name": "HEX",
+      "tag": "POP ROCK",
+      "bio": "Legendárna slovenská kapela s hitmi naprieč generáciami."
+    },
+    {
+      "slug": "david-koller",
+      "name": "DAVID KOLLER",
+      "tag": "ROCK",
+      "bio": "Česká rocková legenda a frontman kapely Lucie."
+    },
+    {
+      "slug": "gladiator",
+      "name": "GLADIATOR",
+      "tag": "ROCK",
+      "bio": "Slovenská rocková stálica s nezameniteľnými refrénmi."
+    },
+    {
+      "slug": "billy-barman",
+      "name": "BILLY BARMAN",
+      "tag": "INDIE ROCK",
+      "bio": "Osobitý indie rock s básnivými textami a živelnými koncertmi."
+    },
+    {
+      "slug": "kollarovci",
+      "name": "KOLLÁROVCI",
+      "tag": "FOLK",
+      "bio": "Goralská hudobná show, ktorá spája folklór so zábavou."
+    }
+  ],
+  "tickets": [
+    {
+      "title": "1-DŇOVÝ LÍSTOK",
+      "subtitle": "Piatok alebo sobota",
+      "benefits": "Všetky stagey a zóny\nGastro a sprievodný program",
+      "highlight": 0
+    },
+    {
+      "title": "2-DŇOVÝ LÍSTOK",
+      "subtitle": "Celý festival, piatok + sobota",
+      "benefits": "Oba festivalové dni\nNajlepšia cena na deň",
+      "highlight": 1,
+      "badge": "NAJVÝHODNEJŠÍ"
+    },
+    {
+      "title": "VIP",
+      "subtitle": "Na deň alebo celý festival",
+      "benefits": "Vyvýšená VIP zóna s barom\nRýchly vstup do areálu",
+      "highlight": 0
+    }
+  ],
+  "faqs": [
+    {
+      "question": "Kedy sa spustí predaj vstupeniek?",
+      "answer": "Predaj vstupeniek na ročník 2027 spustíme čoskoro. Odporúčame sledovať naše sociálne siete a prihlásiť sa na odber noviniek — early bird ceny bývajú dostupné len obmedzený čas."
+    },
+    {
+      "question": "Kde sa festival koná a ako sa tam dostanem?",
+      "answer": "Festival sa koná v areáli Agrokomplex Nitra (Výstavná 4). Areál je dostupný pešo z centra mesta, MHD aj autom — parkovanie je k dispozícii priamo pri areáli."
+    },
+    {
+      "question": "Je festival vhodný pre deti a rodiny?",
+      "answer": "Áno. Majáles je podujatie pre všetky generácie — súčasťou areálu sú oddychové zóny, kolotoče a sprievodný program pre celé rodiny. Podmienky vstupu pre deti zverejníme spolu s predajom vstupeniek."
+    },
+    {
+      "question": "Čo si môžem priniesť do areálu?",
+      "answer": "Kompletný zoznam povolených a zakázaných predmetov zverejníme pred festivalom v návštevníckom poriadku. V areáli budú gastro zóny s jedlom aj nápojmi."
+    }
+  ],
+  "zones": [
+    {
+      "title": "GASTRO ZÓNA",
+      "description": "Street food, lokálne pivovary a drinky na oboch koncoch areálu."
+    },
+    {
+      "title": "KOLOTOČE",
+      "description": "Zábava a atrakcie s výhľadom na celý festival."
+    },
+    {
+      "title": "CHILL ZÓNY",
+      "description": "Tieň, ležadlá a pokojnejší kút, keď si potrebuješ vydýchnuť."
+    },
+    {
+      "title": "PRE RODINY",
+      "description": "Sprievodný program a zábava pre všetky generácie."
+    }
+  ],
+  "gallery": [
+    {
+      "caption": "Festivalová atmosféra"
+    },
+    {
+      "caption": "Hlavný stage"
+    },
+    {
+      "caption": "Publikum"
+    },
+    {
+      "caption": "Areál Agrokomplex"
+    },
+    {
+      "caption": "Večerná show"
+    }
+  ],
+  "partners": [
+    {
+      "name": "Partner 1"
+    },
+    {
+      "name": "Partner 2"
+    },
+    {
+      "name": "Partner 3"
+    },
+    {
+      "name": "Partner 4"
+    }
+  ]
+}

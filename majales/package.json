@@ -1,0 +1,16 @@
+{
+  "name": "majales-nitra",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web festivalu Majáles Nitra. Samotný web je PHP — npm je tu len kvôli prehliadačovým testom.",
+  "scripts": {
+    "dev": "bash scripts/dev-server.sh",
+    "test": "php tests/run.php",
+    "test:security": "php tests/security.php",
+    "test:browser": "bash tests/run-browser.sh",
+    "pack": "bash scripts/pack.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}
