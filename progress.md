@@ -29,11 +29,14 @@ z čistej inštalácie.
 - [x] RBAC admin/obsluha, audit log, jednotné chybové kódy
 - [x] Platby ako samostatná entita + analytika prevádzky
 - [x] Mobilná verzia adminu, doladenie webu na telefóne
-- [x] Testy: 93 backendových + 18 E2E kontrol cez celý cyklus objednávky
+- [x] Nástenka pípa, kým je objednávka nepotvrdená (zvuk, vibrácie, blikajúci titulok)
+- [x] Automatické predlžovanie sľúbených časov podľa vyťaženia kuchyne
+- [x] Testy: 122 backendových + 32 E2E kontrol cez celý cyklus objednávky
 - [x] Finálny audit, build, zabalenie
 
-Overené: čistá inštalácia z balíka, objednávka cez prehliadač na mobile,
-prijatie a preklikanie objednávky v admine, e-maily, doklad, CSV export.
+Overené: čistá inštalácia z balíka (rozbalený ZIP, vlastný config, migrácie,
+seed, beh pod `php -S`), objednávka cez prehliadač na mobile, prijatie
+a preklikanie objednávky v admine, e-maily, doklad, CSV export.
 
 ## Ako pokračovať
 
