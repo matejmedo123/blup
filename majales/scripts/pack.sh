@@ -25,6 +25,9 @@ zip -r -q "$OUT" . \
   -x 'tests/*' \
   -x 'scripts/*' \
   -x '.git/*' \
+  -x 'node_modules/*' \
+  -x 'package.json' -x 'package-lock.json' \
+  -x '.gitignore' \
   -x '*.sqlite' -x '*.sqlite-wal' -x '*.sqlite-shm' \
   -x '*.log' -x '.DS_Store' -x '*/.DS_Store'
 
@@ -40,8 +43,8 @@ cp storage/.htaccess "$TMP/storage/.htaccess"
 rm -rf "$TMP"
 
 # Poistka: keby sa do balíka predsa len dostalo niečo citlivé.
-if unzip -l "$OUT" | grep -qE ' config\.php$|\.sqlite'; then
-  echo "CHYBA: v balíku je config.php alebo databáza. Balík mažem."
+if unzip -l "$OUT" | grep -qE ' config\.php$|\.sqlite|node_modules/'; then
+  echo "CHYBA: v balíku je config.php, databáza alebo node_modules. Balík mažem."
   rm -f "$OUT"
   exit 1
 fi
