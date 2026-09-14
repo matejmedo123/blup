@@ -14,6 +14,7 @@
     "mobile": "npm --prefix mobile run start",
     "typecheck": "npm --prefix mobile run typecheck",
     "check:origin": "node scripts/check-origin.mjs",
+    "check:licenses": "node scripts/check-licenses.mjs",
     "web": "npm --prefix mobile run web"
   },
   "devDependencies": {
