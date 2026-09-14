@@ -41,6 +41,8 @@ const MESSAGES: Record<string, string> = {
   TICKET_TYPE_INACTIVE: 'Táto vstupenka už nie je v predaji.',
   AMOUNT_MISMATCH: 'Suma platby nesedela s objednávkou. Nič sme ti nestrhli.',
   EVENT_ALREADY_OVER: 'Tento event už prebehol.',
+  EVENT_ALREADY_ENDED: 'Tento event už skončil — propagovať sa dá len to, čo ešte len bude.',
+  BOOST_PACKAGE_NOT_FOUND: 'Tento balík už nie je v ponuke.',
 
   // basket
   CART_EMPTY: 'Košík je prázdny.',

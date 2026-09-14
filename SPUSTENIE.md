@@ -441,7 +441,7 @@ select cron.schedule('blup-tickets', '* * * * *', $$
     body := '{"limit": 25}'::jsonb);
 $$);
 
--- upratanie vypršaných rezervácií v košíku
+-- upratanie vypršaných rezervácií a označenie skončených eventov
 select cron.schedule('blup-cart', '*/5 * * * *', $$
   select net.http_post(
     url := 'https://<project-ref>.supabase.co/functions/v1/cart-sweep',
@@ -463,7 +463,10 @@ select cron.schedule('blup-digest', '0 7 * * 1', $$
 $$);
 ```
 
-`cart-sweep` je len upratovanie — vypršaná rezervácia prestáva držať vstupenky
+`cart-sweep` robí dve veci naraz a ani jedna nie je kritická. Označí eventy,
+ktoré už skončili, ako `completed` — bez toho sa skončený event všade inde
+správá ako nadchádzajúci (presne tak sa dal boostnúť koncert spred mesiaca).
+A je to upratovanie — vypršaná rezervácia prestáva držať vstupenky
 v tej sekunde, keď vyprší, nech beží čokoľvek.
 
 **✓ Kontrola:** `select jobname, schedule from cron.job;` — štyri riadky.

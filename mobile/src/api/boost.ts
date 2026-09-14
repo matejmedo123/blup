@@ -42,6 +42,39 @@ export async function getBoostPackages(): Promise<BoostPackage[]> {
   return (data ?? []) as BoostPackage[];
 }
 
+export interface BoostQuote {
+  available: boolean;
+  reason: string | null;
+  package_hours: number;
+  /** Shorter than package_hours when the event ends first. */
+  effective_hours: number;
+  truncated: boolean;
+  starts_at: string;
+  ends_at: string;
+  /** Set when a boost is already running and this one queues behind it. */
+  queued_after: string | null;
+  amount_cents: number;
+  currency: string;
+}
+
+/**
+ * What this package would actually deliver on this event, before any payment
+ * sheet opens.
+ *
+ * A boost is worth nothing once the event is over, so the server cuts it short
+ * at the event's end. The price does not change with it — which makes this the
+ * difference between the organizer choosing to buy three hours and the
+ * organizer discovering afterwards that they paid for twenty-four.
+ */
+export async function getBoostQuote(eventId: string, packageCode: string): Promise<BoostQuote> {
+  const { data, error } = await supabase.rpc('boost_quote', {
+    p_event: eventId,
+    p_package: packageCode,
+  });
+  if (error) throw error;
+  return data as BoostQuote;
+}
+
 export async function createBoostCheckout(
   eventId: string,
   packageCode: string,

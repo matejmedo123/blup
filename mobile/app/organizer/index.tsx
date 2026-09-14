@@ -1,5 +1,5 @@
 import { eventHref } from '@/lib/format';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,7 +12,10 @@ import {
   createPersonalOrganization,
 } from '@/api/organizations';
 import { getMyEvents } from '@/api/events';
-import { createBoostCheckout, getBoostPackages, waitForBoost, type BoostPackage } from '@/api/boost';
+import {
+  createBoostCheckout, getBoostPackages, getBoostQuote, waitForBoost,
+  type BoostPackage, type BoostQuote,
+} from '@/api/boost';
 import { createPromoCode, getPromoCodes } from '@/api/promo';
 import { isConfigured } from '@/lib/env';
 import { isStripeModuleAvailable, STRIPE_UNAVAILABLE_MESSAGE, useStripeBridge } from '@/payments/stripe';
@@ -41,6 +44,7 @@ export default function OrganizerScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [boostFor, setBoostFor] = useState<{ id: string; title: string } | null>(null);
+  const [boostQuotes, setBoostQuotes] = useState<Record<string, BoostQuote>>({});
   const [promoFor, setPromoFor] = useState<{ id: string; title: string } | null>(null);
   const [promoCode, setPromoCode] = useState<string | null>(null);
 
@@ -66,6 +70,34 @@ export default function OrganizerScreen() {
   const myEvents = useQuery({ queryKey: ['events', 'mine'], queryFn: getMyEvents });
 
   const packages = useQuery({ queryKey: ['boost', 'packages'], queryFn: getBoostPackages });
+
+  // Priced per package, for this event, the moment the sheet opens — a boost is
+  // cut short at the end of the event and the price does not follow, so the
+  // organizer has to be told before they pay, not after.
+  useEffect(() => {
+    const eventId = boostFor?.id;
+    const list = packages.data ?? [];
+    if (!eventId || list.length === 0) return;
+
+    let cancelled = false;
+    setBoostQuotes({});
+
+    void (async () => {
+      const pairs = await Promise.all(list.map(async (pack) => {
+        try {
+          return [pack.code, await getBoostQuote(eventId, pack.code)] as const;
+        } catch {
+          // A quote that will not load is not worth blocking the sheet over —
+          // the server refuses the order anyway if something is wrong.
+          return null;
+        }
+      }));
+      if (cancelled) return;
+      setBoostQuotes(Object.fromEntries(pairs.filter(Boolean) as [string, BoostQuote][]));
+    })();
+
+    return () => { cancelled = true; };
+  }, [boostFor?.id, packages.data]);
 
   // Reach and RSVP come from the events themselves; revenue from the ledger.
   // Personal events count too — somebody running free events under their own
@@ -211,7 +243,21 @@ export default function OrganizerScreen() {
   }
 
   const events = organization ? (orgEvents.data ?? []) : [];
-  const personalEvents = myEvents.data ?? [];
+
+  // The same rule as public.event_has_ended(): an event without an end time is
+  // treated as four hours long. The server refuses a boost on a finished event
+  // either way — this is so the button is not there to be pressed in the first
+  // place, rather than failing after the payment sheet has opened.
+  const hasEnded = (event: { start_at: string; end_at?: string | null }) => {
+    const ends = event.end_at
+      ? new Date(event.end_at).getTime()
+      : new Date(event.start_at).getTime() + 4 * 60 * 60 * 1000;
+    return Number.isFinite(ends) && ends < Date.now();
+  };
+
+  const allMine = myEvents.data ?? [];
+  const personalEvents = allMine.filter((event) => !hasEnded(event));
+  const finishedEvents = allMine.filter((event) => hasEnded(event));
   const currency = balance.data?.currency;
 
   return (
@@ -349,6 +395,63 @@ export default function OrganizerScreen() {
           })
         )}
 
+        {/* --- finished ------------------------------------------------------- */}
+        {/*
+          Kept, not hidden and certainly not deleted: the tickets, the takings
+          and the accounting all hang off these, and the organizer needs last
+          month's numbers. What they lose is the actions that only make sense
+          ahead of time — a promo code nobody can still redeem, and a boost for
+          a night that already happened.
+        */}
+        {finishedEvents.length > 0 ? (
+          <>
+            <Text style={styles.section}>Skončené</Text>
+            {finishedEvents.map((event) => {
+              const family = categoryFamilies[familyFor(event.category)];
+              const orgRow = events.find((item) => item.id === event.id);
+
+              return (
+                <View key={event.id} style={[styles.eventCard, styles.eventCardDone]}>
+                  <Pressable
+                    style={styles.eventTop}
+                    onPress={() => router.push(eventHref(event))}
+                  >
+                    <View style={[styles.dot, { backgroundColor: family.color, opacity: 0.45 }]} />
+                    <View style={styles.flex}>
+                      <Text style={styles.eventTitleDone} numberOfLines={1}>{event.title}</Text>
+                      <Text style={styles.eventMeta}>
+                        Skončilo {formatEventDate(event.start_at)}
+                        {orgRow ? ` · ${orgRow.attendee_count} prišlo` : ''}
+                      </Text>
+                    </View>
+                    <Text style={styles.eventPrice}>
+                      {event.is_free ? 'Zdarma' : formatMoney(event.price_cents, event.currency)}
+                    </Text>
+                  </Pressable>
+
+                  <View style={styles.eventActions}>
+                    <Pressable
+                      style={styles.eventAction}
+                      onPress={() => router.push(`/organizer/analytics/${event.id}`)}
+                    >
+                      <Text style={styles.eventActionLabel}>Štatistiky</Text>
+                    </Pressable>
+
+                    {!event.is_free ? (
+                      <Pressable
+                        style={styles.eventAction}
+                        onPress={() => router.push(`/organizer/tickets/${event.id}`)}
+                      >
+                        <Text style={styles.eventActionLabel}>Vstupenky</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })}
+          </>
+        ) : null}
+
         {/* --- money ---------------------------------------------------------- */}
         {organization ? (
           <>
@@ -430,6 +533,17 @@ export default function OrganizerScreen() {
               <Text style={styles.packageMeta}>
                 +{Math.round(pack.weight * 100)} bodov vo výbere · {pack.hours} h
               </Text>
+              {boostQuotes[pack.code]?.truncated ? (
+                <Text style={styles.packageWarning}>
+                  Pobeží {boostQuotes[pack.code].effective_hours} h z {pack.hours} h —
+                  event sa skončí skôr. Cena sa nemení.
+                </Text>
+              ) : null}
+              {boostQuotes[pack.code]?.queued_after ? (
+                <Text style={styles.packageMeta}>
+                  Zaradí sa za boost, ktorý práve beží.
+                </Text>
+              ) : null}
             </View>
             <Text style={styles.packagePrice}>
               {formatMoney(pack.price_cents, pack.currency)}
@@ -589,6 +703,11 @@ const styles = StyleSheet.create({
   eventTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   dot: { width: 10, height: 10, borderRadius: 5 },
   eventTitle: { ...typography.rowTitle, color: colors.text },
+  packageWarning: { ...typography.metaSm, color: colors.warning, marginTop: 2 },
+  // Finished events stay in the list but stop competing for attention with the
+  // ones the organizer can still do something about.
+  eventCardDone: { backgroundColor: 'transparent', borderColor: colors.border, opacity: 0.72 },
+  eventTitleDone: { ...typography.rowTitle, color: colors.textSecondary },
   eventMeta: { ...typography.metaSm, color: colors.textTertiary, marginTop: 2 },
   eventPrice: { ...typography.meta, color: colors.cyan },
 
