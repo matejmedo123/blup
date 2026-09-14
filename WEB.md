@@ -133,10 +133,17 @@ payment_intent.succeeded          tickets and boosts
 payment_intent.payment_failed
 payment_intent.canceled
 charge.refunded
+charge.dispute.created            freezes the organizer's payouts
+charge.dispute.closed             lifts the freeze; a loss debits the ledger
 checkout.session.completed        web Premium starts here
 customer.subscription.created
 customer.subscription.updated     renewal, cancellation, card failure
 customer.subscription.deleted
+account.updated                   Connect onboarding progress
+transfer.created                  BLUP -> the organizer's Stripe balance
+transfer.paid
+payout.paid                       that balance -> their bank
+payout.failed
 ```
 
 `return_url` is validated against `APP_PUBLIC_URL` and must be a path on that

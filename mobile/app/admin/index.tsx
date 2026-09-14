@@ -57,6 +57,11 @@ export default function AdminDashboard() {
       />
       <Row label="Otvorené nahlásenia" badge={data.open_reports} onPress={() => router.push('/admin/reports')} />
       <Row label="Čakajúce výplaty" badge={data.pending_payouts} onPress={() => router.push('/admin/payouts')} />
+      <Row
+        label="Výplatná politika a spory"
+        badge={data.open_disputes}
+        onPress={() => router.push('/admin/policy')}
+      />
       <Row label="Používatelia" onPress={() => router.push('/admin/users')} />
       <Row label="Všetky eventy" onPress={() => router.push('/admin/events')} />
     </Screen>

@@ -208,9 +208,46 @@ export interface OrganizationBalance {
   balance_cents: number;
   available_cents: number;
   pending_cents: number;
+  /**
+   * The part of `pending_cents` held back as the reserve — the share that
+   * survives the event itself, because a card dispute for "service not
+   * provided" can arrive months after the doors closed.
+   */
+  reserve_cents: number;
+  /** When the next tranche of pending money becomes available. */
+  next_release_at: string | null;
   gross_sales_cents: number;
   platform_fee_cents: number;
+  commission_cents: number;
+  archive_fee_cents: number;
+  refunded_cents: number;
   paid_out_cents: number;
+  /** Null for members who are not entitled to see it. */
+  payout_tier: 0 | 1 | 2 | null;
+  payouts_frozen: boolean | null;
+}
+
+export interface PayoutTier {
+  tier: 0 | 1 | 2;
+  label: string;
+  advance_max_bps: number;
+  advance_earliest_days: number;
+  payout_delay_days: number;
+  reserve_bps: number;
+  reserve_release_days: number;
+}
+
+export interface PaymentDispute {
+  id: string;
+  organization_id: string | null;
+  order_id: string | null;
+  event_id: string | null;
+  amount_cents: number;
+  currency: string;
+  reason: string | null;
+  status: 'open' | 'won' | 'lost' | 'withdrawn';
+  opened_at: string;
+  closed_at: string | null;
 }
 
 export interface TicketType {
@@ -392,6 +429,9 @@ export interface PlatformStats {
   /** commission + archive fees + boosts */
   platform_revenue_cents: number;
   pending_payouts: number;
+  /** Open card disputes — each one has an organizer frozen behind it. */
+  open_disputes: number;
+  frozen_organizations: number;
   premium_users: number;
 }
 

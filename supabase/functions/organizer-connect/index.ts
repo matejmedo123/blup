@@ -75,6 +75,16 @@ Deno.serve(async (req) => {
       await db.from('organizations').update({ stripe_account_id: accountId }).eq('id', org.id);
     }
 
+    // Manual payouts are what makes the hold real, so assert it on every visit
+    // rather than only at creation: an account made before this existed is
+    // still on Stripe's rolling default, and onboarding is the one moment we
+    // are reliably here. Not fatal if it fails — onboarding still has to work.
+    try {
+      await stripe.setManualPayouts(accountId);
+    } catch (error) {
+      console.error('could not force manual payouts on', accountId, error);
+    }
+
     // Always re-read the live capability flags from Stripe.
     const account = await stripe.retrieveAccount(accountId);
 

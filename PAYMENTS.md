@@ -272,8 +272,9 @@ nothing.
 3. Add a webhook endpoint pointing at
    `https://<project>.functions.supabase.co/stripe-webhook`, subscribed to:
    `payment_intent.succeeded`, `payment_intent.payment_failed`,
-   `payment_intent.canceled`, `charge.refunded`, `account.updated`,
-   `transfer.created`, `transfer.paid`.
+   `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`,
+   `charge.dispute.closed`, `account.updated`, `transfer.created`,
+   `transfer.paid`, `payout.paid`, `payout.failed`.
 4. Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
 5. Enable **Connect** (Express accounts) for payouts.
 6. `supabase secrets set --env-file supabase/.env && ./scripts/deploy-functions.sh`

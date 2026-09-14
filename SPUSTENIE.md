@@ -233,7 +233,7 @@ STRIPE_PRICE_PREMIUM_YEARLY=price_...
 **Developers → Webhooks → Add endpoint**
 
 - URL: `https://<project-ref>.supabase.co/functions/v1/stripe-webhook`
-- Udalosti — presne týchto jedenásť:
+- Udalosti — presne týchto pätnásť:
 
 ```
 payment_intent.succeeded
@@ -244,10 +244,18 @@ customer.subscription.created
 customer.subscription.updated
 customer.subscription.deleted
 charge.refunded
+charge.dispute.created
+charge.dispute.closed
 account.updated
 transfer.created
 transfer.paid
+payout.paid
+payout.failed
 ```
+
+Tie dve `charge.dispute.*` sú tam preto, že otvorený spor **zmrazí výplaty**
+organizátora. Bez nich sa o spore nedozvieš a organizátor si medzitým vyplatí
+peniaze, ktoré budeš musieť vrátiť ty.
 
 Skopíruj **Signing secret**:
 

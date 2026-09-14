@@ -267,6 +267,73 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'charge.dispute.created': {
+        // A customer has gone to their bank. Two things matter and both have to
+        // happen here: record it, which freezes every payout for that organizer
+        // until it closes, and tell them — they are the one who has to produce
+        // the evidence, and they have a deadline.
+        const paymentIntentId = String(object.payment_intent ?? '');
+        const { data: orders } = paymentIntentId
+          ? await db
+              .from('orders')
+              .select('id')
+              .or(`provider_reference.eq.${paymentIntentId},provider_reference.like.${paymentIntentId}#%`)
+          : { data: [] as { id: string }[] };
+
+        // A basket disputed as one charge is one dispute at Stripe. Attaching it
+        // to the first order is enough: the freeze is per organizer, and the
+        // amount is the charge's, not the order's.
+        const orderId = orders?.[0]?.id ?? null;
+        if (!orderId) {
+          console.error('dispute with no matching order:', object.id, paymentIntentId);
+          break;
+        }
+
+        await db.rpc('record_dispute_opened', {
+          p_provider_reference: String(object.id),
+          p_charge_reference: String(object.charge ?? ''),
+          p_order_id: orderId,
+          p_amount_cents: Number(object.amount ?? 0),
+          p_currency: String(object.currency ?? 'eur').toUpperCase(),
+          p_reason: object.reason ? String(object.reason) : null,
+        });
+        break;
+      }
+
+      case 'charge.dispute.closed': {
+        // Stripe's status is `won`, `lost`, or `warning_closed` — the last one
+        // being an early warning that never became a real dispute.
+        const raw = String(object.status ?? '');
+        const status = raw === 'won' ? 'won' : raw === 'lost' ? 'lost' : 'withdrawn';
+
+        await db.rpc('record_dispute_closed', {
+          p_provider_reference: String(object.id),
+          p_status: status,
+        });
+        break;
+      }
+
+      case 'payout.paid':
+      case 'payout.failed': {
+        // The other leg. `transfer.*` is BLUP → the organizer's Stripe balance;
+        // `payout.*` is that balance → their bank, which is the one the
+        // organizer actually asks about. Payouts are manual, so every one of
+        // these belongs to a payout BLUP sent.
+        const payoutId = metadata.payout_id;
+        if (!payoutId) break;
+
+        const failed = event.type === 'payout.failed';
+        await db.rpc('mark_payout_settled', {
+          p_payout_id: payoutId,
+          p_status: failed ? 'failed' : 'paid',
+          p_reference: String(object.id),
+        });
+        if (failed) {
+          console.error('payout failed:', object.id, object.failure_message ?? '');
+        }
+        break;
+      }
+
       case 'transfer.created':
       case 'transfer.paid': {
         const payoutId = metadata.payout_id;

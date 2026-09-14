@@ -140,6 +140,9 @@ Deno.serve(async (req) => {
         // What BLUP keeps out of this charge: commission plus archive fee.
         applicationFeeCents: order.blup_revenue_cents,
         connectedAccountId: org?.charges_enabled ? org.stripe_account_id : null,
+        // The event's own name on the card statement. An unrecognised line is
+        // where a large share of disputes begin.
+        descriptor: event?.title ?? null,
         customerId: await customerFor(db, user),
         clientReferenceId: order.id,
         metadata: { order_id: order.id, buyer_id: user.id, event_id: order.event_id, platform: 'blup_web' },

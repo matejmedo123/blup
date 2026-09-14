@@ -18,6 +18,26 @@ import {
 import { colors, radius, spacing, typography } from '@/theme';
 import type { PayoutStatus } from '@/types/models';
 
+/**
+ * What the organizer is told about how long their money is held.
+ *
+ * The numbers themselves live in the `payout_tiers` table, because they belong
+ * in an annex to the contract and have to be changeable without a deployment.
+ * These are only the names.
+ */
+const TIER_LABEL: Record<number, string> = {
+  0: 'Nový organizátor',
+  1: '1–2 eventy',
+  2: '3+ bez incidentu',
+};
+
+function releaseLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return null;
+  return when.toLocaleDateString('sk-SK', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 const TONE: Record<PayoutStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   paid: 'success',
   processing: 'warning',
@@ -165,7 +185,42 @@ export default function PayoutsScreen() {
         <Caption>
           {formatMoney(balance.data?.pending_cents ?? 0, currency)} ešte dozrieva
         </Caption>
+        {(balance.data?.reserve_cents ?? 0) > 0 ? (
+          <Caption>
+            z toho {formatMoney(balance.data?.reserve_cents ?? 0, currency)} rezerva
+          </Caption>
+        ) : null}
+        {releaseLabel(balance.data?.next_release_at ?? null) ? (
+          <Caption>
+            najbližšie uvoľnenie {releaseLabel(balance.data?.next_release_at ?? null)}
+          </Caption>
+        ) : null}
       </View>
+
+      {balance.data?.payouts_frozen ? (
+        <Notice
+          tone="danger"
+          title="Výplaty sú pozastavené"
+          body={
+            'Zákazník napadol platbu u svojej banky. Kým sa spor neuzavrie, ' +
+            'z BLUPu neodídu žiadne peniaze. Pošli nám podklady k podujatiu čo ' +
+            'najskôr — banka má na rozhodnutie lehotu a po nej sa už nedá nič robiť.'
+          }
+        />
+      ) : null}
+
+      {balance.data?.payout_tier != null ? (
+        <Notice
+          tone="accent"
+          title={`Tvoja úroveň výplat: ${TIER_LABEL[balance.data.payout_tier] ?? balance.data.payout_tier}`}
+          body={
+            'Peniaze z predaja sa uvoľňujú až po skončení podujatia, nie po ' +
+            'predaji vstupenky — spor o „služba nebola poskytnutá“ vie prísť aj ' +
+            'mesiace po akcii. Časť sumy držíme ako rezervu ešte dlhšie. Čím ' +
+            'viac odohraných eventov bez incidentu, tým skôr a tým viac dostaneš.'
+          }
+        />
+      ) : null}
 
       <View style={styles.summary}>
         <SummaryRow label="Hrubý predaj vstupeniek" value={formatMoney(balance.data?.gross_sales_cents ?? 0, currency)} />
@@ -218,16 +273,22 @@ export default function PayoutsScreen() {
         returnKeyType="done"
         onSubmitEditing={() => { if (organization.payouts_enabled) void withdraw(); }}
         hint={
-          organization.payouts_enabled
-            ? 'Pôjde na bankový účet, ktorý si pripojil pri onboardingu.'
-            : 'Dokonči onboarding výplat, aby si mohol vyberať.'
+          balance.data?.payouts_frozen
+            ? 'Výplaty sú pozastavené pre otvorený spor o platbu.'
+            : organization.payouts_enabled
+              ? 'Pôjde na bankový účet, ktorý si pripojil pri onboardingu.'
+              : 'Dokonči onboarding výplat, aby si mohol vyberať.'
         }
       />
       <Button
         title="Požiadať o výplatu"
         onPress={withdraw}
         loading={busy === 'withdraw'}
-        disabled={!organization.payouts_enabled || (balance.data?.available_cents ?? 0) <= 0}
+        disabled={
+          !organization.payouts_enabled
+          || Boolean(balance.data?.payouts_frozen)
+          || (balance.data?.available_cents ?? 0) <= 0
+        }
       />
 
       <SectionHeader title="História výplat" />

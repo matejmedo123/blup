@@ -112,6 +112,20 @@ export interface StripeAccount {
   requirements?: { currently_due?: string[]; disabled_reason?: string | null };
 }
 
+/**
+ * What the buyer sees on their card statement.
+ *
+ * Half of all card disputes start with somebody not recognising a line on a
+ * statement, so this is a dispute-prevention measure, not cosmetics. Stripe
+ * allows at most 22 characters and rejects < > \\ ' " *.
+ */
+function statementDescriptor(name: string | null | undefined): string | undefined {
+  if (!name) return undefined;
+  const cleaned = name.replace(/[<>\\'"*]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 22);
+  // Stripe also requires at least one letter.
+  return /[a-zA-Z]/.test(cleaned) ? cleaned : undefined;
+}
+
 export const stripe = {
   /**
    * A destination charge: the buyer pays BLUP, Stripe automatically forwards the
@@ -128,12 +142,15 @@ export const stripe = {
     applicationFeeCents?: number;
     connectedAccountId?: string | null;
     customerEmail?: string;
+    /** The event name, for the buyer's card statement. */
+    descriptor?: string | null;
   }) =>
     stripeRequest<StripePaymentIntent>('/payment_intents', 'POST', {
       amount: params.amountCents,
       currency: params.currency.toLowerCase(),
       'automatic_payment_methods[enabled]': 'true',
       receipt_email: params.customerEmail,
+      statement_descriptor: statementDescriptor(params.descriptor),
       metadata: {
         order_id: params.orderId,
         buyer_id: params.buyerId,
@@ -144,6 +161,12 @@ export const stripe = {
         ? {
             application_fee_amount: params.applicationFeeCents ?? 0,
             transfer_data: { destination: params.connectedAccountId },
+            // The one parameter that decides who eats a chargeback. With it,
+            // the organizer is the merchant of record and a dispute is taken
+            // from their balance; without it BLUP is, and BLUP pays — which is
+            // the whole reason this runs on Connect rather than a plain
+            // account. It must be sent on every charge that has a destination.
+            on_behalf_of: params.connectedAccountId,
           }
         : {}),
     }, `pi_${params.orderId}`),
@@ -184,6 +207,8 @@ export const stripe = {
     }[];
     applicationFeeCents?: number;
     connectedAccountId?: string | null;
+    /** The event name, for the buyer's card statement. */
+    descriptor?: string | null;
     /** mode: 'subscription' */
     priceId?: string;
     trialDays?: number;
@@ -229,10 +254,14 @@ export const stripe = {
           }];
       body.payment_intent_data = {
         metadata: params.metadata,
+        statement_descriptor: statementDescriptor(params.descriptor),
         ...(params.connectedAccountId
           ? {
               application_fee_amount: params.applicationFeeCents ?? 0,
               transfer_data: { destination: params.connectedAccountId },
+              // See createPaymentIntent: this is what puts the dispute on the
+              // organizer's balance instead of ours.
+              on_behalf_of: params.connectedAccountId,
             }
           : {}),
       };
@@ -326,7 +355,25 @@ export const stripe = {
         transfers: { requested: 'true' },
       },
       business_type: 'company',
+      // Manual payouts are the escrow. Left on Stripe's default the connected
+      // account pays itself out to its own bank on a rolling schedule, which
+      // would move the money out from under BLUP's own hold — the ledger would
+      // still be counting a reserve that had already left. Nothing reaches the
+      // organizer's bank until BLUP sends a payout.
+      settings: { payouts: { schedule: { interval: 'manual' } } },
       metadata: { organization_id: params.organizationId, platform: 'blup' },
+    }),
+
+  /**
+   * Forces manual payouts on an account that already exists.
+   *
+   * Accounts created before this setting existed are still on Stripe's rolling
+   * default, and onboarding is the only moment we are reliably called — so the
+   * onboarding path re-asserts it rather than assuming.
+   */
+  setManualPayouts: (accountId: string) =>
+    stripeRequest<StripeAccount>(`/accounts/${accountId}`, 'POST', {
+      settings: { payouts: { schedule: { interval: 'manual' } } },
     }),
 
   retrieveAccount: (accountId: string) =>

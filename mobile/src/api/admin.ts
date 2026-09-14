@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase';
-import type { PlatformStats, Profile, ReportStatus } from '@/types/models';
+import type {
+  PaymentDispute, PayoutTier, PlatformStats, Profile, ReportStatus,
+} from '@/types/models';
 
 /**
  * Admin API. Every function calls a SECURITY DEFINER database function that
@@ -339,4 +341,93 @@ export async function saveMarketingSettings(next: {
 
   if (error) throw error;
   return data as MarketingSettings;
+}
+
+// --- payout policy, reserves and disputes ------------------------------------
+
+/**
+ * The tier matrix. It lives in the database rather than in this file because it
+ * belongs in an annex to the organizer contract — it has to be changeable
+ * without an amendment, and without a deployment.
+ */
+export async function listPayoutTiers(): Promise<PayoutTier[]> {
+  const { data, error } = await supabase
+    .from('payout_tiers')
+    .select('*')
+    .order('tier', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as PayoutTier[];
+}
+
+export async function listDisputes(status: 'open' | 'all' = 'open'): Promise<PaymentDispute[]> {
+  let query = supabase
+    .from('payment_disputes')
+    .select('*, organization:organizations (id, name, slug), event:events (id, title)')
+    .order('opened_at', { ascending: false })
+    .limit(100);
+
+  if (status === 'open') query = query.eq('status', 'open');
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as unknown as PaymentDispute[];
+}
+
+/** Pin an organization to a tier, or pass null to follow their history again. */
+export async function setPayoutTier(
+  organizationId: string,
+  tier: 0 | 1 | 2 | null,
+  note?: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_payout_tier', {
+    p_organization_id: organizationId,
+    p_tier: tier,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
+}
+
+/**
+ * What could be advanced on one event right now — and when it cannot, why.
+ * Asking before offering keeps the screen from showing a button that the
+ * database is going to refuse.
+ */
+export async function advanceQuote(
+  organizationId: string,
+  eventId: string,
+): Promise<{
+  eligible: boolean;
+  reason: string | null;
+  tier?: number;
+  max_bps?: number;
+  opens_at?: string;
+  max_cents: number;
+}> {
+  const { data, error } = await supabase.rpc('advance_quote', {
+    p_organization_id: organizationId,
+    p_event_id: eventId,
+  });
+  if (error) throw error;
+  return data as never;
+}
+
+/**
+ * Grant an advance before the event. Admin-only by design: an advance the
+ * organizer can take on their own is not an advance, it is a payout, and it
+ * removes the only leverage the platform has if the event is cancelled.
+ */
+export async function approveAdvance(
+  organizationId: string,
+  eventId: string,
+  amountCents: number,
+  note?: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('approve_payout_advance', {
+    p_organization_id: organizationId,
+    p_event_id: eventId,
+    p_amount_cents: amountCents,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
 }

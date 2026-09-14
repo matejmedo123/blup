@@ -84,6 +84,9 @@ Deno.serve(async (req) => {
       .eq('id', order.organization_id)
       .single();
 
+    const { data: event } = await db
+      .from('events').select('title').eq('id', order.event_id).single();
+
     const intent = await stripe.createPaymentIntent({
       amountCents: order.total_cents,
       currency: order.currency,
@@ -95,6 +98,9 @@ Deno.serve(async (req) => {
       // using it here would hand the buyer-paid archive fee to the organizer.
       applicationFeeCents: order.blup_revenue_cents,
       connectedAccountId: org?.charges_enabled ? org.stripe_account_id : null,
+      // The event's own name on the card statement. An unrecognised line is
+      // where a large share of disputes begin.
+      descriptor: event?.title ?? null,
       customerEmail: user.email,
     });
 
