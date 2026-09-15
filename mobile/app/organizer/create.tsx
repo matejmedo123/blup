@@ -250,12 +250,16 @@ export default function CreateEventScreen() {
    * this waits until the typing stops rather than firing per keystroke, and the
    * in-flight request is abandoned as soon as the text changes again.
    */
+  // Whether we are searching at all is a property of what is typed, not
+  // something to discover in an effect — so the list is emptied by not showing
+  // it, rather than by a setState that costs a second render on every keystroke
+  // below four characters.
+  const query = address.trim();
+  const searching = suggesting && query.length >= 4;
+  const visibleSuggestions = searching ? suggestions : [];
+
   useEffect(() => {
-    const query = address.trim();
-    if (!suggesting || query.length < 4) {
-      setSuggestions([]);
-      return;
-    }
+    if (!searching) return;
 
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -271,7 +275,7 @@ export default function CreateEventScreen() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [address, suggesting]);
+  }, [query, searching]);
 
   /** Picks one of the suggestions: fills the field and moves the pin. */
   // Not a hook — the name only looked like one, which made every lint run report
@@ -606,9 +610,9 @@ export default function CreateEventScreen() {
         hint="Píš a vyber z návrhov — alebo stlač Enter a špendlík skočí, kam patrí."
       />
 
-      {suggestions.length > 0 ? (
+      {visibleSuggestions.length > 0 ? (
         <View style={styles.suggestions}>
-          {suggestions.map((hit) => (
+          {visibleSuggestions.map((hit) => (
             <Pressable
               key={`${hit.latitude},${hit.longitude}`}
               onPress={() => applySuggestion(hit)}

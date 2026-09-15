@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { StyleSheet, View } from 'react-native';
 
 import { categoryFamilies, colors, emojiFor, familyFor, radius, spacing, typography } from '@/theme';
+import { useSeed } from '@/hooks/useSeed';
 import { env } from '@/lib/env';
 import type { Coordinates, EventFeedItem } from '@/types/models';
 
@@ -131,41 +132,10 @@ export function EventMap({
     setCentre(userLocation);
   }, [userLocation]);
 
-  // A new focus point moves the map there and zooms in to street level. Only
-  // when it actually changes — panning away afterwards is the user's business.
-  const focusKey = focus ? `${focus.latitude},${focus.longitude}` : null;
-  useEffect(() => {
-    if (!focus) return;
-    centred.current = true;
-    setCentre({ latitude: focus.latitude, longitude: focus.longitude });
-    setZoom((current) => Math.max(current, 16));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusKey]);
-
-  const reported = useRef(false);
-  useEffect(() => {
-    if (reported.current || !size.width || !size.height) return;
-    reported.current = true;
-    report(centre, zoom);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.width, size.height]);
-
-  useEffect(() => {
-    if (size.height > 0) setZoom(zoomForRadius(radiusM, centre.latitude, size.height));
-    // Only when the requested radius changes, not on every pan.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [radiusM, size.height]);
-
-  useEffect(() => {
-    const node = hostRef.current;
-    if (!node) return;
-    const observer = new ResizeObserver(([entry]) => {
-      setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
+  // Declared before the effects that call it. It used to sit below them, which
+  // worked only because an effect runs after the whole component body — a
+  // `const` referenced before its own declaration, one reordering away from a
+  // temporal-dead-zone crash.
   const report = useCallback((next: Coordinates, z: number) => {
     if (!onRegionChange || !size.width) return;
     const scale = Math.pow(2, z) * TILE_SIZE;
@@ -176,6 +146,40 @@ export function EventMap({
       longitudeDelta: (size.width / scale) * 360,
     });
   }, [onRegionChange, size.width, size.height]);
+
+  // A new focus point moves the map there and zooms in to street level. Only
+  // when it actually changes — panning away afterwards is the user's business.
+  const focusKey = focus ? `${focus.latitude},${focus.longitude}` : null;
+  useSeed(focusKey, () => {
+    if (!focus) return;
+    centred.current = true;
+    setCentre({ latitude: focus.latitude, longitude: focus.longitude });
+    setZoom((current) => Math.max(current, 16));
+  });
+
+  const reported = useRef(false);
+  useEffect(() => {
+    if (reported.current || !size.width || !size.height) return;
+    reported.current = true;
+    report(centre, zoom);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.width, size.height]);
+
+  // Only when the requested radius (or the box it has to fit) changes, never on
+  // a pan — so it is keyed on exactly those two and adjusts during render
+  // rather than a frame later, which is what made the map visibly settle.
+  const fitKey = size.height > 0 ? `${radiusM}@${size.height}` : null;
+  useSeed(fitKey, () => setZoom(zoomForRadius(radiusM, centre.latitude, size.height)));
+
+  useEffect(() => {
+    const node = hostRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   // --- panning ---------------------------------------------------------------
   /**
@@ -189,6 +193,7 @@ export function EventMap({
    * once when the finger lifts.
    */
   const drag = useRef<{ x: number; y: number; centre: Coordinates } | null>(null);
+  const [dragging, setDragging] = useState(false);
   const layerRef = useRef<HTMLDivElement | null>(null);
   const offset = useRef({ x: 0, y: 0 });
 
@@ -271,6 +276,10 @@ export function EventMap({
     }
 
     drag.current = { x: e.clientX, y: e.clientY, centre };
+    // The ref drives the maths on every pointer move; this only drives the
+    // cursor, and reading a ref during render to decide it is exactly the thing
+    // that makes a component render differently than React thinks it did.
+    setDragging(true);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -296,6 +305,7 @@ export function EventMap({
   const endDrag = () => {
     const started = drag.current;
     drag.current = null;
+    setDragging(false);
     if (!started) return;
 
     const { x, y } = offset.current;
@@ -450,7 +460,7 @@ export function EventMap({
           inset: 0,
           overflow: 'hidden',
           background: colors.map,
-          cursor: interactive ? (drag.current ? 'grabbing' : 'grab') : 'default',
+          cursor: interactive ? (dragging ? 'grabbing' : 'grab') : 'default',
           touchAction: 'none',
         }}
       >

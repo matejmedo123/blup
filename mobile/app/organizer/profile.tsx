@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMyOrganizations, updateOrganization } from '@/api/organizations';
 import { pickImage, uploadOrganizationLogo } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
+import { useSeed } from '@/hooks/useSeed';
 import { formatVatLine } from '@/lib/format';
 import {
   Body, Button, Caption, Input, LoadingState, Notice, Screen, SectionHeader, Switch,
@@ -41,15 +42,14 @@ export default function OrganizationProfileScreen() {
   const [isVatPayer, setIsVatPayer] = useState(false);
   const [vatRate, setVatRate] = useState('23');
 
-  useEffect(() => {
-    if (!organization) return;
-    setName(organization.name);
-    setDescription(organization.description ?? '');
-    setWebsite(organization.website ?? '');
-    setLogoUrl(organization.logo_url ?? null);
-    setIsVatPayer(Boolean(organization.is_vat_payer));
-    setVatRate(String((organization.vat_rate_bps ?? 2300) / 100));
-  }, [organization]);
+  useSeed(organization, (loaded) => {
+    setName(loaded.name);
+    setDescription(loaded.description ?? '');
+    setWebsite(loaded.website ?? '');
+    setLogoUrl(loaded.logo_url ?? null);
+    setIsVatPayer(Boolean(loaded.is_vat_payer));
+    setVatRate(String((loaded.vat_rate_bps ?? 2300) / 100));
+  });
 
   if (organizations.isLoading) return <Screen><LoadingState /></Screen>;
 

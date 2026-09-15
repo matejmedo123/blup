@@ -1,8 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import {
-  Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View,
-  type StyleProp, type ViewStyle,
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -30,7 +27,7 @@ export function BottomSheet({
   footer?: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
 }) {
-  const progress = useRef(new Animated.Value(0)).current;
+  const progress = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     Animated.timing(progress, {

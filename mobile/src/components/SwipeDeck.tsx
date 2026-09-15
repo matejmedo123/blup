@@ -48,8 +48,8 @@ export function SwipeDeck({
       const current = events[index];
       if (current) onSwipe(current, direction);
 
-      translateX.value = 0;
-      translateY.value = 0;
+      translateX.set(0);
+      translateY.set(0);
       setLocked(false);
 
       if (direction === 'up') return; // navigation happens in onSwipe
@@ -68,45 +68,45 @@ export function SwipeDeck({
   const gesture = Gesture.Pan()
     .enabled(!locked)
     .onUpdate((change) => {
-      translateX.value = change.translationX;
-      translateY.value = change.translationY;
+      translateX.set(change.translationX);
+      translateY.set(change.translationY);
     })
     .onEnd((change) => {
       const { translationX, translationY, velocityX } = change;
 
       if (translationY < -SWIPE_THRESHOLD && Math.abs(translationX) < SWIPE_THRESHOLD) {
         runOnJS(lock)();
-        translateY.value = withTiming(-700, { duration: 180 }, () => {
+        translateY.set(withTiming(-700, { duration: 180 }, () => {
           runOnJS(advance)('up');
-        });
+        }));
         return;
       }
 
       if (Math.abs(translationX) > SWIPE_THRESHOLD || Math.abs(velocityX) > 900) {
         const direction: SwipeDirection = translationX > 0 ? 'right' : 'left';
         runOnJS(lock)();
-        translateX.value = withTiming(
+        translateX.set(withTiming(
           translationX > 0 ? SCREEN_WIDTH * 1.3 : -SCREEN_WIDTH * 1.3,
           { duration: FLING_MS },
           () => {
             runOnJS(advance)(direction);
           },
-        );
+        ));
         return;
       }
 
-      translateX.value = withSpring(0, { damping: 18 });
-      translateY.value = withSpring(0, { damping: 18 });
+      translateX.set(withSpring(0, { damping: 18 }));
+      translateY.set(withSpring(0, { damping: 18 }));
     });
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { rotate: `${interpolate(translateX.value, [-SCREEN_WIDTH, 0, SCREEN_WIDTH], [-16, 0, 16])}deg` },
+      { translateX: translateX.get() },
+      { translateY: translateY.get() },
+      { rotate: `${interpolate(translateX.get(), [-SCREEN_WIDTH, 0, SCREEN_WIDTH], [-16, 0, 16])}deg` },
     ],
     opacity: interpolate(
-      Math.abs(translateX.value),
+      Math.abs(translateX.get()),
       [0, SCREEN_WIDTH * 0.9],
       [1, 0],
       'clamp',
@@ -114,11 +114,11 @@ export function SwipeDeck({
   }));
 
   const blupStamp = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [0, SWIPE_THRESHOLD], [0, 1], 'clamp'),
+    opacity: interpolate(translateX.get(), [0, SWIPE_THRESHOLD], [0, 1], 'clamp'),
   }));
 
   const nopeStamp = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [-SWIPE_THRESHOLD, 0], [1, 0], 'clamp'),
+    opacity: interpolate(translateX.get(), [-SWIPE_THRESHOLD, 0], [1, 0], 'clamp'),
   }));
 
   const press = (direction: SwipeDirection) => {
@@ -130,13 +130,13 @@ export function SwipeDeck({
     }
 
     setLocked(true);
-    translateX.value = withTiming(
+    translateX.set(withTiming(
       direction === 'right' ? SCREEN_WIDTH * 1.3 : -SCREEN_WIDTH * 1.3,
       { duration: FLING_MS },
       () => {
         runOnJS(advance)(direction);
       },
-    );
+    ));
   };
 
   const current = events[index];

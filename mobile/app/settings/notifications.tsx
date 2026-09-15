@@ -6,6 +6,7 @@ import {
 } from '@/api/notifications';
 import { registerForPushNotifications } from '@/notifications/push';
 import { messageFor } from '@/lib/errors';
+import { useSeed } from '@/hooks/useSeed';
 import { Body, Button, LoadingState, Notice, Screen, Switch } from '@/components/ui';
 
 export default function NotificationSettingsScreen() {
@@ -18,9 +19,7 @@ export default function NotificationSettingsScreen() {
     queryFn: getNotificationPreferences,
   });
 
-  useEffect(() => {
-    if (query.data) setPreferences(query.data);
-  }, [query.data]);
+  useSeed(query.data, setPreferences);
 
   const update = async (patch: Partial<NotificationPreferences>) => {
     setError(null);

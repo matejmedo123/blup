@@ -271,15 +271,20 @@ export default function HomeScreen() {
 
   // The weekly digest picks the best of the coming week from the same ranker
   // the notification uses.
+  // Fixed at mount. "This week" sliding forward second by second while the feed
+  // is open would be churn nobody asked for, and a render that reads the clock
+  // is not a pure render.
+  const [now] = useState(() => Date.now());
+
   const weekly = useMemo(() => {
-    const horizon = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const horizon = now + 7 * 24 * 60 * 60 * 1000;
     return recommended
       .filter((event) => {
         const start = new Date(event.start_at).getTime();
-        return Number.isFinite(start) && start > Date.now() && start <= horizon;
+        return Number.isFinite(start) && start > now && start <= horizon;
       })
       .slice(0, 3);
-  }, [recommended]);
+  }, [recommended, now]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>

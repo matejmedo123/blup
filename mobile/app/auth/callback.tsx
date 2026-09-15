@@ -32,11 +32,11 @@ export default function AuthCallbackScreen() {
     error_description?: string;
   }>();
 
-  const [status, setStatus] = useState<'working' | 'error'>('working');
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Supabase puts the details in the query string, the hash, or both.
+  // Supabase puts the details in the query string, the hash, or both. None of it
+  // changes while this screen is mounted, so it is read once, on the way in —
+  // an effect would have rendered "working" first and corrected itself after,
+  // which on a dead link is a spinner that turns into an error for no reason.
+  const [failure] = useState(() => {
     const href =
       Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.href : null;
     const hash = href ? new URL(href).hash.replace(/^#/, '') : '';
@@ -44,18 +44,25 @@ export default function AuthCallbackScreen() {
 
     const errorCode = params.error_code ?? hashParams.get('error_code') ?? undefined;
     const error = params.error ?? hashParams.get('error') ?? undefined;
+    if (!error && !errorCode) return null;
 
-    if (error || errorCode) {
-      setMessage(
-        ERROR_MESSAGES[errorCode ?? ''] ??
-          params.error_description?.replace(/\+/g, ' ') ??
-          'Tento odkaz sa nedal použiť.',
-      );
-      setStatus('error');
-      return;
-    }
+    return (
+      ERROR_MESSAGES[errorCode ?? ''] ??
+      params.error_description?.replace(/\+/g, ' ') ??
+      'Tento odkaz sa nedal použiť.'
+    );
+  });
 
-    // No error: exchange the code for a session, then continue into the app.
+  const [status, setStatus] = useState<'working' | 'error'>(failure ? 'error' : 'working');
+  const [message, setMessage] = useState<string | null>(failure);
+
+  useEffect(() => {
+    if (failure) return;
+
+    const href =
+      Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.href : null;
+
+    // Exchange the code for a session, then continue into the app.
     const url = href ?? `blup://auth/callback?code=${params.code ?? ''}`;
 
     handleAuthDeepLink(url)

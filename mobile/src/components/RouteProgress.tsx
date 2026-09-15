@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet } from 'react-native';
 import { usePathname } from 'expo-router';
 
@@ -24,9 +24,9 @@ import { colors } from '@/theme';
  */
 export function RouteProgress() {
   const pathname = usePathname();
-  const progress = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const wash = useRef(new Animated.Value(0)).current;
+  const progress = useState(() => new Animated.Value(0))[0];
+  const opacity = useState(() => new Animated.Value(0))[0];
+  const wash = useState(() => new Animated.Value(0))[0];
   const first = useRef(true);
 
   useEffect(() => {

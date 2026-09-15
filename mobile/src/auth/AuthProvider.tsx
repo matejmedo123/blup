@@ -33,7 +33,10 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [initializing, setInitializing] = useState(true);
+  // False from the start when there is no backend to restore a session from —
+  // otherwise the app showed a splash for a state that was never going to
+  // arrive, and the effect had to correct it on the next tick.
+  const [initializing, setInitializing] = useState(() => isConfigured.supabase);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
   const loadProfile = useCallback(async (userId: string) => {
@@ -58,10 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!isConfigured.supabase) {
-      setInitializing(false);
-      return;
-    }
+    // Nothing to restore without a backend; `initializing` already starts false
+    // in that case, so there is no state to correct here.
+    if (!isConfigured.supabase) return;
 
     let active = true;
 
@@ -104,9 +106,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [loadProfile]);
 
+  // Hoisted out of the dependency array: an optional chain in there is opaque to
+  // the compiler, which then gives up on memoizing this callback at all.
+  const user = session?.user ?? null;
+
   const refreshProfile = useCallback(async () => {
-    if (session?.user) await loadProfile(session.user.id);
-  }, [session?.user, loadProfile]);
+    if (user) await loadProfile(user.id);
+  }, [user, loadProfile]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -117,20 +123,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       session,
-      user: session?.user ?? null,
+      user,
       profile,
       initializing,
       loadingProfile,
-      isAuthenticated: Boolean(session?.user),
-      isGuest: !session?.user,
+      isAuthenticated: Boolean(user),
+      isGuest: !user,
       isAdmin: profile?.app_role === 'admin' || profile?.app_role === 'moderator',
       // A signed-in user without a completed profile goes through onboarding.
-      needsOnboarding: Boolean(session?.user) && profile !== null && !profile.onboarding_completed,
+      needsOnboarding: Boolean(user) && profile !== null && !profile.onboarding_completed,
       backendConfigured: isConfigured.supabase,
       refreshProfile,
       signOut,
     }),
-    [session, profile, initializing, loadingProfile, refreshProfile, signOut],
+    [session, user, profile, initializing, loadingProfile, refreshProfile, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

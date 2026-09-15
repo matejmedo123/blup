@@ -150,7 +150,7 @@ export default function EventPhotosScreen() {
           />
           <View style={styles.flex}>
             <Caption>Titulná fotka</Caption>
-            <Body muted>Vymeníš ju cez „Dať na titulku" pri ktorejkoľvek fotke nižšie.</Body>
+            <Body muted>Vymeníš ju cez „Dať na titulku“ pri ktorejkoľvek fotke nižšie.</Body>
           </View>
         </View>
       ) : (

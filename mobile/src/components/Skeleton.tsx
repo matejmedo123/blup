@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { colors, radius, spacing } from '@/theme';
@@ -27,7 +27,7 @@ export function Skeleton({
   radius?: number;
   style?: ViewStyle;
 }) {
-  const pulse = useRef(new Animated.Value(0.45)).current;
+  const pulse = useState(() => new Animated.Value(0.45))[0];
 
   useEffect(() => {
     let cancelled = false;

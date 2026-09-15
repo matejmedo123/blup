@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { isUsernameAvailable, updateProfile } from '@/api/profiles';
 import { pickImage, uploadAvatar } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
+import { useSeed } from '@/hooks/useSeed';
 import { Avatar, Button, Caption, Input, Notice } from '@/components/ui';
 import { OnboardingShell } from '@/components/OnboardingShell';
 import { colors, spacing } from '@/theme';
@@ -23,13 +24,13 @@ export default function OnboardingProfileScreen() {
   const [error, setError] = useState<string | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!profile) return;
-    setDisplayName((current) => current || profile.display_name || '');
-    setUsername((current) => current || profile.username || '');
-    setBio((current) => current || profile.bio || '');
-    setAvatarUrl((current) => current || profile.avatar_url);
-  }, [profile]);
+  // Only fills blanks: whatever is already typed wins over what the server has.
+  useSeed(profile, (loaded) => {
+    setDisplayName((current) => current || loaded.display_name || '');
+    setUsername((current) => current || loaded.username || '');
+    setBio((current) => current || loaded.bio || '');
+    setAvatarUrl((current) => current || loaded.avatar_url);
+  });
 
   const changePhoto = async () => {
     setError(null);

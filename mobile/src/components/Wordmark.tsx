@@ -1,8 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import {
-  AccessibilityInfo, Animated, Easing, StyleSheet, Text, View,
-  type StyleProp, type TextStyle, type ViewStyle,
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, heroGradient, spacing, typography } from '@/theme';
@@ -98,7 +95,7 @@ export function BlupMonogram({
  * with a soft accent bloom behind the content.
  */
 export function HeroBackground({ children }: { children: React.ReactNode }) {
-  const glow = useRef(new Animated.Value(0.42)).current;
+  const glow = useState(() => new Animated.Value(0.42))[0];
 
   // A slow breath rather than a blink: four seconds a cycle, opacity and scale
   // only, so it costs the compositor nothing and never asks for a re-layout.

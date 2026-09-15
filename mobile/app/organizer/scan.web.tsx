@@ -75,9 +75,13 @@ export default function ScanWebScreen() {
     streamRef.current = null;
   };
 
-  const startCamera = async () => {
-    if (!detectorSupported) { setCameraState('unsupported'); return; }
-    setCameraState('starting');
+  /**
+   * Asks the browser for the camera. Split from `startCamera` so the mount
+   * effect can call it without announcing a state the screen already starts in
+   * — `cameraState` is 'starting' from the first render when a detector exists,
+   * so setting it again is a second render before the first has finished.
+   */
+  const acquireCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
@@ -91,6 +95,13 @@ export default function ScanWebScreen() {
     } catch {
       setCameraState('denied');
     }
+  };
+
+  /** The retry button: says it is trying again, then tries. */
+  const startCamera = async () => {
+    if (!detectorSupported) { setCameraState('unsupported'); return; }
+    setCameraState('starting');
+    await acquireCamera();
   };
 
   // Poll the video for a QR while the camera is live. `requestAnimationFrame`
@@ -126,7 +137,13 @@ export default function ScanWebScreen() {
   // The permission prompt is the browser's, and getUserMedia does not need a
   // gesture to ask for it.
   useEffect(() => {
-    if (detectorSupported) void startCamera();
+    if (!detectorSupported) return stopCamera;
+    // The setState inside only runs after `await getUserMedia`, which is a
+    // different tick — but the compiler cannot see across an await and reads any
+    // reachable setState as a synchronous one. Starting a camera on mount is
+    // what effects are for; this is the rule being unable to prove it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void acquireCamera();
     return stopCamera;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -42,7 +42,11 @@ export default function CartScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState(0);
+  // The clock, not the countdown. Keeping the remaining seconds in state meant
+  // seeding it synchronously inside the effect — one render with a stale 0
+  // before the real value landed. Storing "now" instead lets the countdown be
+  // derived during render, so it is right on the first paint.
+  const [now, setNow] = useState(() => Date.now());
 
   const cart = useQuery({
     queryKey: ['cart', promo],
@@ -58,18 +62,14 @@ export default function CartScreen() {
   // One clock for the whole basket, driven by the server's expiry rather than
   // by a countdown the client starts and could quietly get wrong.
   useEffect(() => {
-    if (!expiresAt) {
-      setSecondsLeft(0);
-      return;
-    }
-
-    const deadline = new Date(expiresAt).getTime();
-    const tick = () => setSecondsLeft(Math.max(0, Math.round((deadline - Date.now()) / 1000)));
-
-    tick();
-    const timer = setInterval(tick, 1000);
+    if (!expiresAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [expiresAt]);
+
+  const secondsLeft = expiresAt
+    ? Math.max(0, Math.round((new Date(expiresAt).getTime() - now) / 1000))
+    : 0;
 
   useEffect(() => {
     if (secondsLeft !== 0 || !expiresAt) return;

@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { isUsernameAvailable, updateProfile } from '@/api/profiles';
 import { pickImage, removeAvatar, uploadAvatar } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
+import { useSeed } from '@/hooks/useSeed';
 import { Avatar, Button, Caption, Input, Notice, Screen } from '@/components/ui';
 import { colors, spacing } from '@/theme';
 
@@ -22,13 +23,12 @@ export default function EditProfileScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    if (!profile) return;
-    setDisplayName(profile.display_name ?? '');
-    setUsername(profile.username ?? '');
-    setBio(profile.bio ?? '');
-    setCity(profile.city ?? '');
-  }, [profile]);
+  useSeed(profile, (loaded) => {
+    setDisplayName(loaded.display_name ?? '');
+    setUsername(loaded.username ?? '');
+    setBio(loaded.bio ?? '');
+    setCity(loaded.city ?? '');
+  });
 
   const changePhoto = async (source: 'library' | 'camera') => {
     setError(null);

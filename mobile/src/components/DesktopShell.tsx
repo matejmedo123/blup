@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, usePathname, router } from 'expo-router';
 
@@ -104,6 +104,32 @@ function readCollapsed(): boolean {
   }
 }
 
+/**
+ * localStorage as an external store, so React can read it the way it reads any
+ * other one. `storage` fires in *other* tabs, so the local write notifies
+ * explicitly — otherwise collapsing the sidebar in this tab would be the one
+ * change nobody was told about.
+ */
+const collapsedListeners = new Set<() => void>();
+
+function subscribeCollapsed(onChange: () => void): () => void {
+  collapsedListeners.add(onChange);
+  globalThis.addEventListener?.('storage', onChange);
+  return () => {
+    collapsedListeners.delete(onChange);
+    globalThis.removeEventListener?.('storage', onChange);
+  };
+}
+
+function writeCollapsed(next: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(COLLAPSED_KEY, next ? 'yes' : 'no');
+  } catch {
+    /* not remembered; the notification below still collapses it for this visit */
+  }
+  for (const listener of collapsedListeners) listener();
+}
+
 export function DesktopShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { profile, isAdmin, isGuest } = useAuth();
@@ -120,20 +146,13 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
    * first paint happens on the server, where there is no localStorage, and
    * reading it during render makes the markup disagree with the browser's.
    */
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => { setCollapsed(readCollapsed()); }, []);
+  // Read as an external store rather than copied into state by an effect on
+  // mount. Same protection against the build-time snapshot disagreeing with the
+  // browser — that is what the third argument is for — without the extra render
+  // the effect cost, and without a second copy of the truth to keep in step.
+  const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
 
-  const toggle = () => {
-    setCollapsed((current) => {
-      const next = !current;
-      try {
-        globalThis.localStorage?.setItem(COLLAPSED_KEY, next ? 'yes' : 'no');
-      } catch {
-        /* not remembered, still collapsed for this visit */
-      }
-      return next;
-    });
-  };
+  const toggle = () => writeCollapsed(!collapsed);
 
   // The shell frames every screen, not just the tabs, so the badges belong to
   // it rather than to whichever layout happens to be mounted underneath.

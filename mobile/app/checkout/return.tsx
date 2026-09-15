@@ -24,16 +24,17 @@ export default function CheckoutReturnScreen() {
   // for the same thing: the webhook, which is still the only thing that turns
   // money into a ticket.
   const { order, checkout } = useLocalSearchParams<{ order?: string; checkout?: string }>();
-  const [state, setState] = useState<'waiting' | 'done' | 'pending' | 'failed'>('waiting');
+  // Arriving with neither parameter is knowable from the first render; it does
+  // not need an effect to discover it.
+  const [state, setState] = useState<'waiting' | 'done' | 'pending' | 'failed'>(
+    () => (order || checkout ? 'waiting' : 'pending'),
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    if (!order && !checkout) {
-      setState('pending');
-      return;
-    }
+    if (!order && !checkout) return;
 
     void (async () => {
       try {

@@ -22,16 +22,20 @@ export default function ClaimTicketScreen() {
   const { isGuest } = useAuth();
   const queryClient = useQueryClient();
 
-  const [state, setState] = useState<'idle' | 'working' | 'done' | 'failed'>('idle');
+  // Starts where it is actually going: with a token and a signed-in viewer the
+  // work begins immediately, so rendering "idle" first only to correct it is a
+  // render nobody needed.
+  const [state, setState] = useState<'idle' | 'working' | 'done' | 'failed'>(
+    () => (token && !isGuest ? 'working' : 'idle'),
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
 
   useEffect(() => {
     // Signing in is the one prerequisite: the ticket has to end up attached to
     // somebody. The token survives the round trip through the sign-in screen.
-    if (!token || isGuest || state !== 'idle') return;
+    if (!token || isGuest || state !== 'working') return;
 
-    setState('working');
     void (async () => {
       try {
         const result = await claimTicketsWithToken(token);

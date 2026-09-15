@@ -245,7 +245,15 @@ export function MarketingTags(): React.ReactElement | null {
   // analytics never asked at all — and the moment one was switched on, people
   // who had been using the site for weeks got a bar out of nowhere. Asking up
   // front is one decision, made once, before anything can load.
+  //
+  // Deliberately after mount, and deliberately not a lazy initial state. The web
+  // build is a static export: the first render happens at build time in Node,
+  // where there is no localStorage and consentAnswered() therefore answers
+  // "already asked". Deciding this during render would bake that answer into the
+  // HTML and then contradict it on hydration. Asking once the browser is
+  // actually there is the correct shape, and the extra render is the price.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!consentAnswered()) setAsk(true);
   }, []);
 

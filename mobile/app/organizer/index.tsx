@@ -44,7 +44,12 @@ export default function OrganizerScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [boostFor, setBoostFor] = useState<{ id: string; title: string } | null>(null);
-  const [boostQuotes, setBoostQuotes] = useState<Record<string, BoostQuote>>({});
+  // Tagged with the event they belong to, so opening the sheet for a different
+  // event does not need a setState to clear the old ones — quotes for the wrong
+  // event are simply not read.
+  const [boostQuotes, setBoostQuotes] = useState<
+    { eventId: string; quotes: Record<string, BoostQuote> } | null
+  >(null);
   const [promoFor, setPromoFor] = useState<{ id: string; title: string } | null>(null);
   const [promoCode, setPromoCode] = useState<string | null>(null);
 
@@ -71,6 +76,20 @@ export default function OrganizerScreen() {
 
   const packages = useQuery({ queryKey: ['boost', 'packages'], queryFn: getBoostPackages });
 
+  // Read once, at mount, rather than on every render: a render whose output
+  // depends on the wall clock is not a pure one, and an event crossing its end
+  // time while somebody is mid-scroll should not make the list rearrange under
+  // their finger. It settles on the next visit, which is soon enough.
+  //
+  // Up here with the other hooks, not next to the function that uses it: this
+  // screen returns early while the organizations load, and a hook below that
+  // return changes the hook count between renders — React tears the tree down
+  // with #310.
+  const [now] = useState(() => Date.now());
+
+  const quoteFor = (code: string): BoostQuote | undefined =>
+    boostFor && boostQuotes?.eventId === boostFor.id ? boostQuotes.quotes[code] : undefined;
+
   // Priced per package, for this event, the moment the sheet opens — a boost is
   // cut short at the end of the event and the price does not follow, so the
   // organizer has to be told before they pay, not after.
@@ -80,7 +99,6 @@ export default function OrganizerScreen() {
     if (!eventId || list.length === 0) return;
 
     let cancelled = false;
-    setBoostQuotes({});
 
     void (async () => {
       const pairs = await Promise.all(list.map(async (pack) => {
@@ -93,7 +111,10 @@ export default function OrganizerScreen() {
         }
       }));
       if (cancelled) return;
-      setBoostQuotes(Object.fromEntries(pairs.filter(Boolean) as [string, BoostQuote][]));
+      setBoostQuotes({
+        eventId,
+        quotes: Object.fromEntries(pairs.filter(Boolean) as [string, BoostQuote][]),
+      });
     })();
 
     return () => { cancelled = true; };
@@ -252,7 +273,7 @@ export default function OrganizerScreen() {
     const ends = event.end_at
       ? new Date(event.end_at).getTime()
       : new Date(event.start_at).getTime() + 4 * 60 * 60 * 1000;
-    return Number.isFinite(ends) && ends < Date.now();
+    return Number.isFinite(ends) && ends < now;
   };
 
   const allMine = myEvents.data ?? [];
@@ -533,13 +554,13 @@ export default function OrganizerScreen() {
               <Text style={styles.packageMeta}>
                 +{Math.round(pack.weight * 100)} bodov vo výbere · {pack.hours} h
               </Text>
-              {boostQuotes[pack.code]?.truncated ? (
+              {quoteFor(pack.code)?.truncated ? (
                 <Text style={styles.packageWarning}>
-                  Pobeží {boostQuotes[pack.code].effective_hours} h z {pack.hours} h —
+                  Pobeží {quoteFor(pack.code)!.effective_hours} h z {pack.hours} h —
                   event sa skončí skôr. Cena sa nemení.
                 </Text>
               ) : null}
-              {boostQuotes[pack.code]?.queued_after ? (
+              {quoteFor(pack.code)?.queued_after ? (
                 <Text style={styles.packageMeta}>
                   Zaradí sa za boost, ktorý práve beží.
                 </Text>

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getMarketingSettings, saveMarketingSettings } from '@/api/admin';
 import { messageFor } from '@/lib/errors';
+import { useSeed } from '@/hooks/useSeed';
 import {
   Body, Button, Caption, Divider, ErrorState, Input, LoadingState, Notice, Screen,
   SectionHeader, Switch,
@@ -38,17 +39,15 @@ export default function AdminMarketingScreen() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const data = settings.data;
-    if (!data) return;
-    setMetaEnabled(data.meta_enabled);
-    setMetaPixel(data.meta_pixel_id ?? '');
-    setGoogleEnabled(data.google_enabled);
-    setAdsId(data.google_ads_id ?? '');
-    setAdsLabel(data.google_ads_purchase_label ?? '');
-    setAnalyticsId(data.google_analytics_id ?? '');
-    setConsent(data.consent_required);
-  }, [settings.data]);
+  useSeed(settings.data, (loaded) => {
+    setMetaEnabled(loaded.meta_enabled);
+    setMetaPixel(loaded.meta_pixel_id ?? '');
+    setGoogleEnabled(loaded.google_enabled);
+    setAdsId(loaded.google_ads_id ?? '');
+    setAdsLabel(loaded.google_ads_purchase_label ?? '');
+    setAnalyticsId(loaded.google_analytics_id ?? '');
+    setConsent(loaded.consent_required);
+  });
 
   if (settings.isLoading) return <Screen><LoadingState /></Screen>;
 

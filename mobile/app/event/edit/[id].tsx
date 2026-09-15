@@ -9,6 +9,7 @@ import { cancelEvent, deleteEvent, getEvent, updateEvent } from '@/api/events';
 import { logAdminEventEdit } from '@/api/admin';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
+import { useSeed } from '@/hooks/useSeed';
 import { DateTimeField } from '@/components/DateTimeField';
 import {
   Body, Button, Caption, Chip, Divider, ErrorState, Input, LoadingState, Notice, Screen,
@@ -68,24 +69,23 @@ export default function EditEventScreen() {
 
   const data = event.data;
 
-  useEffect(() => {
-    if (!data) return;
-    setTitle(data.title);
-    setDescription(data.description ?? '');
-    setCategory(data.category ?? 'other');
-    setVenueName(data.venue_name ?? '');
-    setAddress(data.address ?? '');
-    setCapacity(data.capacity ? String(data.capacity) : '');
-    setUnlisted(data.visibility === 'unlisted');
+  useSeed(data, (loaded) => {
+    setTitle(loaded.title);
+    setDescription(loaded.description ?? '');
+    setCategory(loaded.category ?? 'other');
+    setVenueName(loaded.venue_name ?? '');
+    setAddress(loaded.address ?? '');
+    setCapacity(loaded.capacity ? String(loaded.capacity) : '');
+    setUnlisted(loaded.visibility === 'unlisted');
 
-    const start = new Date(data.start_at);
+    const start = new Date(loaded.start_at);
     setStartAt(start);
 
-    if (data.end_at) {
-      const hours = (new Date(data.end_at).getTime() - start.getTime()) / 3_600_000;
+    if (loaded.end_at) {
+      const hours = (new Date(loaded.end_at).getTime() - start.getTime()) / 3_600_000;
       if (hours > 0 && hours <= 24) setDurationHours(Math.round(hours));
     }
-  }, [data]);
+  });
 
   // An admin who is not the host is editing on somebody else's behalf.
   const asAdmin = useMemo(

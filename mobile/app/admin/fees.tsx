@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getPlatformSettings, updatePlatformSettings } from '@/api/admin';
 import { messageFor } from '@/lib/errors';
+import { useSeed } from '@/hooks/useSeed';
 import { formatMoney } from '@/lib/format';
 import {
   Body, Button, Caption, Card, Divider, Input, LoadingState, Notice, Screen, SectionHeader,
@@ -38,24 +39,23 @@ export default function FeesScreen() {
 
   const settings = useQuery({ queryKey: ['platform-settings'], queryFn: getPlatformSettings });
 
-  useEffect(() => {
-    if (!settings.data) return;
-    setPercent((settings.data.platform_fee_bps / 100).toString());
-    setArchive((settings.data.archive_fee_cents / 100).toFixed(2));
-    setPayer(settings.data.archive_fee_payer);
-    setSettlement(String(settings.data.settlement_days));
+  useSeed(settings.data, (loaded) => {
+    setPercent((loaded.platform_fee_bps / 100).toString());
+    setArchive((loaded.archive_fee_cents / 100).toFixed(2));
+    setPayer(loaded.archive_fee_payer);
+    setSettlement(String(loaded.settlement_days));
     setOperator({
-      name: settings.data.operator_name ?? '',
-      address: settings.data.operator_address ?? '',
-      city: settings.data.operator_city ?? '',
-      country: settings.data.operator_country ?? '',
-      regNo: settings.data.operator_reg_no ?? '',
-      vatNo: settings.data.operator_vat_no ?? '',
-      email: settings.data.operator_email ?? '',
-      phone: settings.data.operator_phone ?? '',
-      website: settings.data.operator_website ?? '',
+      name: loaded.operator_name ?? '',
+      address: loaded.operator_address ?? '',
+      city: loaded.operator_city ?? '',
+      country: loaded.operator_country ?? '',
+      regNo: loaded.operator_reg_no ?? '',
+      vatNo: loaded.operator_vat_no ?? '',
+      email: loaded.operator_email ?? '',
+      phone: loaded.operator_phone ?? '',
+      website: loaded.operator_website ?? '',
     });
-  }, [settings.data]);
+  });
 
   const saveOperator = async () => {
     setError(null);

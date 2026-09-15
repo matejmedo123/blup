@@ -26,7 +26,7 @@ export function useToast(): ToastContextValue {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
-  const progress = useRef(new Animated.Value(0)).current;
+  const progress = useState(() => new Animated.Value(0))[0];
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const show = useCallback((next: string) => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { useSeed } from '@/hooks/useSeed';
 import { updateProfile } from '@/api/profiles';
 import { getPremiumStatus } from '@/api/premium';
 import { useLocation } from '@/hooks/useLocation';
@@ -19,13 +20,12 @@ export default function PrivacySettingsScreen() {
   const [allowDm, setAllowDm] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!profile) return;
-    setIsPrivate(profile.is_private);
-    setShowLocation(profile.show_location);
-    setAnonymousMode(profile.anonymous_mode);
-    setAllowDm(profile.allow_dm);
-  }, [profile]);
+  useSeed(profile, (loaded) => {
+    setIsPrivate(loaded.is_private);
+    setShowLocation(loaded.show_location);
+    setAnonymousMode(loaded.anonymous_mode);
+    setAllowDm(loaded.allow_dm);
+  });
 
   const update = async (patch: Parameters<typeof updateProfile>[0]) => {
     setError(null);

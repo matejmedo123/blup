@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getInterests, getMyInterests, setMyInterests } from '@/api/profiles';
 import { messageFor } from '@/lib/errors';
+import { useSeed } from '@/hooks/useSeed';
 import { Body, Button, Chip, LoadingState, Notice, Screen } from '@/components/ui';
 import { colors, interestGroupFor, spacing, typography } from '@/theme';
 
@@ -17,9 +18,7 @@ export default function InterestsSettingsScreen() {
   const interests = useQuery({ queryKey: ['interests'], queryFn: getInterests });
   const mine = useQuery({ queryKey: ['interests', 'mine'], queryFn: getMyInterests });
 
-  useEffect(() => {
-    if (mine.data) setSelected(new Set(mine.data));
-  }, [mine.data]);
+  useSeed(mine.data, (loaded) => setSelected(new Set(loaded)));
 
   const grouped = useMemo(() => {
     const groups = new Map<string, typeof interests.data>();
