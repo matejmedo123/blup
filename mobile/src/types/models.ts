@@ -172,6 +172,14 @@ export interface BlupEvent {
   comment_count: number;
   view_count: number;
   tickets_sold: number;
+  /**
+   * True when BLUP typed this event in on somebody else's behalf. The organizer
+   * is then named by `external_organizer_name` rather than by an account, and
+   * no tickets are sold here — see migration 0048.
+   */
+  listed_by_platform?: boolean;
+  external_organizer_name?: string | null;
+  external_source_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -432,6 +440,8 @@ export interface PlatformStats {
   /** Open card disputes — each one has an organizer frozen behind it. */
   open_disputes: number;
   frozen_organizations: number;
+  /** Organizers claiming an event BLUP listed for them. */
+  pending_event_claims: number;
   premium_users: number;
 }
 

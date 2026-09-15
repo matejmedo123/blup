@@ -42,6 +42,11 @@ const MESSAGES: Record<string, string> = {
   AMOUNT_MISMATCH: 'Suma platby nesedela s objednávkou. Nič sme ti nestrhli.',
   EVENT_ALREADY_OVER: 'Tento event už prebehol.',
   EVENT_ALREADY_ENDED: 'Tento event už skončil — propagovať sa dá len to, čo ešte len bude.',
+  RECIPIENT_NOT_FOUND: 'Takého používateľa nemám. Potrebuješ @username alebo e-mail, ktorým sa registroval — vstupenka musí niekomu patriť.',
+  INVALID_QUANTITY: 'Počet musí byť od 1 do 50.',
+  TICKET_TYPE_NOT_FOUND: 'Tento typ vstupenky už neexistuje.',
+  EVENT_NOT_CLAIMABLE: 'Prihlásiť sa dá len o event, ktorý pridal BLUP za niekoho iného.',
+  CLAIM_NOT_PENDING: 'Tento nárok už niekto vybavil.',
   BOOST_PACKAGE_NOT_FOUND: 'Tento balík už nie je v ponuke.',
 
   // basket

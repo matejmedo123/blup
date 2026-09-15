@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -13,7 +14,7 @@ import {
   Body, Button, Caption, Chip, Divider, ErrorState, Input, LoadingState, Notice, Screen,
   SectionHeader, Switch,
 } from '@/components/ui';
-import { labelFor, spacing } from '@/theme';
+import { colors, labelFor, radius, spacing } from '@/theme';
 
 const CATEGORIES = [
   'techno', 'house', 'hiphop', 'rock', 'jazz', 'indie', 'festival', 'running', 'cycling',
@@ -202,7 +203,29 @@ export default function EditEventScreen() {
         />
       ) : null}
 
-      <Button title="Zmeniť fotku" variant="secondary" onPress={changeCover} disabled={saving} />
+      {/* The picture that is on the event right now. Without it the button was
+          a guess: on a second edit nobody remembers which of three photos is
+          live, and "Zmeniť fotku" replaces it either way. */}
+      <SectionHeader title="Titulná fotka" />
+      {data.cover_image_url ? (
+        <Image
+          source={{ uri: data.cover_image_url }}
+          style={styles.cover}
+          contentFit="cover"
+          transition={120}
+          accessibilityLabel="Súčasná titulná fotka"
+        />
+      ) : (
+        <View style={[styles.cover, styles.coverEmpty]}>
+          <Body muted>Zatiaľ bez fotky — v zozname sa ukáže farebný podklad.</Body>
+        </View>
+      )}
+      <Button
+        title={data.cover_image_url ? 'Nahradiť fotku' : 'Pridať fotku'}
+        variant="secondary"
+        onPress={changeCover}
+        disabled={saving}
+      />
 
       {/* --- basics --------------------------------------------------------- */}
       <SectionHeader title="Detaily" />
@@ -362,4 +385,19 @@ export default function EditEventScreen() {
 const styles = StyleSheet.create({
   textarea: { height: 110, textAlignVertical: 'top', paddingTop: spacing.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  cover: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: radius.card,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.md,
+  },
+  coverEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    padding: spacing.lg,
+  },
 });

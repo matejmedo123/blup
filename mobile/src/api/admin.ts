@@ -431,3 +431,44 @@ export async function approveAdvance(
   });
   if (error) throw error;
 }
+
+// --- events listed on somebody else's behalf ---------------------------------
+
+export interface EventClaim {
+  id: string;
+  event_id: string;
+  organization_id: string;
+  claimed_by: string;
+  note: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  decided_at: string | null;
+}
+
+export async function listEventClaims(status: 'pending' | 'all' = 'pending'): Promise<EventClaim[]> {
+  let query = supabase
+    .from('event_claims')
+    .select('*, event:events (id, title, start_at, external_organizer_name, external_source_url), organization:organizations (id, name, slug, verification_status)')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (status === 'pending') query = query.eq('status', 'pending');
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as unknown as EventClaim[];
+}
+
+/** Approving hands the event to the claiming organization and clears the listing. */
+export async function decideEventClaim(
+  claimId: string,
+  approve: boolean,
+  note?: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('decide_event_claim', {
+    p_claim_id: claimId,
+    p_approve: approve,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
+}

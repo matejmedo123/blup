@@ -569,6 +569,20 @@ export async function getAttendingEvents(): Promise<BlupEvent[]> {
     .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 }
 
+/**
+ * Has this event finished?
+ *
+ * The same rule as public.event_has_ended(): with no end time an event is taken
+ * to run four hours — long enough that a gig is not called over while people are
+ * still inside, short enough that yesterday's is.
+ */
+export function eventHasEnded(event: { start_at: string; end_at?: string | null }): boolean {
+  const ends = event.end_at
+    ? new Date(event.end_at).getTime()
+    : new Date(event.start_at).getTime() + 4 * 60 * 60 * 1000;
+  return Number.isFinite(ends) && ends < Date.now();
+}
+
 // --- attendees & comments ---------------------------------------------------
 
 export interface Attendee {
@@ -670,4 +684,25 @@ export function toFeedItem(event: BlupEvent, extra: Partial<EventFeedItem> = {})
     score_breakdown: null,
     ...extra,
   } as EventFeedItem;
+}
+
+// --- events BLUP listed on somebody else's behalf ----------------------------
+
+/**
+ * "This is our event."
+ *
+ * A request, not a transfer: anyone can press the button, so nothing moves
+ * until a person at BLUP agrees. See migration 0048.
+ */
+export async function claimEvent(
+  eventId: string,
+  organizationId: string,
+  note?: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('claim_event', {
+    p_event_id: eventId,
+    p_organization_id: organizationId,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
 }

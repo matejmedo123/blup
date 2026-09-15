@@ -62,6 +62,11 @@ export default function AdminDashboard() {
         badge={data.open_disputes}
         onPress={() => router.push('/admin/policy')}
       />
+      <Row
+        label="Nároky na eventy"
+        badge={data.pending_event_claims}
+        onPress={() => router.push('/admin/claims')}
+      />
       <Row label="Používatelia" onPress={() => router.push('/admin/users')} />
       <Row label="Všetky eventy" onPress={() => router.push('/admin/events')} />
     </Screen>

@@ -439,3 +439,42 @@ export async function getEventOrders(eventId: string) {
   if (error) throw error;
   return data ?? [];
 }
+
+// --- complimentary tickets ---------------------------------------------------
+
+/**
+ * Hands somebody a ticket for nothing — a competition winner, a guest, press.
+ *
+ * Doing this by refunding a real purchase is worse in every way: it touches the
+ * payment provider, it muddles the takings and it can be disputed months later.
+ * A comp is a real ticket worth zero: same QR, same scanner, same one-use rule,
+ * no ledger entry, and it still takes a seat.
+ *
+ * `recipient` is an @username or the address they signed up with. They need a
+ * BLUP account — the ticket has to belong to somebody.
+ */
+export async function issueCompTickets(
+  ticketTypeId: string,
+  recipient: string,
+  quantity: number,
+  note?: string | null,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('issue_comp_tickets', {
+    p_ticket_type_id: ticketTypeId,
+    p_recipient: recipient,
+    p_quantity: quantity,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
+  return (data as unknown[] | null)?.length ?? 0;
+}
+
+export async function getCompSummary(eventId: string): Promise<{
+  issued: number;
+  checked_in: number;
+  cancelled: number;
+}> {
+  const { data, error } = await supabase.rpc('event_comp_summary', { p_event_id: eventId });
+  if (error) throw error;
+  return data as { issued: number; checked_in: number; cancelled: number };
+}

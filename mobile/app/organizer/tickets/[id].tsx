@@ -4,7 +4,9 @@ import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getEvent } from '@/api/events';
-import { createTicketType, updateTicketType } from '@/api/organizations';
+import {
+  createTicketType, getCompSummary, issueCompTickets, updateTicketType,
+} from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
 import { formatPrice } from '@/lib/format';
 import {
@@ -24,13 +26,62 @@ export default function TicketTypesScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Giving a ticket away.
+  const [compFor, setCompFor] = useState<string | null>(null);
+  const [compTo, setCompTo] = useState('');
+  const [compQty, setCompQty] = useState('1');
+  const [compNote, setCompNote] = useState('');
+  const [compBusy, setCompBusy] = useState(false);
+  const [compDone, setCompDone] = useState<string | null>(null);
+
   const event = useQuery({
     queryKey: ['event', id],
     queryFn: () => getEvent(id!),
     enabled: Boolean(id),
   });
 
+  // Above the early return below: a hook after it unmounts the whole screen.
+  const comps = useQuery({
+    queryKey: ['event', id, 'comps'],
+    queryFn: () => getCompSummary(id!),
+    enabled: Boolean(id),
+  });
+
   if (event.isLoading) return <Screen><LoadingState /></Screen>;
+
+  const giveAway = async () => {
+    if (!compFor) return;
+    setError(null);
+    setCompDone(null);
+
+    const qty = Number(compQty);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
+      setError('Počet musí byť celé číslo od 1 do 50.');
+      return;
+    }
+    if (!compTo.trim()) {
+      setError('Napíš @username alebo e-mail, ktorým sa registroval.');
+      return;
+    }
+
+    setCompBusy(true);
+    try {
+      const issued = await issueCompTickets(compFor, compTo.trim(), qty, compNote.trim() || null);
+      setCompDone(`Odoslané: ${issued} ${issued === 1 ? 'vstupenka' : 'vstupenky'}. Príde mu aj e-mail.`);
+      setCompTo('');
+      setCompNote('');
+      setCompQty('1');
+      setCompFor(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['event', id] }),
+        queryClient.invalidateQueries({ queryKey: ['event', id, 'comps'] }),
+      ]);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setCompBusy(false);
+    }
+  };
 
   const submit = async () => {
     setError(null);
@@ -115,9 +166,67 @@ export default function TicketTypesScreen() {
               compact
               onPress={() => toggleActive(ticket.id, ticket.is_active)}
             />
+            <Button
+              title="Darovať"
+              variant="ghost"
+              compact
+              onPress={() => {
+                setCompDone(null);
+                setError(null);
+                setCompFor(compFor === ticket.id ? null : ticket.id);
+              }}
+            />
           </View>
         ))
       )}
+
+      {/* --- giving one away ------------------------------------------------ */}
+      {compFor ? (
+        <View style={styles.compBox}>
+          <SectionHeader title="Darovať vstupenku" />
+          <Body muted>
+            Pre výhercu súťaže, hosťa alebo médiá. Vstupenka je plnohodnotná —
+            rovnaký QR kód, rovnaký skener — len stojí nula. Do tržieb sa
+            nepočíta, ale miesto na akcii zaberie.
+          </Body>
+          <Input
+            label="Komu"
+            value={compTo}
+            onChangeText={setCompTo}
+            placeholder="@username alebo e-mail"
+            autoCapitalize="none"
+            editable={!compBusy}
+            hint="Musí mať účet na BLUPe — vstupenka niekomu patrí."
+          />
+          <Input
+            label="Počet"
+            value={compQty}
+            onChangeText={setCompQty}
+            keyboardType="number-pad"
+            editable={!compBusy}
+          />
+          <Input
+            label="Odkaz (nepovinné)"
+            value={compNote}
+            onChangeText={setCompNote}
+            placeholder="Výherca súťaže na Instagrame"
+            editable={!compBusy}
+            hint="Uvidí ho v notifikácii a zostane pri vstupenke."
+          />
+          <Button title="Poslať vstupenku" onPress={giveAway} loading={compBusy} />
+          <Button title="Zrušiť" variant="ghost" onPress={() => setCompFor(null)} />
+        </View>
+      ) : null}
+
+      {compDone ? <Notice tone="success" title="Odoslané" body={compDone} /> : null}
+
+      {(comps.data?.issued ?? 0) > 0 ? (
+        <Caption>
+          Darované vstupenky: {comps.data?.issued}
+          {comps.data?.checked_in ? ` · ${comps.data.checked_in} použitých` : ''}
+          {' '}· do tržieb sa nepočítajú
+        </Caption>
+      ) : null}
 
       <SectionHeader title="Pridať typ vstupenky" />
       <Input label="Názov" value={name} onChangeText={setName} placeholder="Early bird" editable={!saving} />
@@ -131,6 +240,15 @@ export default function TicketTypesScreen() {
 }
 
 const styles = StyleSheet.create({
+  compBox: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },

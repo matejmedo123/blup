@@ -10,9 +10,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
 import {
-  addComment, cancelRsvp, getComments, getEvent, getEventAttendees, getFollowedAttendees,
-  rsvpToEvent, saveEvent, toggleLike, unsaveEvent,
+  addComment, cancelRsvp, claimEvent, eventHasEnded, getComments, getEvent,
+  getEventAttendees, getFollowedAttendees, rsvpToEvent, saveEvent, toggleLike, unsaveEvent,
 } from '@/api/events';
+import { openExternal } from '@/lib/external';
 import { addToCart, getCart } from '@/api/cart';
 import { track } from '@/marketing/tags';
 import { getPeopleRecommendations, describeMatch } from '@/api/ai';
@@ -23,6 +24,7 @@ import { reportContent } from '@/api/admin';
 import { addEventToCalendar, openDirections } from '@/maps/calendar';
 import { subscribeToTable } from '@/lib/realtime';
 import { joinEventConversation } from '@/api/messages';
+import { getMyOrganizations } from '@/api/organizations';
 import { createCrew, getEventCrews, joinCrew, leaveCrew } from '@/api/crews';
 import { getEventRating, getMyReview, reviewEvent } from '@/api/reviews';
 import { messageFor } from '@/lib/errors';
@@ -62,6 +64,7 @@ export default function EventDetailScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [crewName, setCrewName] = useState('');
   const [reviewBody, setReviewBody] = useState('');
+  const [claimed, setClaimed] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
 
   const event = useQuery({
@@ -193,6 +196,14 @@ export default function EventDetailScreen() {
     queryKey: ['event', id, 'connect'],
     queryFn: () => getPeopleRecommendations({ eventId: eventId!, limit: 10 }),
     enabled: Boolean(eventId),
+  });
+
+  // Only asked for on an event BLUP listed for somebody — the claim button has
+  // to know whether the viewer runs an organization to claim it for.
+  const myOrgs = useQuery({
+    queryKey: ['organizations', 'mine'],
+    queryFn: getMyOrganizations,
+    enabled: !isGuest && Boolean(event.data?.listed_by_platform),
   });
 
   /**
@@ -426,7 +437,10 @@ export default function EventDetailScreen() {
     data.organization?.is_vat_payer,
     data.organization?.vat_rate_bps,
   );
-  const isPast = new Date(data.start_at).getTime() < Date.now();
+  // Was `start_at < now()`, which called a three-day festival past on its second
+  // day and hid the ticket list while it was still running. Same rule as
+  // public.event_has_ended() now.
+  const isPast = eventHasEnded(data);
 
   const toggleCrew = async (crewId: string, joined: boolean) => {
     setError(null);
@@ -465,6 +479,27 @@ export default function EventDetailScreen() {
       setNotice('Ďakujeme za hodnotenie.');
     } catch (caught) {
       setError(messageFor(caught));
+    }
+  };
+
+  /**
+   * Claiming an event BLUP typed in. Nothing moves on the strength of this —
+   * it opens a request a person at BLUP has to agree with, because otherwise
+   * anyone could take over anyone's listing.
+   */
+  const claimThis = async () => {
+    const organization = (myOrgs.data ?? [])[0];
+    if (!organization || !eventId) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await claimEvent(eventId, organization.id);
+      setClaimed(true);
+      setNotice('Ozveme sa. Keď to overíme, event bude tvoj.');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -523,6 +558,12 @@ export default function EventDetailScreen() {
 
         {data.status === 'cancelled' ? (
           <Notice tone="danger" title="Event bol zrušený" body="Organizátor ho odvolal." />
+        ) : isPast ? (
+          <Notice
+            tone="teal"
+            title="Tento event už bol"
+            body="Stránka zostáva, aby si sa mal kam vrátiť — fotky, kto tam bol a hodnotenia. Vstupenky sa už nepredávajú."
+          />
         ) : null}
 
         <View style={styles.infoRow}>
@@ -544,18 +585,57 @@ export default function EventDetailScreen() {
           }
         >
           <Avatar
-            url={data.organization?.logo_url ?? data.creator?.avatar_url}
-            name={data.organization?.name ?? data.creator?.display_name}
+            url={data.listed_by_platform
+              ? null
+              : (data.organization?.logo_url ?? data.creator?.avatar_url)}
+            name={data.listed_by_platform
+              ? data.external_organizer_name
+              : (data.organization?.name ?? data.creator?.display_name)}
             size={40}
-            square={Boolean(data.organization)}
+            square={Boolean(data.organization) || data.listed_by_platform}
           />
           <View style={styles.flex}>
             <Caption>Organizuje</Caption>
             <Text style={styles.hostName}>
-              {data.organization?.name ?? data.creator?.display_name ?? 'Niekto na BLUPe'}
+              {data.listed_by_platform
+                ? data.external_organizer_name
+                : (data.organization?.name ?? data.creator?.display_name ?? 'Niekto na BLUPe')}
             </Text>
+            {/* An event BLUP typed in says so. Leaving the organizer blank does
+                not read as "somebody else's" — it reads as ours, by omission,
+                and our own terms say the contract is with the organizer. */}
+            {data.listed_by_platform ? (
+              <Caption>Pridal BLUP · organizátor zatiaľ nie je na BLUPe</Caption>
+            ) : null}
           </View>
         </Pressable>
+
+        {data.listed_by_platform ? (
+          <Notice
+            tone="accent"
+            title="Tento event sme pridali my"
+            body={
+              `Informácie sme prebrali z verejného oznámenia. Organizuje ${data.external_organizer_name ?? 'niekto iný'}, ` +
+              'nie BLUP — vstupenky sa tu nepredávajú a za priebeh zodpovedá organizátor. ' +
+              'Ak je to tvoj event, prihlás sa oň a prevedieme ti ho.'
+            }
+            actionLabel={data.external_source_url ? 'Otvoriť zdroj' : undefined}
+            onAction={
+              data.external_source_url
+                ? () => void openExternal(data.external_source_url!)
+                : undefined
+            }
+          />
+        ) : null}
+
+        {data.listed_by_platform && (myOrgs.data ?? []).length > 0 ? (
+          <Button
+            title={claimed ? 'Nárok podaný — čaká na BLUP' : 'Toto je náš event'}
+            variant="secondary"
+            disabled={claimed || busy}
+            onPress={() => void claimThis()}
+          />
+        ) : null}
 
         {/* --- actions ------------------------------------------------------ */}
         <View style={styles.actionRow}>
@@ -594,8 +674,12 @@ export default function EventDetailScreen() {
           >
             <View style={styles.chatIcon}><Text style={styles.chatGlyph}>✉</Text></View>
             <View style={styles.flex}>
-              <Text style={styles.hostName}>Chat eventu</Text>
-              <Caption>Dohodni sa, s kým prídeš, opýtaj sa na parkovanie a nezmeškaj, čo píše organizátor.</Caption>
+              <Text style={styles.hostName}>{isPast ? 'Chat eventu · po akcii' : 'Chat eventu'}</Text>
+              <Caption>
+                {isPast
+                  ? 'Zostáva otvorený — stratené veci, fotky a kto koho kde videl.'
+                  : 'Dohodni sa, s kým prídeš, opýtaj sa na parkovanie a nezmeškaj, čo píše organizátor.'}
+              </Caption>
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
