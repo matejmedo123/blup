@@ -48,6 +48,19 @@ function* walk(dir) {
   }
 }
 
+const LOOPBACK = /^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])(:|\/|$)/i;
+
+/** The backend this build was compiled against: the environment, else mobile/.env. */
+function supabaseUrl() {
+  if (process.env.EXPO_PUBLIC_SUPABASE_URL) return process.env.EXPO_PUBLIC_SUPABASE_URL.trim();
+  const envFile = join(ROOT, 'mobile', '.env');
+  if (!existsSync(envFile)) return null;
+  const line = readFileSync(envFile, 'utf8')
+    .split('\n')
+    .find((l) => l.trim().startsWith('EXPO_PUBLIC_SUPABASE_URL='));
+  return line ? line.split('=').slice(1).join('=').trim() || null : null;
+}
+
 const problems = [];
 
 for (const file of walk(ROOT)) {
@@ -80,6 +93,33 @@ if (process.argv.includes('--dist')) {
     const code = readFileSync(join(webJs, bundle), 'utf8');
     if (!code.includes(HOST)) problems.push(`${bundle}  neobsahuje ${HOST} — origin sa nedostal do bundlu`);
     for (const hit of code.matchAll(URL_SHAPED)) problems.push(`${bundle}  ${hit[0]}`);
+
+    // A build is only shippable if it talks to a real backend. The bundle is
+    // compiled with whatever EXPO_PUBLIC_SUPABASE_URL was set at build time, and
+    // a developer's .env points at the local Supabase on 127.0.0.1:54321 — which
+    // in a visitor's browser means *their own machine*. The page then loads
+    // perfectly and does nothing: no events, no sign-in, no tickets, and no
+    // error that says why. Exactly the failure shape this file exists for.
+    //
+    // Only the CONFIGURED value is checked, never the bundle at large: the
+    // Supabase auth library carries `http://localhost:9999` as an internal
+    // default, so scanning for any loopback URL fires on every build, including
+    // correct ones — and a check that always fails is a check nobody reads.
+    //
+    // BLUP_ALLOW_LOCAL_BACKEND=1 to build for local testing on purpose.
+    const backend = supabaseUrl();
+    if (backend) {
+      if (!code.includes(backend.replace(/^https?:\/\//, ''))) {
+        problems.push(`${bundle}  neobsahuje ${backend} — Supabase URL sa nedostala do bundlu`);
+      }
+      if (!process.env.BLUP_ALLOW_LOCAL_BACKEND && LOOPBACK.test(backend)) {
+        problems.push(`${bundle}  Supabase URL je ${backend} — to je počítač návštevníka, nie server.`);
+        problems.push('    Nastav EXPO_PUBLIC_SUPABASE_URL v mobile/.env na svoj projekt a builduj znova.');
+        problems.push('    (Lokálny build naschvál: BLUP_ALLOW_LOCAL_BACKEND=1.)');
+      }
+    } else {
+      problems.push('    EXPO_PUBLIC_SUPABASE_URL nie je nastavená — build by nemal ku komu hovoriť.');
+    }
   }
 }
 

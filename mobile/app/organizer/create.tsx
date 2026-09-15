@@ -274,7 +274,9 @@ export default function CreateEventScreen() {
   }, [address, suggesting]);
 
   /** Picks one of the suggestions: fills the field and moves the pin. */
-  const useSuggestion = (hit: GeocodeHit) => {
+  // Not a hook — the name only looked like one, which made every lint run report
+  // a rules-of-hooks violation that was not there.
+  const applySuggestion = (hit: GeocodeHit) => {
     setAddress(hit.label);
     setCoords({ latitude: hit.latitude, longitude: hit.longitude });
     setMapFocus({ latitude: hit.latitude, longitude: hit.longitude });
@@ -609,7 +611,7 @@ export default function CreateEventScreen() {
           {suggestions.map((hit) => (
             <Pressable
               key={`${hit.latitude},${hit.longitude}`}
-              onPress={() => useSuggestion(hit)}
+              onPress={() => applySuggestion(hit)}
               accessibilityRole="button"
               style={({ pressed }) => [styles.suggestion, pressed && styles.suggestionPressed]}
             >
