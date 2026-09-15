@@ -35,3 +35,7 @@ export const ImageCropContext = createContext<ImageCropValue>({
 export function useImageCrop(): ImageCropValue {
   return useContext(ImageCropContext);
 }
+
+
+export { cropRect } from './imageCropMath';
+export type { CropRect, CropRectInput } from './imageCropMath';

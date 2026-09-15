@@ -311,12 +311,37 @@ export async function checkUsername(username: string): Promise<{
   return data as never;
 }
 
-/** The handle we would suggest for a name — the same folding the server does. */
-export function suggestUsername(name: string): string {
-  return name
+/**
+ * Everything a handle may contain: letters, digits, a dot, an underscore.
+ *
+ * The same set the profiles table checks and `username_available` enforces. One
+ * definition, so a handle cannot be accepted by one and refused by another.
+ */
+export const USERNAME_RULE = /^[a-z0-9_.]{3,24}$/;
+export const USERNAME_MAX = 24;
+
+/**
+ * Keeps what somebody types and drops what cannot be in a handle.
+ *
+ * Accents are folded rather than deleted, so "Jozko" survives from "Jožko"
+ * instead of coming out "joko" — losing letters from the middle of a name is
+ * worse than refusing the character.
+ */
+export function sanitizeUsername(value: string): string {
+  return value
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-    .slice(0, 20);
+    .replace(/[^a-z0-9_.]/g, '')
+    .slice(0, USERNAME_MAX);
+}
+
+/**
+ * An example handle for a name — shown as a placeholder, never as the value.
+ *
+ * What somebody is called is their choice, and a pre-filled field reads as a
+ * decision that has already been made.
+ */
+export function suggestUsername(name: string): string {
+  return sanitizeUsername(name).replace(/[._]/g, '').slice(0, USERNAME_MAX);
 }

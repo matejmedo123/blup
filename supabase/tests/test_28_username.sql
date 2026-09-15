@@ -62,7 +62,12 @@ begin
   assert public.username_available('ab')->>'reason' = 'TOO_SHORT', 'two characters is too short';
   assert public.username_available('má medzeru')->>'reason' = 'BAD_CHARACTERS',
     'spaces and accents are not handles';
-  assert public.username_available(repeat('a', 21))->>'reason' = 'TOO_LONG', 'twenty-one is too long';
+  -- 24 is the number the profiles table checks, so it is the number here too.
+  assert (public.username_available(repeat('a', 24))->>'ok')::boolean, 'twenty-four is allowed';
+  assert public.username_available(repeat('a', 25))->>'reason' = 'TOO_LONG', 'twenty-five is too long';
+  assert public.username_available('')->>'reason' = 'EMPTY', 'nothing typed is not a handle';
+  assert (public.username_available('jozko.mrkvicka_2')->>'ok')::boolean,
+    'a dot and an underscore are allowed';
 
   raise notice 'PASS username_available answers about one handle';
 end $$;

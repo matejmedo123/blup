@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // From the shared file, never from './ImageCrop' — on web that specifier
 // resolves back to this very module. See imageCropShared.ts.
 import { ImageCropContext, type CropRequest } from './imageCropShared';
+import { cropRect } from './imageCropMath';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export { useImageCrop } from './imageCropShared';
@@ -92,25 +93,21 @@ function CropModal({
     return () => globalThis.removeEventListener?.('keydown', onKey);
   }, [onFinish]);
 
-  /** Pixels per source pixel at scale 1 — the "cover" fit. */
-  const baseFit = image ? Math.max(frameW / image.width, frameH / image.height) : 1;
-  const drawW = image ? image.width * baseFit * scale : 0;
-  const drawH = image ? image.height * baseFit * scale : 0;
-
-  /** Keeps the picture covering the frame no matter where it is dragged. */
-  const clamp = useCallback((next: { x: number; y: number }) => {
-    const maxX = Math.max(0, (drawW - frameW) / 2);
-    const maxY = Math.max(0, (drawH - frameH) / 2);
-    return {
-      x: Math.min(maxX, Math.max(-maxX, next.x)),
-      y: Math.min(maxY, Math.max(-maxY, next.y)),
-    };
-  }, [drawW, drawH, frameW, frameH]);
-
-  // Clamped where it is read, not stored back through an effect. Zooming out
-  // changes what "too far" means, and correcting the stored value afterwards is
-  // a second render with the picture briefly in the wrong place.
-  const view = clamp(offset);
+  // One implementation of where the frame sits, shared with the crop test — see
+  // cropRect in imageCropShared.ts.
+  //
+  // Read here rather than stored back through an effect: zooming out changes
+  // what "too far" means, and correcting the stored value afterwards is a
+  // second render with the picture briefly in the wrong place.
+  const rect = cropRect({
+    imageW: image?.width ?? 1,
+    imageH: image?.height ?? 1,
+    frameW,
+    frameH,
+    scale,
+    offset,
+  });
+  const { view, drawW, drawH } = rect;
 
   const zoomTo = (next: number) => setScale(Math.min(6, Math.max(1, next)));
 
@@ -141,10 +138,10 @@ function CropModal({
 
     const started = drag.current;
     if (!started) return;
-    setOffset(clamp({
-      x: started.ox + (e.clientX - started.x),
-      y: started.oy + (e.clientY - started.y),
-    }));
+    setOffset({
+      x: Math.min(rect.maxX, Math.max(-rect.maxX, started.ox + (e.clientX - started.x))),
+      y: Math.min(rect.maxY, Math.max(-rect.maxY, started.oy + (e.clientY - started.y))),
+    });
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -174,16 +171,9 @@ function CropModal({
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('canvas');
 
-      // Frame pixels -> source pixels.
-      const perSource = baseFit * scale;
-      const sourceW = frameW / perSource;
-      const sourceH = frameH / perSource;
-      const sourceX = (image.width - sourceW) / 2 - view.x / perSource;
-      const sourceY = (image.height - sourceH) / 2 - view.y / perSource;
-
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, outW, outH);
-      ctx.drawImage(image, sourceX, sourceY, sourceW, sourceH, 0, 0, outW, outH);
+      ctx.drawImage(image, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, outW, outH);
 
       onFinish(canvas.toDataURL('image/jpeg', 0.9));
     } catch {

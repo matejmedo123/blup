@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
-import { isUsernameAvailable, updateProfile } from '@/api/profiles';
+import {
+  USERNAME_MAX, USERNAME_RULE, checkUsername, isUsernameAvailable, sanitizeUsername, updateProfile,
+} from '@/api/profiles';
 import { useImageCrop } from '@/components/ImageCrop';
 import { pickImage, removeAvatar, uploadAvatar } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
@@ -24,6 +27,16 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Checked while typing rather than only on save, so "obsadené" arrives before
+  // the button is pressed.
+  const handle = username.trim().toLowerCase();
+  const availability = useQuery({
+    queryKey: ['username', handle],
+    queryFn: () => checkUsername(handle),
+    enabled: USERNAME_RULE.test(handle) && handle !== profile?.username,
+    staleTime: 30_000,
+  });
+
 
   useSeed(profile, (loaded) => {
     setDisplayName(loaded.display_name ?? '');
@@ -74,7 +87,10 @@ export default function EditProfileScreen() {
     setSaved(false);
     setSaving(true);
     try {
-      const handle = username.trim().toLowerCase();
+      if (!USERNAME_RULE.test(handle)) {
+        setError('Meno musí mať 3–24 znakov: písmená, čísla, bodka alebo podčiarkovník.');
+        return;
+      }
 
       if (handle !== profile?.username) {
         const available = await isUsernameAvailable(handle);
@@ -126,12 +142,28 @@ export default function EditProfileScreen() {
 
       <Input label="Meno" value={displayName} onChangeText={setDisplayName} editable={!saving} />
       <Input
-        label="Používateľské meno"
+        label="Tvoje @meno"
         value={username}
-        onChangeText={(value) => setUsername(value.toLowerCase())}
+        onChangeText={(value) => setUsername(sanitizeUsername(value))}
         autoCapitalize="none"
         autoCorrect={false}
+        maxLength={USERNAME_MAX}
         editable={!saving}
+        hint={
+          handle.length === 0
+            ? 'Písmená, čísla, bodka a podčiarkovník.'
+            : handle === profile?.username
+              ? `@${handle} — takto ťa ľudia nájdu.`
+              : !USERNAME_RULE.test(handle)
+                ? '3–24 znakov: písmená, čísla, bodka alebo podčiarkovník.'
+                : availability.isLoading
+                  ? `@${handle} — overujem…`
+                  : availability.data?.ok
+                    ? `@${handle} je voľné.`
+                    : availability.data?.reason === 'TAKEN'
+                      ? 'Toto meno je obsadené.'
+                      : 'Toto meno sa nedá použiť.'
+        }
       />
       <Input
         label="O tebe"

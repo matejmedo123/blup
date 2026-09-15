@@ -4,7 +4,10 @@ import { router } from 'expo-router';
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
-import { checkUsername, isUsernameAvailable, suggestUsername, updateProfile } from '@/api/profiles';
+import {
+  USERNAME_MAX, USERNAME_RULE, checkUsername, isUsernameAvailable, sanitizeUsername,
+  suggestUsername, updateProfile,
+} from '@/api/profiles';
 import { useImageCrop } from '@/components/ImageCrop';
 import { pickImage, uploadAvatar } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
@@ -39,17 +42,22 @@ export default function OnboardingProfileScreen() {
     setAvatarUrl((current) => current || loaded.avatar_url);
   });
 
+  // Only ever a placeholder. The handle is whatever they typed and nothing
+  // else — falling back to a suggestion means the app picked their name for
+  // them while looking as though it had asked.
   const suggestion = suggestUsername(displayName);
-  const handle = username.trim() || suggestion;
+  const handle = username.trim();
 
   // Checked while typing, debounced, so the answer arrives before the save
   // rather than as a failure afterwards.
   const availability = useQuery({
     queryKey: ['username', handle],
     queryFn: () => checkUsername(handle),
-    enabled: handle.length >= 3,
+    enabled: USERNAME_RULE.test(handle),
     staleTime: 30_000,
   });
+
+  const taken = availability.data?.reason === 'TAKEN';
 
   const changePhoto = async () => {
     setError(null);
@@ -82,8 +90,12 @@ export default function OnboardingProfileScreen() {
       return;
     }
 
-    if (!/^[a-z0-9_.]{3,24}$/.test(handle)) {
-      setUsernameError('3–24 znakov: písmená, čísla, _ alebo .');
+    if (handle.length === 0) {
+      setUsernameError('Vyber si meno, pod ktorým ťa ľudia nájdu.');
+      return;
+    }
+    if (!USERNAME_RULE.test(handle)) {
+      setUsernameError('3–24 znakov: písmená, čísla, bodka alebo podčiarkovník.');
       return;
     }
 
@@ -152,21 +164,26 @@ export default function OnboardingProfileScreen() {
       <Input
         label="Tvoje @meno"
         value={username}
-        onChangeText={(value) => setUsername(suggestUsername(value))}
+        onChangeText={(value) => { setUsernameError(null); setUsername(sanitizeUsername(value)); }}
         placeholder={suggestion || 'alex'}
         autoCapitalize="none"
         autoCorrect={false}
-        error={usernameError}
+        maxLength={USERNAME_MAX}
+        error={usernameError ?? (taken ? `@${handle} už niekto má. Skús iné.` : null)}
         hint={
-          handle.length < 3
-            ? 'Aspoň tri znaky, bez medzier a diakritiky.'
-            : availability.isLoading
-              ? `@${handle} — overujem…`
-              : availability.data?.ok
-                ? `@${handle} je voľné. Takto ťa ľudia nájdu.`
-                : availability.data?.reason === 'TAKEN'
-                  ? `@${handle} už niekto má. Skús iné.`
-                  : `@${handle} sa nedá použiť.`
+          handle.length === 0
+            ? 'Vyber si, ako ťa majú ľudia nájsť. Písmená, čísla, bodka a podčiarkovník.'
+            : handle.length < 3
+              ? 'Aspoň tri znaky. Písmená, čísla, bodka a podčiarkovník.'
+              : !USERNAME_RULE.test(handle)
+                ? 'Môžu tam byť iba písmená, čísla, bodka a podčiarkovník.'
+                : availability.isLoading
+                  ? `@${handle} — overujem…`
+                  : availability.data?.ok
+                    ? `@${handle} je voľné.`
+                    : taken
+                      ? 'Toto meno je obsadené.'
+                      : 'Toto meno sa nedá použiť.'
         }
         editable={!saving}
       />

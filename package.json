@@ -15,6 +15,7 @@
     "typecheck": "npm --prefix mobile run typecheck",
     "check:origin": "node scripts/check-origin.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
+    "check:crop": "node scripts/smoke-crop.mjs",
     "web": "npm --prefix mobile run web"
   },
   "devDependencies": {
