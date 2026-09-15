@@ -50,7 +50,25 @@ export default function EditEventScreen() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('other');
+  // Up to three, primary first — the same as when the event was created. Only
+  // being able to choose them once meant an event could never be re-tagged.
+  const [categories, setCategories] = useState<string[]>(['other']);
+  const category = categories[0] ?? 'other';
+  const MAX_CATEGORIES = 3;
+
+  const toggleCategory = (item: string) => {
+    setCategories((current) => {
+      if (current.includes(item)) {
+        return current.length === 1 ? current : current.filter((c) => c !== item);
+      }
+      return current.length >= MAX_CATEGORIES ? current : [...current, item];
+    });
+  };
+
+  // "I don't know yet" survives an edit. It used to be overwritten with a
+  // duration on the first save, quietly giving the event an end time nobody
+  // had chosen.
+  const [endUnknown, setEndUnknown] = useState(false);
   const [venueName, setVenueName] = useState('');
   const [address, setAddress] = useState('');
   const [startAt, setStartAt] = useState<Date>(new Date());
@@ -74,7 +92,7 @@ export default function EditEventScreen() {
   useSeed(data, (loaded) => {
     setTitle(loaded.title);
     setDescription(loaded.description ?? '');
-    setCategory(loaded.category ?? 'other');
+    setCategories(loaded.categories?.length ? loaded.categories : [loaded.category ?? 'other']);
     setVenueName(loaded.venue_name ?? '');
     setAddress(loaded.address ?? '');
     setCapacity(loaded.capacity ? String(loaded.capacity) : '');
@@ -86,6 +104,8 @@ export default function EditEventScreen() {
     if (loaded.end_at) {
       const hours = (new Date(loaded.end_at).getTime() - start.getTime()) / 3_600_000;
       if (hours > 0 && hours <= 24) setDurationHours(Math.round(hours));
+    } else {
+      setEndUnknown(true);
     }
   });
 
@@ -149,10 +169,11 @@ export default function EditEventScreen() {
         title: title.trim(),
         description,
         category,
+        categories,
         venueName,
         address,
         startAt,
-        endAt: new Date(startAt.getTime() + durationHours * 3_600_000),
+        endAt: endUnknown ? null : new Date(startAt.getTime() + durationHours * 3_600_000),
         capacity: capacity ? Number(capacity) : null,
         visibility: unlisted ? 'unlisted' : 'public',
       });
@@ -267,11 +288,16 @@ export default function EditEventScreen() {
           <Chip
             key={item}
             label={labelFor(item)}
-            selected={category === item}
-            onPress={() => setCategory(item)}
+            selected={categories.includes(item)}
+            onPress={() => toggleCategory(item)}
           />
         ))}
       </View>
+      <Caption>
+        {categories.length >= MAX_CATEGORIES
+          ? `Vybrané ${categories.length} z ${MAX_CATEGORIES}. Prvá (${labelFor(category)}) určuje farbu karty.`
+          : `Môžeš vybrať až ${MAX_CATEGORIES}. Prvá určuje farbu karty.`}
+      </Caption>
 
       {/* --- when ----------------------------------------------------------- */}
       <SectionHeader title="Kedy" />
@@ -282,11 +308,20 @@ export default function EditEventScreen() {
           <Chip
             key={hours}
             label={`${hours}h`}
-            selected={durationHours === hours}
-            onPress={() => setDurationHours(hours)}
+            selected={!endUnknown && durationHours === hours}
+            onPress={() => { setEndUnknown(false); setDurationHours(hours); }}
           />
         ))}
+        <Chip
+          label="Neviem"
+          selected={endUnknown}
+          onPress={() => setEndUnknown(true)}
+        />
       </View>
+
+      {endUnknown ? (
+        <Caption>Ukáže sa len začiatok. Koniec vieš doplniť kedykoľvek neskôr.</Caption>
+      ) : null}
 
       {moved && sold > 0 ? (
         <Notice

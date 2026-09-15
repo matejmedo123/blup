@@ -360,6 +360,9 @@ export async function updateEvent(
   if (patch.title !== undefined) payload.title = patch.title.trim();
   if (patch.description !== undefined) payload.description = patch.description?.trim() || null;
   if (patch.category !== undefined) payload.category = patch.category;
+  // The trigger re-seats the list around the primary, so sending both is safe
+  // in either order.
+  if (patch.categories !== undefined) payload.categories = patch.categories;
   if (patch.tags !== undefined) payload.tags = patch.tags;
   if (patch.latitude !== undefined) payload.latitude = patch.latitude;
   if (patch.longitude !== undefined) payload.longitude = patch.longitude;

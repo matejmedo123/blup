@@ -7,9 +7,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import { getMyOrganizations } from '@/api/organizations';
 import { getEvent, getEventImages, setEventCover } from '@/api/events';
+import { useImageCrop } from '@/components/ImageCrop';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import {
-  deleteEventGalleryImage, pickImage, uploadEventGalleryImage,
+  deleteEventGalleryImage, pickImage, uploadEventCover, uploadEventGalleryImage,
 } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { GradientCover } from '@/components/GradientCover';
@@ -31,6 +32,7 @@ export default function EventPhotosScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  const { crop } = useImageCrop();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,8 +87,14 @@ export default function EventPhotosScreen() {
       const url = await uploadEventGalleryImage(picked.uri, id);
 
       // The first photo becomes the cover automatically — an event with photos
-      // should never still be showing the placeholder card.
-      if (!event.data?.cover_image_url) await setEventCover(id, url);
+      // should never still be showing the placeholder card. It goes through the
+      // same crop as any other cover: a 4:3 gallery photo dropped straight onto
+      // the card is exactly the mismatch the crop sheet exists to prevent.
+      if (!event.data?.cover_image_url) {
+        setBusy(false);
+        await promoteToCover(picked.uri);
+        return;
+      }
 
       await refresh();
     } catch (caught) {
@@ -96,11 +104,25 @@ export default function EventPhotosScreen() {
     }
   };
 
-  const makeCover = async (url: string) => {
+  /**
+   * Makes a picture the card image, at the card's shape.
+   *
+   * Pointing the cover at a gallery photo directly was the hole in the rule that
+   * every cover is 1920×1080: gallery photos are picked at 4:3, so one promoted
+   * straight to the card came out the wrong shape. It is cropped and uploaded
+   * as a cover of its own; the gallery keeps its copy untouched.
+   */
+  const promoteToCover = async (source: string) => {
     if (!id) return;
     setError(null);
-    setBusy(true);
     try {
+      const cropped = await crop({
+        uri: source, size: [1920, 1080], title: 'Orezať titulnú fotku',
+      });
+      if (!cropped) return;
+
+      setBusy(true);
+      const { url } = await uploadEventCover(cropped, id, 1920);
       await setEventCover(id, url);
       await refresh();
     } catch (caught) {
@@ -109,6 +131,8 @@ export default function EventPhotosScreen() {
       setBusy(false);
     }
   };
+
+  const makeCover = (url: string) => promoteToCover(url);
 
   const remove = (imageId: string, url: string) => {
     Alert.alert('Zmazať fotku?', 'Odstráni sa z galérie aj z úložiska.', [

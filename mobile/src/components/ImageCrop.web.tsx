@@ -176,8 +176,18 @@ function CropModal({
       ctx.drawImage(image, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, outW, outH);
 
       onFinish(canvas.toDataURL('image/jpeg', 0.9));
-    } catch {
-      setError('Orezanie sa nepodarilo. Skús inú fotku.');
+    } catch (caught) {
+      // A picture loaded from another origin taints the canvas, and reading it
+      // back throws rather than returning something wrong. Supabase Storage
+      // sends the CORS header that prevents this, so it means the file came
+      // from somewhere that does not — worth saying, because "try another
+      // photo" would send somebody round in circles with the same one.
+      const tainted = caught instanceof Error && caught.name === 'SecurityError';
+      setError(
+        tainted
+          ? 'Túto fotku sa nedá orezať priamo — nahraj ju znova zo zariadenia.'
+          : 'Orezanie sa nepodarilo. Skús inú fotku.',
+      );
       setWorking(false);
     }
   };
