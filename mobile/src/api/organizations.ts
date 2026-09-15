@@ -450,20 +450,24 @@ export async function getEventOrders(eventId: string) {
  * A comp is a real ticket worth zero: same QR, same scanner, same one-use rule,
  * no ledger entry, and it still takes a seat.
  *
- * `recipient` is an @username or the address they signed up with. They need a
- * BLUP account — the ticket has to belong to somebody.
+ * `recipient` is an @username, or any e-mail address. An address we recognise
+ * gets an owned ticket straight away; one we do not gets a guest ticket, which
+ * works at the door exactly the same and follows them into the app if they ever
+ * sign up. Nobody is made to register to collect a prize they already won.
  */
 export async function issueCompTickets(
   ticketTypeId: string,
   recipient: string,
   quantity: number,
   note?: string | null,
+  guestName?: string | null,
 ): Promise<number> {
   const { data, error } = await supabase.rpc('issue_comp_tickets', {
     p_ticket_type_id: ticketTypeId,
     p_recipient: recipient,
     p_quantity: quantity,
     p_note: note ?? null,
+    p_guest_name: guestName ?? null,
   });
   if (error) throw error;
   return (data as unknown[] | null)?.length ?? 0;

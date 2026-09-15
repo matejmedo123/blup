@@ -31,6 +31,7 @@ export default function TicketTypesScreen() {
   const [compTo, setCompTo] = useState('');
   const [compQty, setCompQty] = useState('1');
   const [compNote, setCompNote] = useState('');
+  const [compName, setCompName] = useState('');
   const [compBusy, setCompBusy] = useState(false);
   const [compDone, setCompDone] = useState<string | null>(null);
 
@@ -59,17 +60,28 @@ export default function TicketTypesScreen() {
       setError('Počet musí byť celé číslo od 1 do 50.');
       return;
     }
-    if (!compTo.trim()) {
-      setError('Napíš @username alebo e-mail, ktorým sa registroval.');
+    const to = compTo.trim();
+    if (!to) {
+      setError('Napíš @username alebo e-mail.');
+      return;
+    }
+    if (!to.startsWith('@') && !to.includes('@')) {
+      setError('Potrebujem @username niekoho z BLUPu, alebo e-mailovú adresu.');
       return;
     }
 
     setCompBusy(true);
     try {
-      const issued = await issueCompTickets(compFor, compTo.trim(), qty, compNote.trim() || null);
-      setCompDone(`Odoslané: ${issued} ${issued === 1 ? 'vstupenka' : 'vstupenky'}. Príde mu aj e-mail.`);
+      const issued = await issueCompTickets(
+        compFor, compTo.trim(), qty, compNote.trim() || null, compName.trim() || null,
+      );
+      setCompDone(
+        `Odoslané: ${issued} ${issued === 1 ? 'vstupenka' : 'vstupenky'}. `
+        + 'QR kód mu prišiel e-mailom — účet na vstup nepotrebuje.',
+      );
       setCompTo('');
       setCompNote('');
+      setCompName('');
       setCompQty('1');
       setCompFor(null);
       await Promise.all([
@@ -195,8 +207,17 @@ export default function TicketTypesScreen() {
             onChangeText={setCompTo}
             placeholder="@username alebo e-mail"
             autoCapitalize="none"
+            keyboardType="email-address"
             editable={!compBusy}
-            hint="Musí mať účet na BLUPe — vstupenka niekomu patrí."
+            hint="Účet nepotrebuje. Na e-mail mu príde QR kód, ktorý pri vstupe stačí."
+          />
+          <Input
+            label="Meno (nepovinné)"
+            value={compName}
+            onChangeText={setCompName}
+            placeholder="Jana Nováková"
+            editable={!compBusy}
+            hint="Objaví sa na vstupenke a v oslovení v e-maili."
           />
           <Input
             label="Počet"

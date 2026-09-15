@@ -348,3 +348,35 @@ export async function resendTicketEmail(
 
   return data as TicketEmailDelivery;
 }
+
+// --- guest tickets -----------------------------------------------------------
+
+export interface ClaimResult {
+  ok: boolean;
+  reason: 'ALREADY_YOURS' | 'ALREADY_CLAIMED' | null;
+  event_id: string | null;
+  tickets: number;
+}
+
+/**
+ * The link in a guest ticket e-mail.
+ *
+ * Whoever holds the e-mail holds the ticket — the same thing the QR code
+ * already assumes — so the token is the proof. It is spent on use, so a
+ * forwarded e-mail cannot hand the same ticket to a second person.
+ */
+export async function claimTicketsWithToken(token: string): Promise<ClaimResult> {
+  const { data, error } = await supabase.rpc('claim_tickets_with_token', { p_token: token });
+  if (error) throw error;
+  return data as ClaimResult;
+}
+
+/**
+ * Everything sent to the address I signed up with. Called after sign-in; an
+ * order that already has an owner is left alone, so calling it often is fine.
+ */
+export async function claimMyGuestTickets(): Promise<number> {
+  const { data, error } = await supabase.rpc('claim_my_guest_tickets');
+  if (error) throw error;
+  return (data as number) ?? 0;
+}

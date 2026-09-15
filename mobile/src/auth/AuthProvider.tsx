@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase';
+import { claimMyGuestTickets } from '@/api/tickets';
 import { isConfigured } from '@/lib/env';
 import type { Profile } from '@/types/models';
 
@@ -84,6 +85,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (event === 'SIGNED_OUT') {
         setProfile(null);
+      }
+
+      // A ticket may have been sent to this address before there was an account
+      // to attach it to. The database picks those up when the account is
+      // created; this covers the other order — somebody who was already
+      // registered when an organizer sent one to their address. It is a no-op
+      // when there is nothing waiting, and a failure here must never block a
+      // sign-in, so it is deliberately not awaited or surfaced.
+      if (event === 'SIGNED_IN' && nextSession?.user) {
+        void claimMyGuestTickets().catch(() => {});
       }
     });
 

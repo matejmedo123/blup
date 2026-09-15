@@ -120,16 +120,17 @@ begin
     'ccccccc1-0000-0000-0000-000000000001', 'vyherca@blup.test', 1);
   assert issued = 1, 'the sign-up address finds them too';
 
+  -- Neither a username nor an address is not a recipient at all.
   begin
     perform public.issue_comp_tickets(
-      'ccccccc1-0000-0000-0000-000000000001', 'niekto@nikde.sk', 1);
-    raise exception 'an unknown recipient should have been refused';
+      'ccccccc1-0000-0000-0000-000000000001', 'nikto', 1);
+    raise exception 'a recipient that is neither should have been refused';
   exception when others then
     assert sqlerrm like '%RECIPIENT_NOT_FOUND%', format('expected RECIPIENT_NOT_FOUND, got %s', sqlerrm);
   end;
 
   reset role;
-  raise notice 'PASS a comp goes by @username or sign-up e-mail, and says so when neither matches';
+  raise notice 'PASS a comp goes by @username or sign-up e-mail, and refuses what is neither';
 end $$;
 
 -- --- a stranger cannot give away somebody else's tickets ---------------------

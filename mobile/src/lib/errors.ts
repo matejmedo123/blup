@@ -47,6 +47,7 @@ const MESSAGES: Record<string, string> = {
   TICKET_TYPE_NOT_FOUND: 'Tento typ vstupenky už neexistuje.',
   EVENT_NOT_CLAIMABLE: 'Prihlásiť sa dá len o event, ktorý pridal BLUP za niekoho iného.',
   CLAIM_NOT_PENDING: 'Tento nárok už niekto vybavil.',
+  CLAIM_TOKEN_INVALID: 'Tento odkaz už neplatí — buď ho niekto použil, alebo je zle prekopírovaný.',
   BOOST_PACKAGE_NOT_FOUND: 'Tento balík už nie je v ponuke.',
 
   // basket

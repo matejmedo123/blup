@@ -59,6 +59,14 @@ interface Payload {
     email: string | null;
   };
   tickets: { id: string; code: string; qr_secret: string; type: string; price_cents: number }[];
+  /**
+   * True when the ticket was sent to an address with no BLUP account behind it
+   * — a competition winner, a guest. The QR already works at the door; the
+   * claim link is only so the ticket follows them into the app if they sign up
+   * with a different address than the one it was sent to.
+   */
+  is_guest?: boolean;
+  claim_token?: string | null;
 }
 
 const money = (cents: number, currency: string) =>
@@ -138,8 +146,19 @@ function renderHtml(payload: Payload): string {
         </table>
 
         <div style="margin-top:24px">
-          <a href="${appUrl}/tickets" style="display:inline-block;background:#0080FF;color:#ffffff;text-decoration:none;font:700 15px/1 -apple-system,Segoe UI,Roboto,sans-serif;padding:14px 22px;border-radius:12px">Otvoriť v Blupe</a>
-        </div>
+          <a href="${payload.is_guest && payload.claim_token
+            ? `${appUrl}/tickets/claim/${encodeURIComponent(payload.claim_token)}`
+            : `${appUrl}/tickets`}" style="display:inline-block;background:#0080FF;color:#ffffff;text-decoration:none;font:700 15px/1 -apple-system,Segoe UI,Roboto,sans-serif;padding:14px 22px;border-radius:12px">${
+            payload.is_guest ? 'Uložiť si vstupenku do Blupu' : 'Otvoriť v Blupe'
+          }</a>
+        </div>${payload.is_guest ? `
+
+        <div style="font:400 13px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#5B6675;margin-top:16px;padding:14px 16px;background:#F2F5F8;border-radius:12px">
+          <strong style="color:#0A0D12">Účet na to nepotrebuješ.</strong>
+          QR kód v tomto e-maili ti pri vstupe stačí — priprav si ho na displeji
+          alebo vytlačený. Odkaz vyššie je len na to, aby si vstupenku mal aj
+          v aplikácii; funguje raz, tak ho neposielaj ďalej.
+        </div>` : ''}
 
         <div style="font:400 12px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#9AA6B6;margin-top:22px">
           Každý QR kód je jednorazový — po načítaní pri vstupe už druhýkrát neprejde.
@@ -170,7 +189,12 @@ function renderText(payload: Payload): string {
     `Objednávka: ${payload.order_reference}`,
     '',
     'Vstupenky sú v priloženom PDF. Ukáž QR kód pri vstupe.',
-    `Nájdeš ich aj v aplikácii: ${env.appUrl()}/tickets`,
+    payload.is_guest
+      ? 'Účet na to nepotrebuješ — QR kód stačí.'
+      : `Nájdeš ich aj v aplikácii: ${env.appUrl()}/tickets`,
+    payload.is_guest && payload.claim_token
+      ? `Chceš ju mať aj v aplikácii? ${env.appUrl()}/tickets/claim/${encodeURIComponent(payload.claim_token)} (funguje raz)`
+      : null,
   ].filter(Boolean).join('\n');
 }
 
