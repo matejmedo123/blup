@@ -23,6 +23,7 @@ import {
   Screen,
 } from '@/components/ui';
 import { SiteFooter } from '@/components/SiteFooter';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -77,6 +78,10 @@ export default function FeedScreen() {
     queryFn: () => getFeed(50, activeScope),
     enabled: !counts.isLoading,
   });
+
+  // RefreshControl is inert on react-native-web, so the browser gets the same
+  // gesture from here.
+  const pull = usePullToRefresh(() => posts.refetch(), posts.isRefetching);
 
   const circles = useQuery({
     queryKey: ['profile', 'following', profile?.id],
@@ -162,7 +167,10 @@ export default function FeedScreen() {
 
       {error ? <Notice tone="danger" title="Niečo sa pokazilo" body={error} /> : null}
 
+      {pull.indicator}
+
       <FlatList
+        {...pull.handlers}
         data={posts.data ?? []}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}

@@ -10,6 +10,7 @@ import { useLocation } from '@/hooks/useLocation';
 import { createEventWithTickets } from '@/api/events';
 import { createPersonalOrganization, getMyOrganizations } from '@/api/organizations';
 import { getMyCommunities } from '@/api/communities';
+import { useImageCrop } from '@/components/ImageCrop';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
 import { geocodeAddress, suggestAddresses, type GeocodeHit } from '@/maps/geocode';
 import { messageFor } from '@/lib/errors';
@@ -65,13 +66,29 @@ const cheapestCents = (tickets: TicketDraft[]): number => {
 
 export default function CreateEventScreen() {
   const { profile } = useAuth();
+  const { crop } = useImageCrop();
   const location = useLocation();
   const queryClient = useQueryClient();
 
   const [draftId] = useState(() => Crypto.randomUUID());
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('other');
+  // Up to three, the first one primary. A warehouse party with live art is
+  // techno *and* art; forcing one meant the other half of the event was
+  // invisible to everyone browsing it.
+  const [categories, setCategories] = useState<string[]>(['other']);
+  const category = categories[0] ?? 'other';
+  const MAX_CATEGORIES = 3;
+
+  const toggleCategory = (item: string) => {
+    setCategories((current) => {
+      if (current.includes(item)) {
+        // Never down to nothing: an event is always at least one thing.
+        return current.length === 1 ? current : current.filter((c) => c !== item);
+      }
+      return current.length >= MAX_CATEGORIES ? current : [...current, item];
+    });
+  };
   const [venueName, setVenueName] = useState('');
   const [address, setAddress] = useState('');
   const [capacity, setCapacity] = useState('');
@@ -131,6 +148,10 @@ export default function CreateEventScreen() {
   // A festival is not a long evening. Hours cover most events; anything that
   // crosses midnight more than once needs a real end date, not a bigger chip.
   const [multiDay, setMultiDay] = useState(false);
+  // "I don't know yet" is a real answer. An event with no end time is treated
+  // as four hours long everywhere it matters (see public.event_ends_at), which
+  // is closer to the truth than a duration somebody guessed to get past a form.
+  const [endUnknown, setEndUnknown] = useState(false);
   const [endAt, setEndAt] = useState<Date>(() => new Date(Date.now() + 26 * 3600 * 1000));
 
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -165,7 +186,11 @@ export default function CreateEventScreen() {
   const eventCoords = coords ?? location.coords;
 
   /** One definition of when it ends, so preview and submit cannot disagree. */
-  const endsAt = multiDay ? endAt : new Date(startAt.getTime() + durationHours * 3600 * 1000);
+  const endsAt = endUnknown
+    ? null
+    : multiDay
+      ? endAt
+      : new Date(startAt.getTime() + durationHours * 3600 * 1000);
 
   // The map preview shows the draft exactly as it will be published. Building a
   // complete EventFeedItem (rather than casting a partial one to `never`) is
@@ -188,7 +213,7 @@ export default function CreateEventScreen() {
       venue_name: venueName || null,
       city: location.city ?? null,
       start_at: startAt.toISOString(),
-      end_at: endsAt.toISOString(),
+      end_at: endsAt ? endsAt.toISOString() : null,
       is_free: isFree,
       price_cents: isFree ? 0 : cheapestCents(ticketTypes),
       currency: 'EUR',
@@ -295,8 +320,15 @@ export default function CreateEventScreen() {
       const picked = await pickImage({ source: 'library', aspect: [16, 9] });
       if (!picked) return;
 
+      // Always 1920×1080 by the time it is uploaded, whatever shape it arrived
+      // in — the card, the map pin and the share preview all assume that shape.
+      const cropped = await crop({
+        uri: picked.uri, size: [1920, 1080], title: 'Orezať titulnú fotku',
+      });
+      if (!cropped) return;
+
       setUploadingCover(true);
-      const cover = await uploadEventCover(picked.uri, draftId, picked.width || undefined);
+      const cover = await uploadEventCover(cropped, draftId, 1920);
       setCoverUrl(cover.url);
       setCoverSize({ width: cover.width, height: cover.height });
     } catch (caught) {
@@ -314,7 +346,7 @@ export default function CreateEventScreen() {
       setCoverMissing(true);
       return 'Pridaj titulnú fotku — bez nej sa event vo feede stratí.';
     }
-    if (multiDay) {
+    if (multiDay && endsAt) {
       if (endsAt <= startAt) return 'Koniec musí byť po začiatku.';
       if (endsAt.getTime() - startAt.getTime() > 30 * 24 * 3600 * 1000) {
         return 'Event dlhší ako 30 dní radšej rozdeľ na viac eventov.';
@@ -404,13 +436,14 @@ export default function CreateEventScreen() {
           title,
           description,
           category,
+          categories,
           latitude: eventCoords!.latitude,
           longitude: eventCoords!.longitude,
           address: address || null || undefined,
           venueName: venueName || undefined,
           city: location.city ?? undefined,
           startAt,
-          endAt: endsAt,
+          endAt: endsAt ?? undefined,
           capacity: capacity ? Number(capacity) : null,
           isFree,
           coverImageUrl: coverUrl,
@@ -527,11 +560,16 @@ export default function CreateEventScreen() {
           <Chip
             key={item}
             label={labelFor(item)}
-            selected={category === item}
-            onPress={() => setCategory(item)}
+            selected={categories.includes(item)}
+            onPress={() => toggleCategory(item)}
           />
         ))}
       </View>
+      <Caption style={styles.mapHint}>
+        {categories.length >= MAX_CATEGORIES
+          ? `Vybrané ${categories.length} z ${MAX_CATEGORIES}. Prvá (${labelFor(category)}) určuje farbu karty.`
+          : `Môžeš vybrať až ${MAX_CATEGORIES}. Prvá určuje farbu karty.`}
+      </Caption>
 
       {/* --- when ----------------------------------------------------------- */}
       <SectionHeader title="Kedy" />
@@ -543,23 +581,35 @@ export default function CreateEventScreen() {
           <Chip
             key={hours}
             label={`${hours}h`}
-            selected={!multiDay && durationHours === hours}
-            onPress={() => { setMultiDay(false); setDurationHours(hours); }}
+            selected={!multiDay && !endUnknown && durationHours === hours}
+            onPress={() => { setEndUnknown(false); setMultiDay(false); setDurationHours(hours); }}
           />
         ))}
         <Chip
           label="Viac dní"
-          selected={multiDay}
+          selected={multiDay && !endUnknown}
           onPress={() => {
+            setEndUnknown(false);
             setMultiDay(true);
             // Start from the day after, so the field opens somewhere sensible
             // rather than at a time already behind the start.
             if (endAt <= startAt) setEndAt(new Date(startAt.getTime() + 26 * 3600 * 1000));
           }}
         />
+        <Chip
+          label="Neviem"
+          selected={endUnknown}
+          onPress={() => { setEndUnknown(true); setMultiDay(false); }}
+        />
       </View>
 
-      {multiDay ? (
+      {endUnknown ? (
+        <Caption style={styles.mapHint}>
+          Ukáže sa len začiatok. Koniec vieš doplniť kedykoľvek neskôr v úprave eventu.
+        </Caption>
+      ) : null}
+
+      {multiDay && !endUnknown ? (
         <DateTimeField
           label="Koniec"
           value={endAt}

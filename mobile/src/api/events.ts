@@ -230,6 +230,8 @@ export interface CreateEventInput {
   title: string;
   description?: string;
   category: string;
+  /** Up to three, primary first. Defaults to just `category`. */
+  categories?: string[];
   tags?: string[];
   latitude: number;
   longitude: number;
@@ -265,6 +267,8 @@ export async function createEvent(input: CreateEventInput): Promise<BlupEvent> {
       title: input.title.trim(),
       description: input.description?.trim() || null,
       category: input.category,
+      // The primary leads; the database re-seats the list if it does not.
+      categories: input.categories ?? [input.category],
       tags: input.tags ?? [],
       latitude: input.latitude,
       longitude: input.longitude,

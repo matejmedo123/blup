@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
-import { isUsernameAvailable, updateProfile } from '@/api/profiles';
+import { checkUsername, isUsernameAvailable, suggestUsername, updateProfile } from '@/api/profiles';
+import { useImageCrop } from '@/components/ImageCrop';
 import { pickImage, uploadAvatar } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { useSeed } from '@/hooks/useSeed';
@@ -14,6 +16,7 @@ import { colors, spacing } from '@/theme';
 /** Step 1 of 3 — name, handle and a real profile photo. */
 export default function OnboardingProfileScreen() {
   const { profile, refreshProfile } = useAuth();
+  const { crop } = useImageCrop();
 
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
@@ -25,11 +28,27 @@ export default function OnboardingProfileScreen() {
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
   // Only fills blanks: whatever is already typed wins over what the server has.
+  //
+  // The handle is deliberately *not* seeded from the profile. The account is
+  // created with one derived automatically, and pre-filling it makes it read as
+  // settled — people kept the generated handle because it looked like a fact.
+  // It starts empty, with a suggestion underneath, so picking one is a choice.
   useSeed(profile, (loaded) => {
     setDisplayName((current) => current || loaded.display_name || '');
-    setUsername((current) => current || loaded.username || '');
     setBio((current) => current || loaded.bio || '');
     setAvatarUrl((current) => current || loaded.avatar_url);
+  });
+
+  const suggestion = suggestUsername(displayName);
+  const handle = username.trim() || suggestion;
+
+  // Checked while typing, debounced, so the answer arrives before the save
+  // rather than as a failure afterwards.
+  const availability = useQuery({
+    queryKey: ['username', handle],
+    queryFn: () => checkUsername(handle),
+    enabled: handle.length >= 3,
+    staleTime: 30_000,
   });
 
   const changePhoto = async () => {
@@ -38,8 +57,13 @@ export default function OnboardingProfileScreen() {
       const picked = await pickImage({ source: 'library', aspect: [1, 1] });
       if (!picked) return;
 
+      const cropped = await crop({
+        uri: picked.uri, size: [1024, 1024], circle: true, title: 'Orezať profilovku',
+      });
+      if (!cropped) return;
+
       setUploading(true);
-      const url = await uploadAvatar(picked.uri);
+      const url = await uploadAvatar(cropped);
       setAvatarUrl(url);
       await refreshProfile();
     } catch (caught) {
@@ -58,7 +82,6 @@ export default function OnboardingProfileScreen() {
       return;
     }
 
-    const handle = username.trim().toLowerCase();
     if (!/^[a-z0-9_.]{3,24}$/.test(handle)) {
       setUsernameError('3–24 znakov: písmená, čísla, _ alebo .');
       return;
@@ -127,14 +150,24 @@ export default function OnboardingProfileScreen() {
       />
 
       <Input
-        label="Používateľské meno"
+        label="Tvoje @meno"
         value={username}
-        onChangeText={(value) => setUsername(value.toLowerCase())}
-        placeholder="alex"
+        onChangeText={(value) => setUsername(suggestUsername(value))}
+        placeholder={suggestion || 'alex'}
         autoCapitalize="none"
         autoCorrect={false}
         error={usernameError}
-        hint="Ľudia ťa nájdu ako @meno"
+        hint={
+          handle.length < 3
+            ? 'Aspoň tri znaky, bez medzier a diakritiky.'
+            : availability.isLoading
+              ? `@${handle} — overujem…`
+              : availability.data?.ok
+                ? `@${handle} je voľné. Takto ťa ľudia nájdu.`
+                : availability.data?.reason === 'TAKEN'
+                  ? `@${handle} už niekto má. Skús iné.`
+                  : `@${handle} sa nedá použiť.`
+        }
         editable={!saving}
       />
 

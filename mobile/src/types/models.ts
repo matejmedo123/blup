@@ -149,6 +149,8 @@ export interface BlupEvent {
   description: string | null;
   cover_image_url: string | null;
   category: string;
+  /** Up to three, the primary one first. `category` is always categories[0]. */
+  categories: string[];
   tags: string[];
   latitude: number;
   longitude: number;

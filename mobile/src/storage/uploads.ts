@@ -81,6 +81,12 @@ async function compress(
   maxWidth: number,
   sourceWidth?: number,
 ): Promise<{ uri: string; width: number; height: number }> {
+  // Already cropped and encoded by the crop sheet, at exactly the size asked
+  // for. Re-encoding it would only cost a second generation of JPEG artefacts.
+  if (uri.startsWith('data:image/jpeg')) {
+    return { uri, width: sourceWidth ?? maxWidth, height: 0 };
+  }
+
   const context = ImageManipulator.ImageManipulator.manipulate(uri);
   if (!sourceWidth || sourceWidth > maxWidth) {
     context.resize({ width: maxWidth });
@@ -163,10 +169,9 @@ export async function uploadEventCover(
   const userId = userData?.user?.id;
   if (!userId) throw new Error('UNAUTHENTICATED');
 
-  // 1920 on the long edge: the size the card, the detail hero and the
-  // link-preview crawler all want, and small enough that a phone on mobile
-  // data still loads the feed. The picture's own proportions are kept —
-  // a portrait poster is shown whole rather than cropped to a strip.
+  // 1920×1080 by the time it gets here: the crop sheet fixes the shape, because
+  // the card, the map pin and the link preview all assume it. A portrait photo
+  // left alone either letterboxes the card or gets stretched across it.
   const compressed = await compress(uri, 1920, sourceWidth);
   const url = await uploadToBucket({
     bucket: 'event-images',
@@ -174,7 +179,14 @@ export async function uploadEventCover(
     uri: compressed.uri,
   });
 
-  return { url, width: compressed.width, height: compressed.height };
+  // A cropped cover is 16:9 by construction; `compress` cannot measure a data
+  // URI, so the shape is stated rather than guessed at.
+  const cropped = uri.startsWith('data:image/jpeg');
+  return {
+    url,
+    width: cropped ? 1920 : compressed.width,
+    height: cropped ? 1080 : compressed.height,
+  };
 }
 
 /** Adds a photo to an event gallery and records the row. */

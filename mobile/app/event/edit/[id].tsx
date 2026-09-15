@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import { cancelEvent, deleteEvent, getEvent, updateEvent } from '@/api/events';
 import { logAdminEventEdit } from '@/api/admin';
+import { useImageCrop } from '@/components/ImageCrop';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { useSeed } from '@/hooks/useSeed';
@@ -45,6 +46,7 @@ export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile, isAdmin } = useAuth();
   const queryClient = useQueryClient();
+  const { crop } = useImageCrop();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -110,8 +112,15 @@ export default function EditEventScreen() {
     try {
       const picked = await pickImage({ source: 'library', aspect: [16, 9] });
       if (!picked) return;
+
+      // Cropped to the card's shape before it is uploaded. A portrait photo left
+      // as it is either letterboxes the card or gets stretched across it — and
+      // on the web the system picker does no cropping at all.
+      const cropped = await crop({ uri: picked.uri, size: [1920, 1080], title: 'Orezať titulnú fotku' });
+      if (!cropped) return;
+
       setSaving(true);
-      const { url } = await uploadEventCover(picked.uri, id!, picked.width || undefined);
+      const { url } = await uploadEventCover(cropped, id!, 1920);
       await updateEvent(id!, { coverImageUrl: url });
       await event.refetch();
     } catch (caught) {
@@ -224,6 +233,17 @@ export default function EditEventScreen() {
         title={data.cover_image_url ? 'Nahradiť fotku' : 'Pridať fotku'}
         variant="secondary"
         onPress={changeCover}
+        disabled={saving}
+      />
+
+      {/* The way into the gallery. Editing an event is where anybody looks for
+          this after publishing, and until now it was only reachable from the
+          public page — so an organizer adding photos afterwards had nowhere to
+          click. */}
+      <Button
+        title="Fotky v galérii"
+        variant="ghost"
+        onPress={() => router.push(`/event/photos/${id}`)}
         disabled={saving}
       />
 

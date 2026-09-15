@@ -17,7 +17,7 @@ import { subscribeToTable } from '@/lib/realtime';
 import { messageFor } from '@/lib/errors';
 import { formatMessageTime, isSameDay, formatDayLabel } from '@/lib/format';
 import {
-  Avatar, Body, ErrorState, LoadingState, Mono, Notice, Screen,
+  Avatar, Body, Caption, ErrorState, LoadingState, Mono, Notice, Screen,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { Message } from '@/types/models';
@@ -48,6 +48,8 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  /** A picked photo waiting to go with the next message. */
+  const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
 
@@ -118,20 +120,34 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
     });
   }, [id, queryClient, markRead]);
 
+  /**
+   * Picking a photo used to send it. There was no moment between choosing the
+   * file and it being in the conversation — no caption, no second look, no way
+   * back. It waits here instead, and goes with the next send.
+   */
   const submit = async () => {
     const body = draft.trim();
-    if (!body || !id) return;
+    if ((!body && !pending) || !id) return;
 
+    const photo = pending;
     setError(null);
     setSending(true);
     setDraft('');
+    setPending(null);
 
     try {
-      await sendMessage({ conversationId: id, body });
+      const attachmentUrl = photo ? await uploadChatImage(photo, id) : undefined;
+      await sendMessage({
+        conversationId: id,
+        body: body || undefined,
+        ...(attachmentUrl ? { attachmentUrl } : {}),
+      });
       await queryClient.invalidateQueries({ queryKey: ['messages', id] });
       await queryClient.invalidateQueries({ queryKey: ['conversations'] });
     } catch (caught) {
-      setDraft(body); // give the text back rather than losing it
+      // Give both of them back rather than losing them.
+      setDraft(body);
+      setPending(photo);
       setError(messageFor(caught));
     } finally {
       setSending(false);
@@ -144,16 +160,10 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
     try {
       const picked = await pickImage({ source: 'library', aspect: [4, 3] });
       if (!picked) return;
-
-      setSending(true);
-      const url = await uploadChatImage(picked.uri, id);
-      await sendMessage({ conversationId: id, attachmentUrl: url });
-      await queryClient.invalidateQueries({ queryKey: ['messages', id] });
-      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      // Attached, not sent. Nothing leaves until the send button is pressed.
+      setPending(picked.uri);
     } catch (caught) {
       setError(messageFor(caught));
-    } finally {
-      setSending(false);
     }
   };
 
@@ -296,6 +306,24 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
         />
 
         {/* --- composer ------------------------------------------------------ */}
+        {pending ? (
+          <View style={styles.pendingRow}>
+            <Image source={{ uri: pending }} style={styles.pendingThumb} contentFit="cover" />
+            <View style={styles.flex}>
+              <Caption>Fotka je priložená. Pošle sa so správou.</Caption>
+            </View>
+            <Pressable
+              onPress={() => setPending(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Odobrať fotku"
+              disabled={sending}
+              style={({ pressed }) => [styles.pendingRemove, pressed && styles.pressed]}
+            >
+              <Text style={styles.pendingRemoveGlyph}>✕</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View style={styles.composer}>
           <Pressable
             onPress={attach}
@@ -310,7 +338,7 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder="Napíš správu…"
+            placeholder={pending ? "Pridaj popis (nepovinné)…" : "Napíš správu…"}
             placeholderTextColor={colors.textTertiary}
             style={styles.input}
             multiline
@@ -321,12 +349,12 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
 
           <Pressable
             onPress={submit}
-            disabled={sending || draft.trim().length === 0}
+            disabled={sending || (draft.trim().length === 0 && !pending)}
             accessibilityRole="button"
             accessibilityLabel="Odoslať"
             style={({ pressed }) => [
               styles.sendButton,
-              (sending || draft.trim().length === 0) && styles.sendDisabled,
+              (sending || (draft.trim().length === 0 && !pending)) && styles.sendDisabled,
               pressed && styles.pressed,
             ]}
           >
@@ -507,6 +535,22 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 40 },
   emptyText: { textAlign: 'center' },
 
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  pendingThumb: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.surface },
+  pendingRemove: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  pendingRemoveGlyph: { ...typography.meta, color: colors.textSecondary },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',

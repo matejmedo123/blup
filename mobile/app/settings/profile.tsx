@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { isUsernameAvailable, updateProfile } from '@/api/profiles';
+import { useImageCrop } from '@/components/ImageCrop';
 import { pickImage, removeAvatar, uploadAvatar } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { useSeed } from '@/hooks/useSeed';
@@ -13,6 +14,7 @@ import { colors, spacing } from '@/theme';
 /** Edit profile — the photo really is uploaded to Storage and saved on the row. */
 export default function EditProfileScreen() {
   const { profile, refreshProfile } = useAuth();
+  const { crop } = useImageCrop();
 
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
@@ -35,8 +37,17 @@ export default function EditProfileScreen() {
     try {
       const picked = await pickImage({ source, aspect: [1, 1] });
       if (!picked) return;
+
+      // Round in the UI, square in the file — cropped here so the person
+      // chooses what ends up inside the circle rather than the top-left corner
+      // of whatever they took.
+      const cropped = await crop({
+        uri: picked.uri, size: [1024, 1024], circle: true, title: 'Orezať profilovku',
+      });
+      if (!cropped) return;
+
       setUploading(true);
-      await uploadAvatar(picked.uri);
+      await uploadAvatar(cropped);
       await refreshProfile();
     } catch (caught) {
       setError(messageFor(caught));

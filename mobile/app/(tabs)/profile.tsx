@@ -18,6 +18,7 @@ import { formatCount, formatEventDate } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Avatar, Body, Button, LoadingState, Notice } from '@/components/ui';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -28,6 +29,8 @@ import { colors, radius, spacing, typography } from '@/theme';
  * number is read from the database; nothing here is decorative.
  */
 export default function ProfileScreen() {
+  // One place for "reload everything on this screen", so the native control and
+  // the web gesture cannot drift apart.
   const { profile, signOut, refreshProfile, loadingProfile, isAdmin, isGuest } = useAuth();
   const toast = useToast();
 
@@ -53,6 +56,21 @@ export default function ProfileScreen() {
   const premium = useQuery({ queryKey: ['premium', 'status'], queryFn: getPremiumStatus });
   const game = useQuery({ queryKey: ['gamification', 'me'], queryFn: () => getGamification() });
   const badges = useQuery({ queryKey: ['badges', 'progress'], queryFn: getBadgeProgress });
+
+  // One place for "reload everything on this screen", so the native control and
+  // the web gesture cannot drift apart.
+  const refreshAll = () => {
+    void refreshProfile();
+    void counts.refetch();
+    void game.refetch();
+    void myEvents.refetch();
+    void saved.refetch();
+  };
+
+  // RefreshControl is inert on react-native-web; this is the browser's version.
+  // Up here with the other hooks: the screen returns early for a guest and
+  // while the profile loads, and a hook below that return is React #310.
+  const pull = usePullToRefresh(refreshAll, false);
 
   if (isGuest) {
     return (
@@ -101,22 +119,18 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView
+        {...pull.handlers}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={false}
-            onRefresh={() => {
-              void refreshProfile();
-              void counts.refetch();
-              void game.refetch();
-              void myEvents.refetch();
-              void saved.refetch();
-            }}
+            onRefresh={refreshAll}
             tintColor={colors.accent}
           />
         }
       >
+        {pull.indicator}
         <View style={styles.header}>
           <Text style={styles.screenTitle}>Ja</Text>
           <Pressable style={styles.headerButton} onPress={() => router.push('/organizer')}>

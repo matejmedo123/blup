@@ -8,10 +8,19 @@ import { messageFor } from '@/lib/errors';
 import { Body, Button, Chip, Input, Notice, Screen, SectionHeader, Switch } from '@/components/ui';
 import { labelFor, spacing } from '@/theme';
 
+/**
+ * The same list an event picks from, not a hand-picked subset.
+ *
+ * The short list read like somebody's own interests, and it was: a community
+ * about theatre, photography or football had nothing to choose. It also has to
+ * match the event categories for the two ever to be matched up.
+ */
 const CATEGORIES = [
-  'tech', 'startups', 'techno', 'indie', 'jazz', 'running', 'climbing', 'yoga',
-  'hiking', 'food', 'coffee', 'wine', 'art', 'cinema', 'books', 'board-games',
-  'nightlife', 'volunteering', 'wellness', 'other',
+  'techno', 'house', 'hiphop', 'rock', 'jazz', 'indie', 'festival', 'running', 'cycling',
+  'climbing', 'football', 'basketball', 'yoga', 'hiking', 'art', 'theatre', 'cinema',
+  'photography', 'food', 'coffee', 'wine', 'craft-beer', 'startups', 'tech', 'design',
+  'networking', 'nightlife', 'bars', 'board-games', 'gaming', 'language', 'volunteering',
+  'wellness', 'dance', 'books', 'other',
 ];
 
 /** Founding a community. The founder becomes its first member. */

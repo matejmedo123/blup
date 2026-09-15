@@ -15,6 +15,7 @@ import {
   Avatar, Body, EmptyState, ErrorState, IconButton, LoadingState, Mono, Screen,
 } from '@/components/ui';
 import { SiteFooter } from '@/components/SiteFooter';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { ConversationSummary } from '@/types/models';
 
@@ -33,6 +34,9 @@ export default function MessagesScreen() {
     queryKey: ['conversations'],
     queryFn: () => getConversations(60),
   });
+
+  // RefreshControl is inert on react-native-web; this is the browser's version.
+  const pull = usePullToRefresh(() => refetch(), isRefetching);
 
   // A new message lands in the list without pulling to refresh.
   useEffect(() => subscribeToTable({
@@ -85,7 +89,10 @@ export default function MessagesScreen() {
         <IconButton glyph="⌕" onPress={() => router.push('/search')} />
       </View>
 
+      {pull.indicator}
+
       <FlatList
+        {...pull.handlers}
         ListFooterComponent={<SiteFooter />}
         data={conversations}
         keyExtractor={(item) => item.id}

@@ -28,6 +28,7 @@ import { useRequireAuth } from '@/auth/useRequireAuth';
 import { EventMap } from '@/components/EventMap';
 import { useToast } from '@/components/Toast';
 import { BottomSheet } from '@/components/BottomSheet';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
   AvatarStack, Body, Button, EmptyState, ErrorState, IconButton, LoadingState, Notice,
 } from '@/components/ui';
@@ -276,6 +277,9 @@ export default function HomeScreen() {
   // is not a pure render.
   const [now] = useState(() => Date.now());
 
+  // RefreshControl is inert on react-native-web; this is the browser's version.
+  const pull = usePullToRefresh(() => nearby.refetch(), nearby.isRefetching);
+
   const weekly = useMemo(() => {
     const horizon = now + 7 * 24 * 60 * 60 * 1000;
     return recommended
@@ -504,6 +508,8 @@ export default function HomeScreen() {
       ) : nearby.isError ? (
         <ErrorState message={messageFor(nearby.error)} onRetry={() => void nearby.refetch()} />
       ) : (
+        <>
+        {pull.indicator}
         <FlatList
           // Changing numColumns needs a fresh list instance; without the key
           // React Native keeps the old cell layout and the grid comes out
@@ -522,6 +528,7 @@ export default function HomeScreen() {
               tintColor={colors.accent}
             />
           }
+          {...pull.handlers}
           ListHeaderComponent={
             <View>
               {(circles.data ?? []).length > 0 ? (
@@ -628,6 +635,7 @@ export default function HomeScreen() {
             />
           }
         />
+        </>
       )}
 
       {/* --- weekly sheet ----------------------------------------------------- */}

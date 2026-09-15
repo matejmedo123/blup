@@ -5,6 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { getMyOrganizations } from '@/api/organizations';
 import { getEvent, getEventImages, setEventCover } from '@/api/events';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import {
@@ -46,7 +47,24 @@ export default function EventPhotosScreen() {
     enabled: Boolean(id),
   });
 
-  const canEdit = Boolean(event.data && profile && event.data.creator_id === profile.id);
+  const myOrgs = useQuery({
+    queryKey: ['organizations', 'mine'],
+    queryFn: getMyOrganizations,
+    enabled: Boolean(profile),
+  });
+  const myOrgIds = (myOrgs.data ?? [])
+    .filter((org) => ['owner', 'admin', 'event_manager'].includes(org.my_role ?? ''))
+    .map((org) => org.id);
+
+  // The database lets an organization's owners, admins and event managers write
+  // here, and the screen used to be narrower than that — somebody running the
+  // organization but not the creator of the event saw a read-only gallery.
+  const canEdit = Boolean(
+    event.data && profile && (
+      event.data.creator_id === profile.id
+      || (event.data.organization_id != null && myOrgIds.includes(event.data.organization_id))
+    ),
+  );
 
   const refresh = async () => {
     await Promise.all([

@@ -11,6 +11,7 @@ import { avatarColorFor, colors, radius, spacing, typography, shadow } from '@/t
 import { initialsFor } from '@/lib/format';
 import { CONTENT_MAX, useLayout } from '@/hooks/useLayout';
 import { SiteFooter } from './SiteFooter';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 
 /** Screen shell: safe area + background, used by every route. */
 export function Screen({
@@ -57,6 +58,16 @@ export function Screen({
   // leaving it stranded under a short page.
   const grow = footer && Platform.OS === 'web' ? { flexGrow: 1 } : null;
 
+  // A RefreshControl does nothing on react-native-web, so a screen that had a
+  // pull-to-refresh on a phone had none in a browser — including a phone
+  // browser. The props are read off the element that was passed rather than
+  // asking every screen to hand them over a second way.
+  const refreshProps = (refreshControl as { props?: {
+    onRefresh?: () => void | Promise<unknown>;
+    refreshing?: boolean;
+  } } | undefined)?.props;
+  const pull = usePullToRefresh(refreshProps?.onRefresh, refreshProps?.refreshing);
+
   const body = scroll ? (
     <ScrollView
       style={styles.flex}
@@ -64,7 +75,9 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}
+      {...pull.handlers}
     >
+      {pull.indicator}
       {children}
       {footer && Platform.OS === 'web' ? <SiteFooter /> : null}
     </ScrollView>

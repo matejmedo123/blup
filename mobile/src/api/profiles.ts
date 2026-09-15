@@ -295,3 +295,28 @@ export async function searchProfiles(query: string, limit = 20): Promise<Profile
   if (error) throw error;
   return (data ?? []) as Profile[];
 }
+
+/**
+ * Is this handle free?
+ *
+ * Asked while somebody types, so it answers about one handle and nothing else —
+ * it is not a search. Saves finding out through a failed save.
+ */
+export async function checkUsername(username: string): Promise<{
+  ok: boolean;
+  reason: 'TOO_SHORT' | 'TOO_LONG' | 'BAD_CHARACTERS' | 'TAKEN' | null;
+}> {
+  const { data, error } = await supabase.rpc('username_available', { p_username: username });
+  if (error) throw error;
+  return data as never;
+}
+
+/** The handle we would suggest for a name — the same folding the server does. */
+export function suggestUsername(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 20);
+}
