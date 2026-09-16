@@ -724,87 +724,113 @@ export default function CreateEventScreen() {
         </>
       ) : null}
 
+      {/* --- listed on somebody else's behalf -------------------------------- */}
+      {/* Above the ticket section, not inside it. It used to sit in the branch
+          that only renders for a PAID event, which made it unreachable for the
+          case it exists for: most of what we add by hand at the start is a free
+          city event, and turning the event paid just to reveal the switch then
+          failed validation. */}
+      {isAdmin ? (
+        <>
+          <SectionHeader title="Pridávaš za niekoho iného?" />
+          <Switch
+            label="Pridať ako BLUP"
+            description="Event niekoho iného, ktorý zatiaľ na BLUPe nie je. Bude pri ňom jeho meno a poznámka, že sme ho pridali my."
+            value={listedByBlup}
+            onValueChange={(next) => {
+              setListedByBlup(next);
+              // A listing has no organization of ours behind it, and without one
+              // nobody can be paid out — so it cannot sell tickets here. Saying
+              // that now beats refusing the form after everything is filled in.
+              if (next) {
+                setIsFree(true);
+                setFieldErrors({});
+              }
+            }}
+          />
+          {listedByBlup ? (
+            <>
+              <Input
+                label="Kto to organizuje"
+                value={externalOrganizer}
+                onChangeText={setExternalOrganizer}
+                placeholder="Kultúrne centrum Nitra"
+                editable={!saving}
+                hint="Povinné. Bez mena to vyzerá ako náš event."
+              />
+              <Input
+                label="Odkiaľ (nepovinné)"
+                value={externalSource}
+                onChangeText={setExternalSource}
+                placeholder="https://…"
+                autoCapitalize="none"
+                editable={!saving}
+                hint="Odkaz na oznámenie alebo na predaj vstupeniek. Pošleme tam ľudí."
+              />
+            </>
+          ) : null}
+        </>
+      ) : null}
+
       {/* --- tickets -------------------------------------------------------- */}
       <SectionHeader title="Vstupenky" />
-      <Switch
-        value={isFree}
-        onValueChange={(next) => {
-          setIsFree(next);
-          if (next) setFieldErrors({});
-        }}
-        label="Event zdarma"
-        description="Eventy zdarma môže vytvoriť ktokoľvek. Na predaj vstupeniek potrebuješ overený účet organizátora."
-      />
+      {/* A listing is somebody else's event, so there is no verified
+          organization of ours behind it and nobody to pay out — the database
+          refuses paid ticket types without one. Saying that here beats a
+          "Event zdarma" switch that silently cannot be turned off. */}
+      {listedByBlup ? (
+        <Notice
+          tone="accent"
+          title="Vstupenky sa tu nepredávajú"
+          body="Cudzí event u nás nemá overenú organizáciu, takže nie je komu poslať peniaze. Ak sa vstupné platí, napíš to do popisu a ľudí pošli odkazom vyššie. Keď si organizátor event prevezme, predaj si zapne sám."
+        />
+      ) : (
+        <>
+        <Switch
+          value={isFree}
+          onValueChange={(next) => {
+            setIsFree(next);
+            if (next) setFieldErrors({});
+          }}
+          label="Event zdarma"
+          description="Eventy zdarma môže vytvoriť ktokoľvek. Na predaj vstupeniek potrebuješ overený účet organizátora."
+        />
 
-      {!isFree ? (
-        verifiedOrgs.length === 0 ? (
-          // Having no *verified* organization is not the same as having none.
-          // Offering to create a second one to somebody who is simply waiting
-          // for verification collided on the slug and failed.
-          pendingOrg ? (
-            <Notice
-              tone="warning"
-              title={
-                pendingOrg.verification_status === 'rejected'
-                  ? `Overenie ${pendingOrg.name} neprešlo`
-                  : `${pendingOrg.name} čaká na overenie`
-              }
-              body={
-                pendingOrg.verification_status === 'rejected'
-                  ? 'Pozri sa, čo treba doplniť, a pošli žiadosť znova. Dovtedy vieš zverejňovať eventy zdarma.'
-                  : 'Kým to prejde, môžeš zverejňovať eventy zdarma. Predaj vstupeniek sa odomkne hneď po overení.'
-              }
-              actionLabel="Otvoriť overenie"
-              onAction={() => router.push('/organizer/verification')}
-            />
+        {!isFree ? (
+          verifiedOrgs.length === 0 ? (
+            // Having no *verified* organization is not the same as having none.
+            // Offering to create a second one to somebody who is simply waiting
+            // for verification collided on the slug and failed.
+            pendingOrg ? (
+              <Notice
+                tone="warning"
+                title={
+                  pendingOrg.verification_status === 'rejected'
+                    ? `Overenie ${pendingOrg.name} neprešlo`
+                    : `${pendingOrg.name} čaká na overenie`
+                }
+                body={
+                  pendingOrg.verification_status === 'rejected'
+                    ? 'Pozri sa, čo treba doplniť, a pošli žiadosť znova. Dovtedy vieš zverejňovať eventy zdarma.'
+                    : 'Kým to prejde, môžeš zverejňovať eventy zdarma. Predaj vstupeniek sa odomkne hneď po overení.'
+                }
+                actionLabel="Otvoriť overenie"
+                onAction={() => router.push('/organizer/verification')}
+              />
+            ) : (
+              <Notice
+                tone="warning"
+                title="Na predaj vstupeniek potrebuješ profil organizátora"
+                body="Vstupné si môže nastaviť ktokoľvek — stačí jedno klepnutie. Peniaze však vieme vyplatiť až overenému subjektu, to je zákonná požiadavka, nie naše pravidlo."
+                actionLabel={creatingOrg ? 'Zakladám…' : 'Založiť to za mňa'}
+                onAction={becomeOrganizer}
+              />
+            )
           ) : (
-            <Notice
-              tone="warning"
-              title="Na predaj vstupeniek potrebuješ profil organizátora"
-              body="Vstupné si môže nastaviť ktokoľvek — stačí jedno klepnutie. Peniaze však vieme vyplatiť až overenému subjektu, to je zákonná požiadavka, nie naše pravidlo."
-              actionLabel={creatingOrg ? 'Zakladám…' : 'Založiť to za mňa'}
-              onAction={becomeOrganizer}
-            />
-          )
-        ) : (
-          <>
-            {isAdmin ? (
-              <>
-                <Caption style={styles.orgHint}>Pridávaš za niekoho iného?</Caption>
-                <Switch
-                  label="Pridať ako BLUP"
-                  description="Event niekoho iného, ktorý zatiaľ na BLUPe nie je. Bude pri ňom jeho meno a poznámka, že sme ho pridali my."
-                  value={listedByBlup}
-                  onValueChange={setListedByBlup}
-                />
-                {listedByBlup ? (
-                  <>
-                    <Input
-                      label="Kto to organizuje"
-                      value={externalOrganizer}
-                      onChangeText={setExternalOrganizer}
-                      placeholder="Kultúrne centrum Nitra"
-                      editable={!saving}
-                      hint="Povinné. Bez mena to vyzerá ako náš event."
-                    />
-                    <Input
-                      label="Odkiaľ (nepovinné)"
-                      value={externalSource}
-                      onChangeText={setExternalSource}
-                      placeholder="https://…"
-                      autoCapitalize="none"
-                      editable={!saving}
-                      hint="Odkaz na oznámenie, z ktorého si to prebral."
-                    />
-                  </>
-                ) : null}
-              </>
-            ) : null}
-
-            {!listedByBlup ? (
+            <>
+              {/* Unconditional now: a listing forces the event free, so this
+                  paid-only branch never renders for one. */}
               <Caption style={styles.orgHint}>Zverejniť ako</Caption>
-            ) : null}
-            {!listedByBlup ? (
               <View style={styles.chips}>
                 {verifiedOrgs.map((org) => (
                   <Chip
@@ -815,89 +841,90 @@ export default function CreateEventScreen() {
                   />
                 ))}
               </View>
-            ) : null}
 
-            {ticketTypes.map((ticket, index) => (
-              <View key={ticket.key} style={styles.ticketCard}>
-                <View style={styles.ticketHead}>
-                  <Caption>{index === 0 ? 'Typ vstupenky' : `Typ vstupenky ${index + 1}`}</Caption>
-                  {ticketTypes.length > 1 ? (
-                    <Button
-                      title="Odstrániť"
-                      variant="ghost"
-                      compact
-                      onPress={() => removeTicket(ticket.key)}
-                      disabled={saving}
-                    />
-                  ) : null}
-                </View>
-
-                <Input
-                  label="Názov"
-                  value={ticket.name}
-                  onChangeText={(v) => patchTicket(ticket.key, { name: v })}
-                  placeholder="Napr. Early bird"
-                  error={fieldErrors[`ticket.${index}.name`]}
-                  editable={!saving}
-                />
-
-                <View style={styles.ticketRow}>
-                  <View style={styles.ticketCell}>
-                    <Input
-                      label="Cena (EUR)"
-                      value={ticket.price}
-                      onChangeText={(v) => patchTicket(ticket.key, { price: v })}
-                      placeholder="15"
-                      keyboardType="decimal-pad"
-                      error={fieldErrors[`ticket.${index}.price`]}
-                      editable={!saving}
-                    />
+              {ticketTypes.map((ticket, index) => (
+                <View key={ticket.key} style={styles.ticketCard}>
+                  <View style={styles.ticketHead}>
+                    <Caption>{index === 0 ? 'Typ vstupenky' : `Typ vstupenky ${index + 1}`}</Caption>
+                    {ticketTypes.length > 1 ? (
+                      <Button
+                        title="Odstrániť"
+                        variant="ghost"
+                        compact
+                        onPress={() => removeTicket(ticket.key)}
+                        disabled={saving}
+                      />
+                    ) : null}
                   </View>
-                  <View style={styles.ticketCell}>
-                    <Input
-                      label="Počet"
-                      value={ticket.quantity}
-                      onChangeText={(v) => patchTicket(ticket.key, { quantity: v })}
-                      placeholder="100"
-                      keyboardType="number-pad"
-                      error={fieldErrors[`ticket.${index}.quantity`]}
-                      editable={!saving}
-                    />
+
+                  <Input
+                    label="Názov"
+                    value={ticket.name}
+                    onChangeText={(v) => patchTicket(ticket.key, { name: v })}
+                    placeholder="Napr. Early bird"
+                    error={fieldErrors[`ticket.${index}.name`]}
+                    editable={!saving}
+                  />
+
+                  <View style={styles.ticketRow}>
+                    <View style={styles.ticketCell}>
+                      <Input
+                        label="Cena (EUR)"
+                        value={ticket.price}
+                        onChangeText={(v) => patchTicket(ticket.key, { price: v })}
+                        placeholder="15"
+                        keyboardType="decimal-pad"
+                        error={fieldErrors[`ticket.${index}.price`]}
+                        editable={!saving}
+                      />
+                    </View>
+                    <View style={styles.ticketCell}>
+                      <Input
+                        label="Počet"
+                        value={ticket.quantity}
+                        onChangeText={(v) => patchTicket(ticket.key, { quantity: v })}
+                        placeholder="100"
+                        keyboardType="number-pad"
+                        error={fieldErrors[`ticket.${index}.quantity`]}
+                        editable={!saving}
+                      />
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))}
+              ))}
 
-            <Pressable
-              onPress={addTicket}
-              disabled={saving || ticketTypes.length >= MAX_TICKET_TYPES}
-              accessibilityRole="button"
-              accessibilityLabel="Pridať ďalší typ vstupenky"
-              style={({ pressed }) => [
-                styles.addTicket,
-                pressed && styles.addTicketPressed,
-                ticketTypes.length >= MAX_TICKET_TYPES && styles.addTicketDisabled,
-              ]}
-            >
-              <View style={styles.addTicketPlus}>
-                <Text style={styles.addTicketPlusGlyph}>+</Text>
-              </View>
-              <Body style={styles.addTicketLabel}>
-                {ticketTypes.length >= MAX_TICKET_TYPES
-                  ? `Viac ako ${MAX_TICKET_TYPES} typov už nie`
-                  : 'Pridať ďalší typ vstupenky'}
-              </Body>
-            </Pressable>
+              <Pressable
+                onPress={addTicket}
+                disabled={saving || ticketTypes.length >= MAX_TICKET_TYPES}
+                accessibilityRole="button"
+                accessibilityLabel="Pridať ďalší typ vstupenky"
+                style={({ pressed }) => [
+                  styles.addTicket,
+                  pressed && styles.addTicketPressed,
+                  ticketTypes.length >= MAX_TICKET_TYPES && styles.addTicketDisabled,
+                ]}
+              >
+                <View style={styles.addTicketPlus}>
+                  <Text style={styles.addTicketPlusGlyph}>+</Text>
+                </View>
+                <Body style={styles.addTicketLabel}>
+                  {ticketTypes.length >= MAX_TICKET_TYPES
+                    ? `Viac ako ${MAX_TICKET_TYPES} typov už nie`
+                    : 'Pridať ďalší typ vstupenky'}
+                </Body>
+              </Pressable>
 
-            <Caption style={styles.ticketHint}>
-              {cheapestLabel
-                ? `V zozname sa event ukáže ako „${cheapestLabel}“.`
-                : 'Ľudia uvidia všetky typy pri kúpe. Ceny a počty vieš neskôr upraviť.'}
-            </Caption>
+              <Caption style={styles.ticketHint}>
+                {cheapestLabel
+                  ? `V zozname sa event ukáže ako „${cheapestLabel}“.`
+                  : 'Ľudia uvidia všetky typy pri kúpe. Ceny a počty vieš neskôr upraviť.'}
+              </Caption>
 
-          </>
-        )
-      ) : null}
+            </>
+          )
+        ) : null}
+        </>
+      )}
 
       <Input
         label="Kapacita (nepovinné)"

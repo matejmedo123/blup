@@ -22,8 +22,13 @@
  */
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
+import { fileURLToPath } from 'node:url';
 
-const roots = ['mobile/app', 'mobile/src'];
+// Anchored to this file, not to wherever it was run from. Run from mobile/ it
+// used to die on ENOENT for 'mobile/app' — a check that only works from one
+// directory is a check somebody eventually stops running.
+const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
+const roots = [join(ROOT, 'mobile/app'), join(ROOT, 'mobile/src')];
 const HOOK = /^\s{2}(?:const|let)\s+[^=]*=\s*use[A-Z]\w*\s*\(|^\s{2}use[A-Z]\w*\s*\(/;
 // A conditional return at the body's top level, on one line or opening a block.
 const EARLY_RETURN = /^\s{2}if\s*\(.*\)\s*(?:return\b|\{\s*$)/;

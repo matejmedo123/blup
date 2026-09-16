@@ -21,8 +21,14 @@
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+// fileURLToPath, not .pathname: a file URL percent-encodes what a path may
+// legally contain, so a project unzipped into "blup-zdrojaky (1)" arrived
+// here as "blup-zdrojaky%20(1)" — a directory that does not exist. The
+// script then died on ENOENT before it checked a single thing, and the
+// build stopped on its very first step.
+const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const ORIGIN = process.env.BLUP_ORIGIN || 'https://blup.sk';
 const HOST = ORIGIN.replace(/^https?:\/\//, '');
 

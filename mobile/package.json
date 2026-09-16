@@ -57,6 +57,7 @@
     "babel-preset-expo": "^57.0.7",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
+    "playwright": "^1.56.1",
     "typescript": "~6.0.3"
   },
   "scripts": {
