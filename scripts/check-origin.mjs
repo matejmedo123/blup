@@ -161,6 +161,16 @@ if (process.argv.includes('--dist')) {
       problems.push(`${bundle}  neobsahuje ${configured} — Supabase URL sa nedostala do bundlu`);
     }
 
+    // Nothing configured, yet the bundle carries a backend: the value came from
+    // somewhere the build no longer reads. In practice that is Metro's cache in
+    // the system temp directory, which `rm -rf .expo node_modules/.cache` does
+    // not touch — a build that quietly ships the PREVIOUS build's configuration.
+    // `expo export --clear` is what actually clears it.
+    if (!configured && baked) {
+      problems.push(`${bundle}  v bundli je ${baked}, hoci nastavené nie je nič — to je stará cache.`);
+      problems.push('    Metro si drží cache v /tmp; zmaž ju buildom s --clear (build:web ho už používa).');
+    }
+
     // What the browser will actually use: the served config wins, because it is
     // loaded before the bundle.
     const effective = served || baked;
