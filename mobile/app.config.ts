@@ -170,6 +170,25 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       process.env.EXPO_PUBLIC_PREMIUM_PRODUCT_ID_YEARLY ?? 'com.blup.app.premium.yearly',
     debugAi: process.env.EXPO_PUBLIC_DEBUG_AI === 'true',
 
+    /**
+     * Whether Premium may be *bought* inside the iOS app.
+     *
+     * 'off' (the default) means the app sells no digital goods at all: the
+     * Premium screen shows what it does and whether you have it, and nothing
+     * else. That is the only shape that needs no In-App Purchase and pays no
+     * commission, and it is what the first submission should ship as.
+     *
+     * 'iap' turns on StoreKit. Apple requires it for digital subscriptions sold
+     * in the app and takes 15–30 %. Selling them any other way inside the app,
+     * or pointing at a website to buy them, is what gets an app removed —
+     * so there is no third setting here on purpose.
+     *
+     * Event tickets are untouched by this. They are a service used outside the
+     * app, which Apple's own rules say must NOT go through In-App Purchase, so
+     * they run on Stripe on every platform and Apple takes nothing.
+     */
+    premiumIos: process.env.EXPO_PUBLIC_PREMIUM_IOS === 'iap' ? 'iap' : 'off',
+
     // Read here, not from process.env inside the app. Expo inlines
     // EXPO_PUBLIC_* into the *config*, and `extra` is what reaches the bundle —
     // a component reading process.env directly gets undefined at runtime and

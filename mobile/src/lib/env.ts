@@ -21,6 +21,8 @@ type Extra = {
   premiumProductIdYearly: string;
   debugAi: boolean;
   webUrl: string;
+  /** 'off' = no digital purchases in the iOS app at all. */
+  premiumIos: 'iap' | 'off';
   vapidPublicKey: string;
   mapTilesUrl: string;
   mapAttribution: string;
@@ -43,6 +45,7 @@ export const env = {
    */
   /** Origin the web build is served from; used for shareable links. */
   webUrl: extra.webUrl || process.env.EXPO_PUBLIC_WEB_URL || 'https://blup.sk',
+  premiumIos: extra.premiumIos === 'iap' ? 'iap' : 'off',
   /** VAPID public key for Web Push. Public by design — it identifies us to the
    *  push service and cannot be used to send anything. */
   vapidPublicKey: extra.vapidPublicKey || process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY || '',

@@ -7,24 +7,33 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_DEBUG_AI": "true"
-      },
+      "environment": "development",
       "ios": { "simulator": false },
       "android": { "buildType": "apk" }
     },
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "environment": "preview",
+      "ios": { "simulator": false },
       "android": { "buildType": "apk" }
     },
     "production": {
       "channel": "production",
+      "environment": "production",
       "autoIncrement": true,
       "ios": { "resourceClass": "m-medium" }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APP_ID",
+        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+      },
+      "android": {
+        "track": "internal"
+      }
+    }
   }
 }

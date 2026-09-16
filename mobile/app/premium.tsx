@@ -13,6 +13,7 @@ import { messageFor } from '@/lib/errors';
 import {
   Badge, Body, Button, Caption, Divider, LoadingState, Notice, Screen, SectionHeader,
 } from '@/components/ui';
+import { env } from '@/lib/env';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -114,6 +115,25 @@ export default function PremiumScreen() {
 
   const isPremium = status.data?.is_premium ?? false;
 
+  /**
+   * Whether this build sells Premium at all.
+   *
+   * On the web, always. On iOS, only when the build was made with
+   * EXPO_PUBLIC_PREMIUM_IOS=iap — and then it goes through StoreKit, because
+   * Apple requires that for digital subscriptions sold inside an app.
+   *
+   * With it off the screen shows what Premium does and whether you have it, and
+   * says nothing about buying it: no price, no button, no link to a website.
+   * That is deliberate. An app that sells digital goods by any other route, or
+   * points at one, is the thing Apple removes apps for — and an app that sells
+   * none needs no In-App Purchase and pays no commission.
+   *
+   * Tickets are unaffected: a ticket is a service used outside the app, which
+   * Apple's own rules say must NOT use In-App Purchase. They run on Stripe
+   * everywhere and Apple takes nothing from them.
+   */
+  const sellsPremium = canManageBilling || env.premiumIos === 'iap';
+
   return (
     <Screen scroll>
       <View style={styles.hero}>
@@ -149,7 +169,7 @@ export default function PremiumScreen() {
 
       <Divider />
 
-      {!canManageBilling && !store.available ? (
+      {sellsPremium && !canManageBilling && !store.available ? (
         <Notice
           tone="warning"
           title={
@@ -161,7 +181,18 @@ export default function PremiumScreen() {
         />
       ) : null}
 
-      {!isPremium ? (
+      {!sellsPremium && !isPremium ? (
+        <Notice
+          tone="accent"
+          title="Premium sa tu nepredáva"
+          body={
+            'Ak Premium máš, odomkne sa v tejto aplikácii samo — je viazané na '
+            + 'tvoj účet, nie na zariadenie.'
+          }
+        />
+      ) : null}
+
+      {sellsPremium && !isPremium ? (
         <>
           <View style={styles.plans}>
             <View style={styles.plan}>
