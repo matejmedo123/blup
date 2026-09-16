@@ -65,7 +65,7 @@ const cheapestCents = (tickets: TicketDraft[]): number => {
 };
 
 export default function CreateEventScreen() {
-  const { profile } = useAuth();
+  const { profile, isAdmin } = useAuth();
   const { crop } = useImageCrop();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -127,6 +127,14 @@ export default function CreateEventScreen() {
       : `od ${min.toFixed(2).replace('.', ',')} €`;
   })();
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+
+  // Staff adding somebody else's event to the catalogue. The organizer is named
+  // as text because they are not on BLUP yet, and the event says on its face
+  // that BLUP typed it in — an unnamed organizer does not read as "somebody
+  // else's", it reads as ours. See migration 0048.
+  const [listedByBlup, setListedByBlup] = useState(false);
+  const [externalOrganizer, setExternalOrganizer] = useState('');
+  const [externalSource, setExternalSource] = useState('');
   const [communityId, setCommunityId] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [coverMissing, setCoverMissing] = useState(false);
@@ -355,6 +363,7 @@ export default function CreateEventScreen() {
     if (!eventCoords) return 'Vyber miesto — klikni na mapu alebo zapni GPS.';
     if (startAt.getTime() < Date.now() - 60_000) return 'Vyber čas začiatku v budúcnosti.';
     if (!isFree) {
+      if (listedByBlup) return 'Event pridaný za niekoho iného nemôže predávať vstupenky cez BLUP.';
       if (!organizationId) return 'Platené eventy môže zverejniť iba overená organizácia.';
 
       const errors: Record<string, string> = {};
@@ -447,7 +456,10 @@ export default function CreateEventScreen() {
           capacity: capacity ? Number(capacity) : null,
           isFree,
           coverImageUrl: coverUrl,
-          organizationId,
+          organizationId: listedByBlup ? null : organizationId,
+          listedByPlatform: listedByBlup,
+          externalOrganizerName: listedByBlup ? externalOrganizer.trim() : null,
+          externalSourceUrl: listedByBlup ? externalSource.trim() || null : null,
           communityId,
           status: 'published',
         },
@@ -756,17 +768,54 @@ export default function CreateEventScreen() {
           )
         ) : (
           <>
-            <Caption style={styles.orgHint}>Zverejniť ako</Caption>
-            <View style={styles.chips}>
-              {verifiedOrgs.map((org) => (
-                <Chip
-                  key={org.id}
-                  label={org.name}
-                  selected={organizationId === org.id}
-                  onPress={() => setOrganizationId(org.id)}
+            {isAdmin ? (
+              <>
+                <Caption style={styles.orgHint}>Pridávaš za niekoho iného?</Caption>
+                <Switch
+                  label="Pridať ako BLUP"
+                  description="Event niekoho iného, ktorý zatiaľ na BLUPe nie je. Bude pri ňom jeho meno a poznámka, že sme ho pridali my."
+                  value={listedByBlup}
+                  onValueChange={setListedByBlup}
                 />
-              ))}
-            </View>
+                {listedByBlup ? (
+                  <>
+                    <Input
+                      label="Kto to organizuje"
+                      value={externalOrganizer}
+                      onChangeText={setExternalOrganizer}
+                      placeholder="Kultúrne centrum Nitra"
+                      editable={!saving}
+                      hint="Povinné. Bez mena to vyzerá ako náš event."
+                    />
+                    <Input
+                      label="Odkiaľ (nepovinné)"
+                      value={externalSource}
+                      onChangeText={setExternalSource}
+                      placeholder="https://…"
+                      autoCapitalize="none"
+                      editable={!saving}
+                      hint="Odkaz na oznámenie, z ktorého si to prebral."
+                    />
+                  </>
+                ) : null}
+              </>
+            ) : null}
+
+            {!listedByBlup ? (
+              <Caption style={styles.orgHint}>Zverejniť ako</Caption>
+            ) : null}
+            {!listedByBlup ? (
+              <View style={styles.chips}>
+                {verifiedOrgs.map((org) => (
+                  <Chip
+                    key={org.id}
+                    label={org.name}
+                    selected={organizationId === org.id}
+                    onPress={() => setOrganizationId(org.id)}
+                  />
+                ))}
+              </View>
+            ) : null}
 
             {ticketTypes.map((ticket, index) => (
               <View key={ticket.key} style={styles.ticketCard}>

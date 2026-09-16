@@ -482,3 +482,86 @@ export async function getCompSummary(eventId: string): Promise<{
   if (error) throw error;
   return data as { issued: number; checked_in: number; cancelled: number };
 }
+
+// --- the door list -----------------------------------------------------------
+
+/**
+ * One row per issued ticket: who holds it, the address it was sent to, and the
+ * code printed on it.
+ *
+ * This is personal data about other people, so it is never selected from the
+ * table — `event_ticket_holders` is SECURITY DEFINER and checks that the caller
+ * actually runs this event before it returns anything.
+ */
+export interface TicketHolder {
+  ticket_id: string;
+  code: string;
+  status: 'valid' | 'used' | 'refunded' | 'cancelled';
+  holder_name: string | null;
+  email: string | null;
+  username: string | null;
+  buyer_id: string | null;
+  is_guest: boolean;
+  ticket_type: string | null;
+  price_cents: number;
+  currency: string;
+  is_complimentary: boolean;
+  checked_in_at: string | null;
+  deactivated_at: string | null;
+  deactivation_reason: string | null;
+  order_id: string | null;
+  created_at: string;
+}
+
+export interface TicketSummary {
+  total: number;
+  valid: number;
+  used: number;
+  cancelled: number;
+  refunded: number;
+  complimentary: number;
+  guests: number;
+}
+
+export async function getTicketHolders(
+  eventId: string,
+  options: { query?: string | null; status?: string | null; limit?: number; offset?: number } = {},
+): Promise<TicketHolder[]> {
+  const { data, error } = await supabase.rpc('event_ticket_holders', {
+    p_event_id: eventId,
+    p_query: options.query?.trim() || null,
+    p_status: options.status || null,
+    p_limit: options.limit ?? 100,
+    p_offset: options.offset ?? 0,
+  });
+  if (error) throw error;
+  return (data ?? []) as TicketHolder[];
+}
+
+export async function getTicketSummary(eventId: string): Promise<TicketSummary> {
+  const { data, error } = await supabase.rpc('event_ticket_summary', { p_event_id: eventId });
+  if (error) throw error;
+  return data as TicketSummary;
+}
+
+/**
+ * Switches one ticket off, or back on.
+ *
+ * Off is not cosmetic: check_in_ticket() refuses anything that is not 'valid',
+ * so the scanner turns the person away at the door. On again clears the
+ * check-in too, because otherwise the next scan would say ALREADY_USED and the
+ * organizer would be exactly where they started.
+ */
+export async function setTicketActive(
+  ticketId: string,
+  active: boolean,
+  reason?: string | null,
+): Promise<TicketHolder['status']> {
+  const { data, error } = await supabase.rpc('set_ticket_active', {
+    p_ticket_id: ticketId,
+    p_active: active,
+    p_reason: reason?.trim() || null,
+  });
+  if (error) throw error;
+  return (data as { status: TicketHolder['status'] }).status;
+}

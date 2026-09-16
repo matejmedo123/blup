@@ -29,7 +29,39 @@ type Extra = {
   cartoKey: string;
 };
 
-const extra = (Constants.expoConfig?.extra ?? {}) as Partial<Extra>;
+/**
+ * Configuration the *served files* carry, rather than the build.
+ *
+ * `public/blup-config.js` sets `window.__BLUP_CONFIG__` and is loaded before the
+ * bundle. It exists because a web export bakes in whatever EXPO_PUBLIC_* values
+ * were set the moment it was made: an archive built against a local backend
+ * loads perfectly on a real domain and talks to nothing at all. This lets the
+ * same archive be pointed at a project by editing one file on the hosting.
+ *
+ * Only non-empty strings count, so an untouched file with empty placeholders
+ * never shadows a build that was configured correctly. Nothing secret belongs
+ * here — every value is downloaded by every visitor either way.
+ */
+function servedConfig(): Partial<Extra> {
+  const candidate = (globalThis as { __BLUP_CONFIG__?: unknown }).__BLUP_CONFIG__;
+  if (!candidate || typeof candidate !== 'object') return {};
+
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(candidate as Record<string, unknown>)) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed !== '') out[key] = trimmed;
+    } else if (typeof value === 'boolean') {
+      out[key] = value;
+    }
+  }
+  return out as Partial<Extra>;
+}
+
+const extra = {
+  ...((Constants.expoConfig?.extra ?? {}) as Partial<Extra>),
+  ...servedConfig(),
+} as Partial<Extra>;
 
 export const env = {
   /**
@@ -86,6 +118,8 @@ export const isConfigured = {
 
 export const MISSING_SUPABASE_MESSAGE =
   'BLUP zatiaľ nie je pripojený na backend.\n\n' +
-  'Skopíruj mobile/.env.example do mobile/.env a doplň EXPO_PUBLIC_SUPABASE_URL a ' +
-  'EXPO_PUBLIC_SUPABASE_ANON_KEY zo svojho Supabase projektu, potom reštartuj cez ' +
+  'Na nahratom webe: otvor blup-config.js vedľa index.html a doplň supabaseUrl a ' +
+  'supabaseAnonKey zo Supabase → Project Settings → API.\n\n' +
+  'Pri vývoji: skopíruj mobile/.env.example do mobile/.env, doplň ' +
+  'EXPO_PUBLIC_SUPABASE_URL a EXPO_PUBLIC_SUPABASE_ANON_KEY a reštartuj cez ' +
   '`npx expo start --clear`.';

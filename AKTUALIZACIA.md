@@ -15,6 +15,89 @@ Počítaj s **20 minútami**, z toho väčšina je čakanie na build.
 
 ## Čo je nové v tomto balíku
 
+Zo šiestich vecí z tvojho testovania. Pri každej je aj to, čo presne bolo zle.
+
+**Vstupenky**
+
+- **Vidíš, kto príde.** *Organizátor → pri evente „Kto príde"* (a aj zo
+  *Štatistík eventu*): zoznam s **menom, adresou, na ktorú vstupenka odišla, a
+  kódom vstupenky**. Nad ním počty — platné, použité, neplatné. Hľadá sa v ňom
+  podľa mena, e-mailu aj kódu.
+- **Jednu vstupenku sa dá vypnúť a zase zapnúť.** Deaktivovaná vstupenka
+  **naozaj neprejde pri vstupe** — skener odmieta všetko, čo nie je platné —
+  a držiteľovi príde upozornenie s dôvodom, ktorý napíšeš. Znovuaktivovanie
+  zmaže aj odbavenie, takže vstupenka funguje ešte raz a potom je *použitá*.
+  Vrátená (refundovaná) vstupenka sa znovu zapnúť nedá; to je rozhodnutie o
+  peniazoch, nie o dverách.
+- Kto to smie: **tvorca eventu, majiteľ/admin/event manager organizácie a
+  admin BLUPu.** Nikto iný tie mená a adresy ani neuvidí — kontrola je v
+  databáze, nie v appke. Každé vypnutie a zapnutie sa zapisuje do auditu.
+
+**Objav**
+
+- **„Stojí za cestu."** Keď si z Nitry a v Bratislave je koncert, ktorý sedí na
+  tvoj vkus a ide naň veľa ľudí, uvidíš ho na domovskej stránke vo vlastnom
+  páse. Berie sa 50 – 220 km a len to, čo prejde cez dosť vysokú latku — inak by
+  to bol druhý feed, nie tip.
+
+**Vytváranie eventu**
+
+- **Tlačidlá v orezávaní fotky majú konečne text.** Boli tam celý čas: nápis mal
+  farbu `accentText`, čo je **tá istá modrá ako pozadie tlačidla**, takže modré
+  písmená na modrom tlačidle. A skratka `font: 700 15px/1 inherit` je neplatná,
+  takže ju prehliadač zahodil celú. Teraz je popis biely a veľkosť sa nastavuje
+  po vlastnostiach.
+- **Admin vie pridať event „ako BLUP".** Pri vytváraní eventu je prepínač
+  *Pridať ako BLUP* a dve políčka: **kto to naozaj organizuje** a **odkaz na
+  zdroj**. Tak sa dajú na začiatku ručne pridávať cudzie eventy bez toho, aby
+  to vyzeralo, že ich robíme my. Na taký event sa nedajú predávať vstupenky —
+  cudzie peniaze cez náš účet nepotečú.
+
+**Na telefóne**
+
+- **Potiahnutie nadol obnoví stránku.** Nefungovalo z dvoch dôvodov naraz:
+  súbor `usePullToRefresh.ts` prekrýval webovú verziu `.web.tsx` (**tá istá
+  pasca s príponami ako pri cookies** — Metro berie prvú príponu, `ts` je pred
+  `tsx`), a keď sa to odkrylo, poslucháči sa odpájali a pripájali pri každom
+  vykreslení — nameraných **728-krát ešte pred prvým dotykom**, takže pohyb
+  prsta pristál na už zrušenom poslucháčovi. Aby sa to nestalo tretíkrát,
+  `scripts/check-platform-files.mjs` odteraz odmietne dvojicu súborov s
+  rozdielnou príponou.
+
+**E-maily so vstupenkami**
+
+- Queue je v poriadku a testy to pokrývajú — **chýba nasadenie a cron**. Aby to
+  už nebolo neviditeľné: *Admin → prehľad* ukazuje **koľko e-mailov čaká, ako
+  starý je najstarší a koľko zlyhalo**. Keď najstarší čaká dlhšie ako 10 minút,
+  cron nebeží. Rýchla kontrola z príkazového riadka: `./scripts/check-emails.sh`.
+
+**Nahrávanie webu**
+
+- **`blup-config.js` vedľa `index.html`.** Build si doteraz zapiekol adresu
+  backendu v momente, keď vznikol — a balík vyrobený proti lokálnej databáze sa
+  na doméne načíta úplne v poriadku a **nehovorí s ničím**. Tichšie to zlyhať
+  nevie. Odteraz sa dá ten istý balík nasmerovať prepísaním jedného súboru na
+  hostingu, bez buildovania. Nič tajné v ňom nie je — `anon key` si aj tak
+  stiahne každý návštevník a dáta chráni RLS. `service_role` tam nepatrí a
+  kontrola `check-origin --dist` to odmietne.
+
+**✓ Rýchla kontrola po nasadení**
+
+```sql
+-- kto príde na event (spusti ako organizátor, nie service_role)
+select code, holder_name, email, status
+from public.event_ticket_holders('<event-id>');
+
+-- vypnutie jednej vstupenky
+select status from public.set_ticket_active('<ticket-id>', false, 'test');
+-- ... a skener ju musí odmietnuť
+select public.check_in_ticket('<kod>', '<qr_secret>');   -- reason: CANCELLED
+```
+
+---
+
+## Čo bolo nové v predchádzajúcom balíku
+
 Toto je zoznam vecí z tvojho posledného testovania. Pri každej je aj to, čo
 presne bolo zle — nie preto, aby to znelo dôkladne, ale aby si vedel, čo presne
 overiť.
@@ -223,9 +306,28 @@ cd dist && vercel --prod
 > pravidlá pre náhľady odkazov**. Starý súbor by fungoval, ale Instagram by
 > ďalej ukazoval generickú kartu.
 
+> **A pozri sa do `blup-config.js`.** Leží vedľa `index.html` a načíta sa skôr
+> než appka. Ak si buildoval s vyplneným `mobile/.env`, netreba v ňom nič meniť
+> — prázdne hodnoty sa ignorujú. Ak buildoval niekto iný alebo si si nie istý,
+> vyplň v ňom `supabaseUrl` a `supabaseAnonKey` (Supabase → *Project Settings →
+> API*) a `webUrl` na `https://blup.sk`. Je to jediný súbor, ktorý sa dá na
+> hostingu prepísať bez buildovania.
+>
+> **Service_role key tam nepatrí.** Ani Stripe secret key. Tento súbor si
+> stiahne každý návštevník — presne ako celý zvyšok JavaScriptu.
+
 **✓ Kontrola:** otvor `https://blup.sk` a pozri sa na názov v záložke
 prehliadača. Musí byť **„Blup — eventy okolo teba"**, nie `blup.sk`. Ak vidíš
 `blup.sk`, na server sa dostal starý build.
+
+Ešte istejšia kontrola, pred nahratím:
+
+```bash
+node scripts/check-origin.mjs --dist
+```
+
+Odmietne build, ktorý ukazuje na `127.0.0.1`, aj taký, kde `blup-config.js` leží
+v priečinku a stránka ho vôbec nenačíta.
 
 ---
 

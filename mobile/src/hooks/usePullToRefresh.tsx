@@ -16,6 +16,14 @@ export interface PullToRefresh {
  * including on a phone browser, which is where people expect it most.
  *
  * The web implementation lives in the `.web` file next to this one.
+ *
+ * NOTE ON THE EXTENSION. This file is `.tsx` even though it contains no JSX,
+ * and it has to be. Metro resolves a platform pair extension-major: every
+ * candidate for `.ts` is tried before any candidate for `.tsx`, so a
+ * `usePullToRefresh.ts` shadows `usePullToRefresh.web.tsx` completely — the web
+ * build silently got this stub, the hook did nothing, and nothing anywhere said
+ * so. Same trap as `tags.ts` shadowing `tags.web.tsx`. `scripts/check-platform-files.mjs`
+ * fails the build if the pair is ever split across extensions again.
  */
 export function usePullToRefresh(
   _onRefresh?: () => void | Promise<unknown>,

@@ -378,6 +378,13 @@ export default function OrganizerScreen() {
                     <Text style={styles.eventActionLabel}>Štatistiky</Text>
                   </Pressable>
 
+                  <Pressable
+                    style={styles.eventAction}
+                    onPress={() => router.push(`/organizer/attendees/${event.id}`)}
+                  >
+                    <Text style={styles.eventActionLabel}>Kto príde</Text>
+                  </Pressable>
+
                   {!event.is_free ? (
                     <Pressable
                       style={styles.eventAction}
@@ -456,6 +463,13 @@ export default function OrganizerScreen() {
                       onPress={() => router.push(`/organizer/analytics/${event.id}`)}
                     >
                       <Text style={styles.eventActionLabel}>Štatistiky</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.eventAction}
+                      onPress={() => router.push(`/organizer/attendees/${event.id}`)}
+                    >
+                      <Text style={styles.eventActionLabel}>Kto príde</Text>
                     </Pressable>
 
                     {!event.is_free ? (

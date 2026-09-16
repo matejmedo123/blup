@@ -45,6 +45,7 @@ export default function OrganizerLayout() {
       <Stack.Screen name="scan" options={{ title: 'Skenovanie vstupeniek' }} />
       <Stack.Screen name="analytics/[id]" options={{ title: 'Štatistiky eventu' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Typy vstupeniek' }} />
+      <Stack.Screen name="attendees/[id]" options={{ title: 'Kto príde' }} />
       <Stack.Screen name="promo/[id]" options={{ title: 'Promo kódy' }} />
     </Stack>
   );

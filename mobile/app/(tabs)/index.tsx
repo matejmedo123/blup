@@ -12,7 +12,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
-import { getFeedEvents, saveEvent, unsaveEvent } from '@/api/events';
+import {
+  getFeedEvents, getWorthTheTrip, saveEvent, unsaveEvent,
+} from '@/api/events';
 import { getFollowing } from '@/api/profiles';
 import { getAIRecommendations } from '@/api/ai';
 import { getUnreadCount } from '@/api/notifications';
@@ -30,7 +32,7 @@ import { useToast } from '@/components/Toast';
 import { BottomSheet } from '@/components/BottomSheet';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
-  AvatarStack, Body, Button, EmptyState, ErrorState, IconButton, LoadingState, Notice,
+  AvatarStack, Body, Button, Caption, EmptyState, ErrorState, IconButton, LoadingState, Notice,
 } from '@/components/ui';
 import {
   categoriesInFamily, categoryFilters, colors, radius, shadow, spacing, typography,
@@ -280,6 +282,15 @@ export default function HomeScreen() {
   // RefreshControl is inert on react-native-web; this is the browser's version.
   const pull = usePullToRefresh(() => nearby.refetch(), nearby.isRefetching);
 
+  // The second list: things far enough away to need a decision. Only asked for
+  // once there is a location to be far from.
+  const trip = useQuery({
+    queryKey: ['events', 'worth-the-trip', location.coords?.latitude, location.coords?.longitude],
+    queryFn: () => getWorthTheTrip(location.coords),
+    enabled: Boolean(location.coords),
+    staleTime: 10 * 60 * 1000,
+  });
+
   const weekly = useMemo(() => {
     const horizon = now + 7 * 24 * 60 * 60 * 1000;
     return recommended
@@ -430,6 +441,10 @@ export default function HomeScreen() {
       ) : null}
 
       {/* --- content --------------------------------------------------------- */}
+      {/* Above the list, not inside it: pulling has to work when the list failed
+          to load too — that is precisely when somebody reaches for it. */}
+      {pull.indicator}
+
       {view === 'map' ? (
         <View style={styles.mapWrapper}>
           <EventMap
@@ -509,7 +524,6 @@ export default function HomeScreen() {
         <ErrorState message={messageFor(nearby.error)} onRetry={() => void nearby.refetch()} />
       ) : (
         <>
-        {pull.indicator}
         <FlatList
           // Changing numColumns needs a fresh list instance; without the key
           // React Native keeps the old cell layout and the grid comes out
@@ -638,6 +652,35 @@ export default function HomeScreen() {
         </>
       )}
 
+      {/* --- worth the trip --------------------------------------------------- */}
+      {/* Absent rather than empty: a heading over nothing is worse than no
+          heading, and this list is allowed to have nothing in it. */}
+      {view === 'list' && (trip.data ?? []).length > 0 ? (
+        <View style={styles.tripBlock}>
+          <Text style={styles.tripTitle}>Stojí za cestu</Text>
+          <Text style={styles.tripHint}>Ďalej od teba, ale možno práve preto.</Text>
+          <FlatList
+            horizontal
+            data={trip.data ?? []}
+            keyExtractor={(item) => item.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tripRail}
+            renderItem={({ item }) => (
+              <View style={styles.tripCard}>
+                <EventCard
+                  event={item}
+                  onPress={() => router.push(eventHref(item))}
+                />
+                <Caption>
+                  {item.city ? `${item.city} · ` : ''}
+                  {item.distance_m ? `${Math.round(item.distance_m / 1000)} km` : ''}
+                </Caption>
+              </View>
+            )}
+          />
+        </View>
+      ) : null}
+
       {/* --- weekly sheet ----------------------------------------------------- */}
       <BottomSheet
         visible={weeklyOpen}
@@ -704,6 +747,11 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  tripBlock: { marginTop: spacing.xl, gap: spacing.xs },
+  tripTitle: { ...typography.section, color: colors.text, paddingHorizontal: spacing.lg },
+  tripHint: { ...typography.metaSm, color: colors.textTertiary, paddingHorizontal: spacing.lg },
+  tripRail: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingVertical: spacing.sm },
+  tripCard: { width: 280, gap: spacing.xs },
   screen: { flex: 1, backgroundColor: colors.background },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.

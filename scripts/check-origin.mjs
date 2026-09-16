@@ -80,6 +80,48 @@ if (process.argv.includes('--dist')) {
     process.exit(1);
   }
   const html = readFileSync(join(dist, 'index.html'), 'utf8');
+
+  // The served config: blup-config.js is loaded before the bundle and overrides
+  // what was baked in, so a build compiled against the local backend is still
+  // shippable when this file points it somewhere real. It is only worth
+  // anything if the page actually loads it, so that is checked first — an
+  // ignored config file is the same silent failure wearing a different hat.
+  const configFile = join(dist, 'blup-config.js');
+  let served = null;
+  if (existsSync(configFile)) {
+    if (!html.includes('blup-config.js')) {
+      problems.push('mobile/dist/index.html  nenačítava blup-config.js — súbor tam je a nič nerobí');
+    }
+    const text = readFileSync(configFile, 'utf8');
+    served = text.match(/supabaseUrl:\s*'([^']*)'/)?.[1]?.trim() || null;
+    const key = text.match(/supabaseAnonKey:\s*'([^']*)'/)?.[1]?.trim() || '';
+    if (served && !key) {
+      problems.push('mobile/dist/blup-config.js  supabaseUrl je vyplnená, supabaseAnonKey nie');
+    }
+    // A secret in here would be handed to every visitor. Only the values are
+    // examined — the file's own comments say the words "service_role" and
+    // "sk_" precisely to warn against them, and a check that trips over its
+    // own warning is a check that gets deleted.
+    for (const value of text.matchAll(/:\s*'([^']*)'/g)) {
+      const v = value[1];
+      if (/^sk_(live|test)_/.test(v) || /^rk_(live|test)_/.test(v)) {
+        problems.push('mobile/dist/blup-config.js  obsahuje Stripe secret key — ten patrí len do Edge Functions');
+      }
+      // A Supabase key is a JWT; the role is inside it. An anon key and a
+      // service_role key look identical until you read the payload, and pasting
+      // the wrong one here hands every visitor full access to the database.
+      const parts = v.split('.');
+      if (parts.length === 3) {
+        try {
+          const payload = Buffer.from(parts[1], 'base64url').toString('utf8');
+          if (/"role"\s*:\s*"service_role"/.test(payload)) {
+            problems.push('mobile/dist/blup-config.js  je tam service_role key — ten odomyká celú databázu, patrí len do Edge Functions');
+          }
+        } catch { /* not a JWT after all */ }
+      }
+    }
+  }
+
   const og = html.match(/property="og:url"\s+content="([^"]*)"/)?.[1];
   if (!og) problems.push('mobile/dist/index.html  chýba og:url');
   else if (!og.startsWith(ORIGIN)) problems.push(`mobile/dist/index.html  og:url = ${og}  → má byť ${ORIGIN}`);
@@ -94,31 +136,53 @@ if (process.argv.includes('--dist')) {
     if (!code.includes(HOST)) problems.push(`${bundle}  neobsahuje ${HOST} — origin sa nedostal do bundlu`);
     for (const hit of code.matchAll(URL_SHAPED)) problems.push(`${bundle}  ${hit[0]}`);
 
-    // A build is only shippable if it talks to a real backend. The bundle is
-    // compiled with whatever EXPO_PUBLIC_SUPABASE_URL was set at build time, and
-    // a developer's .env points at the local Supabase on 127.0.0.1:54321 — which
-    // in a visitor's browser means *their own machine*. The page then loads
-    // perfectly and does nothing: no events, no sign-in, no tickets, and no
-    // error that says why. Exactly the failure shape this file exists for.
+    // A build is only shippable if it talks to a real backend.
+    //
+    // The truth about a build is inside the bundle, not in anybody's .env, so
+    // that is where the value is read from. A developer's .env points at the
+    // local Supabase on 127.0.0.1:54321 — which in a visitor's browser means
+    // *their own machine*. The page then loads perfectly and does nothing: no
+    // events, no sign-in, no tickets, and no error that says why. Exactly the
+    // failure shape this file exists for, and one that shipped twice.
     //
     // Only the CONFIGURED value is checked, never the bundle at large: the
     // Supabase auth library carries `http://localhost:9999` as an internal
     // default, so scanning for any loopback URL fires on every build, including
     // correct ones — and a check that always fails is a check nobody reads.
-    //
-    // BLUP_ALLOW_LOCAL_BACKEND=1 to build for local testing on purpose.
-    const backend = supabaseUrl();
-    if (backend) {
-      if (!code.includes(backend.replace(/^https?:\/\//, ''))) {
-        problems.push(`${bundle}  neobsahuje ${backend} — Supabase URL sa nedostala do bundlu`);
+    // The config is serialised into the bundle as a JS string literal, so the
+    // quotes around it arrive backslash-escaped. Matching only bare quotes finds
+    // nothing and reads as "no backend configured" on every build.
+    const baked = code.match(/\\?"supabaseUrl\\?"\s*:\s*\\?"([^"\\]*)/)?.[1]?.trim() || null;
+    const configured = supabaseUrl();
+
+    // "I set it in .env and nothing changed."
+    if (configured && baked && !LOOPBACK.test(configured)
+        && !code.includes(configured.replace(/^https?:\/\//, ''))) {
+      problems.push(`${bundle}  neobsahuje ${configured} — Supabase URL sa nedostala do bundlu`);
+    }
+
+    // What the browser will actually use: the served config wins, because it is
+    // loaded before the bundle.
+    const effective = served || baked;
+
+    if (!effective) {
+      // A build meant to be configured after upload. Legitimate, but it has to
+      // be on purpose — otherwise it is indistinguishable from a broken one.
+      if (!process.env.BLUP_CONFIG_AT_DEPLOY) {
+        problems.push(`${bundle}  žiadna Supabase URL — build by nemal ku komu hovoriť.`);
+        problems.push('    Buď nastav EXPO_PUBLIC_SUPABASE_URL v mobile/.env a builduj znova,');
+        problems.push('    alebo vyplň supabaseUrl v mobile/dist/blup-config.js.');
+        problems.push('    (Balík na dopísanie po nahratí naschvál: BLUP_CONFIG_AT_DEPLOY=1.)');
+      } else if (!existsSync(configFile)) {
+        problems.push('mobile/dist  BLUP_CONFIG_AT_DEPLOY, ale blup-config.js tam nie je — nebude sa kam dopísať');
+      } else {
+        console.log('• Backend sa dopĺňa až po nahratí (mobile/dist/blup-config.js).');
       }
-      if (!process.env.BLUP_ALLOW_LOCAL_BACKEND && LOOPBACK.test(backend)) {
-        problems.push(`${bundle}  Supabase URL je ${backend} — to je počítač návštevníka, nie server.`);
-        problems.push('    Nastav EXPO_PUBLIC_SUPABASE_URL v mobile/.env na svoj projekt a builduj znova.');
-        problems.push('    (Lokálny build naschvál: BLUP_ALLOW_LOCAL_BACKEND=1.)');
-      }
-    } else {
-      problems.push('    EXPO_PUBLIC_SUPABASE_URL nie je nastavená — build by nemal ku komu hovoriť.');
+    } else if (!process.env.BLUP_ALLOW_LOCAL_BACKEND && LOOPBACK.test(effective)) {
+      problems.push(`${bundle}  Supabase URL je ${effective} — to je počítač návštevníka, nie server.`);
+      problems.push('    Nastav EXPO_PUBLIC_SUPABASE_URL v mobile/.env na svoj projekt a builduj znova,');
+      problems.push('    alebo vyplň supabaseUrl a supabaseAnonKey v mobile/dist/blup-config.js.');
+      problems.push('    (Lokálny build naschvál: BLUP_ALLOW_LOCAL_BACKEND=1.)');
     }
   }
 }

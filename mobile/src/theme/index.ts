@@ -31,6 +31,10 @@ export const colors = {
   // --- accents --------------------------------------------------------------
   accent: '#0080FF',
   accentHover: '#1A8CFF',
+  // Accent-coloured TEXT, for a link or a label on a dark surface. It is not a
+  // foreground for an accent-coloured background — used that way it paints blue
+  // on blue, which is how the crop sheet shipped with two invisible buttons.
+  // White is the label colour on `accent`; see buttonLabelPrimary.
   accentText: '#0080FF',
   accentSoft: 'rgba(0, 128, 255, 0.12)',
   accentSofter: 'rgba(0, 128, 255, 0.16)',

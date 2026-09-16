@@ -57,6 +57,20 @@ export default function Root({ children }: PropsWithChildren) {
         */}
         <ScrollViewStyleReset />
 
+        {/*
+          Backend configuration, loaded before the bundle so it can override
+          what was baked in at export time.
+
+          Why it exists: a web build hard-codes whatever EXPO_PUBLIC_SUPABASE_URL
+          was set when it was made. Upload a build that was exported against a
+          local backend and the site loads perfectly and talks to nothing — it
+          is the quietest possible failure. With this file the same archive can
+          be pointed at a project by editing one line on the hosting, no build
+          tools involved. Everything in it is public by construction; it ships
+          in the JavaScript either way.
+        */}
+        <script src="/blup-config.js" />
+
         <style dangerouslySetInnerHTML={{ __html: SHELL_CSS }} />
       </head>
       <body>{children}</body>

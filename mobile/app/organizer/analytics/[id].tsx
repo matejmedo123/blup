@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import {
@@ -83,6 +83,20 @@ export default function EventAnalyticsScreen() {
         {sells ? <Tile label="Predané vstupenky" value={String(data.tickets_sold)} /> : null}
         {sells ? <Tile label="Odbavení" value={String(data.checked_in)} /> : null}
       </View>
+
+      {/* The numbers above say how many; this says who — with the address each
+          ticket went to and the code on it, and the switch that turns one off. */}
+      <Pressable
+        style={styles.linkRow}
+        accessibilityRole="button"
+        onPress={() => router.push(`/organizer/attendees/${id}`)}
+      >
+        <View style={styles.flex}>
+          <Text style={styles.linkTitle}>Kto príde</Text>
+          <Caption>Mená, adresy a kódy vstupeniek — a deaktivácia jednotlivej vstupenky.</Caption>
+        </View>
+        <Text style={styles.linkChevron}>›</Text>
+      </Pressable>
 
       {/* --- the curve ----------------------------------------------------- */}
       {/* A free event has nothing to plot and no money to report. A curve of
@@ -212,6 +226,18 @@ const styles = StyleSheet.create({
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },
+
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+  },
+  linkTitle: { ...typography.bodyStrong, color: colors.text },
+  linkChevron: { ...typography.heading, color: colors.textTertiary },
 
   rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   range: {

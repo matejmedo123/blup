@@ -291,14 +291,23 @@ const buttonBase: React.CSSProperties = {
   border: 'none',
   borderRadius: radius.md,
   padding: '12px 18px',
-  font: '700 15px/1 inherit',
+  // Not the `font` shorthand: `inherit` is not a valid family inside it, so the
+  // whole declaration was dropped and the buttons rendered at the browser
+  // default. Separate properties inherit the family on their own.
+  fontFamily: 'inherit',
+  fontWeight: 700,
+  fontSize: 15,
+  lineHeight: 1,
   cursor: 'pointer',
 };
 
 const primaryButton: React.CSSProperties = {
   ...buttonBase,
   background: colors.accent,
-  color: colors.accentText,
+  // White, not colors.accentText — that token is the accent colour itself, for
+  // accent-coloured text on a dark surface. Used here it painted blue letters
+  // on a blue button, so the label was there and invisible.
+  color: '#FFFFFF',
 };
 
 const ghostButton: React.CSSProperties = {

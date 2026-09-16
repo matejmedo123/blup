@@ -232,6 +232,10 @@ export interface CreateEventInput {
   category: string;
   /** Up to three, primary first. Defaults to just `category`. */
   categories?: string[];
+  /** Staff only: BLUP listed this on somebody else's behalf. See migration 0048. */
+  listedByPlatform?: boolean;
+  externalOrganizerName?: string | null;
+  externalSourceUrl?: string | null;
   tags?: string[];
   latitude: number;
   longitude: number;
@@ -269,6 +273,9 @@ export async function createEvent(input: CreateEventInput): Promise<BlupEvent> {
       category: input.category,
       // The primary leads; the database re-seats the list if it does not.
       categories: input.categories ?? [input.category],
+      listed_by_platform: input.listedByPlatform ?? false,
+      external_organizer_name: input.externalOrganizerName ?? null,
+      external_source_url: input.externalSourceUrl ?? null,
       tags: input.tags ?? [],
       latitude: input.latitude,
       longitude: input.longitude,
@@ -712,4 +719,25 @@ export async function claimEvent(
     p_note: note ?? null,
   });
   if (error) throw error;
+}
+
+/**
+ * Events far enough away to need a decision, good enough to be worth one.
+ *
+ * Discovery stops at the radius, which is right for "what is on tonight" and
+ * wrong for everything else — somebody in Nitra never saw the one concert in
+ * Bratislava they would have driven to. Deliberately few, and empty rather than
+ * padded: an empty section is a better answer than a bad suggestion two hours
+ * away. See migration 0054.
+ */
+export async function getWorthTheTrip(coords?: {
+  latitude: number;
+  longitude: number;
+} | null): Promise<EventFeedItem[]> {
+  const { data, error } = await supabase.rpc('events_worth_the_trip', {
+    p_lat: coords?.latitude ?? null,
+    p_lon: coords?.longitude ?? null,
+  });
+  if (error) throw error;
+  return (data ?? []) as EventFeedItem[];
 }
