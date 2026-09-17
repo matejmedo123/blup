@@ -101,10 +101,44 @@ export async function getPeopleRecommendations(params: {
   return (data ?? []) as PeopleMatch[];
 }
 
-/** Human sentence for a match, e.g. "4 spoločné záujmy · idete obaja". */
+/**
+ * Why this person, in the words somebody would actually use.
+ *
+ * Ordered by how much the evidence is worth, which is the same order the ranker
+ * uses: somebody who already follows you, then a community you are both in,
+ * then the people you both know. Shared interests come last on purpose —
+ * "you both like techno" is true of forty thousand people in one city, and
+ * leading with it is what made the old suggestions feel random.
+ *
+ * Never more than two reasons: a card that lists five is a card nobody reads.
+ */
 export function describeMatch(match: PeopleMatch): string {
+  const facts = match.score_breakdown?.facts ?? {};
+  const communities = facts.shared_community_names ?? [];
   const parts: string[] = [];
 
+  if (facts.follows_me) parts.push('Sleduje ťa');
+  if (communities.length > 0) {
+    parts.push(
+      communities.length === 1
+        ? `Obaja ste v ${communities[0]}`
+        : `${communities.length} spoločné komunity`,
+    );
+  }
+  if ((facts.shared_crews ?? 0) > 0) parts.push('Boli ste v jednej partii');
+  if (match.mutual_follows > 0) {
+    parts.push(
+      match.mutual_follows === 1
+        ? '1 spoločný známy'
+        : `${match.mutual_follows} spoločných známych`,
+    );
+  }
+  if (match.same_event) parts.push('Idete obaja');
+  if (match.mutual_events > 0) {
+    parts.push(
+      match.mutual_events === 1 ? '1 spoločný event' : `${match.mutual_events} spoločných eventov`,
+    );
+  }
   if (match.shared_interests > 0) {
     parts.push(
       match.shared_interests === 1
@@ -112,15 +146,60 @@ export function describeMatch(match: PeopleMatch): string {
         : `${match.shared_interests} ${match.shared_interests < 5 ? 'spoločné záujmy' : 'spoločných záujmov'}`,
     );
   }
-  if (match.same_event) parts.push('idete obaja');
-  if (match.mutual_events > 0) {
-    parts.push(
-      match.mutual_events === 1 ? '1 spoločný event' : `${match.mutual_events} spoločných eventov`,
-    );
-  }
-  if (match.mutual_follows > 0) parts.push(`${match.mutual_follows} spoločných známych`);
 
-  return parts.slice(0, 2).join(' · ') || 'Návrh pre teba';
+  // No fallback sentence. The ranker no longer returns people with nothing in
+  // common, so "Návrh pre teba" would only ever have been a way of saying
+  // "we do not know either".
+  return parts.slice(0, 2).join(' · ');
+}
+
+/** Somebody you were suggested and passed on stops being suggested. */
+export async function dismissPerson(userId: string): Promise<void> {
+  const { error } = await supabase.rpc('dismiss_person', { p_user_id: userId });
+  if (error) throw error;
+}
+
+/**
+ * People you may know, inside one community.
+ *
+ * Members only — the database refuses a non-member outright rather than
+ * returning an empty list, because a private community's roll is not a
+ * directory.
+ */
+export interface CommunityPerson {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  mutual_follows: number;
+  mutual_events: number;
+  role: string;
+  reason: 'follows_you' | 'together' | 'community';
+}
+
+export async function getCommunityPeople(
+  communityId: string,
+  limit = 12,
+): Promise<CommunityPerson[]> {
+  const { data, error } = await supabase.rpc('community_people_you_may_know', {
+    p_community_id: communityId,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as CommunityPerson[];
+}
+
+export function describeCommunityPerson(person: CommunityPerson): string {
+  if (person.reason === 'follows_you') return 'Sleduje ťa';
+  if (person.mutual_follows > 0) {
+    return person.mutual_follows === 1
+      ? '1 spoločný známy'
+      : `${person.mutual_follows} spoločných známych`;
+  }
+  if (person.mutual_events > 0) {
+    return person.mutual_events === 1 ? 'Boli ste na tom istom evente' : 'Viackrát ste sa minuli';
+  }
+  return 'V tej istej komunite';
 }
 
 // --- debug / observability (spec §39) ---------------------------------------

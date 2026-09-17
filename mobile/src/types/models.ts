@@ -384,7 +384,28 @@ export interface PeopleMatch {
   same_event: boolean;
   distance_m: number | null;
   score: number;
-  score_breakdown: Record<string, unknown>;
+  /**
+   * Why this person, as facts rather than as a sentence.
+   *
+   * Typed because the card reads it: the reasons are ordered by how much the
+   * evidence is worth, and getting that order wrong is what made the old
+   * suggestions read as random.
+   */
+  score_breakdown: {
+    engine?: string;
+    components?: Record<string, number>;
+    facts?: {
+      follows_me?: boolean;
+      shared_communities?: number;
+      shared_community_names?: string[];
+      shared_crews?: number;
+      mutual_events?: number;
+      mutual_follows?: number;
+      shared_interests?: number;
+      distance_m?: number;
+    };
+    reason?: 'follows_you' | 'community' | 'crew' | 'mutuals' | 'together' | 'interests' | 'nearby';
+  };
 }
 
 export interface PremiumStatus {

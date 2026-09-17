@@ -9,6 +9,9 @@ import {
   createPost, deletePost, getCommunity, getCommunityMembers, getPosts, isCommunityMember,
   joinCommunity, leaveCommunity, togglePostLike, type CommunityPost,
 } from '@/api/communities';
+import {
+  describeCommunityPerson, dismissPerson, getCommunityPeople,
+} from '@/api/ai';
 import { pickImage, uploadCommunityImage } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { formatCount, formatRelative } from '@/lib/format';
@@ -51,6 +54,18 @@ export default function CommunityScreen() {
     queryFn: () => getCommunityMembers(id!),
     enabled: Boolean(id),
   });
+
+  const people = useQuery({
+    queryKey: ['community', id, 'people-you-may-know'],
+    queryFn: () => getCommunityPeople(id!),
+    enabled: Boolean(id) && Boolean(member.data),
+    retry: false,
+  });
+
+  const hidePerson = async (userId: string) => {
+    await dismissPerson(userId);
+    await queryClient.invalidateQueries({ queryKey: ['community', id, 'people-you-may-know'] });
+  };
 
   const posts = useQuery({
     queryKey: ['community', id, 'posts'],
@@ -213,6 +228,42 @@ export default function CommunityScreen() {
               </>
             ) : null}
 
+            {/* The question a community actually answers: who here do I know?
+                Members only — the database refuses a non-member outright rather
+                than returning an empty list, because a roll is not a directory. */}
+            {member.data && (people.data ?? []).length > 0 ? (
+              <>
+                <SectionHeader title="Možno ich poznáš" />
+                <Caption style={styles.peopleIntro}>
+                  Ľudia z tejto komunity, ktorých ešte nesleduješ.
+                </Caption>
+                {(people.data ?? []).map((person) => (
+                  <View key={person.user_id} style={styles.personRow}>
+                    <Pressable
+                      style={styles.personMain}
+                      onPress={() => router.push(`/user/${person.user_id}`)}
+                    >
+                      <Avatar url={person.avatar_url} name={person.display_name} size={44} />
+                      <View style={styles.flex}>
+                        <Text style={styles.personName} numberOfLines={1}>
+                          {person.display_name ?? person.username ?? 'Niekto'}
+                        </Text>
+                        <Caption numberOfLines={1}>{describeCommunityPerson(person)}</Caption>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void hidePerson(person.user_id)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel="Skryť návrh"
+                    >
+                      <Text style={styles.personDismiss}>✕</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </>
+            ) : null}
+
             <SectionHeader title="Feed" />
 
             {member.data ? (
@@ -299,6 +350,17 @@ const styles = StyleSheet.create({
   name: { ...typography.title, color: '#FFFFFF' },
   meta: { color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   description: { marginBottom: spacing.md },
+
+  peopleIntro: { marginBottom: spacing.sm },
+  personRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  personMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, minWidth: 0 },
+  personName: { ...typography.bodyStrong, color: colors.text },
+  personDismiss: { ...typography.body, color: colors.textTertiary, paddingHorizontal: spacing.sm },
 
   memberRow: { gap: spacing.md, paddingVertical: spacing.xs },
   member: { alignItems: 'center', width: 60, gap: 4 },
