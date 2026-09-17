@@ -8,6 +8,7 @@ import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
 import { avatarColorFor, colors, radius, spacing, typography, shadow } from '@/theme';
+import { useAccent } from '@/theme/accent';
 import { initialsFor } from '@/lib/format';
 import { CONTENT_MAX, useLayout } from '@/hooks/useLayout';
 import { SiteFooter } from './SiteFooter';
@@ -171,6 +172,10 @@ export function Button({
   large?: boolean;
 }) {
   const isDisabled = disabled || loading;
+  // The one colour Premium repaints. Read here rather than baked into the
+  // stylesheet, because StyleSheet.create captures its values at import and a
+  // colour chosen afterwards would change nothing.
+  const accent = useAccent();
 
   return (
     <Pressable
@@ -184,6 +189,7 @@ export function Button({
         compact && styles.buttonCompact,
         full && styles.buttonFull,
         variant === 'primary' && styles.buttonPrimary,
+        variant === 'primary' && { backgroundColor: accent.accent },
         variant === 'secondary' && styles.buttonSecondary,
         variant === 'ghost' && styles.buttonGhost,
         variant === 'danger' && styles.buttonDanger,
@@ -250,6 +256,8 @@ export function Segmented<T extends string>({
   onChange: (next: T) => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const accent = useAccent();
+
   return (
     <View style={[styles.segmented, style]}>
       {options.map((option) => {
@@ -260,7 +268,11 @@ export function Segmented<T extends string>({
             onPress={() => onChange(option.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            style={[styles.segment, active && styles.segmentActive]}
+            style={[
+              styles.segment,
+              active && styles.segmentActive,
+              active && { backgroundColor: accent.accent },
+            ]}
           >
             <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>
               {option.label}
@@ -375,6 +387,8 @@ export function Chip({
   style?: StyleProp<ViewStyle>;
   onCover?: boolean;
 }) {
+  const accent = useAccent();
+
   return (
     <Pressable
       onPress={onPress}
@@ -384,6 +398,7 @@ export function Chip({
         styles.chip,
         onCover && styles.chipOnCover,
         selected && styles.chipSelected,
+        selected && { backgroundColor: accent.accent },
         pressed && onPress ? styles.chipPressed : null,
         style,
       ]}
@@ -399,12 +414,13 @@ export function Badge({
   label: string;
   tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'accent' | 'teal';
 }) {
+  const accent = useAccent();
   const palette: Record<string, { bg: string; fg: string }> = {
     neutral: { bg: colors.surfaceElevated, fg: colors.textSecondary },
     success: { bg: colors.successSoft, fg: colors.success },
     warning: { bg: colors.warningSoft, fg: colors.warning },
     danger: { bg: colors.dangerSoft, fg: colors.danger },
-    accent: { bg: colors.accentSoft, fg: colors.accentText },
+    accent: { bg: accent.soft, fg: accent.text },
     teal: { bg: colors.tealSoft, fg: colors.teal },
   };
   const tones = palette[tone];
@@ -618,6 +634,8 @@ export function Switch({
   label: string;
   description?: string;
 }) {
+  const accent = useAccent();
+
   return (
     <Pressable
       accessibilityRole="switch"
@@ -629,7 +647,11 @@ export function Switch({
         <Text style={styles.switchLabel}>{label}</Text>
         {description ? <Text style={styles.switchDescription}>{description}</Text> : null}
       </View>
-      <View style={[styles.switchTrack, value && styles.switchTrackOn]}>
+      <View style={[
+        styles.switchTrack,
+        value && styles.switchTrackOn,
+        value && { backgroundColor: accent.accent },
+      ]}>
         <View style={[styles.switchThumb, value && styles.switchThumbOn]} />
       </View>
     </Pressable>

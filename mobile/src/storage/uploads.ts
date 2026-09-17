@@ -142,6 +142,29 @@ export async function uploadAvatar(uri: string): Promise<string> {
   return url;
 }
 
+/**
+ * A chat wallpaper, which only its owner ever sees.
+ *
+ * Into the avatars bucket under the owner's own folder: the storage policy
+ * derives ownership from that path, so this needs no new bucket and no new
+ * policy — and a wallpaper is the same kind of thing as an avatar, a picture
+ * you chose about yourself.
+ */
+export async function uploadChatWallpaper(uri: string): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) throw new Error('UNAUTHENTICATED');
+
+  // 1080 wide is enough behind text on any phone, and keeps a photo from a
+  // modern camera from becoming a two-megabyte download on every chat open.
+  const compressed = await compress(uri, 1080);
+  return uploadToBucket({
+    bucket: 'avatars',
+    path: `${userId}/chat-wallpaper.jpg`,
+    uri: compressed.uri,
+  });
+}
+
 export async function removeAvatar(): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;

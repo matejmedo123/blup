@@ -15,6 +15,7 @@ import { pickImage, signChatImage, uploadChatImage } from '@/storage/uploads';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { subscribeToTable } from '@/lib/realtime';
 import { enterSubmits } from '@/lib/keyboard';
+import { useAccent } from '@/theme/accent';
 import { messageFor } from '@/lib/errors';
 import { formatMessageTime, isSameDay, formatDayLabel } from '@/lib/format';
 import {
@@ -56,6 +57,11 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
   // The message being answered. Held here rather than on the bubble, because
   // what it changes is the composer, not the message that was tapped.
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+
+  // A Premium wallpaper, which only its owner sees: it is behind *your* chats,
+  // not behind the conversation, so nobody else's room changes because you
+  // picked a photo.
+  const accent = useAccent();
   const listRef = useRef<FlatList<Message>>(null);
 
   const conversation = useQuery({
@@ -231,6 +237,22 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 92 : 0}
       >
+        {/* The wallpaper, behind everything and under a scrim. Text on a photo
+            is unreadable often enough that the scrim is not optional — and the
+            bubbles keep their own background, so nothing depends on which photo
+            somebody picked. */}
+        {accent.chatWallpaper ? (
+          <View style={styles.wallpaperLayer} pointerEvents="none">
+            <Image
+              source={{ uri: accent.chatWallpaper }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={150}
+            />
+            <View style={styles.wallpaperScrim} />
+          </View>
+        ) : null}
+
         {/* --- thread header ------------------------------------------------ */}
         <View style={styles.threadBar}>
           {record?.kind === 'event' ? (
@@ -618,6 +640,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+
+  wallpaperLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  // Dark enough that white text stays white text over any photograph.
+  wallpaperScrim: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(10,13,18,0.72)',
   },
 
   replyStrip: {

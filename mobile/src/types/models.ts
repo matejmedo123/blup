@@ -46,6 +46,16 @@ export interface Profile {
   longitude: number | null;
   location_updated_at: string | null;
   app_role: AppRole;
+  /**
+   * When this person's Premium runs out, or null.
+   *
+   * Public on purpose — it is what the badge says out loud. The subscription
+   * itself (what they pay, on which platform, when it renews) stays private;
+   * this is one date, kept in sync by a trigger so a badge cannot outlive the
+   * subscription behind it.
+   */
+  premium_until?: string | null;
+  accent_color?: string | null;
   is_private: boolean;
   show_location: boolean;
   anonymous_mode: boolean;

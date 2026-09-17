@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -161,11 +162,23 @@ export default function PremiumScreen() {
 
       <SectionHeader title="Čo z toho máš" />
       {PREMIUM_FEATURES.map((feature) => (
-        <View key={feature} style={styles.feature}>
-          <Text style={styles.featureCheck}>✓</Text>
-          <Body style={styles.flex}>{feature}</Body>
+        <View key={feature.title} style={styles.feature}>
+          <Text style={styles.featureIcon}>{feature.icon}</Text>
+          <View style={styles.flex}>
+            <Text style={styles.featureTitle}>{feature.title}</Text>
+            <Body muted>{feature.body}</Body>
+          </View>
         </View>
       ))}
+
+      {isPremium ? (
+        <Button
+          title="Nastaviť farbu a pozadie"
+          variant="secondary"
+          onPress={() => router.push('/settings/look')}
+          style={styles.lookButton}
+        />
+      ) : null}
 
       <Divider />
 
@@ -285,8 +298,10 @@ const styles = StyleSheet.create({
   heroTitle: { ...typography.title, color: colors.text },
   heroBody: { textAlign: 'center', maxWidth: 300 },
 
-  feature: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', marginBottom: spacing.md },
-  featureCheck: { ...typography.bodyStrong, color: colors.success },
+  feature: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', marginBottom: spacing.lg },
+  featureIcon: { fontSize: 20, width: 26, textAlign: 'center' },
+  featureTitle: { ...typography.bodyStrong, color: colors.text },
+  lookButton: { marginBottom: spacing.lg },
 
   plans: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   plan: {

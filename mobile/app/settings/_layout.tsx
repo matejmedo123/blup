@@ -36,6 +36,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="interests" options={{ title: 'Záujmy' }} />
       <Stack.Screen name="notifications" options={{ title: 'Notifikácie' }} />
       <Stack.Screen name="privacy" options={{ title: 'Súkromie' }} />
+      <Stack.Screen name="look" options={{ title: 'Vzhľad' }} />
       <Stack.Screen name="saved" options={{ title: 'Uložené eventy' }} />
       <Stack.Screen name="attending" options={{ title: 'Idem na' }} />
     </Stack>

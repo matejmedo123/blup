@@ -20,6 +20,7 @@ import { CartFab } from '@/components/CartFab';
 import { BottomInsetProvider } from '@/components/BottomInset';
 import { ImageCropProvider } from '@/components/ImageCrop';
 import { DialogProvider } from '@/components/Dialog';
+import { AccentProvider } from '@/theme/accent';
 import { RouteProgress } from '@/components/RouteProgress';
 import { StartupGate } from '@/components/StartupGate';
 import { MarketingTags } from '@/marketing/tags';
@@ -189,6 +190,10 @@ export default function RootLayout() {
                     {/* The crop sheet renders here so any screen can ask for a
                         picture in a fixed shape without owning a modal. On
                         native it is a pass-through: the OS picker crops. */}
+                    {/* The colour of BLUP, per person. Inside the auth gate
+                        because it asks the server what applies; outside every
+                        screen because it repaints all of them. */}
+                    <AccentProvider>
                     <ImageCropProvider>
                       {/* Confirmations and prompts. Ours rather than
                           Alert.alert, which react-native-web implements as an
@@ -201,6 +206,7 @@ export default function RootLayout() {
                         <CartFab />
                       </DialogProvider>
                     </ImageCropProvider>
+                    </AccentProvider>
                   </BottomInsetProvider>
                 </StartupGate>
               </AuthGateProvider>

@@ -16,6 +16,7 @@ export default function SettingsScreen() {
       <Row label="Upraviť profil" onPress={() => router.push('/settings/profile')} />
       <Row label="Záujmy" onPress={() => router.push('/settings/interests')} />
       <Row label="Súkromie" onPress={() => router.push('/settings/privacy')} />
+      <Row label="Vzhľad" onPress={() => router.push('/settings/look')} />
       <Row label="Notifikácie" onPress={() => router.push('/settings/notifications')} />
 
       <SectionHeader title="Tvoje veci" />

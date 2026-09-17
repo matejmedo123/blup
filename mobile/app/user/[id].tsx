@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,6 +19,8 @@ import {
   Avatar, Badge, Body, Button, Caption, Chip, EmptyState, ErrorState, LoadingState, Notice,
   Screen, SectionHeader,
 } from '@/components/ui';
+import { recordProfileView } from '@/api/premium';
+import { PremiumBadge } from '@/components/PremiumBadge';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export default function UserProfileScreen() {
@@ -36,6 +38,16 @@ export default function UserProfileScreen() {
     enabled: Boolean(id),
   });
 
+
+  // Recording that somebody opened this profile is what makes "kto si ťa
+  // pozrel" real. Fire-and-forget: failing to record a view must never be the
+  // reason a profile does not open, and anonymous browsing writes nothing at
+  // all — that check is on the server, at the write.
+  const viewedId = profile.data?.id ?? null;
+  useEffect(() => {
+    if (!viewedId || viewedId === me?.id) return;
+    void recordProfileView(viewedId);
+  }, [viewedId, me?.id]);
 
   const counts = useQuery({
     queryKey: ['profile', 'counts', id],
@@ -142,7 +154,10 @@ export default function UserProfileScreen() {
         <Avatar url={person.avatar_url} name={person.display_name} size={84} />
 
         <View style={styles.headerBody}>
-          <Text style={styles.name}>{person.display_name ?? person.username}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{person.display_name ?? person.username}</Text>
+            <PremiumBadge until={person.premium_until} />
+          </View>
           <Caption>@{person.username}</Caption>
           {person.city ? <Caption>{person.city}</Caption> : null}
 
@@ -234,6 +249,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   header: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
   headerBody: { flex: 1, gap: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   name: { ...typography.heading, color: colors.text },
   stats: { flexDirection: 'row', gap: spacing.xl, marginTop: spacing.md },
   stat: { alignItems: 'center' },
