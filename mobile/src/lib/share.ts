@@ -43,3 +43,18 @@ export async function shareEvent(event: {
   const result = await Share.share({ message, url, title: event.title });
   return { shared: result.action === Share.sharedAction };
 }
+
+/**
+ * Any link, not just an event — an invite code, for instance.
+ *
+ * Separate from shareEvent because the phone's sheet wants the message and the
+ * url as two things, and gluing an arbitrary caption onto eventUrl() would have
+ * meant every caller building the same string slightly differently.
+ */
+export async function shareLink(url: string, message?: string): Promise<ShareResult> {
+  const result = await Share.share({
+    message: [message, url].filter(Boolean).join('\n'),
+    url,
+  });
+  return { shared: result.action === Share.sharedAction };
+}

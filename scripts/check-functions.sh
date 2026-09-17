@@ -35,7 +35,7 @@ echo
 FUNCTIONS=(
   checkout-create boost-create organizer-connect payout-request accounting-export
   ticket-email web-checkout iap-apple-verify ai-recommendations stripe-webhook
-  iap-apple-notifications push-dispatch weekly-digest cart-sweep config-status og
+  iap-apple-notifications push-dispatch weekly-digest cart-sweep config-status og unsubscribe
 )
 
 missing=0

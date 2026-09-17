@@ -31,7 +31,8 @@ export type NotificationType =
   | 'event_starting_soon' | 'event_updated' | 'event_cancelled' | 'friend_attending'
   | 'ticket_purchased' | 'ticket_confirmed' | 'payout_update' | 'org_verified'
   | 'org_rejected' | 'weekly_recommendations' | 'new_comment' | 'event_full'
-  | 'new_message' | 'badge_earned' | 'level_up';
+  | 'new_message' | 'badge_earned' | 'level_up'
+  | 'waitlist_open' | 'invite_arrived';
 
 export interface Profile {
   id: string;

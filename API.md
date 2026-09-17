@@ -197,6 +197,8 @@ Base URL: `https://<project-ref>.functions.supabase.co`
 | `POST /boost-create` | user JWT | buy a paid boost for an event |
 | `POST /accounting-export` | user JWT | books as CSV, rendered under the caller's own session |
 | `GET /config-status` | none | which integrations have credentials (booleans only) |
+| `POST /ticket-email` | service-role key (or a user JWT to resend one order) | drains the whole mail queue: tickets as PDF, everything else rendered from its payload |
+| `GET\|POST /unsubscribe?t=…` | **none** | one click from a mail client, and the RFC 8058 List-Unsubscribe target. No JWT on purpose — the person clicking has no session and often no account |
 
 ### `POST /checkout-create`
 
@@ -316,6 +318,28 @@ calls `fulfill_checkout` and issues every ticket in the basket at once.
 
 The return page reads `?checkout=<id>` (a basket) or `?order=<id>` (a single
 ticket) and waits for the webhook either way. A redirect is not a payment.
+
+## E-mail, waitlist and invites (RPC)
+
+| RPC | Who | What |
+|---|---|---|
+| `my_email_preferences()` / `set_email_preferences(digest)` | signed in | The digest switch, and whether this address has unsubscribed or gone undeliverable. |
+| `email_unsubscribe(token)` | **anon** | One click from a mail client, no session. Returns false for any token that means nothing, rather than saying which — an endpoint that distinguished them would be an address checker. |
+| `can_email(address, kind)` | signed in | Whether that kind of mail may go to that address. |
+| `campaign_audience(org, audience, event)` | org member | Who would get it, using the same query the send runs. |
+| `send_campaign(org, audience, subject, body, event)` | org member | Writes and queues in one transaction. Three a day per organization; verified organizations only. |
+| `campaign_report(campaign)` | org member | Queued, delivered, failed, and how many unsubscribed after reading it. |
+| `email_queue_stats()` | admin | Budget, what has gone out, what is waiting, what has given up. |
+| `join_waitlist(ticket_type, wanted, email)` | **anon** or signed in | "Daj mi vedieť." A guest needs only an address; six queues an hour from one bare address. |
+| `leave_waitlist(ticket_type)` / `my_waitlist()` | signed in | Your own places in the queue. |
+| `waitlist_size(ticket_type)` | anyone | The count only. Who is waiting is nobody's list, not even the organizer's. |
+| `my_invite_code()` / `my_invites()` | signed in | The code (made on first use) and what it has actually done. |
+| `claim_invite(code)` | signed in | Within 14 days of signing up, once, never your own and never your own address. |
+
+Service-role only: `notify_waitlists(limit)`, `qualify_invites(limit)`,
+`mark_email_undeliverable(address, complaint)`, `ensure_email_contact(…)`.
+The first two are called by cron directly in SQL — they are database functions,
+not Edge Functions, so no key travels anywhere.
 
 ## Seating (RPC)
 

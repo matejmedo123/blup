@@ -1,8 +1,15 @@
 /**
  * POST /functions/v1/ticket-email
  *
- * Drains the ticket-email queue: renders each pending delivery as an HTML mail
- * with a PDF attachment (one page per ticket, QR included) and sends it.
+ * Drains the e-mail queue. A ticket is rendered as an HTML mail with a PDF
+ * attachment (one page per ticket, QR included); the other kinds — a waitlist
+ * opening, an organizer's announcement — are rendered from the payload the
+ * database wrote with the row.
+ *
+ * One worker for all of them on purpose: claim_email_deliveries() hands out
+ * whatever is due, so a second function draining the same queue would sooner or
+ * later claim a ticket it did not know how to render and mark it failed. The
+ * name is historical — it was only tickets once.
  *
  * Called three ways, all of them safe to overlap:
  *   · by stripe-webhook right after an order is fulfilled — the fast path
@@ -18,7 +25,9 @@
 import {
   ApiError, adminClient, errorResponse, handleOptions, json, readJson, requireUser,
 } from '../_shared/http.ts';
-import { ConfigurationError, emailConfigured, sendEmail, toBase64 } from '../_shared/email.ts';
+import {
+  ConfigurationError, emailConfigured, sendEmail, toBase64, unsubscribeHeaders,
+} from '../_shared/email.ts';
 import { ticketPdf, type TicketPdfInput } from '../_shared/pdf.ts';
 import { env } from '../_shared/env.ts';
 
@@ -29,9 +38,14 @@ interface Body {
 
 interface Delivery {
   id: string;
+  kind: 'ticket' | 'order_refunded' | 'waitlist_open' | 'invite' | 'announcement' | 'digest';
   order_id: string | null;
+  event_id: string | null;
   to_email: string;
   subject: string;
+  /** Everything a non-ticket mail needs, written with the row. */
+  payload: Record<string, unknown> | null;
+  unsubscribe_token: string | null;
 }
 
 interface Payload {
@@ -198,6 +212,135 @@ function renderText(payload: Payload): string {
   ].filter(Boolean).join('\n');
 }
 
+// ---------------------------------------------------------------------------
+// The other kinds
+// ---------------------------------------------------------------------------
+/**
+ * One shell, so an announcement and a waitlist mail look like the ticket did.
+ *
+ * Same table-based, inline-styled construction as above and for the same
+ * reason: clever layout is unsupported by at least one client people actually
+ * read mail in. The footer is not decoration — the unsubscribe link is what
+ * keeps the sending domain alive.
+ */
+function shell(opts: {
+  eyebrow: string;
+  title: string;
+  body: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  unsubscribeUrl?: string | null;
+}): string {
+  return `<!doctype html>
+<html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>${escapeHtml(opts.title)}</title></head>
+<body style="margin:0;padding:0;background:#F2F5F8">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F2F5F8">
+  <tr><td align="center" style="padding:28px 12px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden">
+
+      <tr><td style="background:#0A0D12;padding:22px 26px">
+        <div style="font:900 26px/1 -apple-system,Segoe UI,Roboto,sans-serif;color:#ffffff;letter-spacing:-1px">Blup<span style="color:#0080FF">.</span></div>
+        <div style="font:700 11px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;color:#9AA6B6;letter-spacing:1.5px;margin-top:6px">${escapeHtml(opts.eyebrow)}</div>
+      </td></tr>
+
+      <tr><td style="padding:26px">
+        <div style="font:800 21px/1.25 -apple-system,Segoe UI,Roboto,sans-serif;color:#0A0D12">${escapeHtml(opts.title)}</div>
+        <div style="font:400 15px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#5B6675;margin-top:12px">${opts.body}</div>
+        ${opts.ctaHref ? `<div style="margin-top:24px">
+          <a href="${opts.ctaHref}" style="display:inline-block;background:#0080FF;color:#ffffff;text-decoration:none;font:700 15px/1 -apple-system,Segoe UI,Roboto,sans-serif;padding:14px 22px;border-radius:12px">${escapeHtml(opts.ctaLabel ?? 'Otvoriť')}</a>
+        </div>` : ''}
+      </td></tr>
+
+      <tr><td style="background:#F2F5F8;padding:16px 26px;font:400 12px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#9AA6B6">
+        Blup · eventy okolo teba${opts.unsubscribeUrl ? `<br>
+        <a href="${opts.unsubscribeUrl}" style="color:#9AA6B6">Nechcem takéto e-maily</a>` : ''}
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+/** Turns the organizer's plain text into paragraphs, escaping everything. */
+function paragraphs(text: string): string {
+  return escapeHtml(text)
+    .split(/\n{2,}/)
+    .map((block) => `<p style="margin:0 0 12px">${block.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+function unsubscribeUrl(token: string | null): string | null {
+  if (!token) return null;
+  const base = Deno.env.get('SUPABASE_URL') ?? '';
+  return `${base}/functions/v1/unsubscribe?t=${encodeURIComponent(token)}`;
+}
+
+function renderOther(delivery: Delivery): { html: string; text: string } {
+  const p = delivery.payload ?? {};
+  const appUrl = env.appUrl();
+  const unsub = unsubscribeUrl(delivery.unsubscribe_token);
+
+  if (delivery.kind === 'waitlist_open') {
+    const title = String(p.event_title ?? 'Event');
+    const type = String(p.ticket_type ?? 'Vstupenka');
+    const when = p.start_at ? whenLabel(String(p.start_at)) : '';
+    const href = `${appUrl}/event/${encodeURIComponent(String(p.event_id ?? ''))}`;
+
+    return {
+      html: shell({
+        eyebrow: 'UVOĽNILO SA MIESTO',
+        title,
+        body: `
+          <p style="margin:0 0 12px"><strong style="color:#0A0D12">${escapeHtml(type)}</strong> je zase v predaji.</p>
+          ${when ? `<p style="margin:0 0 12px">${escapeHtml(when)}</p>` : ''}
+          <p style="margin:0 0 12px">
+            Nič ti nedržíme — dali sme vedieť presne toľkým ľuďom, koľko je vstupeniek,
+            a kto je prvý, ten má. Preto ti to píšeme hneď.
+          </p>`,
+        ctaLabel: 'Kúpiť vstupenku',
+        ctaHref: href,
+        unsubscribeUrl: unsub,
+      }),
+      text: [
+        `UVOĽNILO SA MIESTO — ${title}`,
+        `${type} je zase v predaji.`,
+        when,
+        '',
+        'Nič nedržíme, kto je prvý, ten má.',
+        href,
+        unsub ? `Nechcem takéto e-maily: ${unsub}` : '',
+      ].filter(Boolean).join('\n'),
+    };
+  }
+
+  // An announcement, and anything else that is a person's own words.
+  const organizer = String(p.organizer ?? 'Organizátor');
+  const body = String(p.body ?? '');
+  const href = p.event_id
+    ? `${appUrl}/event/${encodeURIComponent(String(p.event_id))}`
+    : appUrl;
+
+  return {
+    html: shell({
+      eyebrow: `ODKAZ OD ${organizer.toUpperCase()}`,
+      title: delivery.subject,
+      body: paragraphs(body),
+      ctaLabel: p.event_id ? 'Otvoriť event' : 'Otvoriť Blup',
+      ctaHref: href,
+      unsubscribeUrl: unsub,
+    }),
+    text: [
+      `${delivery.subject} — ${organizer}`,
+      '',
+      body,
+      '',
+      href,
+      unsub ? `Nechcem takéto e-maily: ${unsub}` : '',
+    ].filter(Boolean).join('\n'),
+  };
+}
+
 function buildPdf(payload: Payload): Uint8Array {
   // The archive fee is stated per ticket, and only when the buyer is the one
   // who paid it — printing a fee on a ticket that the organizer absorbed would
@@ -236,6 +379,28 @@ function buildPdf(payload: Payload): Uint8Array {
 
 async function deliver(db: ReturnType<typeof adminClient>, delivery: Delivery): Promise<'sent' | 'skipped' | 'failed'> {
   try {
+    if (delivery.kind !== 'ticket' && delivery.kind !== 'order_refunded') {
+      const { html, text } = renderOther(delivery);
+      const unsub = unsubscribeUrl(delivery.unsubscribe_token);
+
+      const other = await sendEmail({
+        to: delivery.to_email,
+        subject: delivery.subject,
+        html,
+        text,
+        replyTo: env.emailReplyTo(),
+        // Gmail and Yahoo require one-click unsubscribe on bulk mail. Without
+        // the header the mail is filed as spam long before anybody reads the
+        // link in the footer.
+        headers: unsub ? unsubscribeHeaders(unsub) : undefined,
+      });
+
+      await db.rpc('mark_email_sent', {
+        p_id: delivery.id, p_provider: other.provider, p_message_id: other.id,
+      });
+      return 'sent';
+    }
+
     if (!delivery.order_id) throw new Error('DELIVERY_HAS_NO_ORDER');
 
     const { data, error } = await db.rpc('ticket_email_payload', { p_order_id: delivery.order_id });

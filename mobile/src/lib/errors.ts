@@ -75,6 +75,15 @@ const MESSAGES: Record<string, string> = {
   INVALID_GRID: 'Zadaj počet radov aj počet miest v rade — obe aspoň 1.',
   GRID_TOO_BIG: 'Najviac 200 radov a 200 miest v rade. Väčšiu sálu rozdeľ na sektory.',
   INVALID_SEAT_KIND: 'Taký druh miesta nepoznáme.',
+  // Waitlist, invites and mail.
+  INVALID_EMAIL: 'Táto e-mailová adresa nevyzerá správne.',
+  INVITE_CODE_INVALID: 'Taký kód nepoznáme. Skontroluj ho — ľahko sa poplieta O a 0.',
+  INVITE_SELF: 'Vlastný kód si uplatniť nemôžeš. To by nebola pozvánka.',
+  INVITE_ALREADY_USED: 'Kód od kamaráta sa dá uplatniť raz, a ty už jeden máš.',
+  INVITE_TOO_LATE: 'Kód sa dá uplatniť do 14 dní od registrácie.',
+  COULD_NOT_ALLOCATE_CODE: 'Kód sa nepodarilo vygenerovať. Skús to o chvíľu znova.',
+  TOO_MANY_CAMPAIGNS: 'Tri rozposlania za deň stačia.',
+  ORGANIZATION_NOT_FOUND: 'Takú organizáciu nemáme.',
   TOO_MANY_PENDING_ORDERS:
     'Na tento e-mail máš rozpracovaných priveľa objednávok naraz.',
   RESERVATION_EXPIRED: 'Rezervácia vypršala a vstupenky sa vrátili do predaja.',

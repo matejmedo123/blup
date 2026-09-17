@@ -65,6 +65,9 @@ a real Supabase project.
 | `…001400_grants` | Explicit role grants; revokes on money tables |
 | `…003600_seating` | `venue_maps`, `venue_sections`, `venue_seats`, `cart_hold_seat`, `seat_map_for_event` |
 | `…003700_seat_positions` | Seat positions on the plan; "mine" told apart from "taken" |
+| `…006600_mailing` | `email_contacts` (consent per address), `can_email`, `email_unsubscribe`, `email_campaigns`, `send_campaign`, hourly send budget, ticket priority in `claim_email_deliveries` |
+| `…006700_invite_xp_kind` | Three enum values, alone, because ADD VALUE cannot be used in the transaction that adds it |
+| `…006800_waitlist_and_invites` | `ticket_waitlist`, `join_waitlist`, `notify_waitlists`, `profiles.invite_code`, `invites`, `claim_invite`, `qualify_invites` |
 | `…006500_seating_v2` | `seat_claims`, the seat carried onto orders and tickets, `cart_hold_seats`, `suggest_seats`, `generate_section_seats`, `set_seat_state`, `update_section`, `event_seat_manifest` |
 
 ---
@@ -184,6 +187,44 @@ and the plain ticket list each sold numbered stalls seats with no seat on them.
 Seats have a `kind` (`standard`, `wheelchair`, `companion`, `limited_view`) and
 an `is_sellable` flag, so a pillar or a wheelchair space is a seat that exists
 and is not an ordinary chair. `suggest_seats()` only ever offers `standard`.
+
+### E-mail, consent and volume (migration 0066)
+
+```
+email_contacts (one row per ADDRESS, account or not)
+      │
+      ├── can_email(address, kind)
+      └── unsubscribe_token ──> /functions/v1/unsubscribe  (anon, one click)
+
+email_campaigns ──< email_deliveries (kind, payload, campaign_id, claimed_at)
+```
+
+Consent belongs to the **address**, not the account: a guest who bought one
+ticket never made an account and never saw a preferences screen. Three tiers,
+and the difference is legal as well as practical:
+
+| tier | kinds | rule |
+|---|---|---|
+| transactional | `ticket`, `order_refunded`, `waitlist_open` | always, unless the address is dead or complained |
+| invited | `invite` | unless unsubscribed |
+| marketing | `announcement`, `digest` | `digest` needs `digest_opt_in`; `announcement` needs the recipient to be that organizer's own customer, which `campaign_audience()` establishes by *how it picks the audience* rather than by a flag |
+
+Two ceilings keep a blast from being the last thing this domain ever sends:
+`platform_settings.email_per_hour` (counted from `coalesce(sent_at, claimed_at)`,
+so rows in flight spend the budget too), and a priority in
+`claim_email_deliveries()` that puts a ticket in front of any campaign — a ticket
+is somebody standing at a door.
+
+### The waitlist and invites (migration 0068)
+
+`notify_waitlists()` tells the head of the queue when stock returns, and never
+more people than there are tickets minus the people already told and still
+inside their six-hour window. Nothing is reserved; the mail says so.
+
+`qualify_invites()` pays an invite when the invited person has **confirmed their
+address and done something real** — a ticket, or a check-in — never for a
+signup. Ten rewards per inviter per 30 days. That single rule is the difference
+between a referral scheme and a bounty on making accounts.
 
 ### premium_subscriptions
 

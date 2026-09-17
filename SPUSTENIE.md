@@ -461,6 +461,19 @@ select cron.schedule('blup-digest', '0 7 * * 1', $$
     url := 'https://<project-ref>.supabase.co/functions/v1/weekly-digest',
     headers := '{"Authorization": "Bearer <service-role-key>"}'::jsonb);
 $$);
+
+-- „uvoľnilo sa miesto" — ľuďom, ktorí čakajú na vypredanú vstupenku.
+-- Toto je obyčajná funkcia v databáze, nie Edge Function, takže tu netreba
+-- žiadny kľúč. Napíše len toľkým ľuďom, koľko sa naozaj uvoľnilo.
+select cron.schedule('blup-waitlist', '*/5 * * * *', $$
+  select public.notify_waitlists(500);
+$$);
+
+-- pozvánky: komu už body patria. Raz za hodinu stačí — nikto nečaká na body
+-- v priamom prenose a častejšie by to bolo len zbytočné prehľadávanie.
+select cron.schedule('blup-invites', '17 * * * *', $$
+  select public.qualify_invites(200);
+$$);
 ```
 
 `cart-sweep` robí dve veci naraz a ani jedna nie je kritická. Označí eventy,
@@ -469,7 +482,13 @@ správá ako nadchádzajúci (presne tak sa dal boostnúť koncert spred mesiaca
 A je to upratovanie — vypršaná rezervácia prestáva držať vstupenky
 v tej sekunde, keď vyprší, nech beží čokoľvek.
 
-**✓ Kontrola:** `select jobname, schedule from cron.job;` — štyri riadky.
+**✓ Kontrola:** `select jobname, schedule from cron.job;` — šesť riadkov.
+
+> **E-mailov bude výrazne viac než doteraz.** Okrem vstupeniek teraz chodia aj
+> upozornenia z čakačky a rozposielania od organizátorov. Koľko ich smie odísť
+> za hodinu, nastavíš v *Admin → Poplatky a sadzby* (`email_per_hour`,
+> predvolene 500) — a je to naozaj strop: vstupenky idú vždy prvé, takže
+> rozposielanie nikdy nezdrží vstupenku niekomu, kto stojí pri vchode.
 
 ---
 

@@ -41,6 +41,8 @@ const ICONS: Record<NotificationType, string> = {
   new_message: '✉',
   badge_earned: '★',
   level_up: '▲',
+  waitlist_open: '◫',
+  invite_arrived: '⇄',
 };
 
 export default function ActivityScreen() {

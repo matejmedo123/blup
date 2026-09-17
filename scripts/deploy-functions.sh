@@ -42,6 +42,10 @@ FUNCTIONS=(
   "cart-sweep:false"
   "config-status:false"
   "og:false"
+  # The link in every marketing e-mail, clicked from a mail client that has no
+  # BLUP session and often no account behind it. A JWT check here would make
+  # every unsubscribe fail, which is both a spam complaint and a GDPR one.
+  "unsubscribe:false"
 )
 
 deploy() {

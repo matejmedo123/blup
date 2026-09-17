@@ -23,6 +23,26 @@ export interface EmailMessage {
   text: string;
   attachments?: Attachment[];
   replyTo?: string;
+  /**
+   * Extra headers. In practice this is List-Unsubscribe, which is not a nicety:
+   * Gmail and Yahoo both require one-click unsubscribe on bulk mail, and a
+   * sender without it is filed as spam long before anybody reads the footer.
+   */
+  headers?: Record<string, string>;
+}
+
+/**
+ * The two headers that make an unsubscribe one click in the mail client itself.
+ *
+ * RFC 8058: the URL must act on a POST with no confirmation page and no login —
+ * which is exactly why email_unsubscribe() is granted to `anon` and does
+ * nothing except set a flag.
+ */
+export function unsubscribeHeaders(url: string): Record<string, string> {
+  return {
+    'List-Unsubscribe': `<${url}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  };
 }
 
 export const emailConfigured = (): boolean => Boolean(optionalEnv('RESEND_API_KEY'));
@@ -60,6 +80,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendResult> {
       html: message.html,
       text: message.text,
       reply_to: message.replyTo,
+      headers: message.headers,
       attachments: message.attachments?.map((a) => ({
         filename: a.filename,
         content: a.content,

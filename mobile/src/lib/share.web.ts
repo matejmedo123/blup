@@ -53,3 +53,28 @@ export async function shareEvent(event: {
     return { shared: false };
   }
 }
+
+/**
+ * Any link, not just an event.
+ *
+ * Same rule as above: `navigator.share` on a phone browser and on Safari, the
+ * clipboard everywhere else. React Native's Share would render a button that
+ * appears to work and does nothing at all.
+ */
+export async function shareLink(url: string, message?: string): Promise<ShareResult> {
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ text: message, url });
+      return { shared: true };
+    } catch (error) {
+      if ((error as Error)?.name === 'AbortError') return { shared: false };
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(url);
+    return { shared: true, copied: true };
+  } catch {
+    return { shared: false };
+  }
+}

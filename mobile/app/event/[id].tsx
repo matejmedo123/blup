@@ -16,6 +16,7 @@ import {
 import { openExternal } from '@/lib/external';
 import { addToCart, getCart } from '@/api/cart';
 import { getSeatMap } from '@/api/seating';
+import { getMyWaitlist, joinWaitlist, leaveWaitlist } from '@/api/waitlist';
 import { track } from '@/marketing/tags';
 import { getPeopleRecommendations, describeMatch } from '@/api/ai';
 import { shareEvent } from '@/lib/share';
@@ -165,6 +166,40 @@ export default function EventDetailScreen() {
     if (await addTicket(cheapest.id)) router.push('/cart');
   };
 
+  /**
+   * "Daj mi vedieť, keď sa uvoľní."
+   *
+   * The one thing a sold-out event can still do for somebody, and the strongest
+   * reason anybody gives a ticketing site their address — they are not
+   * subscribing to anything, they want that ticket.
+   */
+  const toggleWaitlist = async (ticketTypeId: string, already: boolean) => {
+    if (!requireAuth(
+      'Aby sme ti vedeli dať vedieť, potrebujeme vedieť komu.',
+      () => {},
+    )) {
+      return;
+    }
+
+    setError(null);
+    setBusy(true);
+    try {
+      if (already) {
+        await leaveWaitlist(ticketTypeId);
+        setNotice('Už ti o tomto nedáme vedieť.');
+      } else {
+        await joinWaitlist({ ticketTypeId });
+        setNotice('Dáme ti vedieť. Píšeme len toľkým ľuďom, koľko sa naozaj uvoľní — '
+          + 'nič nedržíme, kto je prvý, ten má.');
+      }
+      await waitlist.refetch();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** True when the ticket actually made it into the basket. */
   const addTicket = async (ticketTypeId: string): Promise<boolean> => {
     if (!requireAuth(
@@ -258,6 +293,15 @@ export default function EventDetailScreen() {
     queryKey: ['event', id, 'seatmap'],
     queryFn: () => getSeatMap(eventId!),
     enabled: Boolean(eventId) && Boolean(event.data?.venue_map_id),
+  });
+
+  // What this person is already waiting for. Asked for only when they have an
+  // account: a guest joins by typing an address into the checkout-style form
+  // below, and has nothing to show here.
+  const waitlist = useQuery({
+    queryKey: ['waitlist', 'mine'],
+    queryFn: getMyWaitlist,
+    enabled: !isGuest,
   });
 
   // Only asked for on an event BLUP listed for somebody — the claim button has
@@ -514,6 +558,8 @@ export default function EventDetailScreen() {
   );
   const everyTicketIsSeated = hasTickets
     && data.ticket_types.every((ticket) => numberedTypes.has(ticket.id));
+
+  const waitingFor = new Set((waitlist.data ?? []).map((entry) => entry.ticket_type_id));
 
   // Buyers see one number — the full price. This only says VAT is already in it,
   // and only for an organizer who is registered for it.
@@ -806,7 +852,15 @@ export default function EventDetailScreen() {
                       <Caption style={styles.ticketVat}>({vatLabel})</Caption>
                     ) : null}
                   </View>
-                  {numberedTypes.has(ticket.id) && !soldOut ? (
+                  {soldOut ? (
+                    <Button
+                      title={waitingFor.has(ticket.id) ? 'Čakáš' : 'Daj mi vedieť'}
+                      variant={waitingFor.has(ticket.id) ? 'ghost' : 'secondary'}
+                      compact
+                      disabled={busy}
+                      onPress={() => void toggleWaitlist(ticket.id, waitingFor.has(ticket.id))}
+                    />
+                  ) : numberedTypes.has(ticket.id) && !soldOut ? (
                     <Button
                       title="Vybrať miesto"
                       variant="secondary"

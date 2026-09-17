@@ -385,6 +385,15 @@ export default function OrganizerScreen() {
                     <Text style={styles.eventActionLabel}>Kto príde</Text>
                   </Pressable>
 
+                  {/* The one thing an organizer with a sold-out night actually
+                      wants, and had no way to do: write to the people who came. */}
+                  <Pressable
+                    style={styles.eventAction}
+                    onPress={() => router.push(`/organizer/announce/${event.id}`)}
+                  >
+                    <Text style={styles.eventActionLabel}>Napísať im</Text>
+                  </Pressable>
+
                   {!event.is_free ? (
                     <Pressable
                       style={styles.eventAction}
@@ -470,6 +479,13 @@ export default function OrganizerScreen() {
                       onPress={() => router.push(`/organizer/attendees/${event.id}`)}
                     >
                       <Text style={styles.eventActionLabel}>Kto príde</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.eventAction}
+                      onPress={() => router.push(`/organizer/announce/${event.id}`)}
+                    >
+                      <Text style={styles.eventActionLabel}>Napísať im</Text>
                     </Pressable>
 
                     {!event.is_free ? (

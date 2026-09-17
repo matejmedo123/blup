@@ -18,12 +18,14 @@ export default function SettingsScreen() {
       <Row label="Súkromie" onPress={() => router.push('/settings/privacy')} />
       <Row label="Vzhľad" onPress={() => router.push('/settings/look')} />
       <Row label="Notifikácie" onPress={() => router.push('/settings/notifications')} />
+      <Row label="E-maily" onPress={() => router.push('/settings/emails')} />
 
       <SectionHeader title="Tvoje veci" />
       <Row label="Uložené eventy" onPress={() => router.push('/settings/saved')} />
       <Row label="Idem na" onPress={() => router.push('/settings/attending')} />
       <Row label="Vstupenky" onPress={() => router.push('/tickets')} />
       <Row label="BLUP Premium" onPress={() => router.push('/premium')} />
+      <Row label="Pozvi kamarátov" onPress={() => router.push('/invite')} />
 
       <SectionHeader title="Organizovanie" />
       <Row label="Nástenka organizátora" onPress={() => router.push('/organizer')} />
