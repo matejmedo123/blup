@@ -14,6 +14,7 @@ import {
 import { pickImage, signChatImage, uploadChatImage } from '@/storage/uploads';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { subscribeToTable } from '@/lib/realtime';
+import { enterSubmits } from '@/lib/keyboard';
 import { messageFor } from '@/lib/errors';
 import { formatMessageTime, isSameDay, formatDayLabel } from '@/lib/format';
 import {
@@ -345,6 +346,7 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
             maxLength={4000}
             editable={!sending}
             onSubmitEditing={submit}
+            {...enterSubmits(submit)}
           />
 
           <Pressable

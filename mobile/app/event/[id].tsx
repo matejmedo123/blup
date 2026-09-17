@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
 import {
-  Alert, FlatList, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View,
+  FlatList, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -27,6 +27,8 @@ import { joinEventConversation } from '@/api/messages';
 import { getMyOrganizations } from '@/api/organizations';
 import { createCrew, getEventCrews, joinCrew, leaveCrew } from '@/api/crews';
 import { getEventRating, getMyReview, reviewEvent } from '@/api/reviews';
+import { useDialog } from '@/components/Dialog';
+import { enterSubmits } from '@/lib/keyboard';
 import { messageFor } from '@/lib/errors';
 import {
   estimateWalkingTime, formatCount, formatDistanceFromYou, formatEventDate,
@@ -61,6 +63,7 @@ export default function EventDetailScreen() {
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialog = useDialog();
   const [notice, setNotice] = useState<string | null>(null);
   const [crewName, setCrewName] = useState('');
   const [reviewBody, setReviewBody] = useState('');
@@ -368,16 +371,30 @@ export default function EventDetailScreen() {
     setNotice(result.message);
   };
 
-  const handleReport = () => {
-    Alert.prompt?.('Nahlásiť event', 'Čo je s ním zle?', async (reason) => {
-      if (!reason?.trim()) return;
-      try {
-        await reportContent({ targetType: 'event', targetId: eventId!, reason: reason.trim() });
-        setNotice('Nahlásené. Naši moderátori sa na to pozrú.');
-      } catch (caught) {
-        setError(messageFor(caught));
-      }
+  /**
+   * Reporting the event.
+   *
+   * This used to be `Alert.prompt?.(…)` — and react-native-web has no `prompt`
+   * at all, so the optional call made it a no-op: in a browser the report
+   * button did nothing, said nothing, and nobody found out.
+   */
+  const handleReport = async () => {
+    const reason = await dialog.prompt({
+      title: 'Nahlásiť event',
+      body: 'Čo je s ním zle? Napíš to vlastnými slovami — pozrie sa na to človek.',
+      placeholder: 'Napríklad: event neexistuje, urážlivý obsah…',
+      confirmLabel: 'Nahlásiť',
+      multiline: true,
+      required: true,
     });
+    if (!reason?.trim()) return;
+
+    try {
+      await reportContent({ targetType: 'event', targetId: eventId!, reason: reason.trim() });
+      setNotice('Nahlásené. Naši moderátori sa na to pozrú.');
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
   };
 
   const postComment = async () => {
@@ -1043,6 +1060,7 @@ export default function EventDetailScreen() {
               multiline
               maxLength={1000}
               style={styles.commentField}
+              {...enterSubmits(() => void postComment())}
             />
           </View>
           <Button title="Poslať" compact onPress={postComment} loading={busy} disabled={!comment.trim()} />
@@ -1088,7 +1106,7 @@ export default function EventDetailScreen() {
             ) : null}
           </View>
         ) : (
-          <Button title="Nahlásiť event" variant="ghost" onPress={handleReport} />
+          <Button title="Nahlásiť event" variant="ghost" onPress={() => void handleReport()} />
         )}
       </View>
     </ScrollView>

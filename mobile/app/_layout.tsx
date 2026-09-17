@@ -19,6 +19,7 @@ import { AppFrame } from '@/components/AppFrame';
 import { CartFab } from '@/components/CartFab';
 import { BottomInsetProvider } from '@/components/BottomInset';
 import { ImageCropProvider } from '@/components/ImageCrop';
+import { DialogProvider } from '@/components/Dialog';
 import { RouteProgress } from '@/components/RouteProgress';
 import { StartupGate } from '@/components/StartupGate';
 import { MarketingTags } from '@/marketing/tags';
@@ -189,10 +190,16 @@ export default function RootLayout() {
                         picture in a fixed shape without owning a modal. On
                         native it is a pass-through: the OS picker crops. */}
                     <ImageCropProvider>
-                      <AppFrame>{content}</AppFrame>
-                      {/* Floats over every screen so a basket with a ticket in
-                          it cannot go unnoticed until the reservation expires. */}
-                      <CartFab />
+                      {/* Confirmations and prompts. Ours rather than
+                          Alert.alert, which react-native-web implements as an
+                          empty function — every "are you sure?" written with it
+                          silently did nothing in a browser. */}
+                      <DialogProvider>
+                        <AppFrame>{content}</AppFrame>
+                        {/* Floats over every screen so a basket with a ticket in
+                            it cannot go unnoticed until the reservation expires. */}
+                        <CartFab />
+                      </DialogProvider>
                     </ImageCropProvider>
                   </BottomInsetProvider>
                 </StartupGate>

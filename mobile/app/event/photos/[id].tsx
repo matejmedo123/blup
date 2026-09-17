@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import { getMyOrganizations } from '@/api/organizations';
 import { getEvent, getEventImages, setEventCover } from '@/api/events';
+import { useDialog } from '@/components/Dialog';
 import { useImageCrop } from '@/components/ImageCrop';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import {
@@ -33,6 +34,7 @@ export default function EventPhotosScreen() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const { crop } = useImageCrop();
+  const { confirm } = useDialog();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,33 +134,39 @@ export default function EventPhotosScreen() {
     }
   };
 
-  const makeCover = (url: string) => promoteToCover(url);
+  /**
+   * Deleting a photo.
+   *
+   * This used to ask through `Alert.alert`, which react-native-web implements
+   * as an empty function — so in a browser the ✕ opened nothing, deleted
+   * nothing and reported nothing. The dialog is ours now and the delete
+   * actually runs.
+   */
+  const remove = async (imageId: string, url: string) => {
+    const ok = await confirm({
+      title: 'Zmazať fotku?',
+      body: 'Odstráni sa z galérie aj z úložiska. Vrátiť sa to nedá.',
+      confirmLabel: 'Zmazať',
+      cancelLabel: 'Nechať',
+      destructive: true,
+    });
+    if (!ok) return;
 
-  const remove = (imageId: string, url: string) => {
-    Alert.alert('Zmazať fotku?', 'Odstráni sa z galérie aj z úložiska.', [
-      { text: 'Nechať', style: 'cancel' },
-      {
-        text: 'Zmazať',
-        style: 'destructive',
-        onPress: async () => {
-          setError(null);
-          setBusy(true);
-          try {
-            await deleteEventGalleryImage(imageId);
-            // Do not leave the card pointing at a file that no longer exists.
-            if (event.data?.cover_image_url === url) {
-              const rest = (images.data ?? []).filter((image) => image.id !== imageId);
-              await setEventCover(id!, rest[0]?.url ?? null);
-            }
-            await refresh();
-          } catch (caught) {
-            setError(messageFor(caught));
-          } finally {
-            setBusy(false);
-          }
-        },
-      },
-    ]);
+    setError(null);
+    setBusy(true);
+    try {
+      await deleteEventGalleryImage(imageId);
+      // Do not leave the card pointing at a file that no longer exists.
+      if (event.data?.cover_image_url === url) {
+        const rest = (images.data ?? []).filter((image) => image.id !== imageId);
+        await setEventCover(id!, rest[0]?.url ?? null);
+      }
+      await refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (event.isLoading || images.isLoading) return <Screen><LoadingState /></Screen>;
@@ -192,7 +200,7 @@ export default function EventPhotosScreen() {
           />
           <View style={styles.flex}>
             <Caption>Titulná fotka</Caption>
-            <Body muted>Vymeníš ju cez „Dať na titulku“ pri ktorejkoľvek fotke nižšie.</Body>
+            <Body muted>Vymeníš ju v „Upraviť event“.</Body>
           </View>
         </View>
       ) : (
@@ -218,8 +226,8 @@ export default function EventPhotosScreen() {
           <SectionHeader title={hasCover ? 'Pridaj fotky' : 'Pridaj prvú fotku'} />
           <Body muted style={styles.intro}>
             {hasCover
-              ? 'Fotky z miesta alebo z minulých ročníkov. Ktorúkoľvek z nich vieš dať na titulku.'
-              : 'Prvú nahratú fotku vieš hneď dať na titulku.'}
+              ? 'Fotky z miesta alebo z minulých ročníkov. Titulnú fotku meníš v „Upraviť event“.'
+              : 'Prvá nahratá fotka sa rovno použije aj ako titulná.'}
           </Body>
           <View style={styles.actions}>
             <Button
@@ -275,23 +283,20 @@ export default function EventPhotosScreen() {
                   </View>
                 ) : null}
 
+                {/* No "make this the cover" here on purpose: two places that
+                    change the same picture read as two different pictures. The
+                    cover is changed where the event is edited; the gallery is
+                    the gallery. */}
                 {canEdit ? (
                   <View style={styles.tileActions}>
-                    {!isCover ? (
-                      <Pressable
-                        onPress={() => makeCover(image.url)}
-                        disabled={busy}
-                        style={styles.tileButton}
-                      >
-                        <Text style={styles.tileButtonText}>Dať na titulku</Text>
-                      </Pressable>
-                    ) : null}
                     <Pressable
-                      onPress={() => remove(image.id, image.url)}
+                      onPress={() => void remove(image.id, image.url)}
                       disabled={busy}
                       style={[styles.tileButton, styles.tileButtonDanger]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Zmazať fotku"
                     >
-                      <Text style={styles.tileButtonText}>✕</Text>
+                      <Text style={styles.tileButtonText}>Zmazať</Text>
                     </Pressable>
                   </View>
                 ) : null}
@@ -362,8 +367,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
   },
-  tileButtonDanger: { flex: 0, paddingHorizontal: spacing.md },
-  tileButtonText: { ...typography.chip, fontSize: 11, color: colors.textSecondary },
+  tileButtonDanger: { backgroundColor: colors.dangerSoft },
+  tileButtonText: { ...typography.chip, fontSize: 11, color: colors.danger },
 
   footnote: { marginTop: spacing.xl, ...typography.caption },
 });

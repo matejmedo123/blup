@@ -12,7 +12,9 @@ import { createPersonalOrganization, getMyOrganizations } from '@/api/organizati
 import { getMyCommunities } from '@/api/communities';
 import { useImageCrop } from '@/components/ImageCrop';
 import { pickImage, uploadEventCover } from '@/storage/uploads';
-import { geocodeAddress, suggestAddresses, type GeocodeHit } from '@/maps/geocode';
+import {
+  cachedSuggestions, geocodeAddress, suggestAddresses, type GeocodeHit,
+} from '@/maps/geocode';
 import { messageFor } from '@/lib/errors';
 import { eventHref, formatEventDateLong } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
@@ -279,36 +281,63 @@ export default function CreateEventScreen() {
   };
 
   /**
-   * Suggestions while typing. Nominatim asks for at most a request a second, so
-   * this waits until the typing stops rather than firing per keystroke, and the
-   * in-flight request is abandoned as soon as the text changes again.
+   * Suggestions while typing.
+   *
+   * What made this feel slow was not the network — it was 500 ms of waiting
+   * before the request even left, on top of a geocoder built for resolving
+   * whole addresses rather than partial ones. Now: three characters instead of
+   * four, a 220 ms pause instead of half a second, an endpoint meant for
+   * type-ahead, and an answer we already have shown instantly without asking
+   * anybody.
    */
   // Whether we are searching at all is a property of what is typed, not
   // something to discover in an effect — so the list is emptied by not showing
   // it, rather than by a setState that costs a second render on every keystroke
-  // below four characters.
+  // below the threshold.
   const query = address.trim();
-  const searching = suggesting && query.length >= 4;
-  const visibleSuggestions = searching ? suggestions : [];
+  const searching = suggesting && query.length >= 3;
+
+  // Bias towards where the organizer is. "Hlavná" exists in every second town;
+  // the one they mean is almost always the near one, and getting it into first
+  // place feels faster than any millisecond saved on the wire.
+  const nearLat = location.coords?.latitude ?? null;
+  const nearLng = location.coords?.longitude ?? null;
+
+  // Already answered once — show it before the effect even runs, so backspacing
+  // through a word never blanks the list.
+  const known = searching
+    ? cachedSuggestions(query, nearLat != null && nearLng != null
+      ? { latitude: nearLat, longitude: nearLng }
+      : null)
+    : null;
+
+  const visibleSuggestions = searching ? (known ?? suggestions) : [];
 
   useEffect(() => {
     if (!searching) return;
 
+    const near = nearLat != null && nearLng != null
+      ? { latitude: nearLat, longitude: nearLng }
+      : null;
+
+    // Cached: nothing to ask, nothing to wait for.
+    if (cachedSuggestions(query, near)) return;
+
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      suggestAddresses(query, { signal: controller.signal })
+      suggestAddresses(query, { signal: controller.signal, near })
         .then(setSuggestions)
         .catch(() => {
           // Typing faster than the geocoder answers is not an error worth
           // showing anybody.
         });
-    }, 500);
+    }, 220);
 
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, searching]);
+  }, [query, searching, nearLat, nearLng]);
 
   /** Picks one of the suggestions: fills the field and moves the pin. */
   // Not a hook — the name only looked like one, which made every lint run report

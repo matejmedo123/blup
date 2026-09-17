@@ -16,6 +16,7 @@
     "check:origin": "node scripts/check-origin.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
     "check:crop": "node scripts/smoke-crop.mjs",
+    "check:geocode": "node scripts/check-geocode.mjs",
     "check:pull": "node scripts/check-pull.mjs",
     "check:platform": "node scripts/check-platform-files.mjs",
     "check:hooks": "node scripts/check-hooks.mjs",
