@@ -25,7 +25,12 @@ export async function getUnreadMessageCount(): Promise<number> {
 export async function getMessages(conversationId: string, limit = 100): Promise<Message[]> {
   const { data, error } = await supabase
     .from('messages')
-    .select('*, sender:profiles!messages_sender_id_fkey (id, display_name, username, avatar_url)')
+    .select(
+      '*, sender:profiles!messages_sender_id_fkey (id, display_name, username, avatar_url),'
+      // The quoted message comes with the reply, so the bubble can show it
+      // without a second round trip per message.
+      + ' reply_to:messages!messages_reply_to_id_fkey (id, body, attachment_url, sender_id, deleted_at)',
+    )
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -78,11 +83,14 @@ export async function sendMessage(params: {
   conversationId: string;
   body?: string;
   attachmentUrl?: string;
+  /** The message being answered. Must be in the same conversation — checked server-side. */
+  replyToId?: string | null;
 }): Promise<string> {
   const { data, error } = await supabase.rpc('send_message', {
     p_conversation: params.conversationId,
     p_body: params.body ?? null,
     p_attachment: params.attachmentUrl ?? null,
+    p_reply_to: params.replyToId ?? null,
   });
   if (error) throw error;
   return data as string;

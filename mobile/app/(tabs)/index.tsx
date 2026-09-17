@@ -50,6 +50,29 @@ type View_ = 'list' | 'map';
  * "Pre teba" rail, and the two banners. Everything comes from the database —
  * an empty database shows the empty state, not a demo event.
  */
+/**
+ * Why an event an hour away is worth the drive.
+ *
+ * "82 km" on its own reads as a reason to skip. The list this comes from has
+ * already applied a much higher bar than a nearby event has to clear — it is a
+ * short list of things that match what this person likes *and* that a lot of
+ * people are going to — so the card says which of those two it is, in the
+ * words somebody would use to a friend.
+ */
+function tripPitch(event: EventFeedItem): string {
+  const km = event.distance_m ? Math.round(event.distance_m / 1000) : null;
+  const where = event.city ? `${event.city}` : 'inde';
+  const distance = km ? `${km} km` : 'ďalej';
+
+  if (event.friends_going > 0) {
+    return `${where}, ${distance} — ide aj niekto, koho poznáš.`;
+  }
+  if (event.attendee_count >= 100) {
+    return `${where}, ${distance} — ide tam ${event.attendee_count} ľudí.`;
+  }
+  return `${where}, ${distance} — sedí to na to, čo ťa baví.`;
+}
+
 export default function HomeScreen() {
   const { requireAuth } = useRequireAuth();
   const layout = useLayout();
@@ -670,11 +693,11 @@ export default function HomeScreen() {
                 <EventCard
                   event={item}
                   onPress={() => router.push(eventHref(item))}
+                  // The distance is the first thing anybody sees here, and on
+                  // its own it is a reason to skip. The card says why it is
+                  // worth it instead.
+                  pitch={tripPitch(item)}
                 />
-                <Caption>
-                  {item.city ? `${item.city} · ` : ''}
-                  {item.distance_m ? `${Math.round(item.distance_m / 1000)} km` : ''}
-                </Caption>
               </View>
             )}
           />

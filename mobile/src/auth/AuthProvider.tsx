@@ -22,6 +22,14 @@ interface AuthState {
    */
   isGuest: boolean;
   isAdmin: boolean;
+  /**
+   * A full admin, not a moderator.
+   *
+   * `isAdmin` covers both, because a moderator does most of what an admin does
+   * to content. The few things that are BLUP speaking as itself — putting our
+   * name on somebody else's event — ask for this one instead.
+   */
+  isFullAdmin: boolean;
   needsOnboarding: boolean;
   backendConfigured: boolean;
   refreshProfile: () => Promise<void>;
@@ -130,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: Boolean(user),
       isGuest: !user,
       isAdmin: profile?.app_role === 'admin' || profile?.app_role === 'moderator',
+      isFullAdmin: profile?.app_role === 'admin',
       // A signed-in user without a completed profile goes through onboarding.
       needsOnboarding: Boolean(user) && profile !== null && !profile.onboarding_completed,
       backendConfigured: isConfigured.supabase,

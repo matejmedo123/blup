@@ -489,6 +489,22 @@ export interface Message {
     username: string | null;
     avatar_url: string | null;
   } | null;
+  /**
+   * The message this one answers.
+   *
+   * Null on an ordinary message — and also on a reply whose target was deleted:
+   * the foreign key is `on delete set null`, so an answer outlives the question
+   * instead of disappearing with it. The quote then reads "správa bola zmazaná",
+   * which is what actually happened.
+   */
+  reply_to_id?: string | null;
+  reply_to?: {
+    id: string;
+    body: string | null;
+    attachment_url: string | null;
+    sender_id: string | null;
+    deleted_at?: string | null;
+  } | null;
 }
 
 export interface ConversationParticipant {

@@ -196,6 +196,32 @@ begin
   raise notice 'PASS a listing has to say whose event it is';
 end $$;
 
+-- --- a moderator is not an admin for this ------------------------------------
+-- Moderating content and putting BLUP's name on a stranger's event are two
+-- different jobs. The second one is ours to answer for, so it is admins only.
+do $$
+declare failed boolean := false;
+begin
+  insert into auth.users (id, email) values
+    ('55555555-5555-5555-5555-555555555555', 'moderator@blup.test');
+  update public.profiles set app_role = 'moderator'
+  where id = '55555555-5555-5555-5555-555555555555';
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', '55555555-5555-5555-5555-555555555555', true);
+  begin
+    insert into public.events (creator_id, title, category, latitude, longitude, start_at,
+                               is_free, listed_by_platform, external_organizer_name)
+    values ('55555555-5555-5555-5555-555555555555', 'Cudzí event', 'techno',
+            48.15, 17.12, now() + interval '5 days', true, true, 'Kultúrne centrum');
+  exception when others then failed := true;
+  end;
+  assert failed, 'a moderator must not list an event as BLUP';
+  reset role;
+
+  raise notice 'PASS listing as BLUP is an admin''s call, not a moderator''s';
+end $$;
+
 -- --- claiming ----------------------------------------------------------------
 do $$
 declare c public.event_claims;

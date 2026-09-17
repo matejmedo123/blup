@@ -67,7 +67,7 @@ const cheapestCents = (tickets: TicketDraft[]): number => {
 };
 
 export default function CreateEventScreen() {
-  const { profile, isAdmin } = useAuth();
+  const { profile, isFullAdmin } = useAuth();
   const { crop } = useImageCrop();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -759,7 +759,7 @@ export default function CreateEventScreen() {
           case it exists for: most of what we add by hand at the start is a free
           city event, and turning the event paid just to reveal the switch then
           failed validation. */}
-      {isAdmin ? (
+      {isFullAdmin ? (
         <>
           <SectionHeader title="Pridávaš za niekoho iného?" />
           <Switch

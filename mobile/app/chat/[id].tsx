@@ -52,6 +52,10 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
   /** A picked photo waiting to go with the next message. */
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // The message being answered. Held here rather than on the bubble, because
+  // what it changes is the composer, not the message that was tapped.
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
 
   const conversation = useQuery({
@@ -131,10 +135,12 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
     if ((!body && !pending) || !id) return;
 
     const photo = pending;
+    const answering = replyTo;
     setError(null);
     setSending(true);
     setDraft('');
     setPending(null);
+    setReplyTo(null);
 
     try {
       const attachmentUrl = photo ? await uploadChatImage(photo, id) : undefined;
@@ -142,13 +148,15 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
         conversationId: id,
         body: body || undefined,
         ...(attachmentUrl ? { attachmentUrl } : {}),
+        replyToId: answering?.id ?? null,
       });
       await queryClient.invalidateQueries({ queryKey: ['messages', id] });
       await queryClient.invalidateQueries({ queryKey: ['conversations'] });
     } catch (caught) {
-      // Give both of them back rather than losing them.
+      // Give all three back rather than losing them.
       setDraft(body);
       setPending(photo);
+      setReplyTo(answering);
       setError(messageFor(caught));
     } finally {
       setSending(false);
@@ -299,7 +307,9 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
                   message={item}
                   isMine={isMine}
                   showAuthor={showAuthor}
+                  myId={profile?.id ?? null}
                   onLongPress={isMine && !item.deleted_at ? () => void remove(item.id) : undefined}
+                  onReply={item.deleted_at ? undefined : () => setReplyTo(item)}
                 />
               </View>
             );
@@ -307,6 +317,33 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
         />
 
         {/* --- composer ------------------------------------------------------ */}
+        {/* What is being answered, above the box you answer in. Without it a
+            reply is a guess about which of thirty messages it belongs to. */}
+        {replyTo ? (
+          <View style={styles.replyStrip}>
+            <View style={styles.replyBar} />
+            <View style={styles.flex}>
+              <Mono style={styles.replyWho}>
+                {replyTo.sender_id === profile?.id
+                  ? 'Odpovedáš sebe'
+                  : `Odpovedáš ${replyTo.sender?.display_name ?? replyTo.sender?.username ?? 'na správu'}`}
+              </Mono>
+              <Text numberOfLines={1} style={styles.replyText}>
+                {replyTo.body ?? '📷 Fotka'}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setReplyTo(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Zrušiť odpoveď"
+              disabled={sending}
+              style={({ pressed }) => [styles.pendingRemove, pressed && styles.pressed]}
+            >
+              <Text style={styles.pendingRemoveGlyph}>✕</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {pending ? (
           <View style={styles.pendingRow}>
             <Image source={{ uri: pending }} style={styles.pendingThumb} contentFit="cover" />
@@ -369,12 +406,14 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
 }
 
 function MessageBubble({
-  message, isMine, showAuthor, onLongPress,
+  message, isMine, showAuthor, myId, onLongPress, onReply,
 }: {
   message: Message;
   isMine: boolean;
   showAuthor: boolean;
+  myId: string | null;
   onLongPress?: () => void;
+  onReply?: () => void;
 }) {
   if (message.deleted_at) {
     return (
@@ -399,15 +438,49 @@ function MessageBubble({
           </Mono>
         ) : null}
 
+        {/* The quote. `reply_to` is null both for an ordinary message and for
+            a reply whose target was deleted — hence the second branch, which
+            says what happened instead of quietly dropping the quote. */}
+        {message.reply_to ? (
+          <View style={[styles.quote, isMine && styles.quoteMine]}>
+            <Mono style={[styles.quoteWho, isMine && styles.quoteWhoMine]}>
+              {message.reply_to.sender_id === myId ? 'Ty' : 'Odpoveď na'}
+            </Mono>
+            <Text numberOfLines={2} style={[styles.quoteText, isMine && styles.quoteTextMine]}>
+              {message.reply_to.deleted_at
+                ? 'Správa bola zmazaná'
+                : message.reply_to.body ?? '📷 Fotka'}
+            </Text>
+          </View>
+        ) : message.reply_to_id ? (
+          <View style={[styles.quote, isMine && styles.quoteMine]}>
+            <Text style={[styles.quoteText, isMine && styles.quoteTextMine]}>
+              Správa bola zmazaná
+            </Text>
+          </View>
+        ) : null}
+
         {message.attachment_url ? <ChatImage path={message.attachment_url} /> : null}
 
         {message.body ? (
           <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]}>{message.body}</Text>
         ) : null}
 
-        <Mono style={[styles.bubbleTime, isMine && styles.bubbleTimeMine]}>
-          {formatMessageTime(message.created_at)}
-        </Mono>
+        <View style={styles.bubbleFooter}>
+          {onReply ? (
+            <Pressable
+              onPress={onReply}
+              accessibilityRole="button"
+              accessibilityLabel="Odpovedať na správu"
+              hitSlop={8}
+            >
+              <Mono style={[styles.replyAction, isMine && styles.replyActionMine]}>ODPOVEDAŤ</Mono>
+            </Pressable>
+          ) : null}
+          <Mono style={[styles.bubbleTime, isMine && styles.bubbleTimeMine]}>
+            {formatMessageTime(message.created_at)}
+          </Mono>
+        </View>
       </Pressable>
     </View>
   );
@@ -546,6 +619,38 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
+
+  replyStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  replyBar: { width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: colors.accent },
+  replyWho: { color: colors.accentText, fontSize: 9 },
+  replyText: { ...typography.caption, color: colors.textSecondary },
+
+  quote: {
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+    paddingLeft: spacing.sm,
+    paddingVertical: 2,
+    marginBottom: spacing.xs,
+    opacity: 0.9,
+  },
+  quoteMine: { borderLeftColor: 'rgba(255,255,255,0.6)' },
+  quoteWho: { color: colors.accentText, fontSize: 9 },
+  quoteWhoMine: { color: 'rgba(255,255,255,0.75)' },
+  quoteText: { ...typography.caption, color: colors.textSecondary },
+  quoteTextMine: { color: 'rgba(255,255,255,0.8)' },
+
+  bubbleFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md },
+  replyAction: { color: colors.textTertiary, fontSize: 9 },
+  replyActionMine: { color: 'rgba(255,255,255,0.7)' },
   pendingThumb: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.surface },
   pendingRemove: {
     width: 32, height: 32, borderRadius: 16,

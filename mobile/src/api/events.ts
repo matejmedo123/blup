@@ -741,3 +741,50 @@ export async function getWorthTheTrip(coords?: {
   if (error) throw error;
   return (data ?? []) as EventFeedItem[];
 }
+
+/**
+ * Why an event an hour away might still be for you.
+ *
+ * Returns null when there is nothing to say — the event is nearby, or too far,
+ * or over, or simply not a match. The screen then shows nothing, which is the
+ * right amount to say about an event that is just an event.
+ */
+export interface TripPitch {
+  distance_m: number;
+  city: string | null;
+  matches_taste: boolean;
+  friends_going: number;
+  attendee_count: number;
+}
+
+export async function getTripPitch(
+  eventId: string,
+  coords?: { latitude: number; longitude: number } | null,
+): Promise<TripPitch | null> {
+  const { data, error } = await supabase.rpc('event_trip_pitch', {
+    p_event_id: eventId,
+    p_lat: coords?.latitude ?? null,
+    p_lon: coords?.longitude ?? null,
+  });
+  if (error) throw error;
+  return (data as TripPitch | null) ?? null;
+}
+
+/** The pitch as a sentence, in the words somebody would use to a friend. */
+export function tripPitchLine(pitch: TripPitch): string {
+  const km = Math.round(pitch.distance_m / 1000);
+  const where = pitch.city ?? 'Je to';
+
+  if (pitch.friends_going > 0) {
+    return `${where} je ${km} km od teba — ale ide tam ${pitch.friends_going === 1
+      ? 'niekto, koho poznáš'
+      : `${pitch.friends_going} ľudí, ktorých poznáš`}.`;
+  }
+  if (pitch.matches_taste && pitch.attendee_count >= 100) {
+    return `${where} je ${km} km od teba — sedí to na to, čo ťa baví, a ide tam ${pitch.attendee_count} ľudí.`;
+  }
+  if (pitch.matches_taste) {
+    return `${where} je ${km} km od teba — ale presne toto ťa baví.`;
+  }
+  return `${where} je ${km} km od teba — ide tam ${pitch.attendee_count} ľudí.`;
+}

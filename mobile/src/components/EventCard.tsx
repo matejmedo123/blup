@@ -18,7 +18,7 @@ import { AvatarStack } from './ui';
  * then three 26px avatars with "{n} ide" in accent and the price badge.
  */
 export function EventCard({
-  event, onPress, onSave, size = 'large', showScore, attendees = [],
+  event, onPress, onSave, size = 'large', showScore, attendees = [], pitch,
 }: {
   event: EventFeedItem;
   onPress?: () => void;
@@ -26,6 +26,12 @@ export function EventCard({
   size?: 'large' | 'compact';
   showScore?: boolean;
   attendees?: { id: string; avatar_url?: string | null; name?: string | null }[];
+  /**
+   * A line saying why this one is here when the card alone would not explain
+   * it — an event an hour away is not obviously for you, and "82 km" on its own
+   * reads as a reason to skip rather than a reason to go.
+   */
+  pitch?: string | null;
 }) {
   const isCompact = size === 'compact';
   const family = categoryFamilies[familyFor(event.category)];
@@ -62,7 +68,8 @@ export function EventCard({
         <View style={styles.coverTop}>
           <View style={styles.coverBadges}>
             <GlassBadge label={family.label} />
-            {tag && !isCompact ? <GlassBadge label={tag} /> : null}
+            {pitch ? <GlassBadge label="MOHLO BY ŤA ZAUJAŤ" /> : null}
+            {tag && !isCompact && !pitch ? <GlassBadge label={tag} /> : null}
           </View>
 
           {onSave && !isCompact ? (
@@ -100,7 +107,11 @@ export function EventCard({
             there is not — the same score produced both, so they cannot
             contradict each other, and the card is never silent about why it
             is here. */}
-        {event.explanation || reasonLabel(event.score_breakdown?.reason) ? (
+        {pitch ? (
+          <Text style={[styles.reason, styles.pitch]} numberOfLines={2}>{pitch}</Text>
+        ) : null}
+
+        {!pitch && (event.explanation || reasonLabel(event.score_breakdown?.reason)) ? (
           <Text style={styles.reason} numberOfLines={2}>
             {event.explanation ?? reasonLabel(event.score_breakdown?.reason)}
           </Text>
@@ -204,6 +215,7 @@ const styles = StyleSheet.create({
   meta: { ...typography.metaSm, color: colors.textTertiary },
   metaCompact: { fontSize: 11 },
   reason: { ...typography.metaSm, color: colors.cyan },
+  pitch: { color: colors.accentText },
 
   footer: {
     flexDirection: 'row',

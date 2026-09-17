@@ -27,6 +27,7 @@ import { joinEventConversation } from '@/api/messages';
 import { getMyOrganizations } from '@/api/organizations';
 import { createCrew, getEventCrews, joinCrew, leaveCrew } from '@/api/crews';
 import { getEventRating, getMyReview, reviewEvent } from '@/api/reviews';
+import { getTripPitch, tripPitchLine } from '@/api/events';
 import { useDialog } from '@/components/Dialog';
 import { enterSubmits } from '@/lib/keyboard';
 import { messageFor } from '@/lib/errors';
@@ -96,6 +97,20 @@ export default function EventDetailScreen() {
    * page the reader was at the bottom of.
    */
   const eventId = event.data?.id ?? (id && UUID_REF.test(id) ? id : null);
+
+  /**
+   * Why this event is worth the drive, when it is far.
+   *
+   * Null for a nearby event, and null for a far one with nothing on the other
+   * side of the distance — so the notice appears only when there is a real
+   * answer, rather than reassuring everybody about everything.
+   */
+  const pitch = useQuery({
+    queryKey: ['event', eventId, 'trip-pitch'],
+    queryFn: () => getTripPitch(eventId!),
+    enabled: Boolean(eventId) && !isGuest,
+    staleTime: 10 * 60 * 1000,
+  });
 
 
   // The basket, so the ticket rows can say "in your basket" and the button can
@@ -612,6 +627,17 @@ export default function EventDetailScreen() {
             tone="teal"
             title="Tento event už bol"
             body="Stránka zostáva, aby si sa mal kam vrátiť — fotky, kto tam bol a hodnotenia. Vstupenky sa už nepredávajú."
+          />
+        ) : null}
+
+        {/* Far, and worth it anyway. Only when the database has an actual
+            answer — an event an hour away with nothing on the other side of
+            the distance says nothing here at all. */}
+        {pitch.data && !isPast ? (
+          <Notice
+            tone="accent"
+            title="Mohlo by ťa zaujať"
+            body={tripPitchLine(pitch.data)}
           />
         ) : null}
 
