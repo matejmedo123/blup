@@ -498,6 +498,14 @@ export default function OrganizerScreen() {
             />
 
             <Text style={styles.section}>Peniaze</Text>
+            {/* Above the balance on purpose: "how is it selling" is the question
+                people open this screen with, and the balance is the answer to a
+                later one. */}
+            <Button
+              title="Predaj a štatistiky"
+              variant="secondary"
+              onPress={() => router.push('/organizer/stats')}
+            />
             <View style={styles.moneyRow}>
               <Button
                 title="Zostatok a výplaty"

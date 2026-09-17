@@ -42,6 +42,7 @@ export default function OrganizerLayout() {
       <Stack.Screen name="verification" options={{ title: 'Overenie' }} />
       <Stack.Screen name="payouts" options={{ title: 'Zostatok a výplaty' }} />
       <Stack.Screen name="accounting" options={{ title: 'Účtovníctvo' }} />
+      <Stack.Screen name="stats" options={{ title: 'Predaj' }} />
       <Stack.Screen name="scan" options={{ title: 'Skenovanie vstupeniek' }} />
       <Stack.Screen name="analytics/[id]" options={{ title: 'Štatistiky eventu' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Typy vstupeniek' }} />

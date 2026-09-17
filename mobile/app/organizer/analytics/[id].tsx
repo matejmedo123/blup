@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import {
-  getEventAnalytics, getEventOrders, getEventSalesSeries, getMyOrganizations,
+  getCheckoutFunnel, getEventAnalytics, getEventOrders, getEventSalesSeries, getMyOrganizations,
+  getSalesByCity,
 } from '@/api/organizations';
+import { SalesMap } from '@/components/SalesMap';
 import { SalesChart } from '@/components/SalesChart';
 import { useLayout } from '@/hooks/useLayout';
 import { messageFor } from '@/lib/errors';
@@ -40,6 +42,21 @@ export default function EventAnalyticsScreen() {
   const organization = organizations.data?.[0];
 
   const [days, setDays] = useState(30);
+
+  // Where this event's buyers are from, and how many started paying without
+  // finishing. Both scoped to this one event by the same function the global
+  // screen uses, so the two can never disagree.
+  const cities = useQuery({
+    queryKey: ['analytics', id, 'cities'],
+    queryFn: () => getSalesByCity({ eventIds: [id!] }),
+    enabled: Boolean(id),
+  });
+
+  const funnel = useQuery({
+    queryKey: ['analytics', id, 'funnel'],
+    queryFn: () => getCheckoutFunnel({ eventIds: [id!] }),
+    enabled: Boolean(id),
+  });
 
   const series = useQuery({
     queryKey: ['analytics', id, 'series', days],
@@ -97,6 +114,52 @@ export default function EventAnalyticsScreen() {
         </View>
         <Text style={styles.linkChevron}>›</Text>
       </Pressable>
+
+      {/* --- who did not finish -------------------------------------------- */}
+      {funnel.data && funnel.data.started > 0 ? (
+        <>
+          <SectionHeader title="Úspešnosť objednávok" />
+          <View style={[styles.grid, layout.isWide && styles.gridWide]}>
+            <Tile label="Začali platiť" value={String(funnel.data.started)} />
+            <Tile label="Zaplatili" value={String(funnel.data.paid)} />
+            <Tile label="Odišli z pokladne" value={String(funnel.data.abandoned)} />
+            <Tile label="Dokončené" value={`${funnel.data.success_pct} %`} />
+          </View>
+          {funnel.data.abandoned > 0 ? (
+            <Caption style={styles.funnelNote}>
+              {funnel.data.abandoned === 1 ? 'Jedna objednávka' : `${funnel.data.abandoned} objednávok`}
+              {' '}sa nedokončila
+              {funnel.data.abandoned_cents > 0
+                ? ` — ${formatMoney(funnel.data.abandoned_cents, data.currency)}`
+                : ''}
+              {funnel.data.expired > 0 ? `, z toho ${funnel.data.expired} vypršalo` : ''}
+              {funnel.data.failed > 0 ? `, ${funnel.data.failed} odmietla banka` : ''}.
+            </Caption>
+          ) : null}
+        </>
+      ) : null}
+
+      {/* --- where they are from ------------------------------------------- */}
+      {(cities.data ?? []).length > 0 ? (
+        <>
+          <SectionHeader title="Odkiaľ prídu" />
+          {Platform.OS === 'web' ? (
+            <SalesMap
+              points={(cities.data ?? []).filter((city) => city.latitude != null)}
+              height={layout.isWide ? 340 : 260}
+            />
+          ) : null}
+          <View style={styles.cityList}>
+            {(cities.data ?? []).slice(0, 8).map((city, index) => (
+              <View key={city.city} style={styles.cityRow}>
+                <Text style={styles.cityRank}>{index + 1}</Text>
+                <Body style={styles.flex}>{city.city}</Body>
+                <Body muted>{city.tickets}</Body>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
 
       {/* --- the curve ----------------------------------------------------- */}
       {/* A free event has nothing to plot and no money to report. A curve of
@@ -238,6 +301,15 @@ const styles = StyleSheet.create({
   },
   linkTitle: { ...typography.bodyStrong, color: colors.text },
   linkChevron: { ...typography.heading, color: colors.textTertiary },
+  funnelNote: { marginTop: spacing.sm, marginBottom: spacing.lg, lineHeight: 18 },
+  cityList: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+  },
+  cityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
+  cityRank: { ...typography.monoStrong, color: colors.textTertiary, width: 18 },
 
   rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   range: {

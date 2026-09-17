@@ -565,3 +565,187 @@ export async function setTicketActive(
   if (error) throw error;
   return (data as { status: TicketHolder['status'] }).status;
 }
+
+// --- sales, across events ----------------------------------------------------
+
+/**
+ * The numbers an organizer runs the business on.
+ *
+ * All of these are SECURITY DEFINER over one authorisation function in the
+ * database (`scope_events`), so passing an event id you do not own returns
+ * nothing rather than somebody else's takings — asserted in test 32. Nothing
+ * here is filtered in the client for safety; the filters below are for choosing
+ * what to look at, not for deciding what you may see.
+ */
+export interface SalesScope {
+  eventIds?: string[] | null;
+  organizationId?: string | null;
+  from?: string | null;
+  to?: string | null;
+}
+
+const scopeArgs = (scope: SalesScope) => ({
+  p_event_ids: scope.eventIds?.length ? scope.eventIds : null,
+  p_organization_id: scope.organizationId ?? null,
+  p_from: scope.from ?? null,
+  p_to: scope.to ?? null,
+});
+
+export interface SalesTotals {
+  events: number;
+  orders_paid: number;
+  orders_total: number;
+  tickets: number;
+  gross_cents: number;
+  discount_cents: number;
+  commission_cents: number;
+  archive_fee_cents: number;
+  organizer_net_cents: number;
+  refunded_cents: number;
+  refunded_orders: number;
+  failed_orders: number;
+  prev_gross_cents: number;
+  currency: string;
+  tickets_valid: number;
+  tickets_used: number;
+  tickets_void: number;
+  complimentary: number;
+  checked_in_pct: number;
+  available_cents?: number;
+  pending_cents?: number;
+  reserve_cents?: number;
+  paid_out_cents?: number;
+  disputes_open: number;
+  disputes_open_cents: number;
+}
+
+export async function getSalesTotals(scope: SalesScope = {}): Promise<SalesTotals> {
+  const { data, error } = await supabase.rpc('sales_totals', scopeArgs(scope));
+  if (error) throw error;
+  return data as SalesTotals;
+}
+
+export interface SalesEventRow {
+  event_id: string;
+  title: string;
+  start_at: string;
+  city: string | null;
+  status: string;
+  tickets: number;
+  orders: number;
+  gross_cents: number;
+  organizer_net_cents: number;
+  checked_in: number;
+  currency: string;
+}
+
+export async function getSalesByEvent(scope: SalesScope = {}): Promise<SalesEventRow[]> {
+  const { data, error } = await supabase.rpc('sales_by_event', scopeArgs(scope));
+  if (error) throw error;
+  return (data ?? []) as SalesEventRow[];
+}
+
+export interface SalesTypeRow {
+  ticket_type_id: string;
+  name: string;
+  event_title: string;
+  price_cents: number;
+  sold: number;
+  remaining: number;
+  gross_cents: number;
+  currency: string;
+}
+
+export async function getSalesByTicketType(scope: SalesScope = {}): Promise<SalesTypeRow[]> {
+  const { data, error } = await supabase.rpc('sales_by_ticket_type', scopeArgs(scope));
+  if (error) throw error;
+  return (data ?? []) as SalesTypeRow[];
+}
+
+export interface SalesMethodRow {
+  method: string;
+  orders: number;
+  tickets: number;
+  gross_cents: number;
+  currency: string;
+}
+
+export async function getSalesByMethod(scope: SalesScope = {}): Promise<SalesMethodRow[]> {
+  const { data, error } = await supabase.rpc('sales_by_method', scopeArgs(scope));
+  if (error) throw error;
+  return (data ?? []) as SalesMethodRow[];
+}
+
+export interface SalesCityRow {
+  city: string;
+  orders: number;
+  tickets: number;
+  gross_cents: number;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export async function getSalesByCity(scope: SalesScope = {}): Promise<SalesCityRow[]> {
+  const { data, error } = await supabase.rpc('sales_by_city', {
+    ...scopeArgs(scope),
+    p_limit: 60,
+  });
+  if (error) throw error;
+  return (data ?? []) as SalesCityRow[];
+}
+
+/**
+ * How many people started paying and did not finish.
+ *
+ * `paid` counts orders that were ever paid, not orders currently in the
+ * succeeded state — a refunded order did finish the checkout, and counting it
+ * as abandoned would make this number fall every time somebody got their money
+ * back.
+ */
+export interface CheckoutFunnel {
+  views: number;
+  baskets: number;
+  started: number;
+  paid: number;
+  abandoned: number;
+  expired: number;
+  failed: number;
+  success_pct: number;
+  view_to_paid_pct: number;
+  abandoned_cents: number;
+  from: string;
+  to: string;
+}
+
+export async function getCheckoutFunnel(scope: SalesScope = {}): Promise<CheckoutFunnel> {
+  const { data, error } = await supabase.rpc('checkout_funnel', scopeArgs(scope));
+  if (error) throw error;
+  return data as CheckoutFunnel;
+}
+
+export interface SalesRow {
+  paid_at: string;
+  event_title: string;
+  ticket_type: string | null;
+  quantity: number;
+  gross_cents: number;
+  discount_cents: number;
+  commission_cents: number;
+  archive_fee_cents: number;
+  organizer_net_cents: number;
+  currency: string;
+  buyer: string;
+  email: string | null;
+  city: string | null;
+  has_account: boolean;
+  order_id: string;
+}
+
+export async function getSalesRows(scope: SalesScope = {}): Promise<SalesRow[]> {
+  const { data, error } = await supabase.rpc('sales_rows', {
+    ...scopeArgs(scope),
+    p_limit: 5000,
+  });
+  if (error) throw error;
+  return (data ?? []) as SalesRow[];
+}
