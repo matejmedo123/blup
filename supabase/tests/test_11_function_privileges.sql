@@ -19,7 +19,7 @@ declare
   fn      text;
   leaked  text[] := '{}';
   guarded text[] := array[
-    'public.create_order(uuid, uuid, integer, text, integer, uuid, uuid, text, text, text, double precision, double precision)',
+    'public.create_order(uuid, uuid, integer, text, integer, uuid, uuid, text, text, text, double precision, double precision, uuid)',
     'public.create_checkout(uuid, text)',
     'public.fulfill_order(uuid, payment_provider, text, integer)',
     'public.fulfill_checkout(uuid, payment_provider, text, integer)',

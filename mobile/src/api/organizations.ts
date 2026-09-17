@@ -511,6 +511,8 @@ export interface TicketHolder {
   deactivation_reason: string | null;
   order_id: string | null;
   created_at: string;
+  /** "Tribúna A · rad D, miesto 14", or null for a ticket that names no chair. */
+  seat_label: string | null;
 }
 
 export interface TicketSummary {

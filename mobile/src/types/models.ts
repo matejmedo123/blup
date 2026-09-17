@@ -299,10 +299,22 @@ export interface Ticket {
   currency: string;
   checked_in_at: string | null;
   created_at: string;
+  /** Set only for an event sold by named seat, which is the rare case. */
+  venue_seat_id: string | null;
+}
+
+/** Where to sit, as the ticket screen needs to print it. */
+export interface TicketSeat {
+  row_label: string;
+  seat_number: number;
+  kind: string;
+  note: string | null;
+  venue_section: { name: string } | null;
 }
 
 export interface TicketWithEvent extends Ticket {
   event: Pick<BlupEvent, 'id' | 'title' | 'start_at' | 'venue_name' | 'address' | 'cover_image_url'> | null;
+  seat?: TicketSeat | null;
 }
 
 export interface Order {

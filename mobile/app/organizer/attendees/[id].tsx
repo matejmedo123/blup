@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -68,6 +68,10 @@ export default function AttendeesScreen() {
       || (row.email ?? '').toLowerCase().includes(needle)
       || (row.username ?? '').toLowerCase().includes(needle)
       || row.code.toLowerCase().includes(needle)
+      // "D14" and "D 14" both find the person sitting there. The server search
+      // matches the same two shapes, for lists too long to fetch whole.
+      || (row.seat_label ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+           .includes(needle.replace(/[^a-z0-9]+/g, ''))
     ));
   }, [holders.data, needle]);
 
@@ -118,12 +122,22 @@ export default function AttendeesScreen() {
       {error ? <Notice tone="danger" title="Nepodarilo sa" body={error} /> : null}
 
       <Input
-        placeholder="Hľadaj meno, e-mail alebo kód"
+        placeholder="Hľadaj meno, e-mail, kód alebo miesto"
         value={search}
         onChangeText={setSearch}
         autoCapitalize="none"
       />
       <Segmented options={FILTERS} value={filter} onChange={setFilter} style={styles.filters} />
+
+      {/* Only where there is one to walk. This list is by purchase time, which
+          is the wrong order for standing in an aisle looking for row D. */}
+      {(holders.data ?? []).some((row) => row.seat_label) ? (
+        <Button
+          title="Zoznam podľa sedenia"
+          variant="secondary"
+          onPress={() => router.push(`/organizer/seating/${id}`)}
+        />
+      ) : null}
 
       {rows.length === 0 ? (
         <EmptyState
@@ -165,6 +179,10 @@ export default function AttendeesScreen() {
               <View style={styles.metaRow}>
                 <Text style={styles.code}>{row.code}</Text>
                 {row.ticket_type ? <Caption>{row.ticket_type}</Caption> : null}
+                {/* At the door people are found by their seat far more often
+                    than by a code on a phone they are still unlocking — which
+                    is also why the search below matches "D14". */}
+                {row.seat_label ? <Badge label={row.seat_label} tone="accent" /> : null}
                 {row.is_complimentary ? <Badge label="ZDARMA" tone="accent" /> : null}
                 {row.is_guest ? <Badge label="HOSŤ" tone="neutral" /> : null}
               </View>

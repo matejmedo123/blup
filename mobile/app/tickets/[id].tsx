@@ -7,6 +7,7 @@ import QRCode from 'react-native-qrcode-svg';
 import {
   getTicket, getTicketEmail, getTicketEmailStatus, resendTicketEmail, ticketQrPayload,
 } from '@/api/tickets';
+import { SEAT_KIND_LABEL, type SeatKind } from '@/api/seating';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong, formatPrice, formatRelative } from '@/lib/format';
 import { ticketStatusLabel } from '@/lib/labels';
@@ -81,6 +82,24 @@ export default function TicketScreen() {
         <Text style={styles.eventTitle}>{data.event?.title ?? 'Event'}</Text>
         {data.event ? <Caption>{formatEventDateLong(data.event.start_at)}</Caption> : null}
         {data.event?.venue_name ? <Caption>{data.event.venue_name}</Caption> : null}
+
+        {/* Where to sit. Printed above the QR rather than in the details below,
+            because it is the thing the holder looks for while walking in — the
+            code is for the person scanning it, not for them. */}
+        {data.seat ? (
+          <View style={styles.seatBox}>
+            <Text style={styles.seatLine}>
+              {[data.seat.venue_section?.name, `rad ${data.seat.row_label}`,
+                `miesto ${data.seat.seat_number}`].filter(Boolean).join(' · ')}
+            </Text>
+            {data.seat.kind !== 'standard' || data.seat.note ? (
+              <Caption>
+                {[SEAT_KIND_LABEL[data.seat.kind as SeatKind], data.seat.note]
+                  .filter(Boolean).join(' · ')}
+              </Caption>
+            ) : null}
+          </View>
+        ) : null}
 
         <View style={styles.qrWrapper}>
           {isUsable ? (
@@ -222,6 +241,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   eventTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
+
+  seatBox: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+  },
+  seatLine: { ...typography.subheading, color: colors.text, textAlign: 'center' },
 
   qrWrapper: {
     backgroundColor: '#FFFFFF',

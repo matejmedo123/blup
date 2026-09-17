@@ -96,9 +96,6 @@ export default function CreateEventScreen() {
   const [capacity, setCapacity] = useState('');
   const [isFree, setIsFree] = useState(true);
   const [ticketTypes, setTicketTypes] = useState<TicketDraft[]>([blankTicket()]);
-  // How the event sells. Most sell without places at all; a hall with a
-  // seating plan is the exception, and building one is work — so it is a
-  // deliberate choice rather than something every organizer walks through.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const addTicket = () =>
@@ -947,6 +944,15 @@ export default function CreateEventScreen() {
                 {cheapestLabel
                   ? `V zozname sa event ukáže ako „${cheapestLabel}“.`
                   : 'Ľudia uvidia všetky typy pri kúpe. Ceny a počty vieš neskôr upraviť.'}
+              </Caption>
+
+              {/* Seating is not asked about here on purpose: a sektor predáva
+                  konkrétny typ vstupenky, takže plán sa dá nakresliť až keď tie
+                  typy existujú. Na eventoch to potom čaká ako „Predávať po
+                  sektoroch a miestach“. */}
+              <Caption style={styles.ticketHint}>
+                Sedenie po sektoroch a konkrétnych miestach pridáš na evente,
+                keď ho vytvoríš — plán sály sa kreslí na už hotové typy vstupeniek.
               </Caption>
 
             </>

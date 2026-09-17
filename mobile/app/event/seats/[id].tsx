@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { getSeatMap, holdSeat, releaseSeat, type Section } from '@/api/seating';
+import {
+  getSeatMap, holdSeat, holdSeats, releaseSeat, suggestSeats,
+  SEAT_KIND_LABEL, type Seat, type SeatKind, type Section,
+} from '@/api/seating';
 import { addToCart } from '@/api/cart';
 import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
@@ -25,6 +28,19 @@ import { colors, radius, spacing, typography } from '@/theme';
  * type and adds to the basket by count. Both hold stock the same way and for
  * the same fifteen minutes, because a sector *is* a ticket type — which is why
  * the money, the ceiling and the promo split need no special case here.
+ *
+ * Three things this screen learned since the first version.
+ *
+ * Almost nobody comes alone, and clicking four dots that turn out to be in four
+ * different rows is not a feature. "Nájdi nám miesta vedľa seba" asks the
+ * database for the best block and holds all of it or none of it.
+ *
+ * A hold ends. It used to end silently, and the buyer found out at the till.
+ * There is a clock now.
+ *
+ * And a seat you have already paid for looked exactly like a seat you are
+ * holding — same dot, same colour — so tapping it looked like it should give it
+ * back, and did nothing. The map says which is which, and so does the plan.
  */
 export default function SeatPickerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,12 +51,20 @@ export default function SeatPickerScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [party, setParty] = useState(2);
+  /** Ticks once a second so the hold clock counts down rather than sitting still. */
+  const [now, setNow] = useState(() => Date.now());
 
   const seatMap = useQuery({
     queryKey: ['event', id, 'seatmap'],
     queryFn: () => getSeatMap(id!),
     enabled: Boolean(id),
   });
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   if (seatMap.isLoading) return <Screen><LoadingState label="Načítavam plán…" /></Screen>;
   if (seatMap.isError) {
@@ -71,7 +95,21 @@ export default function SeatPickerScreen() {
   // refetch, and holding the old one would leave the dots showing the state
   // from before the click that changed them.
   const open = sections.find((section) => section.id === openId) ?? null;
-  const mySeats = open?.seats.filter((seat) => seat.mine) ?? [];
+
+  // Everything being held across the whole plan, not just the open sector — the
+  // basket is one basket and the clock on it is one clock.
+  const heldEverywhere = sections.flatMap((section) =>
+    section.seats.filter((seat) => seat.mine_claim === 'held')
+      .map((seat) => ({ section: section.name, seat })));
+
+  const holdEndsAt = heldEverywhere
+    .map(({ seat }) => (seat.hold_until ? Date.parse(seat.hold_until) : NaN))
+    .filter((t) => Number.isFinite(t))
+    .reduce((a, b) => Math.min(a, b), Number.POSITIVE_INFINITY);
+
+  const secondsLeft = Number.isFinite(holdEndsAt)
+    ? Math.max(0, Math.round((holdEndsAt - now) / 1000))
+    : 0;
 
   /** How many seats each row actually holds, for centring the short ones. */
   const seatsPerRow = new Map<number, number>();
@@ -108,17 +146,68 @@ export default function SeatPickerScreen() {
     }
   };
 
-  const takeSeat = async (seatId: string, free: boolean) => {
+  const tapSeat = async (seat: Seat) => {
+    setError(null);
+    setNote(null);
+
+    // Already bought. Nothing to do, and saying so beats a tap that looks
+    // broken — which is exactly what this did before the map told them apart.
+    if (seat.mine_claim === 'sold' || seat.mine_claim === 'ordered') {
+      setNote(`Rad ${seat.row}, miesto ${seat.number} už máš kúpené.`);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (seat.mine_claim === 'held') {
+        await releaseSeat(seat.id);
+      } else {
+        const held = await holdSeat(seat.id);
+        setNote(`Držíme ti ${held.section}, rad ${held.row}, miesto ${held.number}.`);
+      }
+      await refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** "Find us seats next to each other." */
+  const findTogether = async (section: Section) => {
     setError(null);
     setNote(null);
     setBusy(true);
     try {
-      if (free) {
-        const held = await holdSeat(seatId);
-        setNote(`Držíme ti ${held.section}, rad ${held.row}, miesto ${held.number} — 15 minút.`);
-      } else {
-        await releaseSeat(seatId);
+      const found = await suggestSeats(section.id, party);
+      if (found.length === 0) {
+        setError(
+          `V sektore ${section.name} už nie je ${party} voľných miest vedľa seba. `
+          + 'Skús menej miest alebo iný sektor.',
+        );
+        return;
       }
+
+      await holdSeats(found.map((s) => s.seat_id));
+      setNote(
+        `Držíme ti rad ${found[0].row_label}, miesta `
+        + `${found.map((s) => s.seat_number).join(', ')}.`,
+      );
+      setOpenId(section.id);
+      await refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const releaseAll = async () => {
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      for (const { seat } of heldEverywhere) await releaseSeat(seat.id);
       await refresh();
     } catch (caught) {
       setError(messageFor(caught));
@@ -136,6 +225,27 @@ export default function SeatPickerScreen() {
 
       {error ? <Notice tone="danger" title="Nedá sa" body={error} /> : null}
       {note ? <Notice tone="success" title="Hotovo" body={note} /> : null}
+
+      {/* --- the clock, whenever anything is being held --------------------- */}
+      {heldEverywhere.length > 0 ? (
+        <View style={styles.holdBar}>
+          <View style={styles.flex}>
+            <Text style={styles.holdTitle}>
+              {heldEverywhere.length === 1
+                ? 'Držíme ti 1 miesto'
+                : `Držíme ti ${heldEverywhere.length} ${heldEverywhere.length < 5 ? 'miesta' : 'miest'}`}
+            </Text>
+            <Caption>
+              {heldEverywhere
+                .map(({ section, seat }) => `${section} · ${seat.row}${seat.number}`)
+                .join(' · ')}
+            </Caption>
+          </View>
+          <Text style={[styles.clock, secondsLeft <= 60 && styles.clockLow]}>
+            {secondsLeft > 0 ? mmss(secondsLeft) : '—'}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={[styles.plan, { width: planWidth, height: planHeight }]}>
         {map.image_url ? (
@@ -193,10 +303,9 @@ export default function SeatPickerScreen() {
             <Pressable
               key={seat.id}
               disabled={busy || (!seat.free && !seat.mine)}
-              onPress={() => takeSeat(seat.id, seat.free)}
+              onPress={() => tapSeat(seat)}
               accessibilityRole="button"
-              accessibilityLabel={`Rad ${seat.row}, miesto ${seat.number}` +
-                (seat.mine ? ', tvoje' : seat.taken ? ', obsadené' : ', voľné')}
+              accessibilityLabel={seatLabel(seat)}
               hitSlop={6}
               style={[
                 styles.dot,
@@ -207,10 +316,12 @@ export default function SeatPickerScreen() {
                   left: open.x * planWidth + indent + (seat.number - 0.5) * cellW - size / 2,
                   top: open.y * planHeight + (seat.row_index + 0.5) * cellH - size / 2,
                 },
-                seat.mine ? styles.dotMine
-                  : seat.taken ? styles.dotTaken
-                    : !seat.sellable ? styles.dotBlocked
-                      : styles.dotFree,
+                seat.mine_claim === 'held' ? styles.dotMine
+                  : seat.mine ? styles.dotBought
+                    : seat.taken ? styles.dotTaken
+                      : !seat.sellable ? styles.dotBlocked
+                        : seat.kind !== 'standard' ? styles.dotSpecial
+                          : styles.dotFree,
               ]}
             />
           );
@@ -219,20 +330,36 @@ export default function SeatPickerScreen() {
 
       <SectionHeader title="Sektory" />
       {sections.map((section) => (
-        <Pressable key={section.id} style={styles.row} onPress={() => pick(section)} disabled={busy}>
-          <View style={[styles.swatch, { backgroundColor: section.colour }]} />
-          <View style={styles.flex}>
-            <Text style={styles.rowName}>{section.name}</Text>
-            <Caption>
-              {section.available === 0
-                ? 'vypredané'
-                : `${section.available} voľných${section.numbered ? ' · číslované' : ''}`}
-            </Caption>
-          </View>
-          {section.price_cents !== null ? (
-            <Text style={styles.price}>{formatMoney(section.price_cents, 'EUR')}</Text>
+        <View key={section.id} style={styles.sectionCard}>
+          <Pressable style={styles.row} onPress={() => pick(section)} disabled={busy}>
+            <View style={[styles.swatch, { backgroundColor: section.colour }]} />
+            <View style={styles.flex}>
+              <Text style={styles.rowName}>{section.name}</Text>
+              <Caption>
+                {section.available === 0
+                  ? 'vypredané'
+                  : `${section.available} voľných${section.numbered ? ' · číslované' : ''}`}
+              </Caption>
+            </View>
+            {section.price_cents !== null ? (
+              <Text style={styles.price}>{formatMoney(section.price_cents, 'EUR')}</Text>
+            ) : null}
+          </Pressable>
+
+          {section.numbered && section.available > 0 ? (
+            <View style={styles.together}>
+              <Caption style={styles.flex}>Koľkí idete?</Caption>
+              <Stepper value={party} onChange={setParty} min={1} max={10} disabled={busy} />
+              <Button
+                title="Nájdi nám miesta vedľa seba"
+                variant="secondary"
+                compact
+                onPress={() => findTogether(section)}
+                disabled={busy}
+              />
+            </View>
           ) : null}
-        </Pressable>
+        </View>
       ))}
 
       {open ? (
@@ -244,17 +371,24 @@ export default function SeatPickerScreen() {
 
           <View style={styles.legendRow}>
             <LegendDot style={styles.dotFree} label="voľné" />
-            <LegendDot style={styles.dotMine} label="tvoje" />
+            <LegendDot style={styles.dotMine} label="držíš" />
+            <LegendDot style={styles.dotBought} label="máš kúpené" />
             <LegendDot style={styles.dotTaken} label="obsadené" />
+            <LegendDot style={styles.dotSpecial} label="vozík / sprievod / výhľad" />
             <LegendDot style={styles.dotBlocked} label="nepredáva sa" />
           </View>
 
-          {mySeats.length > 0 ? (
-            <View style={styles.mineBox}>
-              <Caption>Držíme ti</Caption>
-              <Text style={styles.mineList}>
-                {mySeats.map((s) => `rad ${s.row}, miesto ${s.number}`).join(' · ')}
-              </Text>
+          {/* Places that are not ordinary chairs, named rather than left as a
+              differently coloured dot somebody has to guess at. */}
+          {open.seats.some((seat) => seat.kind !== 'standard' && seat.free) ? (
+            <View style={styles.specialBox}>
+              {open.seats.filter((seat) => seat.kind !== 'standard' && seat.free).map((seat) => (
+                <Caption key={seat.id}>
+                  {`rad ${seat.row}, miesto ${seat.number} — `}
+                  {SEAT_KIND_LABEL[seat.kind] ?? seat.kind}
+                  {seat.note ? ` (${seat.note})` : ''}
+                </Caption>
+              ))}
             </View>
           ) : null}
 
@@ -262,8 +396,60 @@ export default function SeatPickerScreen() {
         </>
       ) : null}
 
+      {heldEverywhere.length > 0 ? (
+        <Button title="Pustiť všetky držané miesta" variant="ghost" onPress={releaseAll} disabled={busy} />
+      ) : null}
+
       <Button title="Do košíka" onPress={() => router.push('/cart')} />
     </Screen>
+  );
+}
+
+/** "Rad B, miesto 3, držíš" — everything a screen reader needs from one dot. */
+function seatLabel(seat: Seat): string {
+  const kind = seat.kind !== 'standard' ? `, ${SEAT_KIND_LABEL[seat.kind as SeatKind]}` : '';
+  const state = seat.mine_claim === 'held' ? ', držíš'
+    : seat.mine ? ', máš kúpené'
+      : seat.taken ? ', obsadené'
+        : !seat.sellable ? ', nepredáva sa'
+          : ', voľné';
+  return `Rad ${seat.row}, miesto ${seat.number}${kind}${state}`;
+}
+
+function mmss(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+/** How many of you there are. Small enough to live here rather than in ui.tsx. */
+function Stepper({
+  value, onChange, min, max, disabled,
+}: {
+  value: number; onChange: (next: number) => void; min: number; max: number; disabled?: boolean;
+}) {
+  return (
+    <View style={styles.stepper}>
+      <Pressable
+        onPress={() => onChange(Math.max(min, value - 1))}
+        disabled={disabled || value <= min}
+        accessibilityRole="button"
+        accessibilityLabel="O jedného menej"
+        style={[styles.stepperButton, (disabled || value <= min) && styles.stepperOff]}
+      >
+        <Text style={styles.stepperGlyph}>−</Text>
+      </Pressable>
+      <Text style={styles.stepperValue}>{value}</Text>
+      <Pressable
+        onPress={() => onChange(Math.min(max, value + 1))}
+        disabled={disabled || value >= max}
+        accessibilityRole="button"
+        accessibilityLabel="O jedného viac"
+        style={[styles.stepperButton, (disabled || value >= max) && styles.stepperOff]}
+      >
+        <Text style={styles.stepperGlyph}>+</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -271,6 +457,15 @@ const styles = StyleSheet.create({
   title: { ...typography.title, color: colors.text },
   intro: { marginTop: spacing.xs, marginBottom: spacing.lg },
   flex: { flex: 1, minWidth: 0 },
+
+  holdBar: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    padding: spacing.md, borderRadius: radius.md,
+    backgroundColor: colors.accentSoft, marginBottom: spacing.md,
+  },
+  holdTitle: { ...typography.bodyStrong, color: colors.text },
+  clock: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
+  clockLow: { color: colors.danger },
 
   plan: {
     alignSelf: 'center',
@@ -281,7 +476,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: spacing.lg,
   },
-  planEmpty: { ...StyleSheet.absoluteFill as object, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  planEmpty: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center', padding: spacing.lg,
+  },
 
   sector: {
     position: 'absolute',
@@ -295,6 +493,7 @@ const styles = StyleSheet.create({
   sectorFree: { color: colors.text, fontSize: 10, opacity: 0.85 },
   sectorGone: { textDecorationLine: 'line-through' },
 
+  sectionCard: { marginBottom: spacing.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -302,30 +501,42 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
-    marginBottom: spacing.sm,
+  },
+  together: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
   swatch: { width: 14, height: 14, borderRadius: 4 },
   rowName: { ...typography.bodyStrong, color: colors.text },
   price: { ...typography.bodyStrong, color: colors.accent },
+
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stepperButton: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated,
+  },
+  stepperOff: { opacity: 0.4 },
+  stepperGlyph: { ...typography.bodyStrong, color: colors.text },
+  stepperValue: { ...typography.bodyStrong, color: colors.text, minWidth: 18, textAlign: 'center' },
 
   legend: { marginBottom: spacing.sm },
   legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   legendSwatch: { width: 14, height: 14, borderRadius: 7 },
 
+  specialBox: {
+    padding: spacing.md, borderRadius: radius.md,
+    backgroundColor: colors.surface, marginBottom: spacing.md, gap: 2,
+  },
+
   dot: { position: 'absolute', borderWidth: 1.5 },
   dotFree: { backgroundColor: 'rgba(255,255,255,0.10)', borderColor: colors.textSecondary },
   dotMine: { backgroundColor: colors.accent, borderColor: '#FFFFFF' },
+  dotBought: { backgroundColor: colors.success, borderColor: '#FFFFFF' },
+  dotSpecial: { backgroundColor: 'rgba(255,255,255,0.10)', borderColor: colors.warning },
   dotTaken: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, opacity: 0.6 },
   dotBlocked: { backgroundColor: 'transparent', borderColor: colors.border, opacity: 0.4 },
-
-  mineBox: {
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.accentSoft,
-    marginBottom: spacing.md,
-  },
-  mineList: { color: colors.text, fontWeight: '700', marginTop: 2 },
 });
 
 /** One entry in the legend: the same dot style, at a readable size. */

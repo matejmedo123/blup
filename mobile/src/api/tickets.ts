@@ -189,6 +189,17 @@ export async function waitForCheckout(
   return { status: 'pending', tickets: [] };
 }
 
+/**
+ * A ticket, its event, and — for the rare event sold by seat — where to sit.
+ *
+ * The seat is embedded rather than fetched separately: venue_seats and
+ * venue_sections are readable by anyone (a plan is what a buyer picks from), and
+ * a second round trip per ticket for a row and a number is not worth it.
+ */
+const TICKET_SELECT =
+  '*, event:events (id, title, start_at, venue_name, address, cover_image_url), '
+  + 'seat:venue_seats (row_label, seat_number, kind, note, venue_section:venue_sections (name))';
+
 export async function getMyTickets(): Promise<TicketWithEvent[]> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
@@ -196,7 +207,7 @@ export async function getMyTickets(): Promise<TicketWithEvent[]> {
 
   const { data, error } = await supabase
     .from('tickets')
-    .select('*, event:events (id, title, start_at, venue_name, address, cover_image_url)')
+    .select(TICKET_SELECT)
     .eq('buyer_id', userId)
     .order('created_at', { ascending: false });
 
@@ -207,7 +218,7 @@ export async function getMyTickets(): Promise<TicketWithEvent[]> {
 export async function getTicket(ticketId: string): Promise<TicketWithEvent | null> {
   const { data, error } = await supabase
     .from('tickets')
-    .select('*, event:events (id, title, start_at, venue_name, address, cover_image_url)')
+    .select(TICKET_SELECT)
     .eq('id', ticketId)
     .maybeSingle();
 

@@ -63,6 +63,9 @@ a real Supabase project.
 | `…001200_storage_and_realtime` | Storage buckets + policies, realtime publication |
 | `…001300_interest_catalogue` | The 45 interests (reference data, not demo data) |
 | `…001400_grants` | Explicit role grants; revokes on money tables |
+| `…003600_seating` | `venue_maps`, `venue_sections`, `venue_seats`, `cart_hold_seat`, `seat_map_for_event` |
+| `…003700_seat_positions` | Seat positions on the plan; "mine" told apart from "taken" |
+| `…006500_seating_v2` | `seat_claims`, the seat carried onto orders and tickets, `cart_hold_seats`, `suggest_seats`, `generate_section_seats`, `set_seat_state`, `update_section`, `event_seat_manifest` |
 
 ---
 
@@ -136,6 +139,51 @@ ticket_types ──< orders ──< tickets
   `available_at` implements the settlement delay (7 days).
 - **`organization_balances`** — a view: `balance`, `available` (settled only),
   `pending`, `gross_sales`, `platform_fee`, `paid_out`.
+
+### Seating (migrations 0036, 0037, 0065)
+
+```
+venue_maps ──< venue_sections ──< venue_seats
+                    │                  │
+              ticket_types      cart_items.venue_seat_id
+                                orders.venue_seat_id
+                                tickets.venue_seat_id
+```
+
+**A sector is a ticket type.** That is the whole trick: pricing, holds, the
+per-order ceiling, promo splitting, the ledger and the archive fee already work
+on ticket types, so a sector adds a rectangle on a picture and, optionally,
+named seats inside it. A sector with no seats sells by count exactly as any
+ticket type does.
+
+The rectangles are stored as fractions of the plan image (0..1), so
+re-photographing the plan moves nothing. Both the editor and the buyer's picker
+draw it at `image_height / image_width`.
+
+**The seat travels: basket → order → ticket.** Migration 0065 closed the gap
+that made the whole feature unsafe — `checkout_start()` deleted the cart line
+the hold lived on, `create_order()` was never told which seat, and
+`fulfill_order()` left `tickets.venue_seat_id` null. A seat is therefore claimed
+by three things, and `seat_claims(event)` is the single function that says so:
+
+| claim | source | releases when |
+|---|---|---|
+| `held` | `cart_items` with `expires_at > now()` | the basket expires |
+| `ordered` | `orders` that are `processing`, or `requires_payment` and unexpired | the order is cancelled or expires |
+| `sold` | `tickets` with status `valid`/`used` | the ticket is refunded or cancelled |
+
+Two unique partial indexes make double-selling impossible rather than unlikely:
+`tickets_seat_once` and `orders_seat_once`. Neither predicate can call `now()`,
+so an expired-but-unswept order still blocks its seat — the safe direction to be
+wrong in, and `release_expired_holds()` runs on every basket operation.
+
+`create_order()` and `cart_add()` both refuse a ticket type whose sector has
+seats when no seat is named (`SEAT_REQUIRED`). Without that the guest checkout
+and the plain ticket list each sold numbered stalls seats with no seat on them.
+
+Seats have a `kind` (`standard`, `wheelchair`, `companion`, `limited_view`) and
+an `is_sellable` flag, so a pillar or a wheelchair space is a seat that exists
+and is not an ordinary chair. `suggest_seats()` only ever offers `standard`.
 
 ### premium_subscriptions
 

@@ -15,6 +15,7 @@ import {
 } from '@/api/events';
 import { openExternal } from '@/lib/external';
 import { addToCart, getCart } from '@/api/cart';
+import { getSeatMap } from '@/api/seating';
 import { track } from '@/marketing/tags';
 import { getPeopleRecommendations, describeMatch } from '@/api/ai';
 import { shareEvent } from '@/lib/share';
@@ -246,6 +247,17 @@ export default function EventDetailScreen() {
     queryKey: ['event', id, 'connect'],
     queryFn: () => getPeopleRecommendations({ eventId: eventId!, limit: 10 }),
     enabled: Boolean(eventId),
+  });
+
+  // Almost no event has a seating plan, so this is asked for only when one is
+  // attached. It answers one question the ticket list cannot answer on its own:
+  // which ticket types are sold by named seat. Those cannot go in a basket by
+  // the metre — the database refuses it — so offering "Pridať" on them would be
+  // a button that fails.
+  const seatMap = useQuery({
+    queryKey: ['event', id, 'seatmap'],
+    queryFn: () => getSeatMap(eventId!),
+    enabled: Boolean(eventId) && Boolean(event.data?.venue_map_id),
   });
 
   // Only asked for on an event BLUP listed for somebody — the claim button has
@@ -494,6 +506,14 @@ export default function EventDetailScreen() {
   const isOwner = data.creator_id === profile?.id;
   const isFull = Boolean(data.capacity && data.attendee_count >= data.capacity);
   const hasTickets = data.ticket_types.length > 0;
+
+  const numberedTypes = new Set(
+    (seatMap.data?.sections ?? [])
+      .filter((section) => section.numbered && section.ticket_type_id)
+      .map((section) => section.ticket_type_id as string),
+  );
+  const everyTicketIsSeated = hasTickets
+    && data.ticket_types.every((ticket) => numberedTypes.has(ticket.id));
 
   // Buyers see one number — the full price. This only says VAT is already in it,
   // and only for an organizer who is registered for it.
@@ -786,7 +806,14 @@ export default function EventDetailScreen() {
                       <Caption style={styles.ticketVat}>({vatLabel})</Caption>
                     ) : null}
                   </View>
-                  {HAS_CART && !soldOut ? (
+                  {numberedTypes.has(ticket.id) && !soldOut ? (
+                    <Button
+                      title="Vybrať miesto"
+                      variant="secondary"
+                      compact
+                      onPress={() => router.push(`/event/seats/${data.id}`)}
+                    />
+                  ) : HAS_CART && !soldOut ? (
                     <Button
                       title="Pridať"
                       variant="secondary"
@@ -800,9 +827,21 @@ export default function EventDetailScreen() {
             })}
 
             <Button
-              title={cartCount > 0 ? `Do košíka (${cartCount})` : 'Kúpiť'}
+              title={
+                cartCount > 0 ? `Do košíka (${cartCount})`
+                  : everyTicketIsSeated ? 'Vybrať si miesto'
+                    : 'Kúpiť'
+              }
               loading={busy}
-              onPress={() => void buy()}
+              onPress={() => {
+                // A hall that sells by seat has no "cheapest ticket" to add
+                // blind — the whole point is choosing where you sit.
+                if (cartCount === 0 && everyTicketIsSeated) {
+                  router.push(`/event/seats/${data.id}`);
+                  return;
+                }
+                void buy();
+              }}
               disabled={data.ticket_types.every((t) => t.quantity_sold >= t.quantity_total)}
               style={styles.ticketButton}
             />
@@ -926,7 +965,10 @@ export default function EventDetailScreen() {
         {/* Only for an event that has a plan, which is almost none of them —
             everything else keeps the plain ticket list above. */}
         {/* The organizer's way back in, on their own event. */}
-        {isOwner && data.venue_map_id ? (
+        {/* Before this the card appeared only once the event already had a
+            plan — and the only screen that can create one is the card's own
+            destination. Seating was built, tested and unreachable. */}
+        {isOwner && hasTickets ? (
           <Pressable
             style={styles.connectCard}
             onPress={() => router.push(`/organizer/plan/${data.id}`)}
@@ -936,8 +978,14 @@ export default function EventDetailScreen() {
               <Text style={styles.connectGlyph}>✎</Text>
             </View>
             <View style={styles.flex}>
-              <Text style={styles.hostName}>Upraviť plán sály</Text>
-              <Caption style={styles.matchReason}>Sektory, farby a číslované rady</Caption>
+              <Text style={styles.hostName}>
+                {data.venue_map_id ? 'Upraviť plán sály' : 'Predávať po sektoroch a miestach'}
+              </Text>
+              <Caption style={styles.matchReason}>
+                {data.venue_map_id
+                  ? 'Sektory, farby a číslované rady'
+                  : 'Nahraj plán sály a kupujúci si vyberú, kde budú sedieť'}
+              </Caption>
             </View>
             <View style={styles.connectCta}>
               <Text style={styles.connectCtaLabel}>Otvoriť</Text>

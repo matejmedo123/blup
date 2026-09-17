@@ -63,6 +63,20 @@ const MESSAGES: Record<string, string> = {
   SEAT_NOT_SELLABLE: 'Toto miesto sa nepredáva — býva to výhľad alebo vyhradené miesto.',
   SEAT_NOT_FOUND: 'Toto miesto na pláne nenájdeme. Skús stránku obnoviť.',
   SECTION_NOT_ON_SALE: 'Tento sektor zatiaľ nie je v predaji.',
+  SEAT_REQUIRED: 'V tomto sektore sa sedí na konkrétnych miestach — vyber si na pláne, kde chceš sedieť.',
+  SEAT_WRONG_SECTION: 'Toto miesto patrí do iného sektora, než je vstupenka. Vyber ho na pláne.',
+  SEAT_IS_SINGLE: 'Jedno miesto je jedno miesto. Ak vás je viac, vyber viac miest.',
+  SEATS_DIFFERENT_EVENTS: 'Vybrané miesta nie sú z toho istého eventu.',
+  NO_SEATS: 'Najprv vyber aspoň jedno miesto.',
+  // The organizer's side of the plan.
+  SEATS_IN_USE: 'Tieto miesta sú už predané alebo ich niekto drží.',
+  SECTION_NOT_FOUND: 'Tento sektor už na pláne nie je.',
+  VENUE_MAP_NOT_FOUND: 'Tento plán sály už neexistuje.',
+  INVALID_GRID: 'Zadaj počet radov aj počet miest v rade — obe aspoň 1.',
+  GRID_TOO_BIG: 'Najviac 200 radov a 200 miest v rade. Väčšiu sálu rozdeľ na sektory.',
+  INVALID_SEAT_KIND: 'Taký druh miesta nepoznáme.',
+  TOO_MANY_PENDING_ORDERS:
+    'Na tento e-mail máš rozpracovaných priveľa objednávok naraz.',
   RESERVATION_EXPIRED: 'Rezervácia vypršala a vstupenky sa vrátili do predaja.',
   CHECKOUT_NOT_FOUND: 'Táto objednávka už neexistuje.',
   AUTH_REQUIRED: 'Na toto sa treba prihlásiť.',
@@ -87,6 +101,26 @@ const MESSAGES: Record<string, string> = {
   NETWORK: 'Bez pripojenia. Skontroluj internet a skús znova.',
 };
 
+/**
+ * Codes whose database HINT is written for the person reading the screen.
+ *
+ * Most hints are notes to whoever is debugging — English, internal, and no help
+ * to a buyer. These few carry the only detail that makes the message actionable
+ * ("rad B má predané miesta"), and the sentence is worse without them, so they
+ * are appended rather than thrown away. Everything else keeps the flat message.
+ */
+const HINTS_ARE_FOR_THE_READER = new Set([
+  'SEATS_IN_USE',
+  'TOO_MANY_PENDING_ORDERS',
+]);
+
+function withHint(code: string, message: string, error: unknown): string {
+  if (!HINTS_ARE_FOR_THE_READER.has(code)) return message;
+
+  const hint = (error as { hint?: unknown } | null)?.hint;
+  return typeof hint === 'string' && hint.trim() ? `${message} ${hint.trim()}` : message;
+}
+
 export function messageFor(error: unknown): string {
   if (!error) return 'Niečo sa pokazilo.';
 
@@ -110,10 +144,10 @@ export function messageFor(error: unknown): string {
         : ((error as { message?: string }).message ?? '');
 
   // Exact match first, then substring (Postgres wraps codes in a longer message).
-  if (MESSAGES[raw]) return MESSAGES[raw];
+  if (MESSAGES[raw]) return withHint(raw, MESSAGES[raw], error);
 
   for (const [code, message] of Object.entries(MESSAGES)) {
-    if (raw.includes(code)) return message;
+    if (raw.includes(code)) return withHint(code, message, error);
   }
 
   if (/network request failed|fetch failed/i.test(raw)) return MESSAGES.NETWORK;

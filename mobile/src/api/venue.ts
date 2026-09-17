@@ -21,6 +21,18 @@ export async function getVenueMaps(organizationId: string): Promise<VenueMap[]> 
   return (data ?? []) as VenueMap[];
 }
 
+/** One plan, with the proportions both the editor and the picker draw it at. */
+export async function getVenueMap(id: string): Promise<VenueMap | null> {
+  const { data, error } = await supabase
+    .from('venue_maps')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data as VenueMap) ?? null;
+}
+
 export async function createVenueMap(input: {
   organizationId: string;
   name: string;
@@ -124,42 +136,106 @@ export async function deleteSection(id: string): Promise<void> {
 /**
  * Fills a section with rows of seats.
  *
- * Rows are lettered A, B, C… and seats numbered from 1. Anything already there
- * is replaced, because "regenerate" is what an organizer means when they change
- * the shape of a stand — and a half-old, half-new grid is worse than either.
+ * This used to delete every seat in the sector from the client and insert a
+ * fresh grid. RLS allowed it, and it was still wrong: tickets point at seats
+ * with ON DELETE SET NULL, so regenerating a stand mid-sale quietly wiped the
+ * row and number off tickets people had already paid for — no error, no trace,
+ * and a buyer who turns up with a ticket for nowhere.
+ *
+ * The database does it now. It refuses to remove a seat somebody holds or has
+ * bought, keeps the ids (and so the kinds) of the seats that survive, and says
+ * what it changed.
  */
 export async function generateSeats(input: {
   sectionId: string;
   rows: number;
   perRow: number;
-}): Promise<number> {
-  await supabase.from('venue_seats').delete().eq('venue_section_id', input.sectionId);
+  /** Where the lettering starts, for a stand whose first row is not A. */
+  startRow?: number;
+}): Promise<{ total: number; created: number; removed: number }> {
+  const { data, error } = await supabase.rpc('generate_section_seats', {
+    p_section_id: input.sectionId,
+    p_rows: input.rows,
+    p_per_row: input.perRow,
+    p_start_row: input.startRow ?? 0,
+  });
 
-  const seats: { venue_section_id: string; row_label: string; seat_number: number }[] = [];
-  for (let r = 0; r < input.rows; r++) {
-    for (let n = 1; n <= input.perRow; n++) {
-      seats.push({
-        venue_section_id: input.sectionId,
-        row_label: rowLabel(r),
-        seat_number: n,
-      });
-    }
-  }
-
-  const { error } = await supabase.from('venue_seats').insert(seats);
   if (error) throw error;
-  return seats.length;
+  return data as { total: number; created: number; removed: number };
 }
 
-/** A, B … Z, then AA, AB — a stand with 27 rows is unusual but not impossible. */
-function rowLabel(index: number): string {
-  let label = '';
-  let n = index;
-  do {
-    label = String.fromCharCode(65 + (n % 26)) + label;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return label;
+/**
+ * Renaming, recolouring or re-pricing a sector.
+ *
+ * Until now a sector drawn in the wrong place could only be deleted — taking
+ * its seats with it, and the seat off every ticket sold from it. Undefined
+ * means "leave this one alone", so the editor sends one field at a time.
+ */
+export async function updateSection(
+  sectionId: string,
+  patch: {
+    name?: string;
+    colour?: string;
+    ticketTypeId?: string | null;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    sortOrder?: number;
+  },
+): Promise<void> {
+  const { error } = await supabase.rpc('update_section', {
+    p_section_id: sectionId,
+    p_name: patch.name ?? null,
+    p_colour: patch.colour ?? null,
+    p_ticket_type_id: patch.ticketTypeId ?? null,
+    p_x: patch.x ?? null,
+    p_y: patch.y ?? null,
+    p_width: patch.width ?? null,
+    p_height: patch.height ?? null,
+    p_sort_order: patch.sortOrder ?? null,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * Takes seats out of sale, or says what they are.
+ *
+ * A pillar, a wheelchair space, a seat the fire officer took away — all of
+ * these are seats that exist and must not be sold as ordinary chairs. Null
+ * leaves a field as it was.
+ */
+export async function setSeatState(
+  seatIds: string[],
+  patch: { sellable?: boolean; kind?: string; note?: string },
+): Promise<number> {
+  const { data, error } = await supabase.rpc('set_seat_state', {
+    p_seat_ids: seatIds,
+    p_sellable: patch.sellable ?? null,
+    p_kind: patch.kind ?? null,
+    p_note: patch.note ?? null,
+  });
+
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/** Every seat of a sector, for the editor's own list. */
+export async function getSectionSeats(sectionId: string): Promise<{
+  id: string; row_label: string; seat_number: number; is_sellable: boolean; kind: string; note: string | null;
+}[]> {
+  const { data, error } = await supabase
+    .from('venue_seats')
+    .select('id, row_label, seat_number, is_sellable, kind, note')
+    .eq('venue_section_id', sectionId)
+    .order('row_label')
+    .order('seat_number');
+
+  if (error) throw error;
+  return (data ?? []) as {
+    id: string; row_label: string; seat_number: number; is_sellable: boolean; kind: string; note: string | null;
+  }[];
 }
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));

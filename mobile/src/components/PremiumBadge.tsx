@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, typography } from '@/theme';
@@ -10,6 +10,11 @@ import { colors, radius, typography } from '@/theme';
  * `premium_until`, which the database keeps in sync with the subscription — so
  * a badge cannot outlive the thing it stands for, which is the only way a badge
  * keeps meaning anything.
+ *
+ * The clock is read once, into state, rather than on every render: reading it
+ * during render is impure — two renders of the same props could disagree — and
+ * the React Compiler rules say so. Once is also all this needs; a badge that
+ * expires while somebody is looking at the screen can wait for the next load.
  */
 export function PremiumBadge({
   until,
@@ -18,7 +23,9 @@ export function PremiumBadge({
   until?: string | null;
   size?: 'small' | 'inline';
 }) {
-  if (!until || new Date(until).getTime() <= Date.now()) return null;
+  const [mountedAt] = useState(() => Date.now());
+
+  if (!until || new Date(until).getTime() <= mountedAt) return null;
 
   return (
     <View style={[styles.badge, size === 'inline' && styles.badgeInline]}>
