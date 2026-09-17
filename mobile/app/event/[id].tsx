@@ -50,6 +50,15 @@ import {
  */
 const HAS_CART = Platform.OS === 'web';
 
+/**
+ * Where a ticket can be bought without an account.
+ *
+ * The browser only. In the app there is a sign-in screen in front of this
+ * anyway, and an anonymous purchase flow there is a different conversation with
+ * Apple.
+ */
+const GUEST_CHECKOUT = Platform.OS === 'web';
+
 /** The address bar carries either a slug or a uuid; only one of them is an id. */
 const UUID_REF = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -115,6 +124,15 @@ export default function EventDetailScreen() {
   const buy = async () => {
     if (!data) return;
 
+    // A guest has no basket — cart_items belong to an account — so sending them
+    // through it only produced "you need to sign in", and the checkout screen
+    // that knows how to sell to somebody without an account sat behind that
+    // wall, unreachable. They go straight to it instead.
+    if (isGuest && GUEST_CHECKOUT) {
+      router.push(`/event/checkout/${data.id}`);
+      return;
+    }
+
     if (cartCount > 0 || !HAS_CART) {
       router.push(HAS_CART ? '/cart' : `/event/checkout/${data.id}`);
       return;
@@ -133,7 +151,21 @@ export default function EventDetailScreen() {
 
   /** True when the ticket actually made it into the basket. */
   const addTicket = async (ticketTypeId: string): Promise<boolean> => {
-    if (!requireAuth('Rezervácia drží vstupenky 15 minút — musí vedieť komu.', () => {})) {
+    if (!requireAuth(
+      'Rezervácia drží vstupenky 15 minút — musí vedieť komu.',
+      () => {},
+      // Buying is the one thing here that genuinely needs no account: a ticket
+      // needs a name, an address and a town, which is what the checkout asks
+      // for. The sheet offers that instead of only a wall.
+      isGuest && GUEST_CHECKOUT && data
+        ? {
+            href: `/event/checkout/${data.id}`,
+            label: 'Pokračovať ako hosť',
+            note: 'Bez účtu to ide tiež — stačí meno, e-mail a mesto. Vstupenku ti pošleme '
+              + 'e-mailom a pri vstupe funguje rovnako. Účet ti ju len odloží na jedno miesto.',
+          }
+        : null,
+    )) {
       return false;
     }
     setError(null);

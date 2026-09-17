@@ -138,8 +138,12 @@ export default function CartScreen() {
     return (
       <Screen>
         <SignInInvite
+          glyph="🎟"
           title="Košík patrí k účtu"
-          body="Rezervácia drží vstupenky 15 minút — a musí vedieť, komu ich drží."
+          body={
+            'Rezervácia drží vstupenky 15 minút — a musí vedieť, komu ich drží. '
+            + 'Kúpiť sa ale dá aj bez účtu: otvor event a daj Kúpiť, stačí meno, e-mail a mesto.'
+          }
         />
       </Screen>
     );
