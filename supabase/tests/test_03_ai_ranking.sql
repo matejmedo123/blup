@@ -83,8 +83,16 @@ begin
   assert bd -> 'components' ? 'distance_score', 'breakdown must expose distance_score';
   assert bd -> 'components' ? 'social_relevance', 'breakdown must expose social_relevance';
   assert bd -> 'components' ? 'past_behaviour', 'breakdown must expose past_behaviour';
-  assert bd -> 'components' ? 'popularity', 'breakdown must expose popularity';
+  -- `popularity` became `momentum` in the v2 ranker: a total measured age, not
+  -- interest — an event that filled in March outranked one selling out this
+  -- week, for ever. The component is still exposed, under the name of what it
+  -- now measures.
+  assert bd -> 'components' ? 'momentum', 'breakdown must expose momentum';
   assert bd -> 'components' ? 'time_relevance', 'breakdown must expose time_relevance';
+  assert bd -> 'components' ? 'fit', 'breakdown must expose fit';
+  assert bd -> 'components' ? 'freshness', 'breakdown must expose freshness';
+  assert bd -> 'components' ? 'fatigue', 'breakdown must expose fatigue';
+  assert bd ->> 'engine' = 'sql_ranker_v2', format('engine is %s', bd ->> 'engine');
   assert (bd -> 'components' ->> 'interest_match')::numeric > 0,
     'the matching event must have a non-zero interest score';
   assert (bd -> 'facts' ->> 'distance_m')::numeric between 900 and 1100,

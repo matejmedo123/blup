@@ -15,15 +15,22 @@ insert into auth.users (id, email) values
 update public.profiles set latitude = 48.3069, longitude = 18.0864
 where id = '11111111-1111-1111-1111-111111111111';
 
--- The schema seeds interests, so take the one that is there rather than adding
--- a second 'techno' that the unique slug would reject anyway.
-insert into public.interests (slug, name, category, sort_order)
-values ('techno', 'Techno', 'techno', 1)
-on conflict (slug) do nothing;
-
+-- The catalogue is seeded by migration 0013, and there 'techno' is a slug under
+-- the 'music' category. This used to insert a techno *category* that the unique
+-- slug rejected, and then pick by that category — so it selected nothing, the
+-- person had no interests at all, and a test about matching somebody's taste
+-- passed without any taste to match. Pick by slug, and then check the fixture
+-- did what it says.
 insert into public.user_interests (user_id, interest_id)
 select '11111111-1111-1111-1111-111111111111', i.id
-from public.interests i where i.category = 'techno' limit 1;
+from public.interests i where i.slug = 'techno' limit 1;
+
+do $$
+begin
+  assert exists (select 1 from public.user_interests
+                 where user_id = '11111111-1111-1111-1111-111111111111'),
+    'the fixture has to work before the assertions mean anything';
+end $$;
 
 -- Bratislava, ~80 km away: big, matches their taste.
 insert into public.events (id, creator_id, title, category, latitude, longitude,

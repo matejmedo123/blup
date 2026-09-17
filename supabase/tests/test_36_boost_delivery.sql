@@ -17,12 +17,19 @@ insert into auth.users (id, email) values
 update public.profiles set latitude = 48.3069, longitude = 18.0864
 where id = '11111111-1111-1111-1111-111111111111';
 
-insert into public.interests (slug, name, category, sort_order)
-values ('techno', 'Techno', 'techno', 1) on conflict (slug) do nothing;
-
+-- By slug: 'techno' is seeded under the 'music' category, so picking by
+-- category selects nothing and leaves the person with no taste at all — which
+-- is the whole variable this test turns.
 insert into public.user_interests (user_id, interest_id)
 select '11111111-1111-1111-1111-111111111111', i.id
-from public.interests i where i.category = 'techno' limit 1;
+from public.interests i where i.slug = 'techno' limit 1;
+
+do $$
+begin
+  assert exists (select 1 from public.user_interests
+                 where user_id = '11111111-1111-1111-1111-111111111111'),
+    'the fixture has to work before the relevance floor means anything';
+end $$;
 
 -- Three events: one that fits, one far away, one of the wrong kind.
 insert into public.events (id, creator_id, title, category, latitude, longitude,
