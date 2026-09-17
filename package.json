@@ -18,6 +18,7 @@
     "check:crop": "node scripts/smoke-crop.mjs",
     "check:geocode": "node scripts/check-geocode.mjs",
     "check:maptiles": "node scripts/check-maptiles.mjs",
+    "check:salesmap": "node scripts/check-salesmap.mjs",
     "check:pull": "node scripts/check-pull.mjs",
     "check:platform": "node scripts/check-platform-files.mjs",
     "check:hooks": "node scripts/check-hooks.mjs",
