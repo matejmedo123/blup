@@ -21,6 +21,7 @@ import { BottomInsetProvider } from '@/components/BottomInset';
 import { ImageCropProvider } from '@/components/ImageCrop';
 import { DialogProvider } from '@/components/Dialog';
 import { AccentProvider } from '@/theme/accent';
+import { SponsoredSpotlight } from '@/components/SponsoredSpotlight';
 import { RouteProgress } from '@/components/RouteProgress';
 import { StartupGate } from '@/components/StartupGate';
 import { MarketingTags } from '@/marketing/tags';
@@ -204,6 +205,10 @@ export default function RootLayout() {
                         {/* Floats over every screen so a basket with a ticket in
                             it cannot go unnoticed until the reservation expires. */}
                         <CartFab />
+                        {/* At most one sponsored card a day, and only to
+                            somebody it fits. Every one of those words is a rule
+                            in the database, not a habit of this component. */}
+                        <SponsoredSpotlight />
                       </DialogProvider>
                     </ImageCropProvider>
                     </AccentProvider>

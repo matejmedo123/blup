@@ -788,3 +788,24 @@ export function tripPitchLine(pitch: TripPitch): string {
   }
   return `${where} je ${km} km od teba — ide tam ${pitch.attendee_count} ľudí.`;
 }
+
+/**
+ * Feed rows for a handful of ids.
+ *
+ * A sponsored card is an ordinary card, so it needs the ordinary shape —
+ * distance, saved, friends going. Reshaping the detail response in the client
+ * instead is how two cards of the same event end up looking different.
+ */
+export async function getEventsForCards(
+  ids: string[],
+  coords?: { latitude: number; longitude: number } | null,
+): Promise<EventFeedItem[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.rpc('events_for_cards', {
+    p_ids: ids,
+    p_lat: coords?.latitude ?? null,
+    p_lon: coords?.longitude ?? null,
+  });
+  if (error) throw error;
+  return (data ?? []) as EventFeedItem[];
+}

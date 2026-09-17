@@ -1,5 +1,6 @@
 import { eventHref } from '@/lib/format';
 import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
+import { SponsoredCard } from '@/components/SponsoredCard';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
@@ -612,14 +613,27 @@ export default function HomeScreen() {
                   ) : null}
             </View>
           }
-          renderItem={({ item }) => (
-            <View style={[styles.cardWrapper, layout.columns > 1 && styles.cardCell]}>
-              <EventCard
-                event={item}
-                onPress={() => openEvent(item)}
-                onSave={() => toggleSave(item)}
-              />
-            </View>
+          renderItem={({ item, index }) => (
+            <>
+              <View style={[styles.cardWrapper, layout.columns > 1 && styles.cardCell]}>
+                <EventCard
+                  event={item}
+                  onPress={() => openEvent(item)}
+                  onSave={() => toggleSave(item)}
+                />
+              </View>
+
+              {/* One sponsored card, after the third organic one. Third rather
+                  than first: the feed has to be worth opening before it is
+                  worth selling, and an ad in slot one is what teaches people to
+                  scroll past the top. Renders nothing when no advertiser
+                  qualifies, which is most of the time. */}
+              {index === 2 ? (
+                <SponsoredCard
+                  style={[styles.cardWrapper, layout.columns > 1 && styles.cardCell]}
+                />
+              ) : null}
+            </>
           )}
           ListFooterComponent={
             <>

@@ -17,6 +17,10 @@ export interface BoostPackage {
   price_cents: number;
   currency: string;
   sort_order: number;
+  /** How many times it will be shown — what is actually bought. */
+  impressions: number;
+  /** Where: feed, map, spotlight. */
+  placements: string[];
 }
 
 export interface BoostSession {
@@ -131,4 +135,104 @@ export async function isBoosted(eventId: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('boost_weight_for', { p_event: eventId });
   if (error) throw error;
   return Number(data ?? 0) > 0;
+}
+
+// --- delivery ----------------------------------------------------------------
+
+/**
+ * The sponsored slots for this person, right now.
+ *
+ * Everything that decides what appears here lives in the database: budget,
+ * pacing, the frequency cap, and the relevance floor that keeps a paid event
+ * from being shown to somebody it does not fit. The app asks and renders; it
+ * does not get a say in who sees what.
+ */
+export interface SponsoredSlot {
+  boost_id: string;
+  event_id: string;
+  relevance: number;
+  rank_score: number;
+}
+
+export type BoostPlacement = 'feed' | 'map' | 'spotlight';
+
+export async function getSponsored(
+  placement: BoostPlacement,
+  coords?: { latitude: number; longitude: number } | null,
+  limit = 1,
+): Promise<SponsoredSlot[]> {
+  const { data, error } = await supabase.rpc('sponsored_events', {
+    p_placement: placement,
+    p_lat: coords?.latitude ?? null,
+    p_lon: coords?.longitude ?? null,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as SponsoredSlot[];
+}
+
+/**
+ * Says a sponsored placement was on screen, or was clicked.
+ *
+ * Deliberately swallowed. This can only spend somebody's budget, never extend
+ * it — an impression that fails to record costs the advertiser nothing, and a
+ * failure here must never be the reason a screen does not render.
+ */
+export async function recordBoostEvent(
+  boostId: string,
+  placement: BoostPlacement,
+  kind: 'impression' | 'click' = 'impression',
+): Promise<void> {
+  try {
+    await supabase.rpc('record_boost_event', {
+      p_boost_id: boostId,
+      p_placement: placement,
+      p_kind: kind,
+    });
+  } catch {
+    // See above.
+  }
+}
+
+/** What a boost actually delivered. Organizer only — enforced in the database. */
+export interface BoostReportRow {
+  id: string;
+  package_code: string | null;
+  starts_at: string;
+  ends_at: string;
+  placements: string[];
+  amount_cents: number;
+  currency: string;
+  impression_budget: number;
+  impressions_served: number;
+  clicks: number;
+  people_reached: number;
+  ctr_pct: number;
+  cost_per_click_cents: number | null;
+  tickets_attributed: number;
+}
+
+export async function getBoostReport(eventId: string): Promise<BoostReportRow[]> {
+  const { data, error } = await supabase.rpc('boost_report', { p_event_id: eventId });
+  if (error) throw error;
+  return (data ?? []) as BoostReportRow[];
+}
+
+/** This week's free boost, for Premium. */
+export interface FreeBoostState {
+  is_premium: boolean;
+  available: boolean;
+  used_at: string | null;
+  renews_at: string;
+}
+
+export async function getFreeBoost(): Promise<FreeBoostState> {
+  const { data, error } = await supabase.rpc('my_free_boost');
+  if (error) throw error;
+  return data as FreeBoostState;
+}
+
+export async function claimFreeBoost(eventId: string): Promise<void> {
+  const { error } = await supabase.rpc('claim_free_boost', { p_event_id: eventId });
+  if (error) throw error;
 }

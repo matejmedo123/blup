@@ -7,6 +7,10 @@ import { getEvent } from '@/api/events';
 import {
   createPromoCode, deletePromoCode, getEventBoosts, getPromoCodes, setPromoActive,
 } from '@/api/promo';
+import {
+  claimFreeBoost, getBoostPackages, getBoostReport, getFreeBoost,
+} from '@/api/boost';
+import { payForBoost } from '@/payments/checkout';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import {
@@ -49,6 +53,64 @@ export default function PromoCodesScreen() {
     queryFn: () => getEventBoosts(id!),
     enabled: Boolean(id),
   });
+
+  const packages = useQuery({ queryKey: ['boost-packages'], queryFn: getBoostPackages });
+
+  const report = useQuery({
+    queryKey: ['boost-report', id],
+    queryFn: () => getBoostReport(id!),
+    enabled: Boolean(id),
+  });
+
+  const freeBoost = useQuery({ queryKey: ['free-boost'], queryFn: getFreeBoost, retry: false });
+
+  const [buying, setBuying] = useState<string | null>(null);
+  const [claiming, setClaiming] = useState(false);
+
+  const refreshBoosts = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['boosts', id] }),
+      queryClient.invalidateQueries({ queryKey: ['boost-report', id] }),
+      queryClient.invalidateQueries({ queryKey: ['free-boost'] }),
+    ]);
+  };
+
+  /**
+   * Premium's one a week. Live immediately — there is nothing to pay.
+   *
+   * Not called `useFreeBoost`: a name starting with `use` is a hook to the lint
+   * rule, and it reported a rules-of-hooks violation that was not there.
+   */
+  const claimWeeklyBoost = async () => {
+    if (!id) return;
+    setError(null);
+    setClaiming(true);
+    try {
+      await claimFreeBoost(id);
+      await refreshBoosts();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setClaiming(false);
+    }
+  };
+
+  const buyBoost = async (packageCode: string) => {
+    if (!id) return;
+    setError(null);
+    setBuying(packageCode);
+    try {
+      const result = await payForBoost(id, packageCode);
+      // On the web the browser is already on its way to Stripe; the boost goes
+      // live when the webhook confirms the money, not when this returns.
+      if (result.status === 'redirecting') return;
+      await refreshBoosts();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBuying(null);
+    }
+  };
 
   const submit = async () => {
     setError(null);
@@ -186,19 +248,86 @@ export default function PromoCodesScreen() {
       )}
 
       <SectionHeader title="Boost" />
-      {liveBoost ? (
+      <Caption style={styles.boostIntro}>
+        Boost kupuje miesto a počet zobrazení, nie hodiny. Ukáže sa len ľuďom, ktorým event sedí —
+        okolie, kategória, ešte nebol. Komu nesedí, tomu sa neukáže a ty zaň neplatíš.
+      </Caption>
+
+      {freeBoost.data?.available ? (
         <Notice
           tone="accent"
-          title="Boost beží"
-          body={`Do ${formatEventDate(liveBoost.ends_at)}. Event má vo výbere navyše ${(liveBoost.weight * 100).toFixed(0)} bodov a v zozname je označený ako sponzorovaný.`}
+          title="Máš boost zadarmo"
+          body="Premium má jeden boost týždenne. Minie sa na tento event a zapne sa hneď."
+          actionLabel={claiming ? 'Zapínam…' : 'Použiť zadarmo'}
+          onAction={() => void claimWeeklyBoost()}
         />
-      ) : (
+      ) : freeBoost.data?.is_premium ? (
+        <Caption style={styles.boostIntro}>
+          Tvoj týždenný boost zadarmo si už minul. Ďalší {freeBoost.data.renews_at
+            ? formatEventDate(freeBoost.data.renews_at)
+            : 'budúci týždeň'}.
+        </Caption>
+      ) : null}
+
+      {liveBoost ? (
         <Notice
-          tone="warning"
-          title="Boost sa objednáva mimo appky"
-          body="Platené zviditeľnenie je pripravené v databáze (event_boosts) aj v odporúčacom algoritme, ale nákup cez appku ešte nie je zapojený na platobnú bránu. Zatiaľ ho vie zapnúť BLUP na požiadanie."
+          tone="success"
+          title="Boost beží"
+          body={`Do ${formatEventDate(liveBoost.ends_at)}.`}
         />
-      )}
+      ) : null}
+
+      {/* What it actually delivered. An organizer deciding whether to spend
+          again deserves the number that is defensible, not the one that sells
+          another boost — so reach is people, and a ticket counts only when the
+          same person clicked first and bought within a day. */}
+      {(report.data ?? []).map((row) => (
+        <View key={row.id} style={styles.reportCard}>
+          <View style={styles.reportHead}>
+            <Text style={styles.reportTitle}>
+              {new Date(row.starts_at).toLocaleDateString('sk-SK')} — {new Date(row.ends_at).toLocaleDateString('sk-SK')}
+            </Text>
+            <Caption>{row.amount_cents === 0 ? 'zadarmo' : formatMoney(row.amount_cents, row.currency)}</Caption>
+          </View>
+
+          <View style={styles.reportGrid}>
+            <ReportStat label="Zobrazené" value={`${row.impressions_served} / ${row.impression_budget}`} />
+            <ReportStat label="Ľuďom" value={String(row.people_reached)} />
+            <ReportStat label="Kliknutí" value={`${row.clicks} (${row.ctr_pct} %)`} />
+            <ReportStat label="Vstupeniek" value={String(row.tickets_attributed)} />
+          </View>
+
+          {row.cost_per_click_cents !== null ? (
+            <Caption>
+              {formatMoney(Math.round(row.cost_per_click_cents), row.currency)} za klik
+            </Caption>
+          ) : null}
+        </View>
+      ))}
+
+      {(packages.data ?? []).map((pkg) => (
+        <View key={pkg.code} style={styles.packageRow}>
+          <View style={styles.flex}>
+            <Text style={styles.packageName}>{pkg.name}</Text>
+            <Caption>
+              {pkg.impressions.toLocaleString('sk-SK')} zobrazení ·{' '}
+              {pkg.placements.map((place) => (
+                place === 'feed' ? 'feed'
+                  : place === 'map' ? 'mapa'
+                  : 'vyskakovacia karta'
+              )).join(', ')}
+            </Caption>
+          </View>
+          <Button
+            title={formatMoney(pkg.price_cents, pkg.currency)}
+            variant="secondary"
+            compact
+            onPress={() => void buyBoost(pkg.code)}
+            loading={buying === pkg.code}
+            disabled={buying !== null}
+          />
+        </View>
+      ))}
 
       <Body muted style={styles.footnote}>
         Zľavu prepočítava server pri vytvorení objednávky. Poplatok BLUPu sa počíta zo sumy, ktorú
@@ -208,7 +337,38 @@ export default function PromoCodesScreen() {
   );
 }
 
+function ReportStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.reportStat}>
+      <Text style={styles.reportValue}>{value}</Text>
+      <Caption>{label}</Caption>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  boostIntro: { marginBottom: spacing.md, lineHeight: 18 },
+  packageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  packageName: { ...typography.bodyStrong, color: colors.text },
+  reportCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  reportHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reportTitle: { ...typography.bodyStrong, color: colors.text },
+  reportGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  reportStat: { flexGrow: 1, flexBasis: 0, minWidth: 74 },
+  reportValue: { ...typography.subheading, color: colors.text },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },
