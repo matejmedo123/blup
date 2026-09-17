@@ -22,16 +22,32 @@
  * person who subscribes on the web and later installs the app keeps it.
  */
 import {
-  ApiError, adminClient, errorResponse, handleOptions, json, rateLimit, readJson, requireUser,
-  userClient,
+  ApiError, adminClient, errorResponse, handleOptions, json, optionalUser, rateLimit, readJson,
+  requireUser, userClient,
 } from '../_shared/http.ts';
 import { stripe } from '../_shared/stripe.ts';
 import { env } from '../_shared/env.ts';
 
 type Kind = 'ticket' | 'cart' | 'premium' | 'boost' | 'portal';
 
+/**
+ * Who is buying, when nobody is signed in.
+ *
+ * Exactly what a ticket needs: the name to print on it, the address to send it
+ * to, and the town they come from — which is not a formality, it is the dot on
+ * the organizer's map and the reason they know which city to advertise in next.
+ */
+interface Guest {
+  name?: string;
+  email?: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 interface Body {
   kind?: Kind;
+  guest?: Guest;
   return_url?: string;
   // ticket
   ticket_type_id?: string;
@@ -74,6 +90,48 @@ async function customerFor(
   return customer.id;
 }
 
+/**
+ * What the browser sent, checked.
+ *
+ * Refusing early and by name is the difference between "Zadaj e-mail, kam ti
+ * má prísť vstupenka" and a failed payment nobody can explain. The town is
+ * required for the same reason the name is: a ticket with no name on it and a
+ * map with no dot are both worse than asking one more question.
+ */
+function normaliseGuest(input: Guest | undefined): {
+  name: string; email: string; city: string;
+  latitude: number | null; longitude: number | null;
+} {
+  const name = (input?.name ?? '').trim();
+  const email = (input?.email ?? '').trim().toLowerCase();
+  const city = (input?.city ?? '').trim();
+
+  if (name.length < 2) {
+    throw new ApiError('GUEST_NAME_REQUIRED', 'Napíš meno, na ktoré má vstupenka znieť.', 400);
+  }
+  // Deliberately loose. A regex that tries to be clever about addresses rejects
+  // real ones; what has to be true is that it could be delivered.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 254) {
+    throw new ApiError('GUEST_EMAIL_INVALID', 'Skontroluj e-mail — vstupenka príde naň.', 400);
+  }
+  if (city.length < 2) {
+    throw new ApiError('GUEST_CITY_REQUIRED', 'Napíš mesto, odkiaľ prídeš.', 400);
+  }
+
+  const latitude = Number(input?.latitude);
+  const longitude = Number(input?.longitude);
+  const hasPoint = Number.isFinite(latitude) && Number.isFinite(longitude)
+    && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+
+  return {
+    name: name.slice(0, 120),
+    email,
+    city: city.slice(0, 80),
+    latitude: hasPoint ? latitude : null,
+    longitude: hasPoint ? longitude : null,
+  };
+}
+
 Deno.serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;
@@ -81,12 +139,18 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') throw new ApiError('METHOD_NOT_ALLOWED', 'Use POST', 405);
 
-    const user = await requireUser(req);
-    rateLimit(`web-checkout:${user.id}`, 12, 60_000);
-
     const body = await readJson<Body>(req);
     const kind = body.kind;
     const db = adminClient();
+
+    // Buying a single ticket is the one thing that works without an account.
+    // Everything else here — a basket, a subscription, a boost, the billing
+    // portal — belongs to somebody, so it still demands a session.
+    const signedIn = await optionalUser(req);
+    const guest = kind === 'ticket' && !signedIn ? normaliseGuest(body.guest) : null;
+    const user = guest ? null : await requireUser(req);
+
+    rateLimit(`web-checkout:${user?.id ?? guest?.email ?? 'anon'}`, 12, 60_000);
 
     if (kind === 'ticket') {
       const quantity = Number(body.quantity);
@@ -96,12 +160,19 @@ Deno.serve(async (req) => {
 
       // Same function the native path uses: availability, sales window,
       // capacity, discount and both fees are decided here, not by the browser.
+      // A guest changes who the order belongs to and nothing about what it
+      // costs — the two are asserted equal to the cent in test 31.
       const { data: order, error } = await db
         .rpc('create_order', {
-          p_buyer_id: user.id,
+          p_buyer_id: user?.id ?? null,
           p_ticket_type_id: body.ticket_type_id,
           p_quantity: quantity,
           p_promo_code: typeof body.promo_code === 'string' ? body.promo_code.trim() : null,
+          p_guest_email: guest?.email ?? null,
+          p_guest_name: guest?.name ?? null,
+          p_buyer_city: guest?.city ?? null,
+          p_buyer_latitude: guest?.latitude ?? null,
+          p_buyer_longitude: guest?.longitude ?? null,
         })
         .single();
 
@@ -117,9 +188,17 @@ Deno.serve(async (req) => {
         });
         if (fulfilError) throw new Error(fulfilError.message);
 
+        // A guest has no "my tickets" to be sent to, so the return link carries
+        // the claim token — the only thing that lets that page show the QR.
         return json({
           kind, order_id: order.id, status: 'succeeded', requires_payment: false,
-          redirect_url: safeReturn(`/checkout/return?order=${order.id}`, '/tickets'),
+          claim_token: order.claim_token ?? null,
+          redirect_url: safeReturn(
+            order.claim_token
+              ? `/checkout/return?order=${order.id}&token=${order.claim_token}`
+              : `/checkout/return?order=${order.id}`,
+            '/tickets',
+          ),
         });
       }
 
@@ -143,10 +222,25 @@ Deno.serve(async (req) => {
         // The event's own name on the card statement. An unrecognised line is
         // where a large share of disputes begin.
         descriptor: event?.title ?? null,
-        customerId: await customerFor(db, user),
+        // A guest gets no Stripe customer: a customer record is for somebody
+        // who comes back, and there is no account to attach it to. Stripe still
+        // has the address for the receipt.
+        customerId: user ? await customerFor(db, user) : null,
+        customerEmail: guest?.email ?? null,
         clientReferenceId: order.id,
-        metadata: { order_id: order.id, buyer_id: user.id, event_id: order.event_id, platform: 'blup_web' },
-        successUrl: safeReturn(`/checkout/return?order=${order.id}&session={CHECKOUT_SESSION_ID}`, '/tickets'),
+        metadata: {
+          order_id: order.id,
+          buyer_id: user?.id ?? '',
+          guest_email: guest?.email ?? '',
+          event_id: order.event_id,
+          platform: 'blup_web',
+        },
+        successUrl: safeReturn(
+          order.claim_token
+            ? `/checkout/return?order=${order.id}&token=${order.claim_token}&session={CHECKOUT_SESSION_ID}`
+            : `/checkout/return?order=${order.id}&session={CHECKOUT_SESSION_ID}`,
+          '/tickets',
+        ),
         cancelUrl: safeReturn(`/event/${order.event_id}`, '/'),
         idempotencyKey: `cs_order_${order.id}`,
       });
@@ -163,6 +257,7 @@ Deno.serve(async (req) => {
         amount_cents: order.total_cents,
         archive_fee_cents: order.archive_fee_cents,
         currency: order.currency,
+        claim_token: order.claim_token ?? null,
       });
     }
 

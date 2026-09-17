@@ -380,3 +380,67 @@ export async function claimMyGuestTickets(): Promise<number> {
   if (error) throw error;
   return (data as number) ?? 0;
 }
+
+// --- a ticket with no account behind it -------------------------------------
+
+/**
+ * What a guest bought, read with the token instead of a session.
+ *
+ * There is no row-level path to it: a guest order has no `buyer_id` for RLS to
+ * match, so the database answers through `guest_order_status`, which requires
+ * the claim token that only this browser and the e-mail have. Without the token
+ * it refuses — which is the whole security model here, so it is worth saying
+ * plainly rather than leaving to a policy nobody reads.
+ */
+export interface GuestOrderStatus {
+  order_id: string;
+  status: 'requires_payment' | 'processing' | 'succeeded' | 'failed' | 'refunded' | 'cancelled';
+  quantity: number;
+  total_cents: number;
+  currency: string;
+  guest_email: string | null;
+  guest_name: string | null;
+  event_title: string | null;
+  event_start_at: string | null;
+  venue_name: string | null;
+  city: string | null;
+  tickets: { code: string; qr_secret: string; status: string }[];
+}
+
+export async function getGuestOrder(orderId: string, token: string): Promise<GuestOrderStatus> {
+  const { data, error } = await supabase.rpc('guest_order_status', {
+    p_order_id: orderId,
+    p_token: token,
+  });
+  if (error) throw error;
+  return data as GuestOrderStatus;
+}
+
+/** The same wait as waitForTickets, for somebody who has no account to wait in. */
+export async function waitForGuestOrder(
+  orderId: string,
+  token: string,
+  { attempts = 20, intervalMs = 1200 }: { attempts?: number; intervalMs?: number } = {},
+): Promise<{ status: 'succeeded' | 'pending' | 'failed'; order: GuestOrderStatus | null }> {
+  let last: GuestOrderStatus | null = null;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      last = await getGuestOrder(orderId, token);
+    } catch {
+      // A wrong token, or an order that is not there. Both are permanent, and
+      // retrying twenty times would only make the page look broken for longer.
+      return { status: 'failed', order: null };
+    }
+
+    if (last.status === 'succeeded') return { status: 'succeeded', order: last };
+    if (last.status === 'failed' || last.status === 'cancelled') {
+      return { status: 'failed', order: last };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  // Not an error: the webhook can lag, and the e-mail arrives either way.
+  return { status: 'pending', order: last };
+}

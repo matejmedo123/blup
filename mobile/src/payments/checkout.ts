@@ -19,6 +19,24 @@ export interface PayResult {
   status: 'succeeded' | 'pending' | 'cancelled' | 'redirecting';
   orderId?: string;
   message?: string;
+  /** Web only; kept in the shared shape so callers need no platform branch. */
+  claimToken?: string | null;
+}
+
+/**
+ * Who is buying, when nobody is signed in.
+ *
+ * The three things a ticket needs and nothing more: the name to print on it,
+ * the address to send it to, and the town it is travelled from — which is what
+ * puts a dot on the organizer's map. Everything here is validated again on the
+ * server; this shape is only what the form collects.
+ */
+export interface GuestDetails {
+  name: string;
+  email: string;
+  city: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface PayHandlers {
@@ -45,6 +63,10 @@ export async function payForTickets(
   quantity: number,
   promoCode: string | null,
   handlers: PayHandlers,
+  // Accepted and ignored: buying without an account is a browser flow, and an
+  // app that is signed out has a sign-in screen in front of it. Part of the
+  // signature so callers do not need a platform branch.
+  _guest?: GuestDetails | null,
 ): Promise<PayResult> {
   const session = await createCheckout(ticketTypeId, quantity, promoCode);
 

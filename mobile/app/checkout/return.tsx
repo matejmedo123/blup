@@ -2,7 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { waitForCheckout, waitForTickets } from '@/api/tickets';
+import QRCode from 'react-native-qrcode-svg';
+
+import {
+  ticketQrPayload, waitForCheckout, waitForGuestOrder, waitForTickets,
+  type GuestOrderStatus,
+} from '@/api/tickets';
 import { track } from '@/marketing/tags';
 import { messageFor } from '@/lib/errors';
 import { Body, Button, Caption, LoadingState, Notice, Screen } from '@/components/ui';
@@ -23,7 +28,13 @@ export default function CheckoutReturnScreen() {
   // A single ticket comes back as ?order=…, a basket as ?checkout=…. Both wait
   // for the same thing: the webhook, which is still the only thing that turns
   // money into a ticket.
-  const { order, checkout } = useLocalSearchParams<{ order?: string; checkout?: string }>();
+  // A guest arrives with ?token= as well: they have no account for the ticket to
+  // live in, so this page is where they see it, and the token is the only thing
+  // that lets the database show it to them.
+  const { order, checkout, token } = useLocalSearchParams<{
+    order?: string; checkout?: string; token?: string;
+  }>();
+  const [guestOrder, setGuestOrder] = useState<GuestOrderStatus | null>(null);
   // Arriving with neither parameter is knowable from the first render; it does
   // not need an effect to discover it.
   const [state, setState] = useState<'waiting' | 'done' | 'pending' | 'failed'>(
@@ -38,6 +49,25 @@ export default function CheckoutReturnScreen() {
 
     void (async () => {
       try {
+        // No session, so no row-level read: the guest path asks the database
+        // with the token instead.
+        if (order && token) {
+          const guest = await waitForGuestOrder(order, token, { attempts: 20, intervalMs: 1200 });
+          if (cancelled) return;
+          setGuestOrder(guest.order);
+          setState(guest.status === 'succeeded' ? 'done'
+            : guest.status === 'failed' ? 'failed' : 'pending');
+
+          if (guest.status === 'succeeded' && guest.order) {
+            track('purchase', {
+              valueCents: guest.order.total_cents,
+              currency: guest.order.currency,
+              items: guest.order.tickets.map((ticket) => ({ id: ticket.code, quantity: 1 })),
+            });
+          }
+          return;
+        }
+
         const result = checkout
           ? await waitForCheckout(checkout, { attempts: 20, intervalMs: 1200 })
           : await waitForTickets(order!, { attempts: 20, intervalMs: 1200 });
@@ -67,7 +97,7 @@ export default function CheckoutReturnScreen() {
     })();
 
     return () => { cancelled = true; };
-  }, [order, checkout]);
+  }, [order, checkout, token]);
 
   if (state === 'waiting') {
     return (
@@ -84,7 +114,46 @@ export default function CheckoutReturnScreen() {
   return (
     <Screen scroll>
       <View style={styles.wrap}>
-        {state === 'done' ? (
+        {state === 'done' && guestOrder ? (
+          <>
+            <Text style={styles.emoji}>🎫</Text>
+            <Text style={styles.title}>Si dnu</Text>
+            <Body muted style={styles.body}>
+              {guestOrder.event_title
+                ? `${guestOrder.event_title}. `
+                : ''}
+              Vstupenku sme poslali na {guestOrder.guest_email ?? 'tvoj e-mail'}. Toto je tá istá
+              vstupenka — pri vstupe stačí ukázať QR kód.
+            </Body>
+
+            {/* Shown here and not only in the e-mail: they are on this page
+                right now, and an e-mail that has not arrived yet is not a
+                ticket. */}
+            {guestOrder.tickets.map((ticket, index) => (
+              <View key={ticket.code} style={styles.qrCard}>
+                {guestOrder.tickets.length > 1 ? (
+                  <Caption>Vstupenka {index + 1} z {guestOrder.tickets.length}</Caption>
+                ) : null}
+                <View style={styles.qrBox}>
+                  <QRCode
+                    value={ticketQrPayload({ code: ticket.code, qr_secret: ticket.qr_secret })}
+                    size={200}
+                    backgroundColor="#FFFFFF"
+                    color="#000000"
+                  />
+                </View>
+                <Caption>{ticket.code}</Caption>
+              </View>
+            ))}
+
+            <Notice
+              tone="accent"
+              title="Ulož si tento odkaz"
+              body="Je to tvoja vstupenka bez prihlásenia. Ten istý odkaz máš aj v e-maile — a keď si niekedy založíš účet na tú istú adresu, vstupenka sa v ňom objaví sama."
+            />
+            <Button title="Späť na eventy" variant="secondary" onPress={() => router.replace('/')} />
+          </>
+        ) : state === 'done' ? (
           <>
             <Text style={styles.emoji}>🎫</Text>
             <Text style={styles.title}>Si dnu</Text>
@@ -112,7 +181,13 @@ export default function CheckoutReturnScreen() {
               Moje vstupenky a príde ti aj e-mailom — netreba platiť znova.
             </Body>
             {error ? <Notice tone="warning" title="Detail" body={error} /> : null}
-            <Button title="Moje vstupenky" onPress={() => router.replace('/tickets')} />
+            {token ? (
+              // No account, so "my tickets" is empty by definition. The e-mail
+              // is where their copy is.
+              <Button title="Späť na eventy" onPress={() => router.replace('/')} />
+            ) : (
+              <Button title="Moje vstupenky" onPress={() => router.replace('/tickets')} />
+            )}
           </>
         )}
       </View>
@@ -126,4 +201,6 @@ const styles = StyleSheet.create({
   title: { ...typography.title, color: colors.text, textAlign: 'center' },
   body: { textAlign: 'center', marginBottom: spacing.lg },
   hint: { textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xxl },
+  qrCard: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
+  qrBox: { backgroundColor: '#FFFFFF', padding: spacing.md, borderRadius: 12 },
 });

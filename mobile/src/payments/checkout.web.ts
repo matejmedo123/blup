@@ -17,6 +17,24 @@ export interface PayResult {
   status: 'succeeded' | 'pending' | 'cancelled' | 'redirecting';
   orderId?: string;
   message?: string;
+  /** Present for a guest purchase: the only key to the ticket without a login. */
+  claimToken?: string | null;
+}
+
+/**
+ * Who is buying, when nobody is signed in.
+ *
+ * The three things a ticket needs and nothing more: the name to print on it,
+ * the address to send it to, and the town it is travelled from — which is what
+ * puts a dot on the organizer's map. Everything here is validated again on the
+ * server; this shape is only what the form collects.
+ */
+export interface GuestDetails {
+  name: string;
+  email: string;
+  city: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface PayHandlers {
@@ -27,6 +45,7 @@ export interface PayHandlers {
 
 interface WebCheckoutResponse {
   order_id?: string;
+  claim_token?: string | null;
   checkout_id?: string;
   boost_id?: string;
   redirect_url?: string;
@@ -53,21 +72,28 @@ export async function payForTickets(
   ticketTypeId: string,
   quantity: number,
   promoCode: string | null,
+  handlers?: PayHandlers,
+  guest?: GuestDetails | null,
 ): Promise<PayResult> {
   const session = await callFunction<WebCheckoutResponse>('web-checkout', {
     kind: 'ticket',
     ticket_type_id: ticketTypeId,
     quantity,
     promo_code: promoCode,
+    // Sent only when there is no session. The server decides which it is — it
+    // reads the token itself rather than believing this flag.
+    guest: guest ?? undefined,
   });
 
   if (session.requires_payment === false) {
-    return { status: 'succeeded', orderId: session.order_id };
+    // A guest has no "my tickets" page, so the order id and its token are the
+    // only way back to the QR. Handed to the caller rather than kept here.
+    return { status: 'succeeded', orderId: session.order_id, claimToken: session.claim_token };
   }
   if (!session.redirect_url) throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
 
   go(session.redirect_url);
-  return { status: 'redirecting', orderId: session.order_id };
+  return { status: 'redirecting', orderId: session.order_id, claimToken: session.claim_token };
 }
 
 /**

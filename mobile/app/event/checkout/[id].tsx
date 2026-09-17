@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
@@ -8,12 +8,15 @@ import { getEvent } from '@/api/events';
 import {
   markTicketPurchaseSignal, previewPromoCode, quoteOrder, type PromoPreview,
 } from '@/api/tickets';
+import { useAuth } from '@/auth/AuthProvider';
 import { useRequireAuth } from '@/auth/useRequireAuth';
 import { isConfigured } from '@/lib/env';
 import { useStripeBridge } from '@/payments/stripe';
 import {
   canTakePayment, payForTickets, requiresPublishableKey, unavailableMessage,
+  type GuestDetails,
 } from '@/payments/checkout';
+import { suggestAddresses } from '@/maps/geocode';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatPrice, vatIncludedLabel } from '@/lib/format';
 import {
@@ -46,6 +49,7 @@ function promoReason(reason?: string): string {
  */
 export default function CheckoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isGuest } = useAuth();
   const { requireAuth } = useRequireAuth();
   const { initPaymentSheet, presentPaymentSheet } = useStripeBridge();
 
@@ -57,6 +61,12 @@ export default function CheckoutScreen() {
   const [promoCode, setPromoCode] = useState('');
   const [promo, setPromo] = useState<PromoPreview | null>(null);
   const [checkingPromo, setCheckingPromo] = useState(false);
+
+  // Buying without an account. Only the three things a ticket needs; anything
+  // more would be a registration form wearing a different hat.
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestCity, setGuestCity] = useState('');
 
   const event = useQuery({
     queryKey: ['event', id],
@@ -94,14 +104,68 @@ export default function CheckoutScreen() {
     }
   };
 
+  /**
+   * Buying without an account.
+   *
+   * Making somebody register before they can pay is the most expensive sentence
+   * on the site. A ticket has never actually needed an account — it needs a name
+   * to print, an address to reach, and a QR that scans — so those three are what
+   * is asked for, and nothing else.
+   *
+   * Only in a browser. In the app there is a sign-in screen in front of this
+   * anyway, and Apple's own rules make an anonymous purchase flow there a
+   * different conversation.
+   */
+  const guestCheckout = Platform.OS === 'web';
+
+  const guestReady =
+    guestName.trim().length >= 2
+    && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(guestEmail.trim())
+    && guestCity.trim().length >= 2;
+
+  /**
+   * The town, as a point.
+   *
+   * Resolved quietly and never in the way: the purchase must not fail because a
+   * geocoder was slow or a village is spelled unusually. Without coordinates the
+   * town is still a row in the organizer's list — it just has no dot on the map.
+   */
+  const locateCity = async (city: string): Promise<{ latitude: number; longitude: number } | null> => {
+    try {
+      const hits = await suggestAddresses(city, { limit: 1 });
+      const hit = hits[0];
+      return hit ? { latitude: hit.latitude, longitude: hit.longitude } : null;
+    } catch {
+      return null;
+    }
+  };
+
   const pay = async () => {
     if (!selected) return;
 
-    // A guest may look at the prices — that is part of deciding to come. The
-    // account is asked for here, at the last step, where it is actually needed:
-    // a ticket has to belong to somebody.
-    if (!requireAuth('Vstupenka musí patriť účtu — pošleme ti ju e-mailom aj do appky.', () => {})) {
-      return;
+    let guest: GuestDetails | null = null;
+
+    if (isGuest) {
+      // A guest may look at the prices — that is part of deciding to come.
+      // In the app, this is where the account is asked for.
+      if (!guestCheckout) {
+        if (!requireAuth('Vstupenka musí patriť účtu — pošleme ti ju e-mailom aj do appky.', () => {})) {
+          return;
+        }
+      } else {
+        if (!guestReady) {
+          setError('Doplň meno, e-mail a mesto — na e-mail ti príde vstupenka.');
+          return;
+        }
+        const point = await locateCity(guestCity.trim());
+        guest = {
+          name: guestName.trim(),
+          email: guestEmail.trim(),
+          city: guestCity.trim(),
+          latitude: point?.latitude ?? null,
+          longitude: point?.longitude ?? null,
+        };
+      }
     }
 
     setError(null);
@@ -120,6 +184,7 @@ export default function CheckoutScreen() {
           presentPaymentSheet,
           merchantName: event.data?.organization?.name ?? 'BLUP',
         },
+        guest,
       );
 
       if (result.orderId) setOrderId(result.orderId);
@@ -134,6 +199,14 @@ export default function CheckoutScreen() {
       }
 
       void markTicketPurchaseSignal(id!);
+
+      // A guest has no account to keep the ticket in; the return page shows it
+      // from the order id and the token, which is the only key they have.
+      if (guest && result.orderId && result.claimToken) {
+        router.replace(`/checkout/return?order=${result.orderId}&token=${result.claimToken}`);
+        return;
+      }
+
       setStage('done');
     } catch (caught) {
       setError(messageFor(caught));
@@ -371,12 +444,61 @@ export default function CheckoutScreen() {
             : 'Provízia BLUPu sa strháva z výplaty organizátora, nepripočítava sa k tvojej cene.'}
         </Caption>
 
+        {/* Buying without an account. Above the button, not behind it: the
+            three fields are part of deciding to pay, not an obstacle that
+            appears after you have decided. */}
+        {isGuest && guestCheckout ? (
+          <>
+            <SectionHeader title="Kam ti máme poslať vstupenku" />
+            <Caption style={styles.guestIntro}>
+              Účet na to nepotrebuješ. QR kód ti príde e-mailom a funguje pri vstupe tak ako
+              každý iný. Ak si účet neskôr založíš na tú istú adresu, vstupenka sa v ňom objaví.
+            </Caption>
+
+            <Input
+              label="Meno a priezvisko"
+              value={guestName}
+              onChangeText={setGuestName}
+              placeholder="Jana Nováková"
+              autoComplete="name"
+              editable={stage === 'select'}
+              hint="Toto meno bude na vstupenke."
+            />
+            <Input
+              label="E-mail"
+              value={guestEmail}
+              onChangeText={setGuestEmail}
+              placeholder="jana@example.com"
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              editable={stage === 'select'}
+              hint="Sem príde vstupenka. Skontroluj si preklep — inam ju poslať nevieme."
+            />
+            <Input
+              label="Mesto, odkiaľ prídeš"
+              value={guestCity}
+              onChangeText={setGuestCity}
+              placeholder="Nitra"
+              editable={stage === 'select'}
+              hint="Organizátor podľa toho vie, odkiaľ mu ľudia chodia. Adresu nechceme."
+            />
+
+            <Button
+              title="Mám účet, prihlásim sa"
+              variant="ghost"
+              onPress={() => router.push('/(auth)/sign-in')}
+            />
+          </>
+        ) : null}
+
         <Button
           title={payable === 0 ? 'Získať vstupenku' : `Zaplatiť ${formatMoney(payable, currency)}`}
           onPress={pay}
           loading={stage === 'paying'}
           disabled={
             !selected ||
+            (isGuest && guestCheckout && !guestReady) ||
             (payable > 0 && (!canTakePayment() || (requiresPublishableKey && !isConfigured.stripe)))
           }
           style={styles.payButton}
@@ -418,6 +540,7 @@ const styles = StyleSheet.create({
   discountLabel: { color: colors.success },
   discountValue: { color: colors.success },
   promoInput: { flex: 1, marginBottom: 0 },
+  guestIntro: { marginBottom: spacing.md },
   quantityHint: { marginLeft: 'auto' },
 
   summaryRow: {

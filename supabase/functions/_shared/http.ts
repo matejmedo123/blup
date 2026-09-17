@@ -103,6 +103,33 @@ export async function requireUser(req: Request): Promise<{ id: string; email?: s
   return { id: data.user.id, email: data.user.email ?? undefined };
 }
 
+/**
+ * The user behind the request, or nothing.
+ *
+ * For paths that work both ways — buying a ticket is the one — so that a
+ * signed-in buyer is still recognised and a guest is not turned away. An
+ * invalid or expired token is treated as "no session" rather than as an error:
+ * somebody whose session lapsed while the checkout page was open should be
+ * asked for a name and an address, not shown a 401.
+ */
+export async function optionalUser(req: Request): Promise<{ id: string; email?: string } | null> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  const token = authHeader.slice('Bearer '.length);
+  // The anon key is what every browser sends on every request; it identifies
+  // the project, not a person, and getUser would reject it anyway.
+  if (!token || token === Deno.env.get('SUPABASE_ANON_KEY')) return null;
+
+  try {
+    const { data, error } = await adminClient().auth.getUser(token);
+    if (error || !data.user) return null;
+    return { id: data.user.id, email: data.user.email ?? undefined };
+  } catch {
+    return null;
+  }
+}
+
 export async function readJson<T>(req: Request): Promise<T> {
   try {
     return (await req.json()) as T;
