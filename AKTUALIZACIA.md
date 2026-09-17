@@ -15,6 +15,116 @@ Počítaj s **20 minútami**, z toho väčšina je čakanie na build.
 
 ## Čo je nové v tomto balíku
 
+Deväť vecí z tvojho posledného zoznamu. Pri každej je aj to, čo presne bolo zle
+— nie preto, aby to znelo dôkladne, ale aby si vedel, čo presne overiť.
+
+**Objav a odporúčanie**
+
+- **„Mohlo by ťa zaujímať" pri vzdialenom evente.** Keď je niečo ďalej, ale
+  sedí ti to, event sám povie prečo sa oplatí ísť — koľko je to cesty, či tam
+  ide niekto, koho poznáš, a či sa také niečo pri tebe vôbec deje. Keď niet čo
+  povedať, nepovie nič; nepíše sa tam veta do každého eventu.
+- **Prepracovaný ranking.** Deväť signálov namiesto piatich, vzdialenosť plynulo
+  namiesto skoku na hranici, správanie s polčasom rozpadu 60 dní, „trending"
+  ako rýchlosť a nie ako súčet. **A chyba, ktorá skrývala celé eventy:** záujmy
+  sa porovnávali len s hlavnou kategóriou, takže event s kategóriami *hudba +
+  techno* sa človeku, ktorý má rád techno, nezobrazoval ako zhoda.
+- **Blup Connect, celý inak.** „Ľudí, ktorých možno poznáš" už nerobí
+  vzdialenosť — teraz je to: kto sleduje teba, s kým máš spoločnú komunitu,
+  s kým sa vzájomne sledujete, s kým si bol na tom istom evente. **Kto s tebou
+  nemá nič spoločné, sa neukáže vôbec** (predtým to dopĺňalo náhodných ľudí
+  z mesta). A koho odmietneš, ten sa už nevráti.
+
+**Premium**
+
+- **Zmena farby BLUPu.** Modrá, ružová, fialová, tyrkysová, jantárová, limetková
+  — prefarbí sa celá appka. Po skončení predplatného sa vráti modrá a tvoja
+  farba ostane uložená, takže sa po obnovení nemusí vyberať znova.
+- **Pozadie chatu z vlastnej fotky**, odznak Premium pri mene, **dvojnásobné
+  body**, **jedno boostnutie eventu týždenne zadarmo** a **„kto si pozrel tvoj
+  profil"** — počet vidí každý, mená len Premium. Kto má zapnutý anonymný režim,
+  ten sa nezapisuje vôbec.
+
+**Boost**
+
+- **Boost je teraz reklamný systém, nie prepínač.** Rozpočet v zobrazeniach,
+  rozloženie v čase (aby sa celý neminul za hodinu), aukcia — ale **s podlahou
+  relevancie: za peniaze sa nedá dostať pred niekoho vhodnejšieho.** Najviac
+  3 sponzorované veci na človeka za deň a jeden „spotlight" denne celkovo.
+- **Report, ktorý niečo hovorí:** dosah sú *ľudia*, nie zobrazenia, a vstupenka
+  sa pripíše len tomu, kto na reklamu klikol a do 24 hodín kúpil. Vlastné
+  prezeranie organizátorovi rozpočet neminie.
+
+**Sedenie — a chyba, ktorá bola pod ním**
+
+- **Miesto, ktoré si kupujúci vybral, mu po zaplatení ostalo.** Predtým nie:
+  košík sa pri prechode na platbu maže, sedadlo viselo na ňom, takže sa **v tej
+  sekunde vrátilo do predaja** — a vystavená vstupenka nemala na sebe žiadne
+  miesto. Dvaja ľudia s lístkom na tú istú stoličku a nijaký spôsob zistiť,
+  komu patrí. Sedadlo teraz putuje **košík → objednávka → vstupenka** a dve
+  jedinečné obmedzenia v databáze robia druhý nárok nemožným, nie nepravdepodobným.
+- **Číslovaný sektor sa už nedá kúpiť „naslepo".** Dvoje dvere to dovoľovali —
+  nákup bez účtu (ten plán sály nikdy nevidí) a obyčajný zoznam vstupeniek.
+  Obe sú zavreté.
+- **„Nájdi nám miesta vedľa seba."** Vyberie najlepší súvislý blok — najbližší
+  rad k pódiu, čo najbližšie k stredu — a drží ho celý alebo vôbec. Miesto pre
+  vozík nikdy nerozdá partii, ktorá oň nežiadala.
+- **Odpočet, dokedy ti miesto držíme** (predtým to ticho skončilo a človek sa
+  to dozvedel pri platbe), **rozlíšenie „držíš" a „máš kúpené"** (vyzeralo to
+  rovnako a klepnutie na kúpené nerobilo nič), **druhy miest** (vozík, sprievod,
+  obmedzený výhľad) na pláne aj na vstupenke.
+- **Plán sály sa dá upraviť.** Doteraz sa sektor dal len vytvoriť a zmazať —
+  a zmazanie berie so sebou jeho miesta a s nimi rad a číslo z každej predanej
+  vstupenky. Teraz sa dá premenovať, prefarbiť, posunúť aj prekresliť, a
+  **prekreslenie odmietne zmazať miesto, ktoré už niekto kúpil**.
+- **Plán sály bol nedostupný.** Karta, ktorá otvára editor, sa ukazovala len pri
+  evente, ktorý plán už má — a jediná obrazovka, kde sa plán dá vytvoriť, je
+  práve ten editor.
+- **Zoznam „kto kde sedí"**, zoradený tak, ako sa prechádza sála, s voľnými
+  miestami a exportom do CSV. V zozname „Kto príde" sa dá hľadať aj podľa
+  miesta — pri vchode sa ľudia hľadajú podľa „rad D, štrnástka", nie podľa kódu.
+
+**Nával ľudí, veľa registrácií, veľa e-mailov**
+
+- **Čakačka na vypredanú vstupenku.** Keď sa niečo uvoľní, dáme vedieť **presne
+  toľkým ľuďom, koľko je vstupeniek** — v poradí, ako sa prihlásili. Nič
+  nedržíme a e-mail to aj hovorí. Funguje aj bez účtu, stačí adresa.
+- **Pozvánky.** Každý má svoj kód. **Za registráciu sa neplatí nič** — body
+  prídu, až keď pozvaný človek potvrdí e-mail a naozaj si niečo kúpi alebo
+  niekam príde. Desať za mesiac na jedného pozývajúceho.
+- **Organizátor vie napísať ľuďom, ktorí u neho boli.** Tým, čo majú vstupenku
+  na tento event; tým, čo sa prihlásili; alebo tým, čo u neho niekedy boli.
+  **Počet uvidí pred odoslaním** a potvrdenie ho povie nahlas. Tri rozposlania
+  za deň, a len overená organizácia.
+- **Odhlásenie jedným klikom priamo z e-mailu** — bez prihlásenia, aj pre
+  človeka, ktorý účet nikdy nemal. Gmail aj Yahoo to na hromadnej pošte
+  vyžadujú a bez toho sa e-maily filtrujú ako spam.
+- **Strop na hodinu, a vstupenky idú vždy prvé.** Rozposielanie nikdy nezdrží
+  vstupenku niekomu, kto stojí pri vchode. Nastavuje sa v *Admin → Poplatky
+  a sadzby*.
+- **Nedoručiteľná adresa sa už neskúša.** Jeden tvrdý odraz opakovaný
+  päťkrát naprieč tisíckami riadkov je presne to, čím sa zabíja doména.
+
+**✓ Rýchla kontrola po nasadení**
+
+```sql
+-- sedenie: predaná vstupenka musí mať na sebe miesto
+select t.code, vs.row_label, vs.seat_number
+from public.tickets t
+join public.venue_seats vs on vs.id = t.venue_seat_id
+limit 5;
+
+-- e-maily: koľko ich smie odísť a koľko čaká
+select public.email_queue_stats();      -- spusti ako admin
+
+-- čakačka: komu by sa práve teraz písalo (nič neodošle, kým nebeží cron)
+select public.waitlist_size('<ticket-type-id>');
+```
+
+---
+
+## Čo bolo nové v balíku pred týmto
+
 Zo šiestich vecí z tvojho testovania. Pri každej je aj to, čo presne bolo zle.
 
 **Vstupenky**
@@ -96,7 +206,7 @@ select public.check_in_ticket('<kod>', '<qr_secret>');   -- reason: CANCELLED
 
 ---
 
-## Čo bolo nové v predchádzajúcom balíku
+## Čo bolo nové ešte predtým
 
 Toto je zoznam vecí z tvojho posledného testovania. Pri každej je aj to, čo
 presne bolo zle — nie preto, aby to znelo dôkladne, ale aby si vedel, čo presne
@@ -213,9 +323,9 @@ musí sa objaviť lišta s dvoma rovnocennými tlačidlami.
 npx supabase db push
 ```
 
-Aplikuje sa **17 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
-chyby) — 10 z predošlého balíka a 7 z tohto. Existujúce tabuľky sa nemažú ani neprepisujú; pridávajú sa stĺpce a
-funkcie.
+Aplikuje sa **26 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
+chyby) — 17 z predošlých dvoch balíkov a 9 z tohto. Existujúce tabuľky sa
+nemažú ani neprepisujú; pridávajú sa stĺpce a funkcie.
 
 Nemusíš mi to veriť — `db push` sám vypíše, ktoré aplikuje, a čo je už v
 databáze preskočí. Zoznam toho, čo tam už je, si pozrieš takto:
@@ -264,9 +374,18 @@ select count(*) from public.events where slug is null;
 npx supabase functions deploy
 ```
 
-Nasadí sa **16 funkcií**, z toho jedna nová: **`og`** — tá, ktorá robí náhľad
-odkazu na Instagrame a vo WhatsApp. Bez nej sa zdieľané eventy budú ďalej
-zobrazovať s generickou kartou.
+Nasadí sa **17 funkcií**, z toho dve nové:
+
+- **`og`** — náhľad odkazu na Instagrame a vo WhatsApp. Bez nej sa zdieľané
+  eventy budú ďalej zobrazovať s generickou kartou.
+- **`unsubscribe`** — odkaz na konci každého newslettera. **Nasadzuje sa bez
+  overovania tokenu** (skript to robí sám, `--no-verify-jwt`), pretože naň
+  kliká človek v poštovom klientovi, ktorý účet často ani nemá. Bez nej každé
+  odhlásenie zlyhá — a to je sťažnosť na spam aj podľa GDPR.
+
+A **`ticket-email` sa výrazne mení**: rozposiela teraz celý front, nielen
+vstupenky. Bez jej nasadenia neodíde žiadne upozornenie z čakačky ani žiadne
+rozposielanie od organizátora.
 
 Nové premenné prostredia netreba. Ak si už raz spustil `supabase secrets set`,
 funkcie si ich načítajú samy.
@@ -340,6 +459,8 @@ Tieto sa nedajú nasadiť z kódu — sú v Supabase.
 | **Authentication → URL Configuration** | `Site URL` = `https://blup.sk` | Inak potvrdzovací odkaz v e-maile vedie na `localhost` |
 | **Authentication → Emails → SMTP** | Resend, podľa Fázy 5c v `SPUSTENIE.md` | Bez toho chodia 2 e-maily za hodinu a len členom tímu |
 | **Authentication → Rate Limits** | *Emails per hour* z `2` na `100` | Tretia registrácia v hodine inak ticho odpadne |
+| **SQL Editor** | Dva nové cron joby (`blup-waitlist`, `blup-invites`) | Fáza 8 v `SPUSTENIE.md`. Bez nich sa nikdy nikomu neozveme, že sa uvoľnila vstupenka, a body za pozvánky nikto nedostane |
+| **Admin → Poplatky a sadzby** | `email_per_hour` (predvolene 500) | Strop na hodinu. Vstupenky idú vždy prvé, takže rozposielanie nikdy nezdrží vstupenku |
 | **Authentication → Providers → Google** | Client ID a Secret | Tlačidlo sa objaví samo, keď je zapnuté |
 
 ---
@@ -378,7 +499,7 @@ Nič sa im nestratí — účty, vstupenky ani uložené eventy. Zmení sa toto:
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje **všetkých 47 migrácií od nuly** a prejde
-**198 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
+Postaví dočasnú databázu, aplikuje **všetkých 70 migrácií od nuly** a prejde
+**380 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
 potom zlyhá, chyba je v tvojich dátach, nie v schéme — a to je pri hľadaní
 veľmi cenné vedieť.
