@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { withOptionalEmbed } from '@/lib/optionalEmbed';
 import type { ConversationSummary, Message } from '@/types/models';
 
 /**
@@ -22,20 +23,28 @@ export async function getUnreadMessageCount(): Promise<number> {
   return (data as number) ?? 0;
 }
 
+const SENDER = 'sender:profiles!messages_sender_id_fkey (id, display_name, username, avatar_url)';
+
+// The quoted message comes with the reply, so the bubble can show it without a
+// second round trip per message. It is also the one part of this query that can
+// be missing — `messages.reply_to_id` arrived in a later migration, and a
+// project that has the new web build but not the new schema cannot resolve it.
+// Chat must not go blank over a quote, so the query degrades instead.
+const QUOTED =
+  'reply_to:messages!messages_reply_to_id_fkey (id, body, attachment_url, sender_id, deleted_at)';
+
 export async function getMessages(conversationId: string, limit = 100): Promise<Message[]> {
-  const { data, error } = await supabase
+  const rows = (fields: string) => supabase
     .from('messages')
-    .select(
-      '*, sender:profiles!messages_sender_id_fkey (id, display_name, username, avatar_url),'
-      // The quoted message comes with the reply, so the bubble can show it
-      // without a second round trip per message.
-      + ' reply_to:messages!messages_reply_to_id_fkey (id, body, attachment_url, sender_id, deleted_at)',
-    )
+    .select(fields)
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  if (error) throw error;
+  const data = await withOptionalEmbed(
+    () => rows(`*, ${SENDER}, ${QUOTED}`),
+    () => rows(`*, ${SENDER}`),
+  );
   // Oldest first for rendering; the query is newest-first so the limit keeps
   // the most recent page.
   return ((data ?? []) as unknown as Message[]).slice().reverse();

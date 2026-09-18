@@ -626,6 +626,36 @@ export function SectionHeader({
   );
 }
 
+/**
+ * One group of a long form, on its own ground.
+ *
+ * A form built as a flat stack of headings and fields reads as one wall — the
+ * event form had six groups in it and no two of them looked separate, so the
+ * question you were answering was whichever one you happened to be looking at.
+ * A panel gives each group a surface, a title and its own padding, which is the
+ * cheapest way to make "where does this section end" visible without drawing
+ * lines everywhere.
+ *
+ * `hint` is the sentence under the title that says why the group exists; it
+ * belongs to the group rather than floating above the first field.
+ */
+export function Panel({
+  title, hint, children, style,
+}: {
+  title?: string;
+  hint?: string;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.panel, style]}>
+      {title ? <Text style={styles.panelTitle}>{title}</Text> : null}
+      {hint ? <Text style={styles.panelHint}>{hint}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
 export function Switch({
   value, onValueChange, label, description,
 }: {
@@ -659,6 +689,17 @@ export function Switch({
 }
 
 const styles = StyleSheet.create({
+  panel: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  panelTitle: { ...typography.subheading, color: colors.text, marginBottom: spacing.xs },
+  panelHint: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.md },
+
   gridStack: { gap: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.sm },
   gridCell: { paddingHorizontal: spacing.sm, paddingBottom: spacing.lg },

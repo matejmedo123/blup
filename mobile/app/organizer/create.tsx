@@ -20,7 +20,7 @@ import { eventHref, formatEventDateLong } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
 import { DateTimeField } from '@/components/DateTimeField';
 import {
-  Body, Button, Caption, Chip, Input, Notice, Screen, SectionHeader, Switch,
+  Body, Button, Caption, Chip, Input, Notice, Panel, Screen, SectionHeader, Switch,
 } from '@/components/ui';
 import { colors, labelFor, radius, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
@@ -571,6 +571,7 @@ export default function CreateEventScreen() {
       ) : null}
 
       {/* --- basics --------------------------------------------------------- */}
+      <Panel title="O čom to je">
       <Input
         label="Názov"
         value={title}
@@ -609,8 +610,10 @@ export default function CreateEventScreen() {
           : `Môžeš vybrať až ${MAX_CATEGORIES}. Prvá určuje farbu karty.`}
       </Caption>
 
+      </Panel>
+
       {/* --- when ----------------------------------------------------------- */}
-      <SectionHeader title="Kedy" />
+      <Panel title="Kedy">
       <DateTimeField value={startAt} onChange={setStartAt} minimumDate={new Date()} />
 
       <Caption style={styles.fieldLabel}>Ako dlho trvá</Caption>
@@ -656,8 +659,10 @@ export default function CreateEventScreen() {
         />
       ) : null}
 
+      </Panel>
+
       {/* --- where ---------------------------------------------------------- */}
-      <SectionHeader title="Kde" />
+      <Panel title="Kde">
       <Caption style={styles.mapHint}>
         {coords ? 'Miesto je nastavené.' : 'Používame tvoju aktuálnu pozíciu — klikni na mapu a posuň špendlík.'}
       </Caption>
@@ -724,14 +729,15 @@ export default function CreateEventScreen() {
         <Caption style={styles.foundLabel}>📍 {foundLabel}</Caption>
       ) : null}
 
+      </Panel>
+
       {/* --- micro-event ----------------------------------------------------- */}
       {(communitiesQuery.data ?? []).length > 0 ? (
-        <>
-          <SectionHeader title="Robí to niektorá z tvojich komunít?" />
-          <Caption style={styles.orgHint}>
-            Ak áno, komunita sa uvedie ako organizátor a event pribudne aj do jej
-            zoznamu. Viditeľnosť sa tým nemení — verejný event vidia všetci tak či tak.
-          </Caption>
+        <Panel
+          title="Robí to niektorá z tvojich komunít?"
+          hint={'Ak áno, komunita sa uvedie ako organizátor a event pribudne aj do jej '
+            + 'zoznamu. Viditeľnosť sa tým nemení — verejný event vidia všetci tak či tak.'}
+        >
           <View style={styles.chips}>
             <Chip
               label="Nie, samostatný"
@@ -747,7 +753,7 @@ export default function CreateEventScreen() {
               />
             ))}
           </View>
-        </>
+        </Panel>
       ) : null}
 
       {/* --- listed on somebody else's behalf -------------------------------- */}
@@ -757,8 +763,7 @@ export default function CreateEventScreen() {
           city event, and turning the event paid just to reveal the switch then
           failed validation. */}
       {isFullAdmin ? (
-        <>
-          <SectionHeader title="Pridávaš za niekoho iného?" />
+        <Panel title="Pridávaš za niekoho iného?">
           <Switch
             label="Pridať ako BLUP"
             description="Event niekoho iného, ktorý zatiaľ na BLUPe nie je. Bude pri ňom jeho meno a poznámka, že sme ho pridali my."
@@ -795,11 +800,11 @@ export default function CreateEventScreen() {
               />
             </>
           ) : null}
-        </>
+        </Panel>
       ) : null}
 
       {/* --- tickets -------------------------------------------------------- */}
-      <SectionHeader title="Vstupenky" />
+      <Panel title="Vstupenky">
       {/* A listing is somebody else's event, so there is no verified
           organization of ours behind it and nobody to pay out — the database
           refuses paid ticket types without one. Saying that here beats a
@@ -969,6 +974,7 @@ export default function CreateEventScreen() {
         keyboardType="number-pad"
         editable={!saving}
       />
+      </Panel>
 
       <Button
         title="Zverejniť event"

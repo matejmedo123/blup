@@ -1,4 +1,5 @@
 import { callFunction, supabase } from '@/lib/supabase';
+import { withOptionalEmbed } from '@/lib/optionalEmbed';
 import type { Order, Ticket, TicketWithEvent } from '@/types/models';
 import { recordSignal } from './signals';
 
@@ -196,33 +197,46 @@ export async function waitForCheckout(
  * venue_sections are readable by anyone (a plan is what a buyer picks from), and
  * a second round trip per ticket for a row and a number is not worth it.
  */
-const TICKET_SELECT =
-  '*, event:events (id, title, start_at, venue_name, address, cover_image_url), '
-  + 'seat:venue_seats (row_label, seat_number, kind, note, venue_section:venue_sections (name))';
+const TICKET_EVENT = 'event:events (id, title, start_at, venue_name, address, cover_image_url)';
+
+// The one part that can be missing: `tickets.venue_seat_id` arrived in a later
+// migration, so a project running the new web build against the old schema
+// cannot resolve it — and a ticket screen that shows nothing because it could
+// not print a row number is worse than one that just does not print it.
+const TICKET_SEAT =
+  'seat:venue_seats (row_label, seat_number, kind, note, venue_section:venue_sections (name))';
 
 export async function getMyTickets(): Promise<TicketWithEvent[]> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
   if (!userId) return [];
 
-  const { data, error } = await supabase
+  const rows = (fields: string) => supabase
     .from('tickets')
-    .select(TICKET_SELECT)
+    .select(fields)
     .eq('buyer_id', userId)
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  const data = await withOptionalEmbed(
+    () => rows(`*, ${TICKET_EVENT}, ${TICKET_SEAT}`),
+    () => rows(`*, ${TICKET_EVENT}`),
+  );
+
   return (data ?? []) as unknown as TicketWithEvent[];
 }
 
 export async function getTicket(ticketId: string): Promise<TicketWithEvent | null> {
-  const { data, error } = await supabase
+  const row = (fields: string) => supabase
     .from('tickets')
-    .select(TICKET_SELECT)
+    .select(fields)
     .eq('id', ticketId)
     .maybeSingle();
 
-  if (error) throw error;
+  const data = await withOptionalEmbed(
+    () => row(`*, ${TICKET_EVENT}, ${TICKET_SEAT}`),
+    () => row(`*, ${TICKET_EVENT}`),
+  );
+
   return (data as unknown as TicketWithEvent) ?? null;
 }
 

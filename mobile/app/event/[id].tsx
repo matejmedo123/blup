@@ -839,6 +839,50 @@ export default function EventDetailScreen() {
           </Pressable>
         ) : null}
 
+        {/* --- who is going ------------------------------------------------- */}
+        {/* Directly under the header, above the tickets. "Is anybody I know
+            going" is the question people open an event to answer, and it was
+            four sections down — past the price, the description and the map. */}
+        <SectionHeader
+          title={`Kto ide · ${formatCount(data.attendee_count)}`}
+          action={attendees.data && attendees.data.length > 6 ? 'Zobraziť všetkých' : undefined}
+          onAction={() => router.push(`/event/attendees/${data.id}`)}
+        />
+
+        {(followedGoing.data ?? []).length > 0 ? (
+          <Notice
+            tone="accent"
+            title={`${followedGoing.data!.length} z tvojich kruhov ide`}
+            body={followedGoing
+              .data!.slice(0, 3)
+              .map((attendee) => attendee.profile?.display_name ?? 'Niekto')
+              .join(', ')}
+          />
+        ) : null}
+
+        {(attendees.data ?? []).length === 0 ? (
+          <Body muted>Zatiaľ nikto — buď prvý, kto povie, že ide.</Body>
+        ) : (
+          <FlatList
+            horizontal
+            data={attendees.data ?? []}
+            keyExtractor={(item) => item.user_id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.avatarRail}
+            renderItem={({ item }) => (
+              <Pressable
+                style={styles.attendee}
+                onPress={() => router.push(`/user/${item.user_id}`)}
+              >
+                <Avatar url={item.profile?.avatar_url} name={item.profile?.display_name} size={52} />
+                <Caption numberOfLines={1} style={styles.attendeeName}>
+                  {item.profile?.display_name?.split(' ')[0] ?? '—'}
+                </Caption>
+              </Pressable>
+            )}
+          />
+        )}
+
         {/* --- tickets ------------------------------------------------------ */}
         {hasTickets && !isPast ? (
           <>
@@ -984,47 +1028,6 @@ export default function EventDetailScreen() {
           </View>
           <Button title="Navigovať" variant="secondary" compact onPress={() => openDirections(data)} />
         </View>
-
-        {/* --- who is going ------------------------------------------------- */}
-        <SectionHeader
-          title={`Kto ide · ${formatCount(data.attendee_count)}`}
-          action={attendees.data && attendees.data.length > 6 ? 'Zobraziť všetkých' : undefined}
-          onAction={() => router.push(`/event/attendees/${data.id}`)}
-        />
-
-        {(followedGoing.data ?? []).length > 0 ? (
-          <Notice
-            tone="accent"
-            title={`${followedGoing.data!.length} z tvojich kruhov ide`}
-            body={followedGoing
-              .data!.slice(0, 3)
-              .map((attendee) => attendee.profile?.display_name ?? 'Niekto')
-              .join(', ')}
-          />
-        ) : null}
-
-        {(attendees.data ?? []).length === 0 ? (
-          <Body muted>Zatiaľ nikto — buď prvý, kto povie, že ide.</Body>
-        ) : (
-          <FlatList
-            horizontal
-            data={attendees.data ?? []}
-            keyExtractor={(item) => item.user_id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.avatarRail}
-            renderItem={({ item }) => (
-              <Pressable
-                style={styles.attendee}
-                onPress={() => router.push(`/user/${item.user_id}`)}
-              >
-                <Avatar url={item.profile?.avatar_url} name={item.profile?.display_name} size={52} />
-                <Caption numberOfLines={1} style={styles.attendeeName}>
-                  {item.profile?.display_name?.split(' ')[0] ?? '—'}
-                </Caption>
-              </Pressable>
-            )}
-          />
-        )}
 
         {/* --- seating -------------------------------------------------------- */}
         {/* Only for an event that has a plan, which is almost none of them —
