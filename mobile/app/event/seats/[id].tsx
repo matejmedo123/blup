@@ -425,9 +425,21 @@ export default function SeatPickerScreen() {
           <Text style={styles.zoomFront}>▲ k pódiu</Text>
         </View>
       ) : (
-      <View style={[styles.plan, { width: planWidth, height: planHeight }]}>
+      <View
+        nativeID="blup-plan-view"
+        style={[styles.plan, { width: planWidth, height: planHeight }]}
+      >
         {map.image_url ? (
-          <Image source={{ uri: map.image_url }} style={StyleSheet.absoluteFill} contentFit="contain" />
+          // Same reason as the editor: on web this is an <img>, and a browser
+          // will happily start dragging the picture out of the page when
+          // somebody presses on a sector.
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Image
+              source={{ uri: map.image_url }}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+            />
+          </View>
         ) : (
           <View style={styles.planEmpty}>
             <Caption>Organizátor nenahral obrázok plánu — sektory sú nižšie.</Caption>
@@ -694,6 +706,7 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center', padding: spacing.lg,
   },
+
 
   sector: {
     position: 'absolute',

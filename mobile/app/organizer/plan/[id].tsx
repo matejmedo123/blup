@@ -506,13 +506,27 @@ export default function PlanEditorScreen() {
 
       <View
         style={[styles.plan, { width: planWidth, height: planHeight }]}
+        nativeID="blup-plan-surface"
         onStartShouldSetResponder={onStart}
         onMoveShouldSetResponder={() => true}
         onResponderMove={onMove}
         onResponderRelease={onEnd}
       >
         {map.data?.image_url ? (
-          <Image source={{ uri: map.data.image_url }} style={StyleSheet.absoluteFill} contentFit="contain" />
+          // pointerEvents="none" is load-bearing, not tidiness. expo-image
+          // renders an <img> on web, and a browser's own drag-and-drop for
+          // images fires on mousedown — so pressing on the plan started
+          // dragging the picture instead of drawing a rectangle, and the
+          // responder never saw the gesture at all. With the image out of the
+          // hit path the press lands on the View below, which is the one doing
+          // the drawing.
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Image
+              source={{ uri: map.data.image_url }}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+            />
+          </View>
         ) : (
           <View style={styles.planEmpty} pointerEvents="none">
             <Caption>Zatiaľ bez obrázka — sektory sa dajú vyznačiť aj na prázdno.</Caption>
@@ -913,6 +927,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     overflow: 'hidden',
     marginTop: spacing.md,
+    // Dragging across a surface selects the text on it in a browser, which
+    // leaves the sector labels highlighted in blue behind the rectangle being
+    // drawn. Harmless and it looks broken.
+    userSelect: 'none',
   },
   planEmpty: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,

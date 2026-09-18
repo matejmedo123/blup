@@ -111,6 +111,25 @@ const SHELL_CSS = `
   :focus-visible { outline: 2px solid #0080FF; outline-offset: 2px; }
   ::selection { background: #0080FF; color: #fff; }
 
+  /* The plan of a hall is drawn on by dragging, and a browser has two habits
+     that make that impossible. It starts its own drag-and-drop the moment a
+     press lands on an <img>, which steals the gesture outright — that one is
+     handled by taking the picture out of the hit path in the component. And on
+     a touch screen it scrolls the page, which React Native's responder system
+     cannot cancel once the browser has begun it. touch-action:none is the only
+     way to say "this surface handles its own gestures"; there is no React
+     Native style for it, so it is set here against the id the drawing surface
+     carries. The img rules are belt and braces: -webkit-user-drag is the one
+     Safari actually honours. */
+  #blup-plan-surface {
+    touch-action: none;
+    -webkit-user-drag: none;
+  }
+  #blup-plan-surface img, #blup-plan-view img {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
   /* A pointer gets a real scrollbar; a touch screen never sees one. */
   @media (hover: hover) {
     ::-webkit-scrollbar { width: 10px; height: 10px; }
