@@ -321,3 +321,44 @@ export async function getReusablePlans(input: {
     start_at: row.start_at as string,
   }));
 }
+
+/**
+ * Drops the background picture, leaving every sector exactly where it is.
+ *
+ * The rectangles are fractions of the image rather than pixels, which is what
+ * makes this safe — a badly photographed plan can be replaced and nothing
+ * moves. That is the whole reason they are stored that way.
+ */
+export async function clearVenueMapImage(mapId: string): Promise<void> {
+  const { error } = await supabase.rpc('clear_venue_map_image', { p_map_id: mapId });
+  if (error) throw error;
+}
+
+export interface PlanRemoval {
+  detached: boolean;
+  deleted: boolean;
+  /** The plan stayed because another night in the same hall is using it. */
+  used_elsewhere?: boolean;
+}
+
+/**
+ * Takes the plan off the event, and deletes it when nothing wants it.
+ *
+ * `keepPlan` is the safe way out once something has sold: the event goes back
+ * to selling by count and every sold ticket still resolves the seat printed on
+ * it. Deleting is refused in that case, because sectors and seats go with the
+ * map and the foreign key on tickets is ON DELETE SET NULL — the row and number
+ * would quietly vanish off tickets people had paid for.
+ */
+export async function removeVenuePlan(input: {
+  eventId: string;
+  keepPlan?: boolean;
+}): Promise<PlanRemoval> {
+  const { data, error } = await supabase.rpc('delete_venue_map', {
+    p_event_id: input.eventId,
+    p_keep_plan: input.keepPlan ?? false,
+  });
+
+  if (error) throw error;
+  return data as PlanRemoval;
+}

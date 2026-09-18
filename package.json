@@ -21,6 +21,7 @@
     "check:salesmap": "node scripts/check-salesmap.mjs",
     "check:pull": "node scripts/check-pull.mjs",
     "check:plan": "node scripts/check-plan-drag.mjs",
+    "check:titles": "node scripts/check-titles.mjs",
     "check:platform": "node scripts/check-platform-files.mjs",
     "check:hooks": "node scripts/check-hooks.mjs",
     "check:emails": "./scripts/check-emails.sh",

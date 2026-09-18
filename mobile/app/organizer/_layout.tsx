@@ -47,7 +47,16 @@ export default function OrganizerLayout() {
       <Stack.Screen name="analytics/[id]" options={{ title: 'Štatistiky eventu' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Typy vstupeniek' }} />
       <Stack.Screen name="attendees/[id]" options={{ title: 'Kto príde' }} />
-      <Stack.Screen name="promo/[id]" options={{ title: 'Promo kódy' }} />
+      <Stack.Screen name="promo/[id]" options={{ title: 'Propagácia a promo kódy' }} />
+      {/* Registered HERE, not in the root layout. A screen belongs to the
+          nearest Stack above it, and a title set on the wrong one is simply
+          ignored — the header then falls back to the route name, which is how
+          "plan/[id]" ended up written across the top of the seating editor. */}
+      <Stack.Screen name="create" options={{ title: 'Nový event' }} />
+      <Stack.Screen name="profile" options={{ title: 'Verejný profil a logo' }} />
+      <Stack.Screen name="plan/[id]" options={{ title: 'Plán sály' }} />
+      <Stack.Screen name="seating/[id]" options={{ title: 'Sedenie' }} />
+      <Stack.Screen name="announce/[id]" options={{ title: 'Napísať ľuďom' }} />
     </Stack>
   );
 }

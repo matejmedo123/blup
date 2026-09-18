@@ -126,14 +126,16 @@ export default function RootLayout() {
       <Stack.Screen name="connect/[id]" options={{ title: 'Blup Connect' }} />
       <Stack.Screen name="legal/[kind]" options={{ title: '' }} />
       <Stack.Screen name="event/seats/[id]" options={{ title: 'Výber miesta' }} />
-      <Stack.Screen name="organizer/plan/[id]" options={{ title: 'Plán sály' }} />
-      <Stack.Screen name="organizer/seating/[id]" options={{ title: 'Sedenie' }} />
-      <Stack.Screen name="organizer/announce/[id]" options={{ title: 'Napísať ľuďom' }} />
       <Stack.Screen name="invite" options={{ title: 'Pozvi kamarátov' }} />
       <Stack.Screen name="pozvanka/[code]" options={{ title: 'Pozvánka' }} />
       <Stack.Screen name="cart" options={{ title: 'Košík' }} />
       <Stack.Screen name="tickets/index" options={{ title: 'Moje vstupenky' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />
+      {/* Both of these are landed on from outside — one after paying, one from
+          a link in a ticket e-mail. The header is the first thing that says
+          where you are, and it said "checkout/return". */}
+      <Stack.Screen name="checkout/return" options={{ title: 'Platba' }} />
+      <Stack.Screen name="tickets/claim/[token]" options={{ title: 'Uložiť vstupenku' }} />
       <Stack.Screen name="premium" options={{ title: 'BLUP Premium' }} />
       <Stack.Screen name="activity" options={{ title: 'Notifikácie' }} />
       <Stack.Screen name="search" options={{ headerShown: false }} />

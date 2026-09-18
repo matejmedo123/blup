@@ -10,8 +10,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEvent, updateEvent } from '@/api/events';
 import { useAuth } from '@/auth/AuthProvider';
 import {
-  cloneVenueMap, createSection, createVenueMap, deleteSection, generateSeats, getReusablePlans,
-  getSectionSeats, getVenueMap, getVenueSections, setSeatState, updateSection, updateVenueMap,
+  clearVenueMapImage, cloneVenueMap, createSection, createVenueMap, deleteSection, generateSeats,
+  getReusablePlans, getSectionSeats, getVenueMap, getVenueSections, removeVenuePlan, setSeatState,
+  updateSection, updateVenueMap,
 } from '@/api/venue';
 import {
   SEAT_KIND_LABEL, SECTION_KIND_LABEL, type SeatKind, type SectionKind,
@@ -450,6 +451,68 @@ export default function PlanEditorScreen() {
     }
   };
 
+  const dropImage = async () => {
+    if (!mapId) return;
+    const ok = await dialog.confirm({
+      title: 'Zmazať obrázok plánu?',
+      body: 'Sektory ani miesta sa nikam nepohnú — sú uložené ako podiely obrázka, '
+          + 'nie ako body. Môžeš rovno nahrať lepšiu fotku.',
+      confirmLabel: 'Zmazať obrázok',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      await clearVenueMapImage(mapId);
+      await refresh();
+      setNote('Obrázok zmazaný. Sektory zostali tam, kde boli.');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const dropPlan = async () => {
+    const soldFrom = existing.some((section) => section.numbered);
+    const ok = await dialog.confirm({
+      title: 'Odpojiť plán od eventu?',
+      body: soldFrom
+        ? 'Event sa vráti k predaju na počet. Plán zostane uložený a vstupenky, ktoré '
+          + 'už majú miesto, si ho nechajú.'
+        : 'Event sa vráti k predaju na počet. Ak plán nepoužíva žiadny iný event, zmaže sa.',
+      confirmLabel: 'Odpojiť',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      // keepPlan: never destroy a hall somebody may run again next month from
+      // a button whose word was "odpojiť". Deleting an unused one is what the
+      // database does by itself when nothing points at it.
+      const result = await removeVenuePlan({ eventId: id!, keepPlan: false });
+      setEditingId(null);
+      await refresh();
+      setNote(
+        result.deleted
+          ? 'Plán zmazaný — nepoužíval ho žiadny iný event.'
+          : result.used_elsewhere
+            ? 'Plán odpojený. Zostal uložený, lebo ho používa aj iný event.'
+            : 'Plán odpojený a zostal uložený.',
+      );
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const startNew = () => {
     setEditingId(null);
     setSeatsOpen(false);
@@ -788,6 +851,33 @@ export default function PlanEditorScreen() {
         onPress={() => router.push(`/event/seats/${id}`)}
         disabled={existing.length === 0}
       />
+
+      {mapId ? (
+        <>
+          <SectionHeader title="Zahodiť" />
+          <Caption style={styles.hint}>
+            Zlá fotka sa dá vymeniť bez toho, aby sa sektory pohli — sú uložené ako
+            podiely obrázka. Odpojenie plánu vráti event k predaju na počet; predané
+            vstupenky si svoje miesto nechajú.
+          </Caption>
+          <View style={styles.actions}>
+            <Button
+              title="Zmazať obrázok"
+              variant="secondary"
+              compact
+              onPress={dropImage}
+              disabled={busy || !map.data?.image_url}
+            />
+            <Button
+              title="Odpojiť plán od eventu"
+              variant="danger"
+              compact
+              onPress={dropPlan}
+              disabled={busy}
+            />
+          </View>
+        </>
+      ) : null}
     </Screen>
   );
 }
