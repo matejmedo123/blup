@@ -10,6 +10,7 @@ import {
 import {
   canManageBilling, openBillingPortal, subscribePremium,
 } from '@/payments/checkout';
+import { useAuth } from '@/auth/AuthProvider';
 import { messageFor } from '@/lib/errors';
 import {
   Badge, Body, Button, Caption, Divider, LoadingState, Notice, Screen, SectionHeader,
@@ -46,6 +47,7 @@ function priceLabel(price?: { amount_cents: number | null; currency: string } | 
 
 export default function PremiumScreen() {
   const queryClient = useQueryClient();
+  const { isAdmin } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,9 +65,19 @@ export default function PremiumScreen() {
   });
   const store = getStore();
 
+  /**
+   * On the web, Premium needs two Stripe price IDs in the backend environment.
+   * Without them config-status reports `web_configured: false`, the prices come
+   * back null — and the screen used to draw both plan cards with no price and a
+   * "Predplatiť" button that threw PREMIUM_PRICING_NOT_CONFIGURED when pressed.
+   * A blank price beside a live button reads as a bug in the page rather than a
+   * deployment that is not finished, so it is said out loud below instead.
+   */
+  const pricingMissing = canManageBilling && pricing.isFetched && !pricing.data?.configured;
+
   // In a browser the store is Stripe, not Apple; the native-store warning below
   // would be both wrong and confusing there.
-  const canBuy = canManageBilling ? true : store.available;
+  const canBuy = (canManageBilling ? true : store.available) && !pricingMissing;
 
   const buy = async (plan: 'monthly' | 'yearly') => {
     setError(null);
@@ -205,6 +217,22 @@ export default function PremiumScreen() {
         />
       ) : null}
 
+      {/* Named for whoever is looking. An admin can fix this in ten minutes and
+          needs the variable names; everybody else needs to know it is not
+          their browser and not their card. */}
+      {pricingMissing ? (
+        <Notice
+          tone="warning"
+          title="Predplatné sa teraz nedá kúpiť"
+          body={isAdmin
+            ? 'Chýbajú STRIPE_PRICE_PREMIUM_MONTHLY a STRIPE_PRICE_PREMIUM_YEARLY v prostredí '
+              + 'Edge Functions. Vytvor v Stripe produkt s dvoma cenami, ID vlož do supabase/.env '
+              + 'a nasaď funkcie znova (./scripts/deploy-functions.sh).'
+            : 'Ceny sa nenačítali, takže sa tu zatiaľ nedá zaplatiť. Nie je to tebou ani tvojou '
+              + 'kartou — skús to prosím neskôr.'}
+        />
+      ) : null}
+
       {sellsPremium && !isPremium ? (
         <>
           <View style={styles.plans}>
@@ -212,6 +240,8 @@ export default function PremiumScreen() {
               <Text style={styles.planName}>Mesačne</Text>
               {priceLabel(pricing.data?.monthly) ? (
                 <Text style={styles.planPrice}>{priceLabel(pricing.data?.monthly)}</Text>
+              ) : pricingMissing ? (
+                <Text style={styles.planPriceMissing}>cena nie je nastavená</Text>
               ) : null}
               <Caption>Zrušíš kedykoľvek</Caption>
               <Button
@@ -228,6 +258,8 @@ export default function PremiumScreen() {
               <Text style={styles.planName}>Ročne</Text>
               {priceLabel(pricing.data?.yearly) ? (
                 <Text style={styles.planPrice}>{priceLabel(pricing.data?.yearly)}</Text>
+              ) : pricingMissing ? (
+                <Text style={styles.planPriceMissing}>cena nie je nastavená</Text>
               ) : null}
               <Caption>Dva mesiace zadarmo</Caption>
               <Button
@@ -304,6 +336,7 @@ const styles = StyleSheet.create({
   lookButton: { marginBottom: spacing.lg },
 
   plans: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
+  planPriceMissing: { ...typography.caption, color: colors.textQuaternary },
   plan: {
     flex: 1,
     backgroundColor: colors.surface,

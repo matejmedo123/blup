@@ -18,7 +18,34 @@ export async function getGamification(userId?: string): Promise<Gamification> {
   return data as Gamification;
 }
 
+/**
+ * Re-checks which badges are earned, then returns the catalogue.
+ *
+ * The check runs first because most of the newer badges — reviews written,
+ * people followed, communities joined, cities you have actually been to — are
+ * counted from real rows rather than from a column on user_stats, so nothing
+ * on those paths triggers an evaluation. Without this the badge would appear
+ * only at the next unrelated bit of activity, which reads as it never arriving.
+ *
+ * It cannot award a badge somebody has not earned: the thresholds are checked
+ * by the same database function as always.
+ */
+export async function checkMyBadges(): Promise<number> {
+  const { data, error } = await supabase.rpc('check_my_badges');
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 export async function getBadgeProgress(): Promise<BadgeProgress[]> {
+  // Deliberately swallowed: a failed re-check must never be the reason the
+  // badge screen shows nothing. The catalogue below is still the truth, just
+  // possibly one activity behind.
+  try {
+    await checkMyBadges();
+  } catch {
+    // See above.
+  }
+
   const { data, error } = await supabase.rpc('badge_progress');
   if (error) throw error;
   return (data ?? []) as BadgeProgress[];

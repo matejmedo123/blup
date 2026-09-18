@@ -20,6 +20,16 @@ const METRIC_LABEL: Record<string, string> = {
   streak_days: 'dní v sérii',
   level: 'level',
   xp: 'XP',
+  reviews_written: 'napísaných recenzií',
+  following: 'ľudí, ktorých sleduješ',
+  followers: 'ľudí, ktorí sledujú teba',
+  communities_joined: 'komunít',
+  crews_joined: 'výletov v partii',
+  posts_written: 'príspevkov',
+  friends_invited: 'kamošov, ktorí prišli cez teba',
+  tickets_bought: 'kúpených vstupeniek',
+  cities_visited: 'miest, v ktorých si bol',
+  categories_tried: 'vyskúšaných kategórií',
 };
 
 /** Odznaky — the whole catalogue, with what you have and what is still ahead. */

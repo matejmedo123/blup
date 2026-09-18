@@ -100,6 +100,12 @@ export const FEATURES: FeatureNeed[] = [
     migration: '20260101007400_email_ops',
     functions: ['send_test_email', 'email_health'],
   },
+  {
+    key: 'badges',
+    label: 'Odznaky za recenzie, mestá, partie a pozvánky',
+    migration: '20260101007700_more_badges',
+    functions: ['badge_metric_value', 'check_my_badges'],
+  },
 ];
 
 export interface FeatureStatus extends FeatureNeed {
