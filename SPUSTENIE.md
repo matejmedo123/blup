@@ -62,7 +62,7 @@ npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-Aplikuje sa 29 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+Aplikuje sa 79 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
 účtovníctvo. Trvá to pol minúty.
 
 4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
@@ -85,7 +85,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje všetkých 29 migrácií od nuly a prejde
+Postaví dočasnú databázu, aplikuje všetkých 79 migrácií od nuly a prejde
 **135 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
@@ -630,6 +630,19 @@ prečítať cudzí QR kód, dať si Premium zadarmo a povýšiť sa na admina. O
 Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 
 **✓ Kontrola:** `22 prešlo, 0 zlyhalo` a `19 prešlo, 0 zlyhalo`.
+
+### A tri, ktoré netreba nasadenie
+
+```bash
+npm run db:verify     # 79 migrácií a 47 testovacích súborov na dočasnej databáze
+npm run check:dns     # SPF, DKIM, DMARC a návratová cesta nedoručeniek
+npm run check:speed   # rýchlosť stránky na priemernom telefóne, s rozpočtom
+```
+
+`check:speed` postaví build, otvorí ho v prehliadači spomalenom na telefón na
+4 Mbit a zlyhá, keď stránka prekročí rozpočet — dnes je to 920 kB a prvé
+písmeno po ~460 ms. Je to jediný spôsob, ako si všimnúť, že niečo pridalo pol
+megabajtu, skôr než sa ozvú ľudia.
 
 ---
 
