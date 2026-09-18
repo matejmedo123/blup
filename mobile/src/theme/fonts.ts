@@ -1,36 +1,16 @@
-import {
-  useFonts,
-  Nunito_400Regular,
-  Nunito_600SemiBold,
-  Nunito_700Bold,
-  Nunito_800ExtraBold,
-  Nunito_900Black,
-} from '@expo-google-fonts/nunito';
-import {
-  JetBrainsMono_400Regular,
-  JetBrainsMono_600SemiBold,
-} from '@expo-google-fonts/jetbrains-mono';
-
 /**
- * Loads the two families the design system uses. Nunito carries the full Latin
- * Extended range, which Slovak needs — ľ, ť, ď, ň, ô, č, š, ž all render
- * properly rather than falling back mid-word.
+ * Fonts, the shared entry point.
  *
- * Returns false until the fonts are ready; the root layout holds the splash
- * screen until then so text never reflows from a system fallback.
+ * The native build downloads the .ttf faces through expo-font and holds the
+ * splash screen until they are ready — see fonts.native.ts. The web does not
+ * come here at all: fonts.web.ts returns immediately, because on the web the
+ * faces are declared as @font-face in app/+html.tsx and the browser streams
+ * them with `font-display: swap`.
+ *
+ * This file is the fallback for any platform without its own variant, and it
+ * must never be the one that runs on the web — which is why it is a `.ts` next
+ * to a `.web.ts` rather than next to a `.web.tsx`. Metro tries every candidate
+ * for one extension before any candidate for the next, so a `.ts` beside a
+ * `.web.tsx` silently wins on the web too.
  */
-export function useAppFonts(): boolean {
-  const [loaded, error] = useFonts({
-    Nunito_400Regular,
-    Nunito_600SemiBold,
-    Nunito_700Bold,
-    Nunito_800ExtraBold,
-    Nunito_900Black,
-    JetBrainsMono_400Regular,
-    JetBrainsMono_600SemiBold,
-  });
-
-  // A font that fails to load must not brick the app — fall through to the
-  // system face rather than showing a blank screen forever.
-  return loaded || Boolean(error);
-}
+export { useAppFonts } from './fonts.native';

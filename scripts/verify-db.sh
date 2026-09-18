@@ -79,5 +79,8 @@ for f in "$ROOT"/supabase/tests/test_*.sql; do
   run_sql "-d $DB -f '$f'"
 done
 
+echo "==> Auditing indexes"
+run_sql "-d $DB -f '$ROOT/supabase/tests/_index_audit.sql'"
+
 echo ""
 echo "✅ Database verified: migrations applied cleanly and all assertions passed."

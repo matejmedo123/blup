@@ -22,6 +22,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, extname, normalize } from 'node:path';
+import { brotliCompressSync, gzipSync, constants as zlibConstants } from 'node:zlib';
 
 const DIST = process.argv[2] ?? 'mobile/dist';
 const PORT = Number(process.argv[3] ?? 4321);
@@ -63,7 +64,40 @@ const TYPES = {
  * used to throw out of the request handler and take the whole server down with
  * it, which turned a missing page into "the browser tests all failed".
  */
-const send = (res, file, code = 200) => {
+/**
+ * Compression, because a preview that serves 4.7 MB of identity-encoded
+ * JavaScript is not previewing the site anybody visits — the real host sends
+ * ~910 kB of brotli, and the difference is the entire loading experience. Any
+ * timing measured without this is measuring a site that does not exist.
+ *
+ * Compressed once per file and kept: these are static files, and re-compressing
+ * a 4.7 MB bundle on every request made the server itself the slow part.
+ */
+const COMPRESSIBLE = /\.(html|js|css|json|webmanifest|svg|txt|map)$/;
+const encoded = new Map();
+
+function compress(file, body, accept) {
+  if (!COMPRESSIBLE.test(file)) return null;
+
+  const wants = accept.includes('br') ? 'br' : accept.includes('gzip') ? 'gzip' : null;
+  if (!wants) return null;
+
+  const key = `${wants}:${file}:${body.length}`;
+  let cached = encoded.get(key);
+  if (!cached) {
+    cached = wants === 'br'
+      // Quality 5 rather than the default 11: a static host precompresses
+      // offline, but here the wait would be several seconds per build.
+      ? brotliCompressSync(body, {
+        params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 },
+      })
+      : gzipSync(body, { level: 6 });
+    encoded.set(key, cached);
+  }
+  return { encoding: wants, body: cached };
+}
+
+const send = (res, file, code = 200, accept = '') => {
   let body;
   try {
     body = readFileSync(file);
@@ -71,10 +105,19 @@ const send = (res, file, code = 200) => {
     return false;
   }
 
-  res.writeHead(code, {
+  const headers = {
     'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream',
     'Cache-Control': 'no-store',
-  });
+    Vary: 'Accept-Encoding',
+  };
+
+  const packed = compress(file, body, accept);
+  if (packed) {
+    headers['Content-Encoding'] = packed.encoding;
+    body = packed.body;
+  }
+
+  res.writeHead(code, headers);
   res.end(body);
   return true;
 };
@@ -83,17 +126,18 @@ createServer((req, res) => {
   // `normalize` keeps a request for ../../etc/passwd inside the build folder.
   const path = normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
   const direct = join(DIST, path);
+  const accept = req.headers['accept-encoding'] ?? '';
 
-  if (existsSync(direct) && statSync(direct).isFile() && send(res, direct)) return;
-  if (send(res, direct + '.html')) return;
-  if (send(res, join(direct, 'index.html'))) return;
+  if (existsSync(direct) && statSync(direct).isFile() && send(res, direct, 200, accept)) return;
+  if (send(res, direct + '.html', 200, accept)) return;
+  if (send(res, join(direct, 'index.html'), 200, accept)) return;
 
   for (const rule of rules) {
-    if (rule.re.test(path) && send(res, join(DIST, rule.to))) return;
+    if (rule.re.test(path) && send(res, join(DIST, rule.to), 200, accept)) return;
   }
 
-  if (send(res, join(DIST, '+not-found.html'), 404)) return;
-  if (send(res, join(DIST, 'index.html'), 404)) return;
+  if (send(res, join(DIST, '+not-found.html'), 404, accept)) return;
+  if (send(res, join(DIST, 'index.html'), 404, accept)) return;
 
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('404');
