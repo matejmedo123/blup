@@ -1,5 +1,4 @@
-import { eventHref } from '@/lib/format';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,15 +11,9 @@ import {
   createPersonalOrganization,
 } from '@/api/organizations';
 import { getMyEvents } from '@/api/events';
-import {
-  createBoostCheckout, getBoostPackages, getBoostQuote, waitForBoost,
-  type BoostPackage, type BoostQuote,
-} from '@/api/boost';
-import { createPromoCode, getPromoCodes } from '@/api/promo';
-import { isConfigured } from '@/lib/env';
-import { isStripeModuleAvailable, STRIPE_UNAVAILABLE_MESSAGE, useStripeBridge } from '@/payments/stripe';
+import { createPromoCode } from '@/api/promo';
 import { messageFor } from '@/lib/errors';
-import { formatEventDate, formatMoney } from '@/lib/format';
+import { eventHref, formatEventDate, formatMoney } from '@/lib/format';
 import { BottomSheet, SheetRow } from '@/components/BottomSheet';
 import { useToast } from '@/components/Toast';
 import {
@@ -32,24 +25,17 @@ import { categoryFamilies, colors, familyFor, radius, spacing, typography } from
  * Organizátor.
  *
  * Three stat tiles, the event creator's entry point, your events with their
- * numbers, and the promo tools. Boosting opens a sheet that goes through the
- * real payment gateway — the boost only starts once the webhook confirms it.
+ * numbers, and the promo tools. Advertising is no longer bought here: it has
+ * its own screen at /organizer/ads, because a bottom sheet with three fixed
+ * packages was the only door into the whole ad system and nobody found it.
  */
 export default function OrganizerScreen() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { initPaymentSheet, presentPaymentSheet } = useStripeBridge();
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [boostFor, setBoostFor] = useState<{ id: string; title: string } | null>(null);
-  // Tagged with the event they belong to, so opening the sheet for a different
-  // event does not need a setState to clear the old ones — quotes for the wrong
-  // event are simply not read.
-  const [boostQuotes, setBoostQuotes] = useState<
-    { eventId: string; quotes: Record<string, BoostQuote> } | null
-  >(null);
   const [promoFor, setPromoFor] = useState<{ id: string; title: string } | null>(null);
   const [promoCode, setPromoCode] = useState<string | null>(null);
 
@@ -74,7 +60,6 @@ export default function OrganizerScreen() {
 
   const myEvents = useQuery({ queryKey: ['events', 'mine'], queryFn: getMyEvents });
 
-  const packages = useQuery({ queryKey: ['boost', 'packages'], queryFn: getBoostPackages });
 
   // Read once, at mount, rather than on every render: a render whose output
   // depends on the wall clock is not a pure one, and an event crossing its end
@@ -86,39 +71,6 @@ export default function OrganizerScreen() {
   // return changes the hook count between renders — React tears the tree down
   // with #310.
   const [now] = useState(() => Date.now());
-
-  const quoteFor = (code: string): BoostQuote | undefined =>
-    boostFor && boostQuotes?.eventId === boostFor.id ? boostQuotes.quotes[code] : undefined;
-
-  // Priced per package, for this event, the moment the sheet opens — a boost is
-  // cut short at the end of the event and the price does not follow, so the
-  // organizer has to be told before they pay, not after.
-  useEffect(() => {
-    const eventId = boostFor?.id;
-    const list = packages.data ?? [];
-    if (!eventId || list.length === 0) return;
-
-    let cancelled = false;
-
-    void (async () => {
-      const pairs = await Promise.all(list.map(async (pack) => {
-        try {
-          return [pack.code, await getBoostQuote(eventId, pack.code)] as const;
-        } catch {
-          // A quote that will not load is not worth blocking the sheet over —
-          // the server refuses the order anyway if something is wrong.
-          return null;
-        }
-      }));
-      if (cancelled) return;
-      setBoostQuotes({
-        eventId,
-        quotes: Object.fromEntries(pairs.filter(Boolean) as [string, BoostQuote][]),
-      });
-    })();
-
-    return () => { cancelled = true; };
-  }, [boostFor?.id, packages.data]);
 
   // Reach and RSVP come from the events themselves; revenue from the ledger.
   // Personal events count too — somebody running free events under their own
@@ -160,61 +112,6 @@ export default function OrganizerScreen() {
       });
       await organizations.refetch();
       toast.show('Profil organizátora je založený');
-    } catch (caught) {
-      setError(messageFor(caught));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /**
-   * Buying a boost. The server prices it and returns a PaymentIntent; the
-   * native sheet takes the money; then we wait for the webhook, because the
-   * sheet succeeding only means the card was accepted.
-   */
-  const buyBoost = async (pack: BoostPackage) => {
-    if (!boostFor) return;
-
-    setError(null);
-    setBusy(true);
-    try {
-      const session = await createBoostCheckout(boostFor.id, pack.code);
-
-      if (!session.payment_intent_client_secret) {
-        throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
-      }
-
-      const { error: initError } = await initPaymentSheet({
-        merchantDisplayName: 'BLUP',
-        paymentIntentClientSecret: session.payment_intent_client_secret,
-        applePay: { merchantCountryCode: 'SK' },
-        googlePay: { merchantCountryCode: 'SK', testEnv: __DEV__ },
-        returnURL: 'blup://stripe-redirect',
-        allowsDelayedPaymentMethods: false,
-      });
-      if (initError) throw new Error(initError.message);
-
-      const { error: sheetError } = await presentPaymentSheet();
-      if (sheetError) {
-        if (sheetError.code === 'Canceled') {
-          setBusy(false);
-          return;
-        }
-        throw new Error(sheetError.message);
-      }
-
-      const outcome = await waitForBoost(session.boost_id);
-
-      if (outcome === 'succeeded') {
-        toast.show('Boost beží — event je zvýraznený');
-      } else if (outcome === 'pending') {
-        toast.show('Platba prebieha, boost sa zapne o chvíľu');
-      } else {
-        throw new Error('Platba neprešla. Boost sa nespustil.');
-      }
-
-      setBoostFor(null);
-      await queryClient.invalidateQueries({ queryKey: ['events'] });
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -320,6 +217,31 @@ export default function OrganizerScreen() {
           <Text style={styles.createGlyph}>＋</Text>
         </Pressable>
 
+        {/* The way into the ad system that does not require already knowing
+            which event you want to promote — the reason it was reported as
+            missing is that the only other door was a sheet inside one event's
+            row, several screens down. */}
+        <Pressable
+          style={({ pressed }) => [styles.adsCard, pressed && styles.pressed]}
+          onPress={() => router.push('/organizer/ads')}
+        >
+          <LinearGradient
+            colors={[colors.orange, colors.pink]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0.8 }}
+            style={styles.adsGradient}
+          >
+            <View style={styles.flex}>
+              <Text style={styles.adsTitle}>Reklama</Text>
+              <Text style={styles.adsBody}>
+                Vlastný rozpočet, okruh a záujmy ľudí, ktorým sa event ukáže.
+                Vidíš dosah ešte pred zaplatením.
+              </Text>
+            </View>
+            <Text style={styles.adsArrow}>→</Text>
+          </LinearGradient>
+        </Pressable>
+
         {!organization ? (
           <Notice
             tone="warning"
@@ -413,8 +335,13 @@ export default function OrganizerScreen() {
                     <Text style={styles.eventActionLabel}>Promo kód</Text>
                   </Pressable>
 
+                  {/* Straight to the ad screen. This used to open a bottom
+                      sheet with three fixed packages, which was the only door
+                      into the entire ad system — hence "nikde nevidím ten
+                      reklamný systém". The packages are still there, at the
+                      top of that screen, next to the campaign builder. */}
                   <Pressable
-                    onPress={() => setBoostFor({ id: event.id, title: event.title })}
+                    onPress={() => router.push(`/organizer/ads/${event.id}`)}
                     style={styles.boostAction}
                   >
                     <LinearGradient
@@ -423,7 +350,7 @@ export default function OrganizerScreen() {
                       end={{ x: 1, y: 0 }}
                       style={styles.boostGradient}
                     >
-                      <Text style={styles.boostLabel}>Boostnúť</Text>
+                      <Text style={styles.boostLabel}>Reklama</Text>
                     </LinearGradient>
                   </Pressable>
                 </View>
@@ -553,80 +480,6 @@ export default function OrganizerScreen() {
         ) : null}
       </ScrollView>
 
-      {/* --- boost sheet ------------------------------------------------------ */}
-      <BottomSheet
-        visible={Boolean(boostFor)}
-        onClose={() => setBoostFor(null)}
-        title="Boostnúť event"
-        subtitle={boostFor?.title}
-        footer={
-          <View style={styles.sheetActions}>
-            {/* The packages above are the quick answer. This is the real ad
-                tool — your own budget, your own audience, your own dates —
-                and it used to be reachable from nowhere at all. */}
-            <Button
-              title="Vlastná kampaň"
-              variant="secondary"
-              onPress={() => {
-                const id = boostFor?.id;
-                setBoostFor(null);
-                if (id) router.push(`/organizer/ads/${id}`);
-              }}
-              large
-              style={styles.flex}
-            />
-          </View>
-        }
-      >
-        <Body muted style={styles.sheetIntro}>
-          Tri hotové balíky. Ak chceš určiť rozpočet, okruh a záujmy ľudí sám,
-          otvor vlastnú kampaň dole.
-        </Body>
-        {!isStripeModuleAvailable ? (
-          <Notice
-            tone="warning"
-            title="Platby potrebujú development build"
-            body={STRIPE_UNAVAILABLE_MESSAGE}
-          />
-        ) : !isConfigured.stripe ? (
-          <Notice
-            tone="warning"
-            title="Platby nie sú nakonfigurované"
-            body="Tento build nemá Stripe kľúč, takže platobný formulár sa nedá otvoriť."
-          />
-        ) : null}
-
-        {(packages.data ?? []).map((pack) => (
-          <Pressable
-            key={pack.code}
-            disabled={busy || !isConfigured.stripe || !isStripeModuleAvailable}
-            onPress={() => buyBoost(pack)}
-            style={({ pressed }) => [styles.package, pressed && styles.pressed]}
-          >
-            <View style={styles.flex}>
-              <Text style={styles.packageName}>{pack.name}</Text>
-              <Text style={styles.packageMeta}>
-                +{Math.round(pack.weight * 100)} bodov vo výbere · {pack.hours} h
-              </Text>
-              {quoteFor(pack.code)?.truncated ? (
-                <Text style={styles.packageWarning}>
-                  Pobeží {quoteFor(pack.code)!.effective_hours} h z {pack.hours} h —
-                  event sa skončí skôr. Cena sa nemení.
-                </Text>
-              ) : null}
-              {quoteFor(pack.code)?.queued_after ? (
-                <Text style={styles.packageMeta}>
-                  Zaradí sa za boost, ktorý práve beží.
-                </Text>
-              ) : null}
-            </View>
-            <Text style={styles.packagePrice}>
-              {formatMoney(pack.price_cents, pack.currency)}
-            </Text>
-          </Pressable>
-        ))}
-      </BottomSheet>
-
       {/* --- promo sheet ------------------------------------------------------ */}
       <BottomSheet
         visible={Boolean(promoFor)}
@@ -742,6 +595,18 @@ const styles = StyleSheet.create({
   },
   createTitle: { ...typography.subheading, color: colors.text },
   createBody: { ...typography.metaSm, color: colors.textTertiary, marginTop: 3 },
+  adsCard: { marginBottom: spacing.lg },
+  adsGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderRadius: radius.card,
+    padding: spacing.xl,
+  },
+  adsTitle: { ...typography.heading, color: '#FFFFFF' },
+  adsBody: { ...typography.metaSm, color: 'rgba(255,255,255,0.9)', marginTop: 3 },
+  adsArrow: { ...typography.heading, color: '#FFFFFF' },
+
   createGlyph: { fontSize: 26, color: colors.accent },
 
   // Centred to sit over the controls beneath them, which are themselves capped

@@ -11,6 +11,7 @@
  *   cart     { kind, promo_code? }  — whatever is reserved in the basket
  *   premium  { kind, plan: 'monthly' | 'yearly' }
  *   boost    { kind, event_id, package_code }
+ *   campaign { kind, event_id, budget_cents, days, placements, radius_m, categories }
  *   portal   { kind }  — Stripe's own page for changing a card or cancelling
  *
  * Why hosted Checkout rather than card fields in our own page: it brings Apple
@@ -29,7 +30,7 @@ import type { BoostRow, CheckoutRow, OrderRow } from '../_shared/rows.ts';
 import { stripe } from '../_shared/stripe.ts';
 import { env } from '../_shared/env.ts';
 
-type Kind = 'ticket' | 'cart' | 'premium' | 'boost' | 'portal';
+type Kind = 'ticket' | 'cart' | 'premium' | 'boost' | 'campaign' | 'portal';
 
 /**
  * Who is buying, when nobody is signed in.
@@ -59,6 +60,12 @@ interface Body {
   // boost
   event_id?: string;
   package_code?: string;
+  // campaign
+  budget_cents?: number;
+  days?: number;
+  placements?: string[];
+  radius_m?: number;
+  categories?: string[];
 }
 
 /**
@@ -433,6 +440,53 @@ Deno.serve(async (req) => {
         successUrl: safeReturn(`/organizer/promo/${body.event_id}?boost=1`, '/organizer'),
         cancelUrl: safeReturn(`/organizer/promo/${body.event_id}`, '/organizer'),
         idempotencyKey: `cs_boost_${boost.id}`,
+      });
+
+      return json({ kind, boost_id: boost.id, redirect_url: session.url });
+    }
+
+    // A campaign is the same money on the same rails as a boost — the only
+    // difference is that the database prices it from a budget instead of a
+    // package. It matters that this exists at all: on the web there is no
+    // native payment sheet, so a campaign created through boost-create would
+    // sit at `requires_payment` forever and the button would be a lie.
+    if (kind === 'campaign') {
+      if (!body.event_id || typeof body.budget_cents !== 'number') {
+        throw new ApiError('INVALID_BODY', 'event_id and budget_cents are required');
+      }
+
+      // create_ad_campaign() authorizes on auth.uid() and computes the price,
+      // the impression budget and the auction weight itself — so it runs under
+      // the caller's JWT and nothing here can choose what a campaign costs.
+      const { data: created, error } = await userClient(req)
+        .rpc('create_ad_campaign', {
+          p_event: body.event_id,
+          p_budget_cents: Math.round(body.budget_cents),
+          p_days: body.days ?? 7,
+          p_placements: body.placements ?? ['feed'],
+          p_radius_m: body.radius_m ?? 30000,
+          p_categories: body.categories?.length ? body.categories : null,
+        })
+        .single();
+
+      if (error || !created) throw new Error(error?.message ?? 'CAMPAIGN_FAILED');
+      const boost = created as BoostRow;
+
+      const session = await stripe.createCheckoutSession({
+        mode: 'payment',
+        amountCents: boost.amount_cents,
+        currency: boost.currency,
+        productName: 'Reklamná kampaň',
+        productDescription: `${boost.impression_budget} zobrazení`,
+        customerId: await customerFor(db, user),
+        clientReferenceId: boost.id,
+        metadata: {
+          boost_id: boost.id, buyer_id: user.id, event_id: body.event_id,
+          platform: 'blup_web',
+        },
+        successUrl: safeReturn(`/organizer/ads/${body.event_id}?paid=1`, '/organizer'),
+        cancelUrl: safeReturn(`/organizer/ads/${body.event_id}`, '/organizer'),
+        idempotencyKey: `cs_campaign_${boost.id}`,
       });
 
       return json({ kind, boost_id: boost.id, redirect_url: session.url });

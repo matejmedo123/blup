@@ -5,14 +5,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getEvent } from '@/api/events';
 import {
-  createAdCampaign, getAdAudience, getAdQuote, getBoostReport, getEventBoosts, setAdPaused,
-  type BoostPlacement, type EventBoost,
+  getAdAudience, getAdQuote, getBoostPackages, getBoostQuote, getBoostReport, getEventBoosts,
+  setAdPaused, waitForBoost, type BoostPlacement, type BoostQuote, type EventBoost,
 } from '@/api/boost';
+import { payForBoost, payForCampaign } from '@/payments/checkout';
+import { isStripeModuleAvailable, STRIPE_UNAVAILABLE_MESSAGE, useStripeBridge } from '@/payments/stripe';
+import { isConfigured } from '@/lib/env';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import {
-  Body, Button, Caption, Chip, Input, LoadingState, Notice, Panel, Screen, SectionHeader,
+  Button, Caption, Chip, Input, LoadingState, Notice, Panel, Screen, SectionHeader,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -62,9 +65,10 @@ function kilometres(metres: number): string {
 }
 
 export default function AdsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, paid } = useLocalSearchParams<{ id: string; paid?: string }>();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { initPaymentSheet, presentPaymentSheet } = useStripeBridge();
 
   const [budget, setBudget] = React.useState('25');
   const [days, setDays] = React.useState(7);
@@ -73,6 +77,7 @@ export default function AdsScreen() {
   const [placements, setPlacements] = React.useState<BoostPlacement[]>(['feed']);
   const [error, setError] = React.useState<string | null>(null);
   const [buying, setBuying] = React.useState(false);
+  const [buyingPackage, setBuyingPackage] = React.useState<string | null>(null);
   const [pausing, setPausing] = React.useState<string | null>(null);
 
   // Cents, from whatever was typed. A comma is what a Slovak keyboard offers
@@ -108,6 +113,28 @@ export default function AdsScreen() {
     queryFn: () => getAdAudience(id!, radiusM, categories),
     enabled: Boolean(id),
     placeholderData: (previous) => previous,
+  });
+
+  const packages = useQuery({ queryKey: ['boost-packages'], queryFn: getBoostPackages });
+
+  // Priced per package for THIS event, because a boost is cut short at the end
+  // of the event and the price does not follow it down. The organizer has to be
+  // told that before they pay, not after.
+  const packageQuotes = useQuery({
+    queryKey: ['boost-quotes', id],
+    queryFn: async () => {
+      const pairs = await Promise.all((packages.data ?? []).map(async (pack) => {
+        try {
+          return [pack.code, await getBoostQuote(id!, pack.code)] as const;
+        } catch {
+          return null;
+        }
+      }));
+      return Object.fromEntries(
+        pairs.filter((pair): pair is readonly [string, BoostQuote] => pair !== null),
+      ) as Record<string, BoostQuote>;
+    },
+    enabled: Boolean(id) && (packages.data ?? []).length > 0,
   });
 
   const quote = useQuery({
@@ -151,7 +178,7 @@ export default function AdsScreen() {
 
     setBuying(true);
     try {
-      await createAdCampaign({
+      const session = await payForCampaign({
         eventId: id,
         budgetCents,
         days,
@@ -159,15 +186,62 @@ export default function AdsScreen() {
         radiusM,
         categories,
       });
-      // Deliberately not "kampaň beží". It is created as unpaid and becomes
-      // live when the webhook confirms the charge — saying otherwise here would
-      // be the frontend claiming a payment it cannot see.
-      toast.show('Kampaň je pripravená — spustí sa po zaplatení');
+
+      // Web: the browser is already on its way to Stripe's page. Nothing more
+      // happens here, and the campaign goes live when the webhook says so.
+      if (session.status === 'redirecting') return;
+
+      const clientSecret = 'clientSecret' in session ? session.clientSecret : undefined;
+      if (!clientSecret) throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: 'BLUP',
+        paymentIntentClientSecret: clientSecret,
+        applePay: { merchantCountryCode: 'SK' },
+        googlePay: { merchantCountryCode: 'SK', testEnv: __DEV__ },
+        returnURL: 'blup://stripe-redirect',
+        allowsDelayedPaymentMethods: false,
+      });
+      if (initError) throw new Error(initError.message);
+
+      const { error: sheetError } = await presentPaymentSheet();
+      if (sheetError) {
+        // A cancelled sheet is not a failure, and the unpaid campaign simply
+        // never starts — there is nothing to apologise for.
+        if (sheetError.code === 'Canceled') return;
+        throw new Error(sheetError.message);
+      }
+
+      // The sheet succeeding only means the card was accepted. The campaign is
+      // live when our server has been told so, which is what this waits for —
+      // saying "kampaň beží" before that would be the frontend claiming a
+      // payment it cannot see.
+      const outcome = session.orderId ? await waitForBoost(session.orderId) : 'pending';
+      if (outcome === 'succeeded') toast.show('Kampaň beží');
+      else if (outcome === 'pending') toast.show('Platba prebieha, kampaň sa spustí o chvíľu');
+      else throw new Error('Platba neprešla. Kampaň sa nespustila.');
+
       await refresh();
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
       setBuying(false);
+    }
+  };
+
+  const buyPackage = async (code: string) => {
+    if (!id) return;
+    setError(null);
+    setBuyingPackage(code);
+    try {
+      const result = await payForBoost(id, code);
+      if (result.status === 'redirecting') return;
+      await refresh();
+      toast.show('Boost sa spustí po potvrdení platby');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBuyingPackage(null);
     }
   };
 
@@ -198,6 +272,17 @@ export default function AdsScreen() {
 
       {error ? <Notice tone="danger" title="Nepodarilo sa" body={error} /> : null}
 
+      {/* Coming back from Stripe's page. Deliberately not "kampaň beží": the
+          card being accepted and our server being told are two different
+          events, and only the second one starts delivery. */}
+      {paid ? (
+        <Notice
+          tone="success"
+          title="Platba prešla"
+          body="Kampaň sa spustí, hneď ako nám to potvrdí banka — spravidla do minúty. Stav uvidíš nižšie."
+        />
+      ) : null}
+
       {/* --- what is running right now -------------------------------------- */}
       {live.length > 0 ? (
         <>
@@ -211,6 +296,65 @@ export default function AdsScreen() {
               onTogglePause={() => togglePause(boost)}
             />
           ))}
+        </>
+      ) : null}
+
+      {/* Said once, at the top, rather than discovered by pressing a button
+          that cannot work. */}
+      {!isConfigured.stripe ? (
+        <Notice
+          tone="warning"
+          title="Platby nie sú nakonfigurované"
+          body="Tento build nemá Stripe kľúč, takže reklamu sa nedá zaplatiť. Doplň ho a nahraj build znova."
+        />
+      ) : !isStripeModuleAvailable ? (
+        <Notice
+          tone="warning"
+          title="Platby potrebujú development build"
+          body={STRIPE_UNAVAILABLE_MESSAGE}
+        />
+      ) : null}
+
+      {/* --- the quick way --------------------------------------------------- */}
+      {(packages.data ?? []).length > 0 ? (
+        <>
+          <SectionHeader title="Rýchly boost" />
+          <Caption style={styles.sectionNote}>
+            Hotové balíky, keď nechceš nič nastavovať. Chceš si vybrať rozpočet
+            a komu to pôjde? To je kampaň nižšie.
+          </Caption>
+
+          {(packages.data ?? []).map((pack) => {
+            const packQuote = packageQuotes.data?.[pack.code];
+            return (
+              <Pressable
+                key={pack.code}
+                style={styles.package}
+                disabled={Boolean(buyingPackage)}
+                onPress={() => buyPackage(pack.code)}
+              >
+                <View style={styles.flex}>
+                  <Text style={styles.packageName}>{pack.name}</Text>
+                  <Text style={styles.packageMeta}>
+                    {pack.impressions.toLocaleString('sk-SK')} zobrazení · {pack.placements.join(', ')}
+                  </Text>
+                  {packQuote?.truncated ? (
+                    <Text style={styles.packageWarn}>
+                      Event skončí skôr — pobeží {packQuote.effective_hours} h, cena sa nemení.
+                    </Text>
+                  ) : null}
+                  {packQuote?.queued_after ? (
+                    <Text style={styles.packageMeta}>Zaradí sa za boost, ktorý práve beží.</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.packagePrice}>
+                  {buyingPackage === pack.code
+                    ? '…'
+                    : formatMoney(pack.price_cents, pack.currency)}
+                </Text>
+              </Pressable>
+            );
+          })}
         </>
       ) : null}
 
@@ -543,6 +687,21 @@ const styles = StyleSheet.create({
   },
 
   payNote: { marginTop: spacing.xs, marginBottom: spacing.lg },
+
+  package: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  packageName: { ...typography.body, color: colors.text },
+  packageMeta: { ...typography.caption, color: colors.textTertiary },
+  packageWarn: { ...typography.caption, color: colors.orange },
+  packagePrice: { ...typography.body, color: colors.accent },
 
   card: {
     borderRadius: radius.lg,

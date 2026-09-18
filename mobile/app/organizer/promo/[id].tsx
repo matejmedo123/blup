@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getEvent } from '@/api/events';
@@ -253,6 +253,16 @@ export default function PromoCodesScreen() {
         okolie, kategória, ešte nebol. Komu nesedí, tomu sa neukáže a ty zaň neplatíš.
       </Caption>
 
+      {/* The packages are the quick answer. Choosing a budget, a radius and
+          which interests to reach is the ad screen, and it is easy to sit here
+          for a long time without knowing that screen exists. */}
+      <Button
+        title="Otvoriť reklamu — vlastný rozpočet a publikum"
+        variant="secondary"
+        onPress={() => router.push(`/organizer/ads/${id}`)}
+        style={styles.adsLink}
+      />
+
       {freeBoost.data?.available ? (
         <Notice
           tone="accent"
@@ -347,6 +357,7 @@ function ReportStat({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  adsLink: { marginBottom: 14 },
   boostIntro: { marginBottom: spacing.md, lineHeight: 18 },
   packageRow: {
     flexDirection: 'row',

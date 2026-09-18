@@ -337,3 +337,24 @@ export async function setAdPaused(boostId: string, paused: boolean): Promise<voi
   });
   if (error) throw error;
 }
+
+/**
+ * Every campaign and boost of mine, across every event.
+ *
+ * The per-event screen answers "how is this event doing"; this answers "what am
+ * I paying for right now", which is the question somebody with four events open
+ * actually has. RLS decides what comes back — the filter is a convenience, not
+ * the authorization.
+ */
+export async function getMyBoosts(eventIds: string[]): Promise<EventBoost[]> {
+  if (eventIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('event_boosts')
+    .select('*')
+    .in('event_id', eventIds)
+    .order('ends_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as EventBoost[];
+}

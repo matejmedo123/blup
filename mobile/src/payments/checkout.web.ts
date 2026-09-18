@@ -148,3 +148,35 @@ export async function payForBoost(eventId: string, packageCode: string): Promise
   go(session.redirect_url);
   return { status: 'redirecting', orderId: session.boost_id };
 }
+
+/**
+ * Buys an ad campaign.
+ *
+ * Web, so it goes through Stripe's hosted page like everything else here. It
+ * deliberately does NOT call boost-create: that returns a PaymentIntent secret
+ * for a native payment sheet, and a browser has nothing to present it with —
+ * the campaign would be created, never paid for, and never run. The button
+ * would say "Spustiť kampaň" and nothing would happen.
+ */
+export async function payForCampaign(input: {
+  eventId: string;
+  budgetCents: number;
+  days: number;
+  placements: string[];
+  radiusM: number;
+  categories: string[];
+}): Promise<PayResult> {
+  const session = await callFunction<WebCheckoutResponse>('web-checkout', {
+    kind: 'campaign',
+    event_id: input.eventId,
+    budget_cents: Math.round(input.budgetCents),
+    days: input.days,
+    placements: input.placements,
+    radius_m: input.radiusM,
+    categories: input.categories,
+  });
+  if (!session.redirect_url) throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+
+  go(session.redirect_url);
+  return { status: 'redirecting', orderId: session.boost_id };
+}

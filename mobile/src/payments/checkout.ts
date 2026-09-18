@@ -131,3 +131,37 @@ export async function payForBoost(eventId: string, packageCode: string): Promise
   });
   return { status: 'pending', orderId: session.boost_id };
 }
+
+/**
+ * Buys an ad campaign.
+ *
+ * Native, so the PaymentIntent goes to the platform's own payment sheet — the
+ * caller presents it, exactly as it does for a package boost. Nothing is
+ * promoted until the webhook confirms the charge.
+ */
+export async function payForCampaign(input: {
+  eventId: string;
+  budgetCents: number;
+  days: number;
+  placements: string[];
+  radiusM: number;
+  categories: string[];
+}): Promise<PayResult & { clientSecret?: string }> {
+  const session = await callFunction<{
+    boost_id?: string;
+    payment_intent_client_secret?: string;
+  }>('boost-create', {
+    event_id: input.eventId,
+    budget_cents: Math.round(input.budgetCents),
+    days: input.days,
+    placements: input.placements,
+    radius_m: input.radiusM,
+    categories: input.categories,
+  });
+
+  return {
+    status: 'pending',
+    orderId: session.boost_id,
+    clientSecret: session.payment_intent_client_secret,
+  };
+}
