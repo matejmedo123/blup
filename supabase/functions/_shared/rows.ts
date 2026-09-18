@@ -63,6 +63,7 @@ export interface BoostRow {
   weight: number;
   starts_at: string;
   ends_at: string;
+  impression_budget: number;
 }
 
 /** public.payouts — an organizer withdrawing settled money. */

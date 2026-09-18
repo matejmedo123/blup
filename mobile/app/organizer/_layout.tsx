@@ -57,6 +57,7 @@ export default function OrganizerLayout() {
       <Stack.Screen name="plan/[id]" options={{ title: 'Plán sály' }} />
       <Stack.Screen name="seating/[id]" options={{ title: 'Sedenie' }} />
       <Stack.Screen name="announce/[id]" options={{ title: 'Napísať ľuďom' }} />
+      <Stack.Screen name="ads/[id]" options={{ title: 'Reklama' }} />
     </Stack>
   );
 }

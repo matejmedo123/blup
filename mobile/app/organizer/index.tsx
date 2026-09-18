@@ -560,12 +560,28 @@ export default function OrganizerScreen() {
         title="Boostnúť event"
         subtitle={boostFor?.title}
         footer={
-          <Body muted style={styles.sheetNote}>
-            Boost sa spustí až keď platbu potvrdí banka. V zozname bude event označený ako
-            sponzorovaný — promo, ktoré sa netají tým, že je promo.
-          </Body>
+          <View style={styles.sheetActions}>
+            {/* The packages above are the quick answer. This is the real ad
+                tool — your own budget, your own audience, your own dates —
+                and it used to be reachable from nowhere at all. */}
+            <Button
+              title="Vlastná kampaň"
+              variant="secondary"
+              onPress={() => {
+                const id = boostFor?.id;
+                setBoostFor(null);
+                if (id) router.push(`/organizer/ads/${id}`);
+              }}
+              large
+              style={styles.flex}
+            />
+          </View>
         }
       >
+        <Body muted style={styles.sheetIntro}>
+          Tri hotové balíky. Ak chceš určiť rozpočet, okruh a záujmy ľudí sám,
+          otvor vlastnú kampaň dole.
+        </Body>
         {!isStripeModuleAvailable ? (
           <Notice
             tone="warning"

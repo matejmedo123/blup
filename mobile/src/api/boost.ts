@@ -33,6 +33,8 @@ export interface BoostSession {
   starts_at: string;
   ends_at: string;
   weight: number;
+  /** How many times it will be shown — what the budget actually bought. */
+  impression_budget?: number;
 }
 
 export async function getBoostPackages(): Promise<BoostPackage[]> {
@@ -118,8 +120,28 @@ export async function waitForBoost(
   return 'pending';
 }
 
+/** One row of public.event_boosts, as the organizer's screens read it. */
+export interface EventBoost {
+  id: string;
+  event_id: string;
+  package_code: string | null;
+  is_campaign: boolean;
+  starts_at: string;
+  ends_at: string;
+  paused_at: string | null;
+  payment_status: string;
+  placements: string[];
+  weight: number;
+  amount_cents: number;
+  currency: string;
+  impression_budget: number;
+  impressions_served: number;
+  target_radius_m: number | null;
+  target_categories: string[] | null;
+}
+
 /** Boost history for one event, newest window first. */
-export async function getEventBoosts(eventId: string) {
+export async function getEventBoosts(eventId: string): Promise<EventBoost[]> {
   const { data, error } = await supabase
     .from('event_boosts')
     .select('*')
@@ -127,7 +149,7 @@ export async function getEventBoosts(eventId: string) {
     .order('ends_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as EventBoost[];
 }
 
 /** True while a paid boost is running. */
@@ -234,5 +256,84 @@ export async function getFreeBoost(): Promise<FreeBoostState> {
 
 export async function claimFreeBoost(eventId: string): Promise<void> {
   const { error } = await supabase.rpc('claim_free_boost', { p_event_id: eventId });
+  if (error) throw error;
+}
+
+// --- campaigns ---------------------------------------------------------------
+
+/**
+ * Everything the campaign builder needs, and nothing it can lie about.
+ *
+ * The estimate is the number the whole screen is built around, so it is worth
+ * being clear what it is: people with an account, a known location inside the
+ * radius, whose stated interests match. It is not a promise of impressions —
+ * somebody in the audience who never opens BLUP that week sees nothing — which
+ * is why `active_people` is shown next to it rather than instead of it.
+ */
+export interface AdAudience {
+  radius_m: number;
+  people: number;
+  active_people: number;
+  categories: string[];
+}
+
+export async function getAdAudience(
+  eventId: string,
+  radiusM: number,
+  categories: string[],
+): Promise<AdAudience> {
+  const { data, error } = await supabase.rpc('ad_audience_estimate', {
+    p_event_id: eventId,
+    p_radius_m: radiusM,
+    p_categories: categories.length ? categories : null,
+  });
+  if (error) throw error;
+  return data as AdAudience;
+}
+
+export interface AdQuote {
+  budget_cents: number;
+  cpm_cents: number;
+  impressions: number;
+}
+
+export async function getAdQuote(budgetCents: number): Promise<AdQuote> {
+  const { data, error } = await supabase.rpc('ad_budget_quote', {
+    p_budget_cents: Math.round(budgetCents),
+  });
+  if (error) throw error;
+  return data as AdQuote;
+}
+
+export interface AdCampaignInput {
+  eventId: string;
+  budgetCents: number;
+  days: number;
+  placements: BoostPlacement[];
+  radiusM: number;
+  categories: string[];
+}
+
+/**
+ * Buys a campaign. Same payment path as a package — the boost is created as
+ * `requires_payment` and only the webhook makes it live.
+ */
+export async function createAdCampaign(input: AdCampaignInput): Promise<BoostSession> {
+  return callFunction<BoostSession>('boost-create', {
+    event_id: input.eventId,
+    budget_cents: Math.round(input.budgetCents),
+    days: input.days,
+    placements: input.placements,
+    radius_m: input.radiusM,
+    categories: input.categories,
+  });
+}
+
+/** Stops delivery without losing the budget, and starts it again. */
+export async function setAdPaused(boostId: string, paused: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_ad_paused', {
+    p_boost_id: boostId,
+    p_paused: paused,
+  });
   if (error) throw error;
 }
