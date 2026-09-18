@@ -165,6 +165,21 @@ export function messageFor(error: unknown): string {
     if (raw.includes(code)) return withHint(code, message, error);
   }
 
+  // The database is older than this build. PostgREST answers a missing
+  // function with PGRST202 and a missing embed with PGRST200, both as English
+  // sentences about a schema cache — which is how four separate "this feature
+  // is broken" reports turned out to be one un-run migration. Say what it
+  // actually is, and where to look.
+  const code = (error as { code?: string } | null)?.code;
+  if (code === 'PGRST202' || /could not find the function/i.test(raw)) {
+    return 'Táto funkcia v databáze ešte nie je — web je novší ako databáza. '
+      + 'Spusti `npx supabase db push` (v Admin → Stav nasadenia vidíš, čo presne chýba).';
+  }
+  if (code === 'PGRST200' || /could not find a relationship/i.test(raw)) {
+    return 'Databáze chýba stĺpec, ktorý táto verzia webu očakáva. '
+      + 'Spusti `npx supabase db push` (v Admin → Stav nasadenia vidíš, čo presne chýba).';
+  }
+
   if (/network request failed|fetch failed/i.test(raw)) return MESSAGES.NETWORK;
 
   // supabase-js says this when a function is not deployed, is named differently

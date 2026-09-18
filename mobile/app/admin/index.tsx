@@ -74,6 +74,10 @@ export default function AdminDashboard() {
         badge={data.open_venue_plan_requests}
         onPress={() => router.push('/admin/venues')}
       />
+      {/* The first thing to open when something "does not work" after a
+          deploy: it says, feature by feature, whether the database is as new
+          as the build. */}
+      <Row label="Stav nasadenia" onPress={() => router.push('/admin/deployment')} />
       <Row label="Používatelia" onPress={() => router.push('/admin/users')} />
       <Row label="Všetky eventy" onPress={() => router.push('/admin/events')} />
     </Screen>
