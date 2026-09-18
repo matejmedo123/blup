@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   getMySeatHolds, getSeatMap, getSectionSeats, holdSeat, holdSeats, releaseSeat, suggestSeats,
-  SEAT_KIND_LABEL, SECTION_KIND_LABEL, type Seat, type SeatKind, type Section,
+  SEAT_KIND_LABEL, SECTION_KIND_LABEL, type Seat, type SeatKind, type SeatMap, type Section,
 } from '@/api/seating';
 import { addToCart } from '@/api/cart';
 import { messageFor } from '@/lib/errors';
@@ -196,9 +196,66 @@ export default function SeatPickerScreen() {
     ? seats.filter((seat) => seat.row === (openRow ?? rowsInOpen[0]))
     : seats;
 
+  /**
+   * Puts what the server just told us straight into the cache.
+   *
+   * Every tap used to end with two awaited invalidations, which meant two
+   * further round trips — the WHOLE plan and the whole open sector, refetched
+   * because one dot changed — with the screen spinning until both came back.
+   * On a sector with two thousand seats that is the "strašne dlho" in the
+   * report.
+   *
+   * The hold call already returned the authoritative answer, so the cache can
+   * be corrected from it without asking again. Anything somebody else changed
+   * meanwhile arrives from the background refresh below.
+   */
+  const applyLocally = (seatIds: string[], sectionId: string | null, held: boolean, until: string | null) => {
+    const ids = new Set(seatIds);
+
+    if (sectionId) {
+      queryClient.setQueryData<Seat[]>(['event', id, 'seatmap', sectionId], (current) => (
+        current?.map((seat) => (ids.has(seat.id)
+          ? { ...seat, mine: held, mine_claim: held ? 'held' : null, hold_until: held ? until : null }
+          : seat))
+      ));
+    }
+
+    // The plan shows how many are left in each sector, so it moves too.
+    queryClient.setQueryData<SeatMap | null>(['event', id, 'seatmap'], (current) => {
+      if (!current || !sectionId) return current;
+      return {
+        ...current,
+        sections: current.sections.map((section) => (section.id === sectionId
+          ? {
+            ...section,
+            available: Math.max(0, section.available + (held ? -ids.size : ids.size)),
+          }
+          : section)),
+      };
+    });
+  };
+
+  /**
+   * Catches up with everybody else, without holding the screen.
+   *
+   * Deliberately not awaited: the cache already has the right answer for what
+   * THIS person just did, and the only thing left to learn is what other people
+   * did — which is not worth a spinner.
+   */
+  const refreshInBackground = () => {
+    void queryClient.invalidateQueries({ queryKey: ['event', id, 'seatmap'] });
+    void queryClient.invalidateQueries({ queryKey: ['event', id, 'holds'] });
+    // The basket badge. Never invalidated here before, so adding a seat left
+    // the counter in the corner showing the old number.
+    void queryClient.invalidateQueries({ queryKey: ['cart'] });
+  };
+
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['event', id, 'seatmap'] });
-    await queryClient.invalidateQueries({ queryKey: ['event', id, 'holds'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['event', id, 'seatmap'] }),
+      queryClient.invalidateQueries({ queryKey: ['event', id, 'holds'] }),
+      queryClient.invalidateQueries({ queryKey: ['cart'] }),
+    ]);
   };
 
   const pick = async (section: Section) => {
@@ -222,7 +279,18 @@ export default function SeatPickerScreen() {
     try {
       await addToCart(section.ticket_type_id, 1);
       setNote(`${section.name} pridaný do košíka.`);
-      await refresh();
+      // One fewer left in that sector — known without asking again.
+      queryClient.setQueryData<SeatMap | null>(['event', id, 'seatmap'], (current) => (
+        current
+          ? {
+            ...current,
+            sections: current.sections.map((item) => (item.id === section.id
+              ? { ...item, available: Math.max(0, item.available - 1) }
+              : item)),
+          }
+          : current
+      ));
+      refreshInBackground();
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -245,11 +313,13 @@ export default function SeatPickerScreen() {
     try {
       if (seat.mine_claim === 'held') {
         await releaseSeat(seat.id);
+        applyLocally([seat.id], openId, false, null);
       } else {
         const held = await holdSeat(seat.id);
+        applyLocally([seat.id], openId, true, held.expires_at);
         setNote(`Držíme ti ${held.section}, rad ${held.row}, miesto ${held.number}.`);
       }
-      await refresh();
+      refreshInBackground();
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -272,13 +342,14 @@ export default function SeatPickerScreen() {
         return;
       }
 
-      await holdSeats(found.map((s) => s.seat_id));
+      const batch = await holdSeats(found.map((s) => s.seat_id));
+      applyLocally(found.map((s) => s.seat_id), section.id, true, batch.expires_at);
       setNote(
         `Držíme ti rad ${found[0].row_label}, miesta `
         + `${found.map((s) => s.seat_number).join(', ')}.`,
       );
       setOpenId(section.id);
-      await refresh();
+      refreshInBackground();
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -291,7 +362,8 @@ export default function SeatPickerScreen() {
     setNote(null);
     setBusy(true);
     try {
-      for (const hold of heldEverywhere) await releaseSeat(hold.seat_id);
+      // In parallel: giving four seats back is one action, not four waits.
+      await Promise.all(heldEverywhere.map((hold) => releaseSeat(hold.seat_id)));
       await refresh();
     } catch (caught) {
       setError(messageFor(caught));
