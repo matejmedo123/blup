@@ -84,6 +84,45 @@ Deväť vecí z tvojho posledného zoznamu. Pri každej je aj to, čo presne bol
   miestami a exportom do CSV. V zozname „Kto príde" sa dá hľadať aj podľa
   miesta — pri vchode sa ľudia hľadajú podľa „rad D, štrnástka", nie podľa kódu.
 
+**Plán sály, haly a štadióna — a kto ho kreslí**
+
+- **Plán kreslí BLUP, nie organizátor.** Doteraz to smel ktokoľvek z organizácie
+  a vyzeralo to štedro. Plán ale rozhoduje, čo sa predáva a za koľko: sektor
+  o pár pixelov vedľa predá iné miesto, než na ktoré sa kupujúci pozeral, a
+  sektor napojený na zlý typ vstupenky predá inú cenu. **Organizátor má teraz pri
+  evente „Požiadať o plán sály"** — napíše, ako sála vyzerá, príde nám to do
+  fronty (*Admin → Žiadosti o plán sály*) a keď je hotovo, dostane upozornenie.
+  Pravidlo drží na troch miestach naraz, lebo do plánu vedú tri cesty: funkcie,
+  priamy zápis cez API, a priradenie hotového plánu na event.
+- **Sektor má druh.** *Sedenie, VIP, Lóža, Státie, Miesta pre vozík* — a k tomu
+  *Pódium, Bar, Vstup, Iné*, ktoré sa **nepredávajú**: nakreslia sa na plán, aby
+  sa kupujúci vedel zorientovať. Plán sály bez pódia je mriežka obdĺžnikov, v
+  ktorej sa nikto nevyzná. Druh rozhoduje o farbe aj o tom, čo kupujúci číta
+  vedľa ceny, a **pódium s cenou databáza odmietne** — nie obrazovka.
+- **Poznámka pre kupujúceho pri sektore**: „Vlastný vstup, obsluha pri stole".
+- **Nákup ide cez plán.** Pri evente, ktorý má plán sály, vedie tlačidlo
+  *Kúpiť* rovno naň — nie na zoznam názvov vstupeniek. Nad plánom je **legenda
+  cien**: farba a k nej suma, lebo plán sa číta najprv podľa farby („tie zelené
+  sú za 990") a inak človek háda, ktorý obdĺžnik čo stojí.
+- **Bodky až po klepnutí na sektor.** Na celom pláne nie sú žiadne — sú tam len
+  sektory. Keď na niektorý klepneš, **otvorí sa cez celú šírku plánu** a až vtedy
+  sa v ňom vykreslia miesta, takže naraz nikdy nevidíš viac ako jeden sektor a
+  bodky sú dosť veľké na to, aby sa do nich dalo trafiť palcom. Keď je rad
+  natoľko široký, že by sa ani po zväčšení nedalo do bodky trafiť — a to závisí
+  od šírky displeja, nie od počtu miest — vyberá sa po radoch: najprv rad, potom
+  miesto v ňom.
+- **Štadión sa zmestí do telefónu.** Plán vracal každé sedadlo každého sektora
+  v jednom JSON-e: pri divadle 400 objektov, pri štadióne 20 000 a niekoľko
+  megabajtov — len aby sa nakreslil jeden sektor. Teraz plán nesie tvar a počty
+  a miesta sa načítajú až pre sektor, ktorý si otvoril.
+  **Plán štadióna s 8 000 miestami má ~2 kB.**
+- **Tá istá hala o mesiac.** Sektor je naviazaný na typ vstupenky a ten patrí
+  jednému eventu, takže hala, ktorá hrá päťdesiatkrát do roka, by sa kreslila
+  päťdesiatkrát. Plán sa teraz dá **skopírovať na iný event** a sektory sa
+  napoja na jeho typy vstupeniek **podľa názvu** — „VIP" nájde „VIP". Podľa
+  poradia alebo ceny by to bol odhad a zlý odhad tu predá lacné miesta za drahú
+  cenu.
+
 **Nával ľudí, veľa registrácií, veľa e-mailov**
 
 - **Čakačka na vypredanú vstupenku.** Keď sa niečo uvoľní, dáme vedieť **presne
@@ -119,6 +158,12 @@ select public.email_queue_stats();      -- spusti ako admin
 
 -- čakačka: komu by sa práve teraz písalo (nič neodošle, kým nebeží cron)
 select public.waitlist_size('<ticket-type-id>');
+
+-- plán sály: ako veľký je ten JSON, ktorý si stiahne telefón
+select length(public.seat_map_for_event('<event-id>')::text);   -- kilobajty, nie megabajty
+
+-- a že organizátor plán naozaj kresliť nemôže (spusti ako organizátor)
+select public.assert_can_manage_venue_map(null);   -- musí skončiť VENUE_PLAN_IS_ADMIN_ONLY
 ```
 
 ---
@@ -474,6 +519,9 @@ Nič sa im nestratí — účty, vstupenky ani uložené eventy. Zmení sa toto:
 - **Počítadlá** prestanú ukazovať nuly — u eventov, kde ich mali, čísla naskočia naraz.
 - **Feed** má tri záložky a otvorí sa na tej, kde niečo je.
 - **Pri registrácii** treba súhlas s podmienkami; existujúcich používateľov sa to netýka.
+- **Plán sály** už organizátor nekreslí. Ak ho niekto z nich mal rozkreslený,
+  **nič sa nezmaže** — len ho ďalej upravuje admin. Organizátorovi sa pri evente
+  namiesto editora ukáže „Požiadať o plán sály".
 - **Organizátori** musia pri ďalšom overení prijať zmluvu. Už overené organizácie
   bežia ďalej, ale zmluvu podpísanú nemajú — ak ju chceš aj od nich, pošli im
   odkaz na `/legal/agreement` a nechaj ich prejsť overením znova.

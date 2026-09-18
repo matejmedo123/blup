@@ -68,6 +68,8 @@ a real Supabase project.
 | `…006600_mailing` | `email_contacts` (consent per address), `can_email`, `email_unsubscribe`, `email_campaigns`, `send_campaign`, hourly send budget, ticket priority in `claim_email_deliveries` |
 | `…006700_invite_xp_kind` | Three enum values, alone, because ADD VALUE cannot be used in the transaction that adds it |
 | `…006800_waitlist_and_invites` | `ticket_waitlist`, `join_waitlist`, `notify_waitlists`, `profiles.invite_code`, `invites`, `claim_invite`, `qualify_invites` |
+| `…006900_venue_notification_kind` | One notification_type value, alone |
+| `…007000_venue_admin` | Plans are admin-only; sector `kind` (VIP, lóža, pódium…); `venue_plan_requests`; `section_seats` split out of the map; `clone_venue_map`; `my_seat_holds` |
 | `…006500_seating_v2` | `seat_claims`, the seat carried onto orders and tickets, `cart_hold_seats`, `suggest_seats`, `generate_section_seats`, `set_seat_state`, `update_section`, `event_seat_manifest` |
 
 ---
@@ -187,6 +189,31 @@ and the plain ticket list each sold numbered stalls seats with no seat on them.
 Seats have a `kind` (`standard`, `wheelchair`, `companion`, `limited_view`) and
 an `is_sellable` flag, so a pillar or a wheelchair space is a seat that exists
 and is not an ordinary chair. `suggest_seats()` only ever offers `standard`.
+
+**Sectors have a kind too** (migration 0070). Five of them sell — `standard`,
+`vip`, `box`, `standing`, `wheelchair` — and four are landmarks drawn so a buyer
+can find themselves on the plan: `stage`, `bar`, `entrance`, `other`. A landmark
+carrying a ticket type is refused by a table check, not by the screen.
+
+**Only a full admin draws a plan** (migration 0070). Not `is_admin()`, which
+also covers moderators: a plan decides what is sold and for how much. The rule
+sits in three places, because there are three ways to reach it —
+`assert_can_manage_venue_map()` for the functions, the RLS write policies for
+anything that talks to PostgREST directly, and a trigger on `events` so an
+organizer cannot point their event at somebody else's finished plan. The
+organizer's half of the feature is `venue_plan_requests`: they describe the
+room, every admin is notified, and the queue is `venue_plan_queue()`.
+
+**A stadium does not fit in one document.** `seat_map_for_event()` returns the
+shape and the counts; `section_seats(event, section)` returns the seats of
+whichever sector was opened, which is also how the screen works. An 8 000-seat
+stadium's plan is about 2 kB. `my_seat_holds(event)` answers the basket clock
+without reading the stadium to find two seats.
+
+**`clone_venue_map(source, event, name)`** copies a plan onto another night and
+matches sectors to that event's ticket types **by name**. By position or by
+price would be a guess, and a wrong guess sells the cheap seats at the expensive
+price.
 
 ### E-mail, consent and volume (migration 0066)
 

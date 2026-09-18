@@ -28,6 +28,12 @@ insert into public.venue_maps (id, organization_id, name, image_width, image_hei
 values ('f1818181-0000-0000-0000-000000000001', 'd1818181-0000-0000-0000-000000000001',
         'Veľká hala', 2000, 1400, 'a1818181-0000-0000-0000-000000000001');
 
+-- Attaching a plan to an event is an admin decision now (migration 0070), and
+-- a trigger enforces it whatever the caller's privileges are. So the fixture
+-- says who is doing it.
+update public.profiles set app_role = 'admin' where id = 'a1818181-0000-0000-0000-000000000001';
+select set_config('request.jwt.claim.sub', 'a1818181-0000-0000-0000-000000000001', true);
+
 insert into public.events (id, creator_id, organization_id, title, category, start_at,
                            latitude, longitude, is_free, price_cents, status, venue_map_id)
 values ('d1818181-0000-0000-0000-000000000002', 'a1818181-0000-0000-0000-000000000001',
@@ -171,6 +177,7 @@ declare
   ev    uuid := 'd1818181-0000-0000-0000-000000000002';
   mine  uuid := '91818181-0000-0000-0000-000000000004';
   hers  uuid := '91818181-0000-0000-0000-000000000005';
+  sect  uuid := 'b1818181-0000-0000-0000-000000000001';
   seats jsonb;
   seat  jsonb;
 begin
@@ -186,9 +193,10 @@ begin
   -- Read the map as the buyer: their own seat and the rival's must not look
   -- the same, or clicking one looks like it failed.
   perform set_config('request.jwt.claim.sub', buyer::text, true);
-  seats := (select s -> 'seats' from jsonb_array_elements(
-              public.seat_map_for_event(ev) -> 'sections') s
-            where s ->> 'name' = 'Sedenie A');
+  -- Since migration 0070 the map carries the shape and the counts, and the
+  -- seats of the sector you opened come separately — a stadium does not fit in
+  -- one document, and the screen only ever shows one sector at a time.
+  seats := public.section_seats(ev, sect);
 
   seat := (select x from jsonb_array_elements(seats) x where (x ->> 'id')::uuid = mine);
   assert (seat ->> 'mine')::boolean, 'the seat I hold says it is mine';
@@ -202,9 +210,7 @@ begin
 
   -- The same map, read by the rival: the two swap over.
   perform set_config('request.jwt.claim.sub', rival::text, true);
-  seats := (select s -> 'seats' from jsonb_array_elements(
-              public.seat_map_for_event(ev) -> 'sections') s
-            where s ->> 'name' = 'Sedenie A');
+  seats := public.section_seats(ev, sect);
 
   seat := (select x from jsonb_array_elements(seats) x where (x ->> 'id')::uuid = hers);
   assert (seat ->> 'mine')::boolean, 'and for them, theirs is mine';

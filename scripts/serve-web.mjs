@@ -54,12 +54,29 @@ const TYPES = {
   '.map': 'application/json',
 };
 
+/**
+ * Returns false when the file is not there, rather than throwing.
+ *
+ * A rewrite rule can point at a page the current build does not contain — and,
+ * more often, a rebuild deletes and rewrites `dist` underneath a server that is
+ * still running, so a file that existed a millisecond ago does not now. That
+ * used to throw out of the request handler and take the whole server down with
+ * it, which turned a missing page into "the browser tests all failed".
+ */
 const send = (res, file, code = 200) => {
+  let body;
+  try {
+    body = readFileSync(file);
+  } catch {
+    return false;
+  }
+
   res.writeHead(code, {
     'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream',
     'Cache-Control': 'no-store',
   });
-  res.end(readFileSync(file));
+  res.end(body);
+  return true;
 };
 
 createServer((req, res) => {
@@ -67,18 +84,19 @@ createServer((req, res) => {
   const path = normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
   const direct = join(DIST, path);
 
-  if (existsSync(direct) && statSync(direct).isFile()) return send(res, direct);
-  if (existsSync(direct + '.html')) return send(res, direct + '.html');
-
-  const index = join(direct, 'index.html');
-  if (existsSync(index)) return send(res, index);
+  if (existsSync(direct) && statSync(direct).isFile() && send(res, direct)) return;
+  if (send(res, direct + '.html')) return;
+  if (send(res, join(direct, 'index.html'))) return;
 
   for (const rule of rules) {
-    if (rule.re.test(path)) return send(res, join(DIST, rule.to));
+    if (rule.re.test(path) && send(res, join(DIST, rule.to))) return;
   }
 
-  const notFound = join(DIST, '+not-found.html');
-  return send(res, existsSync(notFound) ? notFound : join(DIST, 'index.html'), 404);
+  if (send(res, join(DIST, '+not-found.html'), 404)) return;
+  if (send(res, join(DIST, 'index.html'), 404)) return;
+
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('404');
 }).listen(PORT, () => {
   console.log(`${DIST} on http://localhost:${PORT}  (${rules.length} rewrite rules)`);
 });

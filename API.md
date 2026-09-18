@@ -345,15 +345,22 @@ not Edge Functions, so no key travels anywhere.
 
 | RPC | Who | What |
 |---|---|---|
-| `seat_map_for_event(event)` | anyone | The plan, its sectors, and every seat with `free` / `mine` / `mine_claim` / `hold_until` / `kind`. Null for an event with no plan. |
+| `seat_map_for_event(event)` | anyone | The plan and its sectors: kind, landmark flag, price, counts and the grid — **not** the seats. An 8 000-seat stadium comes to about 2 kB. Null for an event with no plan. |
+| `section_seats(event, section)` | anyone | The seats of the sector that was opened, each with `free` / `mine` / `mine_claim` / `hold_until` / `kind`. |
+| `my_seat_holds(event)` | signed in | What you are holding on this event, for the basket clock. |
 | `seat_claims(event)` | anyone | Every seat that is not available and why: `held`, `ordered`, `sold`. The one definition the picker, the hold and the order all read. |
 | `cart_hold_seat(seat)` | signed in | Holds one seat for the basket window. `SEAT_HELD` / `SEAT_TAKEN` / `SEAT_NOT_SELLABLE`. |
 | `cart_hold_seats(seat[])` | signed in | The same for a group — all of them or none. |
 | `cart_release_seat(seat)` | signed in | Gives a held seat back. Somebody else's is a no-op, not an error. |
 | `suggest_seats(section, count)` | anyone | The best block of `count` seats next to each other: nearest the stage first, then nearest the middle. Never offers a wheelchair or limited-view seat. Empty when the group cannot sit together. |
-| `generate_section_seats(section, rows, per_row, start_row)` | venue team | Builds or rebuilds the grid. Refuses to delete a seat somebody holds or bought (`SEATS_IN_USE`); surviving seats keep their id and kind. |
-| `set_seat_state(seat[], sellable, kind, note)` | venue team | Takes seats out of sale or says what they are. Null means "leave it". |
-| `update_section(section, name, colour, ticket_type, x, y, w, h, sort)` | venue team | Renames, recolours or moves a sector. Refuses to re-point one that has sold. |
+| `generate_section_seats(section, rows, per_row, start_row)` | **full admin** | Builds or rebuilds the grid. Refuses to delete a seat somebody holds or bought (`SEATS_IN_USE`); surviving seats keep their id and kind. |
+| `set_seat_state(seat[], sellable, kind, note)` | **full admin** | Takes seats out of sale or says what they are. Null means "leave it". |
+| `update_section(section, name, colour, ticket_type, x, y, w, h, sort, kind, note)` | **full admin** | Renames, recolours, moves or re-kinds a sector. Refuses to re-point one that has sold; turning one into a landmark clears its ticket type. |
+| `clone_venue_map(source, event, name)` | **full admin** | Copies a plan onto another event, matching sectors to its ticket types by name. |
+| `request_venue_plan(event, note, image)` | organizer | "Chceme predávať po miestach." One open request per event; every admin is notified. |
+| `venue_plan_request_for_event(event)` | organizer / admin | Where that request got to. |
+| `venue_plan_queue(status)` | admin | The queue, ordered by when the event is — not by when the request came in. |
+| `set_venue_plan_request(id, status, note)` | **full admin** | Take it, finish it, or say why not. The organizer is told either way. |
 | `event_seat_manifest(event)` | organizer | Who sits where, walked sector → row → seat, empty seats included. |
 | `event_ticket_holders(event, …)` | organizer | The attendee list; carries `seat_label` and matches a search for `D14`. |
 

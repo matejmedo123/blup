@@ -45,10 +45,41 @@ export const SEAT_KIND_LABEL: Record<SeatKind, string> = {
   limited_view: 'Obmedzený výhľad',
 };
 
+/**
+ * What a sector is, which decides both how it reads and whether it sells.
+ *
+ * The last four are drawn so a buyer can find themselves on the plan — a hall
+ * plan without the stage on it is a grid of rectangles nobody can orient
+ * themselves in — and nothing about them is for sale.
+ */
+export type SectionKind =
+  | 'standard' | 'vip' | 'box' | 'standing' | 'wheelchair'
+  | 'stage' | 'bar' | 'entrance' | 'other';
+
+export const SECTION_KIND_LABEL: Record<SectionKind, string> = {
+  standard: 'Sedenie',
+  vip: 'VIP',
+  box: 'Lóža',
+  standing: 'Státie',
+  wheelchair: 'Miesta pre vozík',
+  stage: 'Pódium',
+  bar: 'Bar',
+  entrance: 'Vstup',
+  other: 'Iné',
+};
+
+/** True for the kinds that exist to orient people rather than to be bought. */
+export const LANDMARK_KINDS: SectionKind[] = ['stage', 'bar', 'entrance', 'other'];
+
 export interface Section {
   id: string;
   name: string;
   colour: string;
+  kind: SectionKind;
+  /** The organizer's own line about it: "Vlastný vstup, obsluha pri stole". */
+  note: string | null;
+  /** Drawn for orientation, never sold. The database decides this, not the app. */
+  landmark: boolean;
   /** Fractions of the plan image, 0..1 — so the shape survives any resize. */
   x: number;
   y: number;
@@ -58,10 +89,10 @@ export interface Section {
   price_cents: number | null;
   numbered: boolean;
   available: number;
+  seat_count: number;
   /** How many rows, and the widest of them — the dot grid is sized from these. */
   rows: number;
   row_width: number;
-  seats: Seat[];
 }
 
 export interface SeatMap {
@@ -89,11 +120,29 @@ export interface SuggestedSeat {
   seat_number: number;
 }
 
-/** Null for an event that sells without a plan, which is most of them. */
+/**
+ * The plan: its shape, its sectors and their counts — but not their seats.
+ *
+ * Eight thousand seat objects is several megabytes, built on every open of the
+ * screen, to draw one sector. The seats of the sector somebody actually opened
+ * come from getSectionSeats(), which is also how the screen already worked.
+ *
+ * Null for an event that sells without a plan, which is most of them.
+ */
 export async function getSeatMap(eventId: string): Promise<SeatMap | null> {
   const { data, error } = await supabase.rpc('seat_map_for_event', { p_event_id: eventId });
   if (error) throw error;
   return (data as SeatMap) ?? null;
+}
+
+/** The seats of one sector, with the three states a dot can be in. */
+export async function getSectionSeats(eventId: string, sectionId: string): Promise<Seat[]> {
+  const { data, error } = await supabase.rpc('section_seats', {
+    p_event_id: eventId,
+    p_section_id: sectionId,
+  });
+  if (error) throw error;
+  return (data ?? []) as Seat[];
 }
 
 /**
@@ -161,4 +210,27 @@ export async function getSeatManifest(eventId: string): Promise<ManifestRow[]> {
   const { data, error } = await supabase.rpc('event_seat_manifest', { p_event_id: eventId });
   if (error) throw error;
   return (data ?? []) as ManifestRow[];
+}
+
+export interface SeatHoldLine {
+  seat_id: string;
+  section_id: string;
+  section: string;
+  row: string;
+  number: number;
+  kind: SeatKind;
+  expires_at: string;
+}
+
+/**
+ * Everything this person is holding on this event, for the clock.
+ *
+ * Asked for directly rather than found by scanning the plan: the plan no longer
+ * carries the seats, and a stadium should not have to be downloaded to discover
+ * that you are holding two of them.
+ */
+export async function getMySeatHolds(eventId: string): Promise<SeatHoldLine[]> {
+  const { data, error } = await supabase.rpc('my_seat_holds', { p_event_id: eventId });
+  if (error) throw error;
+  return (data ?? []) as SeatHoldLine[];
 }

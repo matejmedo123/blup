@@ -67,6 +67,13 @@ export default function AdminDashboard() {
         badge={data.pending_event_claims}
         onPress={() => router.push('/admin/claims')}
       />
+      {/* On the other end of every one of these is an organizer whose event
+          cannot go on sale the way they want it to until somebody draws it. */}
+      <Row
+        label="Žiadosti o plán sály"
+        badge={data.open_venue_plan_requests}
+        onPress={() => router.push('/admin/venues')}
+      />
       <Row label="Používatelia" onPress={() => router.push('/admin/users')} />
       <Row label="Všetky eventy" onPress={() => router.push('/admin/events')} />
     </Screen>

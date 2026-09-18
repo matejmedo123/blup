@@ -30,7 +30,13 @@ insert into auth.users (id, email, raw_user_meta_data) values
   ('a3939393-0000-0000-0000-000000000001', 'org39@example.com',    '{"display_name":"Org"}'),
   ('a3939393-0000-0000-0000-000000000002', 'buyer39@example.com',  '{"display_name":"Buyer"}'),
   ('a3939393-0000-0000-0000-000000000003', 'rival39@example.com',  '{"display_name":"Rival"}'),
-  ('a3939393-0000-0000-0000-000000000004', 'stranger39@example.com', '{"display_name":"Stranger"}');
+  ('a3939393-0000-0000-0000-000000000004', 'stranger39@example.com', '{"display_name":"Stranger"}'),
+  -- Plans are drawn by BLUP, not by the organizer (migration 0070). The
+  -- organizer below is deliberately NOT one, so the refusals are real.
+  ('a3939393-0000-0000-0000-000000000009', 'admin39@example.com', '{"display_name":"Admin"}');
+
+update public.profiles set app_role = 'admin' where id = 'a3939393-0000-0000-0000-000000000009';
+select set_config('request.jwt.claim.sub', 'a3939393-0000-0000-0000-000000000009', true);
 
 insert into public.organizations (id, name, slug, created_by, verification_status, payouts_enabled)
 values ('d3939393-0000-0000-0000-000000000001', 'Divadlo 39', 'divadlo-39',
@@ -66,7 +72,7 @@ do $$
 declare
   made jsonb;
 begin
-  perform set_config('request.jwt.claim.sub', 'a3939393-0000-0000-0000-000000000001', true);
+  perform set_config('request.jwt.claim.sub', 'a3939393-0000-0000-0000-000000000009', true);
   made := public.generate_section_seats('b3939393-0000-0000-0000-000000000001', 3, 6);
   assert (made ->> 'total')::int = 18, format('three rows of six is eighteen, got %s', made ->> 'total');
   assert (made ->> 'created')::int = 18, 'and all eighteen are new';
@@ -133,9 +139,13 @@ begin
 
   -- ---- and the plan tells the buyer it is theirs ----------------------------
   perform set_config('request.jwt.claim.sub', buyer::text, true);
+  -- Since migration 0070 the seats come per sector rather than inline in the
+  -- map: a stadium does not fit in one document.
   map  := public.seat_map_for_event(ev);
   sect := (select s from jsonb_array_elements(map -> 'sections') s where s ->> 'name' = 'Prízemie');
-  dot  := (select d from jsonb_array_elements(sect -> 'seats') d where (d ->> 'id')::uuid = seat);
+  dot  := (select d
+           from jsonb_array_elements(public.section_seats(ev, (sect ->> 'id')::uuid)) d
+           where (d ->> 'id')::uuid = seat);
 
   assert (dot ->> 'mine')::boolean, 'my own seat is mine';
   assert dot ->> 'mine_claim' = 'sold', 'and it is sold, not merely held';
@@ -146,7 +156,9 @@ begin
   perform set_config('request.jwt.claim.sub', rival::text, true);
   map  := public.seat_map_for_event(ev);
   sect := (select s from jsonb_array_elements(map -> 'sections') s where s ->> 'name' = 'Prízemie');
-  dot  := (select d from jsonb_array_elements(sect -> 'seats') d where (d ->> 'id')::uuid = seat);
+  dot  := (select d
+           from jsonb_array_elements(public.section_seats(ev, (sect ->> 'id')::uuid)) d
+           where (d ->> 'id')::uuid = seat);
   assert (dot ->> 'taken')::boolean and not (dot ->> 'mine')::boolean,
     'and to everybody else it is simply taken';
   raise notice 'PASS somebody else sees the same seat as taken, and as nobody''s business whose';
@@ -401,7 +413,7 @@ begin
   perform public.cart_clear();
 
   -- A wheelchair space is never handed out as one of a block.
-  perform set_config('request.jwt.claim.sub', 'a3939393-0000-0000-0000-000000000001', true);
+  perform set_config('request.jwt.claim.sub', 'a3939393-0000-0000-0000-000000000009', true);
   perform public.set_seat_state(
     array[(select id from public.venue_seats
            where venue_section_id = stalls and row_label = 'A' and seat_number = 4)],
@@ -426,13 +438,14 @@ end $$;
 -- ============================================================================
 do $$
 declare
+  admin  uuid := 'a3939393-0000-0000-0000-000000000009';
   org    uuid := 'a3939393-0000-0000-0000-000000000001';
   other  uuid := 'a3939393-0000-0000-0000-000000000004';
   stalls uuid := 'b3939393-0000-0000-0000-000000000001';
   kept   uuid;
   made   jsonb;
 begin
-  perform set_config('request.jwt.claim.sub', org::text, true);
+  perform set_config('request.jwt.claim.sub', admin::text, true);
 
   -- Row B seat 3 was sold at the top of this test.
   begin
@@ -456,21 +469,27 @@ begin
     'and the wheelchair space is still a wheelchair space';
   raise notice 'PASS growing a stand keeps every seat''s identity';
 
-  -- Only the people who run the venue may do any of this.
+  -- Only BLUP draws a plan. Not a stranger — and, since migration 0070, not the
+  -- organizer either: a sector ten pixels wrong sells the wrong seat, and a
+  -- sector pointed at the wrong ticket type sells the wrong price.
   perform set_config('request.jwt.claim.sub', other::text, true);
   begin
     made := public.generate_section_seats(stalls, 2, 2);
     assert false, 'a stranger must not rebuild somebody else''s hall';
   exception when others then
-    assert sqlerrm = 'FORBIDDEN', format('expected FORBIDDEN, got %s', sqlerrm);
+    assert sqlerrm = 'VENUE_PLAN_IS_ADMIN_ONLY',
+      format('expected VENUE_PLAN_IS_ADMIN_ONLY, got %s', sqlerrm);
   end;
+
+  perform set_config('request.jwt.claim.sub', org::text, true);
   begin
     perform public.update_section(stalls, 'Moje');
-    assert false, 'nor rename their sectors';
+    assert false, 'and neither may the organizer whose event it is';
   exception when others then
-    assert sqlerrm = 'FORBIDDEN', format('expected FORBIDDEN, got %s', sqlerrm);
+    assert sqlerrm = 'VENUE_PLAN_IS_ADMIN_ONLY',
+      format('expected VENUE_PLAN_IS_ADMIN_ONLY, got %s', sqlerrm);
   end;
-  raise notice 'PASS the plan belongs to the venue, not to whoever calls the function';
+  raise notice 'PASS a plan is drawn by BLUP — not by a stranger and not by the organizer';
 end $$;
 
 
@@ -479,12 +498,12 @@ end $$;
 -- ============================================================================
 do $$
 declare
-  org     uuid := 'a3939393-0000-0000-0000-000000000001';
+  admin   uuid := 'a3939393-0000-0000-0000-000000000009';
   stalls  uuid := 'b3939393-0000-0000-0000-000000000001';
   balcony uuid := 'c3939393-0000-0000-0000-000000000002';
   sect    public.venue_sections;
 begin
-  perform set_config('request.jwt.claim.sub', org::text, true);
+  perform set_config('request.jwt.claim.sub', admin::text, true);
 
   sect := public.update_section(stalls, 'Prízemie ľavé', '#FF4D8D');
   assert sect.name = 'Prízemie ľavé', 'a sector can be renamed';

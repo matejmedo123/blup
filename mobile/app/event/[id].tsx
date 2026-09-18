@@ -16,6 +16,7 @@ import {
 import { openExternal } from '@/lib/external';
 import { addToCart, getCart } from '@/api/cart';
 import { getSeatMap } from '@/api/seating';
+import { getPlanRequest, PLAN_STATUS_LABEL } from '@/api/venuePlans';
 import { getMyWaitlist, joinWaitlist, leaveWaitlist } from '@/api/waitlist';
 import { track } from '@/marketing/tags';
 import { getPeopleRecommendations, describeMatch } from '@/api/ai';
@@ -304,6 +305,14 @@ export default function EventDetailScreen() {
     enabled: !isGuest,
   });
 
+  // Whether a seating plan has been asked for. Only the organizer's own screen
+  // shows this, and only when they sell tickets at all.
+  const planRequest = useQuery({
+    queryKey: ['venue', 'request', id],
+    queryFn: () => getPlanRequest(eventId!),
+    enabled: Boolean(eventId) && !isGuest,
+  });
+
   // Only asked for on an event BLUP listed for somebody — the claim button has
   // to know whether the viewer runs an organization to claim it for.
   const myOrgs = useQuery({
@@ -556,8 +565,12 @@ export default function EventDetailScreen() {
       .filter((section) => section.numbered && section.ticket_type_id)
       .map((section) => section.ticket_type_id as string),
   );
-  const everyTicketIsSeated = hasTickets
-    && data.ticket_types.every((ticket) => numberedTypes.has(ticket.id));
+  // A venue with a plan is bought from the plan. That is the whole flow people
+  // already know from every other ticketing site: press buy, see the room, pick
+  // a sector, pick a seat. Sending them to a list of ticket-type names instead
+  // — when a picture of the hall exists — is asking them to buy blind.
+  const sellsFromPlan = hasTickets && Boolean(data.venue_map_id)
+    && (seatMap.data?.sections ?? []).some((section) => !section.landmark);
 
   const waitingFor = new Set((waitlist.data ?? []).map((entry) => entry.ticket_type_id));
 
@@ -883,14 +896,12 @@ export default function EventDetailScreen() {
             <Button
               title={
                 cartCount > 0 ? `Do košíka (${cartCount})`
-                  : everyTicketIsSeated ? 'Vybrať si miesto'
+                  : sellsFromPlan ? 'Kúpiť — vybrať miesto'
                     : 'Kúpiť'
               }
               loading={busy}
               onPress={() => {
-                // A hall that sells by seat has no "cheapest ticket" to add
-                // blind — the whole point is choosing where you sit.
-                if (cartCount === 0 && everyTicketIsSeated) {
+                if (cartCount === 0 && sellsFromPlan) {
                   router.push(`/event/seats/${data.id}`);
                   return;
                 }
@@ -1021,7 +1032,11 @@ export default function EventDetailScreen() {
         {/* The organizer's way back in, on their own event. */}
         {/* Before this the card appeared only once the event already had a
             plan — and the only screen that can create one is the card's own
-            destination. Seating was built, tested and unreachable. */}
+            destination. Seating was built, tested and unreachable.
+
+            The plan itself is drawn by BLUP, so for an organizer this card
+            leads to the request form and then shows where that request got to.
+            For an admin it is the editor. */}
         {isOwner && hasTickets ? (
           <Pressable
             style={styles.connectCard}
@@ -1033,12 +1048,18 @@ export default function EventDetailScreen() {
             </View>
             <View style={styles.flex}>
               <Text style={styles.hostName}>
-                {data.venue_map_id ? 'Upraviť plán sály' : 'Predávať po sektoroch a miestach'}
+                {data.venue_map_id
+                  ? (profile?.app_role === 'admin' ? 'Upraviť plán sály' : 'Plán sály')
+                  : planRequest.data
+                    ? 'Žiadosť o plán sály'
+                    : 'Predávať po sektoroch a miestach'}
               </Text>
               <Caption style={styles.matchReason}>
                 {data.venue_map_id
-                  ? 'Sektory, farby a číslované rady'
-                  : 'Nahraj plán sály a kupujúci si vyberú, kde budú sedieť'}
+                  ? 'Sektory, VIP lóže a číslované rady'
+                  : planRequest.data
+                    ? PLAN_STATUS_LABEL[planRequest.data.status]
+                    : 'Napíš nám, ako sála vyzerá, a nachystáme miesta'}
               </Caption>
             </View>
             <View style={styles.connectCta}>
@@ -1057,8 +1078,10 @@ export default function EventDetailScreen() {
               <Text style={styles.connectGlyph}>▦</Text>
             </View>
             <View style={styles.flex}>
-              <Text style={styles.hostName}>Vybrať si miesto</Text>
-              <Caption style={styles.matchReason}>Plán sály so sektormi a sedadlami</Caption>
+              <Text style={styles.hostName}>Plán sály</Text>
+              <Caption style={styles.matchReason}>
+                Sektory, ceny a konkrétne miesta — klepni na sektor a uvidíš, čo je voľné
+              </Caption>
             </View>
             <View style={styles.connectCta}>
               <Text style={styles.connectCtaLabel}>Otvoriť</Text>

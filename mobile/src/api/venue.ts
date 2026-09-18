@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { Section } from './seating';
+import { LANDMARK_KINDS, type Section, type SectionKind } from './seating';
 
 export interface VenueMap {
   id: string;
@@ -77,22 +77,32 @@ export async function getVenueSections(venueMapId: string): Promise<Section[]> {
 
   if (error) throw error;
 
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    name: row.name as string,
-    colour: row.colour as string,
-    x: Number(row.x),
-    y: Number(row.y),
-    width: Number(row.width),
-    height: Number(row.height),
-    ticket_type_id: (row.ticket_type_id as string) ?? null,
-    price_cents: null,
-    numbered: ((row.venue_seats as { count: number }[])?.[0]?.count ?? 0) > 0,
-    available: 0,
-    rows: 0,
-    row_width: 0,
-    seats: [],
-  }));
+  return (data ?? []).map((row: Record<string, unknown>) => {
+    const kind = ((row.kind as SectionKind) ?? 'standard');
+    const seats = (row.venue_seats as { count: number }[])?.[0]?.count ?? 0;
+
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      colour: row.colour as string,
+      kind,
+      note: (row.note as string) ?? null,
+      landmark: LANDMARK_KINDS.includes(kind),
+      x: Number(row.x),
+      y: Number(row.y),
+      width: Number(row.width),
+      height: Number(row.height),
+      ticket_type_id: (row.ticket_type_id as string) ?? null,
+      // The editor reads the sectors as stored; price and availability are the
+      // buyer's view and come from seat_map_for_event().
+      price_cents: null,
+      numbered: seats > 0,
+      available: 0,
+      seat_count: seats,
+      rows: 0,
+      row_width: 0,
+    };
+  });
 }
 
 export async function createSection(input: {
@@ -100,6 +110,8 @@ export async function createSection(input: {
   ticketTypeId: string | null;
   name: string;
   colour: string;
+  kind?: SectionKind;
+  note?: string;
   x: number;
   y: number;
   width: number;
@@ -110,9 +122,13 @@ export async function createSection(input: {
     .from('venue_sections')
     .insert({
       venue_map_id: input.venueMapId,
-      ticket_type_id: input.ticketTypeId,
+      // A landmark is not a product, and the table refuses one that carries a
+      // ticket type rather than trusting this screen to remember.
+      ticket_type_id: LANDMARK_KINDS.includes(input.kind ?? 'standard') ? null : input.ticketTypeId,
       name: input.name.trim(),
       colour: input.colour,
+      kind: input.kind ?? 'standard',
+      note: input.note?.trim() || null,
       // Clamped and rounded to the five decimals the column holds, so a shape
       // dragged a pixel past the edge is trimmed rather than refused by a check.
       x: round5(clamp(input.x)),
@@ -176,6 +192,8 @@ export async function updateSection(
   patch: {
     name?: string;
     colour?: string;
+    kind?: SectionKind;
+    note?: string;
     ticketTypeId?: string | null;
     x?: number;
     y?: number;
@@ -194,9 +212,35 @@ export async function updateSection(
     p_width: patch.width ?? null,
     p_height: patch.height ?? null,
     p_sort_order: patch.sortOrder ?? null,
+    p_kind: patch.kind ?? null,
+    p_note: patch.note ?? null,
   });
 
   if (error) throw error;
+}
+
+/**
+ * The same hall, the next night.
+ *
+ * A sector is tied to a ticket type and a ticket type belongs to one event, so
+ * without this an arena gets redrawn for every night it runs. Sectors are
+ * matched to the new event's ticket types **by name** — matching by position or
+ * by price would be a guess, and a wrong guess here sells the cheap seats at the
+ * expensive price.
+ */
+export async function cloneVenueMap(input: {
+  sourceMapId: string;
+  eventId: string;
+  name?: string;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('clone_venue_map', {
+    p_source_map_id: input.sourceMapId,
+    p_event_id: input.eventId,
+    p_name: input.name ?? null,
+  });
+
+  if (error) throw error;
+  return data as string;
 }
 
 /**
@@ -240,3 +284,40 @@ export async function getSectionSeats(sectionId: string): Promise<{
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 const round5 = (v: number) => Math.round(v * 1e5) / 1e5;
+
+export interface ReusablePlan {
+  event_id: string;
+  venue_map_id: string;
+  title: string;
+  start_at: string;
+}
+
+/**
+ * Plans this organization already has, to copy onto a new night.
+ *
+ * Offered on an event that has none, which is the direction this actually goes:
+ * you are setting up Saturday and last month's plan of the same hall is right
+ * there. The other direction — pushing a plan forward onto events you have not
+ * opened yet — is a way to overwrite one by accident.
+ */
+export async function getReusablePlans(input: {
+  organizationId: string;
+  excludeEventId: string;
+}): Promise<ReusablePlan[]> {
+  const { data, error } = await supabase
+    .from('events')
+    .select('id, title, start_at, venue_map_id')
+    .eq('organization_id', input.organizationId)
+    .not('venue_map_id', 'is', null)
+    .neq('id', input.excludeEventId)
+    .order('start_at', { ascending: false })
+    .limit(20);
+
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    event_id: row.id as string,
+    venue_map_id: row.venue_map_id as string,
+    title: row.title as string,
+    start_at: row.start_at as string,
+  }));
+}

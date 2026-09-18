@@ -72,6 +72,12 @@ const MESSAGES: Record<string, string> = {
   SEATS_IN_USE: 'Tieto miesta sú už predané alebo ich niekto drží.',
   SECTION_NOT_FOUND: 'Tento sektor už na pláne nie je.',
   VENUE_MAP_NOT_FOUND: 'Tento plán sály už neexistuje.',
+  VENUE_PLAN_IS_ADMIN_ONLY:
+    'Plán sály kreslí BLUP. Napíš nám cez „Požiadať o plán sály" pri evente a nachystáme to.',
+  VENUE_PLAN_ALREADY_REQUESTED: 'Na tento event už žiadosť máme a robíme na nej.',
+  TELL_US_MORE: 'Napíš nám aspoň pár viet — koľko radov, kde je pódium, čo je VIP.',
+  EVENT_ALREADY_HAS_PLAN: 'Na tomto evente už plán je. Najprv ho odpoj alebo zmaž.',
+  INVALID_SECTION_KIND: 'Taký druh sektora nepoznáme.',
   INVALID_GRID: 'Zadaj počet radov aj počet miest v rade — obe aspoň 1.',
   GRID_TOO_BIG: 'Najviac 200 radov a 200 miest v rade. Väčšiu sálu rozdeľ na sektory.',
   INVALID_SEAT_KIND: 'Taký druh miesta nepoznáme.',

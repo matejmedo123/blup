@@ -488,6 +488,8 @@ export interface PlatformStats {
   frozen_organizations: number;
   /** Organizers claiming an event BLUP listed for them. */
   pending_event_claims: number;
+  /** Organizers waiting for a seating plan. Somebody's sale is held up by each. */
+  open_venue_plan_requests: number;
   premium_users: number;
 }
 
