@@ -38,7 +38,8 @@ interface Body {
 
 interface Delivery {
   id: string;
-  kind: 'ticket' | 'order_refunded' | 'waitlist_open' | 'invite' | 'announcement' | 'digest';
+  kind: 'ticket' | 'order_refunded' | 'waitlist_open' | 'invite' | 'announcement'
+    | 'digest' | 'test';
   order_id: string | null;
   event_id: string | null;
   to_email: string;

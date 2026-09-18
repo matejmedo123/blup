@@ -25,6 +25,7 @@
     "check:platform": "node scripts/check-platform-files.mjs",
     "check:hooks": "node scripts/check-hooks.mjs",
     "check:emails": "./scripts/check-emails.sh",
+    "check:dns": "node scripts/check-dns.mjs",
     "check:functions": "./scripts/check-functions-types.sh",
     "web": "npm --prefix mobile run web"
   },

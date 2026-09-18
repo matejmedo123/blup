@@ -87,6 +87,9 @@ Deno.serve(async (req) => {
       email: {
         configured: configured.email(),
         from: configured.email() ? (optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.sk>') : null,
+        // Without this, bounces are never recorded and the sending domain's
+        // reputation degrades silently until mail starts landing in spam.
+        bounce_webhook: configured.emailWebhook(),
       },
     });
   } catch (error) {

@@ -77,6 +77,7 @@ export default function AdminDashboard() {
       {/* The first thing to open when something "does not work" after a
           deploy: it says, feature by feature, whether the database is as new
           as the build. */}
+      <Row label="E-maily a doručovanie" onPress={() => router.push('/admin/emails')} />
       <Row label="Stav nasadenia" onPress={() => router.push('/admin/deployment')} />
       <Row label="Používatelia" onPress={() => router.push('/admin/users')} />
       <Row label="Všetky eventy" onPress={() => router.push('/admin/events')} />

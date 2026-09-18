@@ -87,6 +87,19 @@ export const FEATURES: FeatureNeed[] = [
     migration: '20260101007100_admin_premium_and_plan_delete',
     functions: ['clear_venue_map_image', 'delete_venue_map'],
   },
+  {
+    key: 'ads',
+    label: 'Reklama — vlastný rozpočet, publikum, pauza',
+    migration: '20260101007300_ad_campaigns',
+    functions: ['ad_audience_estimate', 'ad_budget_quote', 'create_ad_campaign', 'set_ad_paused'],
+    columns: ['event_boosts.paused_at', 'platform_settings.boost_cpm_cents'],
+  },
+  {
+    key: 'email_ops',
+    label: 'E-maily — vidieť, či naozaj chodia',
+    migration: '20260101007400_email_ops',
+    functions: ['send_test_email', 'email_health'],
+  },
 ];
 
 export interface FeatureStatus extends FeatureNeed {

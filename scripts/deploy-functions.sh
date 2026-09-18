@@ -46,6 +46,9 @@ FUNCTIONS=(
   # BLUP session and often no account behind it. A JWT check here would make
   # every unsubscribe fail, which is both a spam complaint and a GDPR one.
   "unsubscribe:false"
+  # Bounces and spam complaints from the mail provider. No session, and the
+  # Svix signature is what authenticates it.
+  "email-events:false"
 )
 
 deploy() {

@@ -52,6 +52,7 @@ export const env = {
   resendApiKey: () => requireEnv('RESEND_API_KEY', 'EMAIL_NOT_CONFIGURED'),
   emailFrom: () => optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.sk>',
   emailReplyTo: () => optionalEnv('EMAIL_REPLY_TO'),
+  resendWebhookSecret: () => requireEnv('RESEND_WEBHOOK_SECRET', 'EMAIL_WEBHOOK_NOT_CONFIGURED'),
   appUrl: () => optionalEnv('APP_PUBLIC_URL') ?? 'https://blup.sk',
 
   // Web subscriptions. Apple's cut does not apply outside the App Store, so the
@@ -74,6 +75,7 @@ export const configured = {
   appleIap: () => Boolean(optionalEnv('APPLE_SHARED_SECRET')),
   ai: () => Boolean(optionalEnv('AI_API_KEY')),
   email: () => Boolean(optionalEnv('RESEND_API_KEY')),
+  emailWebhook: () => Boolean(optionalEnv('RESEND_WEBHOOK_SECRET')),
   webPush: () =>
     Boolean(optionalEnv('VAPID_PUBLIC_KEY')) && Boolean(optionalEnv('VAPID_PRIVATE_KEY')),
   webPremium: () =>

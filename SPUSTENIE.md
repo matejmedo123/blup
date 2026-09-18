@@ -322,6 +322,41 @@ odoslanie.
 
 **✓ Kontrola:** v Resende svieti pri `blup.sk` zelené **Verified**.
 
+**✓ Druhá kontrola, tá dôležitejšia:**
+
+```bash
+npm run check:dns              # alebo: npm run check:dns -- mojadomena.sk
+```
+
+Skript sa pozrie, ako tvoju doménu vidí svet: či má SPF (a práve jeden), či má
+DKIM kľúč, aké má DMARC a či sa nedoručenky majú kam vrátiť. „Verified“ v
+Resende hovorí len o Resende; toto hovorí o tom, či Gmail tvoju poštu prijme.
+
+### 5b·2. Odrazy a sťažnosti — inak ti doručovanie potichu umrie
+
+Adresa, ktorá už neexistuje, sa neopraví sama. Keď na ňu posielaš ďalej,
+poskytovateľ schránok si to počíta a po čase začne hádzať do spamu **všetku**
+tvoju poštu — aj tú ľuďom, ktorí ju chcú. Rovnako sťažnosť („toto je spam“).
+
+BLUP to vie spracovať, ale musí sa to dozvedieť:
+
+1. Resend → **Webhooks → Add Webhook**
+2. URL: `https://<tvoj-projekt>.supabase.co/functions/v1/email-events`
+3. Vyber udalosti `email.bounced` a `email.complained`
+4. Skopíruj **Signing Secret** (`whsec_…`) do `supabase/.env`:
+
+```bash
+RESEND_WEBHOOK_SECRET=whsec_...
+```
+
+Bez tohto tajomstva funkcia každú požiadavku odmietne — a to je zámer: kto
+pozná URL, mohol by inak označiť ľubovoľnú adresu za mŕtvu a odstrihnúť človeka
+od jeho vstupeniek.
+
+**✓ Kontrola:** po nasadení funkcií otvor v appke **Admin → E-maily**. Pošli si
+testovací e-mail (ide rovnakou cestou ako vstupenky, nie skratkou) a sleduj
+riadok „Nedoručiteľných“ — tam sa objavia odrazy, keď nejaké prídu.
+
 ### 5c. Potvrdzovacie e-maily pri registrácii
 
 **Toto je tretia, samostatná vec — a bez nej ti registrácia nedobehne.**
@@ -610,7 +645,9 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 | „Platby zatiaľ nie sú nakonfigurované" | chýba `STRIPE_SECRET_KEY`; over cez `config-status` |
 | Po platbe zlé presmerovanie | `APP_PUBLIC_URL` nesedí s doménou alebo má lomku na konci |
 | E-maily nechodia | doména nie je vo Verified, alebo `EMAIL_FROM` je na inej doméne |
-| E-maily padajú do spamu | dva SPF záznamy naraz — spoj ich do jedného |
+| E-maily padajú do spamu | spusti `npm run check:dns` — povie presne ktorý záznam chýba |
+| E-maily sa vôbec nehýbu | **Admin → E-maily**: keď fronta rastie a za hodinu neodišlo nič, nebeží cron `blup-emails` |
+| E-mailov zlyháva viac než pár % | **Admin → E-maily** ukáže dôvody; skoro vždy je to doména, nie jedna adresa |
 | Potvrdzovací e-mail po registrácii nechodí | Supabase posiela cez vlastnú službu len 2/hodinu a len členom tímu — nastav SMTP na Resend, **Fáza 5c** |
 | Potvrdenie prišlo raz a potom už nie | narazil si na *Emails per hour* — zdvihni limit v **Authentication → Rate Limits** |
 | Odkaz v potvrdení hlási neplatnú adresu | `Redirect URLs` v **Fáze 8** nesedia s doménou |
