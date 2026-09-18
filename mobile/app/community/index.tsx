@@ -5,27 +5,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { getPeopleRecommendations, describeMatch } from '@/api/ai';
-import { getPostEventMatches, describeOverlap, type PostEventMatch } from '@/api/networking';
 import {
   getCommunities, getMyCommunities, joinCommunity, leaveCommunity, type Community,
 } from '@/api/communities';
-import { followUser, unfollowUser, getFollowing } from '@/api/profiles';
 import { messageFor } from '@/lib/errors';
-import { formatCount, formatRelative } from '@/lib/format';
+import { formatCount } from '@/lib/format';
 import { useToast } from '@/components/Toast';
-import { Avatar, ErrorState, IconButton, Input, LoadingState, Notice } from '@/components/ui';
+import { ErrorState, IconButton, Input, LoadingState, Notice } from '@/components/ui';
 import {
   categoryFamilies, colors, familyFor, labelFor, radius, spacing, typography,
 } from '@/theme';
-import type { PeopleMatch } from '@/types/models';
 
 /**
  * Komunita.
  *
- * Four blocks, in the handoff's order: people like you, interest communities,
- * post-event networking, and micro-communities. The first two are ranked by the
- * database; the third is built from who you actually stood next to.
+ * Communities, and only communities: browse them, search them, found one, and
+ * see what the ones you are in are putting on.
+ *
+ * People used to be here too — "Ľudia ako ty" sat above the communities and
+ * post-event matches below them. They have moved to /people, because a person
+ * is not a community: you join a community and it has a feed, you follow a
+ * person and you might end up standing next to them. On one screen the people
+ * were permanently the part you scrolled past.
  */
 export default function CommunityScreen() {
   const queryClient = useQueryClient();
@@ -42,11 +43,6 @@ export default function CommunityScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const people = useQuery({
-    queryKey: ['people', 'recommendations'],
-    queryFn: () => getPeopleRecommendations({ limit: 8 }),
-  });
-
   const searching = debounced.length >= 2;
 
   const communities = useQuery({
@@ -58,41 +54,7 @@ export default function CommunityScreen() {
 
   const mine = useQuery({ queryKey: ['communities', 'mine'], queryFn: getMyCommunities });
 
-  const networking = useQuery({
-    queryKey: ['networking', 'post-event'],
-    queryFn: () => getPostEventMatches({ days: 60, limit: 8 }),
-  });
-
-  const following = useQuery({
-    queryKey: ['profile', 'following', 'ids'],
-    queryFn: async () => {
-      const { data } = await import('@/lib/supabase').then((m) => m.supabase.auth.getUser());
-      const id = data?.user?.id;
-      if (!id) return [] as string[];
-      const list = await getFollowing(id);
-      return list.map((person) => person.id);
-    },
-  });
-
-  const followingIds = new Set(following.data ?? []);
   const joinedIds = new Set((mine.data ?? []).map((community) => community.id));
-
-  const toggleFollow = async (userId: string, isFollowing: boolean) => {
-    setError(null);
-    try {
-      if (isFollowing) {
-        await unfollowUser(userId);
-        toast.show('Už ho nesleduješ');
-      } else {
-        await followUser(userId);
-        toast.show('Sleduješ');
-      }
-      await queryClient.invalidateQueries({ queryKey: ['profile', 'following'] });
-      await networking.refetch();
-    } catch (caught) {
-      setError(messageFor(caught));
-    }
-  };
 
   const toggleJoin = async (communityId: string, joined: boolean) => {
     setError(null);
@@ -110,19 +72,16 @@ export default function CommunityScreen() {
     }
   };
 
-  if (people.isLoading && communities.isLoading) {
+  if (communities.isLoading) {
     return <SafeAreaView style={styles.screen} edges={['top']}><LoadingState /></SafeAreaView>;
   }
 
-  if (people.isError && communities.isError) {
+  if (communities.isError) {
     return (
       <SafeAreaView style={styles.screen} edges={['top']}>
         <ErrorState
-          message={messageFor(people.error ?? communities.error)}
-          onRetry={() => {
-            void people.refetch();
-            void communities.refetch();
-          }}
+          message={messageFor(communities.error)}
+          onRetry={() => { void communities.refetch(); }}
         />
       </SafeAreaView>
     );
@@ -138,21 +97,19 @@ export default function CommunityScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {error ? <Notice tone="danger" title="Niečo sa pokazilo" body={error} /> : null}
 
-        {/* --- people like you ---------------------------------------------- */}
-        <Text style={styles.section}>Ľudia ako ty</Text>
-
-        {(people.data ?? []).length === 0 ? (
-          <EmptyBlock text="Vyber si viac záujmov a označ pár eventov — potom ti sem nájdeme ľudí." />
-        ) : (
-          (people.data ?? []).map((match) => (
-            <PersonRow
-              key={match.user_id}
-              match={match}
-              isFollowing={followingIds.has(match.user_id)}
-              onToggle={() => toggleFollow(match.user_id, followingIds.has(match.user_id))}
-            />
-          ))
-        )}
+        {/* People live on their own screen now. This is a door to it, not a
+            second copy of it — two lists of the same people that drift apart
+            is worse than one. */}
+        <Pressable style={styles.peopleLink} onPress={() => router.push('/people')}>
+          <View style={styles.flex}>
+            <Text style={styles.peopleLinkTitle}>Ľudia ako ty</Text>
+            <Text style={styles.peopleLinkBody}>
+              Spoločné záujmy, spoločné eventy — a ľudia, s ktorými si už na
+              nejakom bol.
+            </Text>
+          </View>
+          <Text style={styles.peopleLinkArrow}>→</Text>
+        </Pressable>
 
         {/* --- interest communities ------------------------------------------ */}
         <Text style={styles.section}>Záujmové komunity</Text>
@@ -196,26 +153,6 @@ export default function CommunityScreen() {
           <Text style={styles.newLabel}>Založiť vlastnú komunitu</Text>
         </Pressable>
 
-        {/* --- post-event networking ----------------------------------------- */}
-        <Text style={styles.section}>Po evente</Text>
-
-        {(networking.data ?? []).length === 0 ? (
-          <EmptyBlock text="Choď na event a potom sem doplníme ľudí, s ktorými si tam bol." />
-        ) : (
-          <>
-            <Text style={styles.sectionHint}>
-              Boli ste na tom istom mieste. Ešte sa nesledujete.
-            </Text>
-            {(networking.data ?? []).map((match) => (
-              <NetworkingRow
-                key={match.user_id}
-                match={match}
-                onFollow={() => toggleFollow(match.user_id, false)}
-              />
-            ))}
-          </>
-        )}
-
         {/* --- micro-communities ---------------------------------------------- */}
         <Pressable
           onPress={() => router.push('/community/micro')}
@@ -239,67 +176,6 @@ export default function CommunityScreen() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function PersonRow({
-  match, isFollowing, onToggle,
-}: {
-  match: PeopleMatch;
-  isFollowing: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <View style={styles.row}>
-      <Pressable onPress={() => router.push(`/user/${match.user_id}`)}>
-        <Avatar url={match.avatar_url} name={match.display_name} size={46} square />
-      </Pressable>
-
-      <Pressable style={styles.flex} onPress={() => router.push(`/user/${match.user_id}`)}>
-        <Text style={styles.rowName} numberOfLines={1}>
-          {match.display_name ?? match.username}
-        </Text>
-        {match.shared_interest_names.length > 0 ? (
-          <Text style={styles.rowTags} numberOfLines={1}>
-            {match.shared_interest_names.slice(0, 3).join(' · ')}
-          </Text>
-        ) : null}
-        <Text style={styles.rowReason} numberOfLines={1}>{describeMatch(match)}</Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onToggle}
-        style={[styles.followButton, isFollowing && styles.followButtonActive]}
-      >
-        <Text style={[styles.followLabel, isFollowing && styles.followLabelActive]}>
-          {isFollowing ? 'Sledujem' : 'Sledovať'}
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function NetworkingRow({ match, onFollow }: { match: PostEventMatch; onFollow: () => void }) {
-  return (
-    <View style={styles.row}>
-      <Pressable onPress={() => router.push(`/user/${match.user_id}`)}>
-        <Avatar url={match.avatar_url} name={match.display_name} size={46} square />
-      </Pressable>
-
-      <Pressable style={styles.flex} onPress={() => router.push(`/user/${match.user_id}`)}>
-        <Text style={styles.rowName} numberOfLines={1}>
-          {match.display_name ?? match.username}
-        </Text>
-        <Text style={styles.rowReason} numberOfLines={2}>{describeOverlap(match)}</Text>
-        {match.last_event_at ? (
-          <Text style={styles.rowWhen}>{formatRelative(match.last_event_at)}</Text>
-        ) : null}
-      </Pressable>
-
-      <Pressable onPress={onFollow} style={styles.followButton}>
-        <Text style={styles.followLabel}>Spojiť sa</Text>
-      </Pressable>
-    </View>
   );
 }
 
@@ -449,6 +325,21 @@ const styles = StyleSheet.create({
   },
   emptyText: { ...typography.body, color: colors.textTertiary },
   emptyAction: { ...typography.chip, color: colors.accent },
+
+  peopleLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.card,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: spacing.lg,
+  },
+  peopleLinkTitle: { ...typography.rowTitle, color: colors.text },
+  peopleLinkBody: { ...typography.metaSm, color: colors.textTertiary, marginTop: 3 },
+  peopleLinkArrow: { ...typography.rowTitle, color: colors.accent },
 
   banner: {
     borderRadius: radius.card,

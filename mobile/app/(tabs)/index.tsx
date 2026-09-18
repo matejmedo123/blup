@@ -570,7 +570,7 @@ export default function HomeScreen() {
           ListHeaderComponent={
             <View>
               {(circles.data ?? []).length > 0 ? (
-                <Pressable style={styles.circles} onPress={() => router.push('/community')}>
+                <Pressable style={styles.circles} onPress={() => router.push('/people')}>
                   <AvatarStack
                     people={(circles.data ?? []).slice(0, 5).map((person) => ({
                       id: person.id,
@@ -640,8 +640,11 @@ export default function HomeScreen() {
               {events.length > 0 ? (
               <View>
                 {/* --- banners --------------------------------------------- */}
+                {/* This banner has always said "Ľudia ako ty" and always
+                    opened Komunita, where the people were one block at the top
+                    of a screen about communities. It goes to the people. */}
                 <Pressable
-                  onPress={() => router.push('/community')}
+                  onPress={() => router.push('/people')}
                   style={({ pressed }) => [pressed && styles.pressed]}
                 >
                   <LinearGradient

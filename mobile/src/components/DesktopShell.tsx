@@ -185,6 +185,7 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
   const secondary: NavItem[] = isGuest
     ? [{ href: '/community', label: 'Komunity', glyph: '◇' }]
     : [
+        { href: '/people', label: 'Ľudia', glyph: '☻' },
         { href: '/community', label: 'Komunity', glyph: '◇' },
         ...((cart.data?.quantity ?? 0) > 0
           ? [{ href: '/cart', label: 'Košík', glyph: '⛒', badge: cart.data!.quantity }]

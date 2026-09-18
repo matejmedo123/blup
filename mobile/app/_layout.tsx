@@ -142,6 +142,7 @@ export default function RootLayout() {
       <Stack.Screen name="badges" options={{ title: 'Odznaky' }} />
       <Stack.Screen name="chat/[id]" options={{ title: '' }} />
       <Stack.Screen name="event/photos/[id]" options={{ title: 'Fotky eventu' }} />
+      <Stack.Screen name="people/index" options={{ headerShown: false }} />
       <Stack.Screen name="community/index" options={{ headerShown: false }} />
       <Stack.Screen name="community/new" options={{ title: 'Nová komunita' }} />
       <Stack.Screen name="community/micro" options={{ title: 'Micro-eventy' }} />

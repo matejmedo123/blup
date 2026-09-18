@@ -146,9 +146,16 @@ export default function FeedScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Feed</Text>
-        <Pressable style={styles.headerButton} onPress={() => router.push('/community')}>
-          <Text style={styles.headerButtonLabel}>Komunity</Text>
-        </Pressable>
+        {/* Two destinations, not one: people are no longer a block inside
+            Komunita, so they need their own way in from here. */}
+        <View style={styles.headerButtons}>
+          <Pressable style={styles.headerButton} onPress={() => router.push('/people')}>
+            <Text style={styles.headerButtonLabel}>Ľudia</Text>
+          </Pressable>
+          <Pressable style={styles.headerButton} onPress={() => router.push('/community')}>
+            <Text style={styles.headerButtonLabel}>Komunity</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.scopeRow}>
@@ -409,6 +416,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   title: { ...typography.screenTitle, color: colors.text },
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   headerButton: {
     paddingHorizontal: spacing.lg,
     paddingVertical: 9,
