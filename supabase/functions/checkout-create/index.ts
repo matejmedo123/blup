@@ -13,6 +13,7 @@
 import {
   ApiError, adminClient, errorResponse, handleOptions, json, rateLimit, readJson, requireUser,
 } from '../_shared/http.ts';
+import type { OrderRow } from '../_shared/rows.ts';
 import { stripe } from '../_shared/stripe.ts';
 
 interface CheckoutRequest {
@@ -44,7 +45,7 @@ Deno.serve(async (req) => {
     const db = adminClient();
 
     // 1. Create the order (validates availability, sales window, capacity, fees).
-    const { data: order, error: orderError } = await db
+    const { data: created, error: orderError } = await db
       .rpc('create_order', {
         p_buyer_id: user.id,
         p_ticket_type_id: body.ticket_type_id,
@@ -53,9 +54,10 @@ Deno.serve(async (req) => {
       })
       .single();
 
-    if (orderError || !order) {
+    if (orderError || !created) {
       throw new Error(orderError?.message ?? 'ORDER_CREATION_FAILED');
     }
+    const order = created as OrderRow;
 
     // 2. Free tickets need no payment provider at all — fulfil immediately.
     if (order.total_cents === 0) {

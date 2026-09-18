@@ -369,7 +369,28 @@ Creates a throwaway cluster, applies the local auth shim
   who carries the archive fee, the money-conservation invariant, and the
   accounting export's totals and authorization
 
+…and 34 more, through `test_42_venues.sql` (a theatre, an arena and an
+8 000-seat stadium). **72 migrations, 42 test files, 403 assertions.**
+
 Assertions run inside a transaction and roll back, so the suite is repeatable.
+
+### The rest of the loop
+
+| Command | What it would have caught |
+|---|---|
+| `npm run db:verify` | Everything above, from an empty database |
+| `npm run typecheck` | — |
+| `npx eslint app src` (in `mobile/`) | Hooks after an early return; impure reads during render |
+| `npm run check:functions` | **Type errors in the Edge Functions.** Supabase deploys them without type-checking and nothing here ran `deno check` either, so 131 of them accumulated unseen — almost all one cause (supabase-js cannot infer an RPC's return shape without a generated `Database` type), which is exactly the noise a real mistake hides in |
+| `npm run check:hooks` | React error #310 — a hook after an early return |
+| `npm run check:platform` | A `.ts` file shadowing its own `.web.tsx` (Metro resolves every `.ts` candidate first) |
+| `npm run check:origin` | A build that points at `127.0.0.1` — the visitor's own computer |
+| `npm run check:licenses` | AGPL or GPL in anything we distribute |
+| `npm run check:crop` / `:geocode` / `:maptiles` / `:salesmap` / `:pull` | The map, the address search and the gestures, in a real browser |
+| `scripts/smoke-*.mjs` | Blank pages, overflow, dead buttons, realtime leaks — Chromium, desktop and phone |
+
+`scripts/check-emails.sh`, `scripts/check-functions.sh` and `scripts/smoke-web.mjs`
+need a live project and cannot run against a throwaway cluster.
 
 
 ---

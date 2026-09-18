@@ -547,7 +547,7 @@ Nič sa im nestratí — účty, vstupenky ani uložené eventy. Zmení sa toto:
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje **všetkých 70 migrácií od nuly** a prejde
-**380 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
+Postaví dočasnú databázu, aplikuje **všetkých 72 migrácií od nuly** a prejde
+**403 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
 potom zlyhá, chyba je v tvojich dátach, nie v schéme — a to je pri hľadaní
 veľmi cenné vedieť.

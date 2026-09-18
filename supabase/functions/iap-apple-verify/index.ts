@@ -15,6 +15,7 @@
 import {
   ApiError, adminClient, errorResponse, handleOptions, json, rateLimit, readJson, requireUser,
 } from '../_shared/http.ts';
+import type { SubscriptionRow } from '../_shared/rows.ts';
 import { env } from '../_shared/env.ts';
 
 const PRODUCTION_URL = 'https://buy.itunes.apple.com/verifyReceipt';
@@ -121,7 +122,7 @@ Deno.serve(async (req) => {
     else status = 'active';
 
     const db = adminClient();
-    const { data: subscription, error } = await db
+    const { data: upserted, error } = await db
       .rpc('upsert_premium_subscription', {
         p_user_id: user.id,
         p_platform: 'apple',
@@ -138,6 +139,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (error) throw error;
+    const subscription = upserted as SubscriptionRow | null;
 
     return json({
       is_premium: ['active', 'trialing', 'grace_period'].includes(status),

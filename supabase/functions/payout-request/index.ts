@@ -11,6 +11,7 @@
 import {
   ApiError, adminClient, errorResponse, handleOptions, json, rateLimit, readJson, requireUser,
 } from '../_shared/http.ts';
+import type { PayoutRow } from '../_shared/rows.ts';
 import { stripe } from '../_shared/stripe.ts';
 import { configured } from '../_shared/env.ts';
 
@@ -38,16 +39,17 @@ Deno.serve(async (req) => {
 
     // request_payout() enforces role, payouts_enabled and available balance,
     // and writes the negative ledger entry inside one transaction.
-    const { data: payout, error } = await db
+    const { data: requested, error } = await db
       .rpc('request_payout', {
         p_organization_id: body.organization_id,
         p_amount_cents: amount,
       })
       .single();
 
-    if (error || !payout) {
+    if (error || !requested) {
       throw new Error(error?.message ?? 'PAYOUT_FAILED');
     }
+    const payout = requested as PayoutRow;
 
     const { data: org } = await db
       .from('organizations')

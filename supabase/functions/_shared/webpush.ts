@@ -17,7 +17,18 @@
  */
 
 // --- base64url ----------------------------------------------------------------
-export function b64urlToBytes(value: string): Uint8Array {
+/**
+ * Bytes backed by a plain ArrayBuffer, which is what WebCrypto now insists on.
+ *
+ * TypeScript 5.7 made `Uint8Array` generic over its backing buffer and narrowed
+ * `BufferSource` to `ArrayBufferView<ArrayBuffer>` — a bare `Uint8Array` is
+ * `Uint8Array<ArrayBufferLike>`, which could be a SharedArrayBuffer, and
+ * `crypto.subtle` will not take one. Nothing here ever produces a shared buffer;
+ * saying so is the whole change.
+ */
+type Bytes = Uint8Array<ArrayBuffer>;
+
+export function b64urlToBytes(value: string): Bytes {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
   return Uint8Array.from(binary, (c) => c.charCodeAt(0));
@@ -29,9 +40,9 @@ export function bytesToB64url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-const utf8 = (text: string) => new TextEncoder().encode(text);
+const utf8 = (text: string): Bytes => new TextEncoder().encode(text) as Bytes;
 
-function concat(...parts: Uint8Array[]): Uint8Array {
+function concat(...parts: Uint8Array[]): Bytes {
   const total = parts.reduce((n, p) => n + p.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;
@@ -41,11 +52,11 @@ function concat(...parts: Uint8Array[]): Uint8Array {
 
 // --- HKDF ---------------------------------------------------------------------
 async function hkdf(
-  salt: Uint8Array,
-  ikm: Uint8Array,
-  info: Uint8Array,
+  salt: Bytes,
+  ikm: Bytes,
+  info: Bytes,
   length: number,
-): Promise<Uint8Array> {
+): Promise<Bytes> {
   const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
     { name: 'HKDF', hash: 'SHA-256', salt, info },
@@ -57,7 +68,7 @@ async function hkdf(
 
 // --- keys ---------------------------------------------------------------------
 /** A P-256 public key as the uncompressed 65-byte point browsers hand out. */
-function jwkFromPublicBytes(bytes: Uint8Array): JsonWebKey {
+function jwkFromPublicBytes(bytes: Bytes): JsonWebKey {
   if (bytes.length !== 65 || bytes[0] !== 0x04) {
     throw new Error('WEBPUSH_BAD_PUBLIC_KEY');
   }
@@ -70,7 +81,7 @@ function jwkFromPublicBytes(bytes: Uint8Array): JsonWebKey {
   };
 }
 
-async function importPublicKey(bytes: Uint8Array, usages: KeyUsage[]): Promise<CryptoKey> {
+async function importPublicKey(bytes: Bytes, usages: KeyUsage[]): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     'jwk',
     jwkFromPublicBytes(bytes),
@@ -140,8 +151,8 @@ export interface PushSubscription {
 export async function encryptPayload(
   subscription: PushSubscription,
   payload: string,
-  overrides?: { salt?: Uint8Array; ephemeral?: CryptoKeyPair },
-): Promise<Uint8Array> {
+  overrides?: { salt?: Bytes; ephemeral?: CryptoKeyPair },
+): Promise<Bytes> {
   const clientPublicBytes = b64urlToBytes(subscription.keys.p256dh);
   const authSecret = b64urlToBytes(subscription.keys.auth);
 

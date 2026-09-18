@@ -14,6 +14,7 @@ import {
   ApiError, adminClient, errorResponse, handleOptions, json, rateLimit, readJson, requireUser,
   userClient,
 } from '../_shared/http.ts';
+import type { BoostRow } from '../_shared/rows.ts';
 import { stripe } from '../_shared/stripe.ts';
 import { env } from '../_shared/env.ts';
 
@@ -52,16 +53,17 @@ Deno.serve(async (req) => {
     //    event. create_boost_order() authorizes on auth.uid(), so it has to run
     //    under the caller's own JWT — a service-role call presents as "no user"
     //    and the function refuses it outright.
-    const { data: boost, error: boostError } = await userClient(req)
+    const { data: createdBoost, error: boostError } = await userClient(req)
       .rpc('create_boost_order', {
         p_event: body.event_id,
         p_package: body.package_code,
       })
       .single();
 
-    if (boostError || !boost) {
+    if (boostError || !createdBoost) {
       throw new Error(boostError?.message ?? 'BOOST_CREATION_FAILED');
     }
+    const boost = createdBoost as BoostRow;
 
     // 2. Charge it to BLUP — a boost is our revenue, not the organizer's, so
     //    there is no Connect transfer and no application fee.

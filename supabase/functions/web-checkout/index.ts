@@ -25,6 +25,7 @@ import {
   ApiError, adminClient, errorResponse, handleOptions, json, optionalUser, rateLimit, readJson,
   requireUser, userClient,
 } from '../_shared/http.ts';
+import type { BoostRow, CheckoutRow, OrderRow } from '../_shared/rows.ts';
 import { stripe } from '../_shared/stripe.ts';
 import { env } from '../_shared/env.ts';
 
@@ -162,7 +163,7 @@ Deno.serve(async (req) => {
       // capacity, discount and both fees are decided here, not by the browser.
       // A guest changes who the order belongs to and nothing about what it
       // costs — the two are asserted equal to the cent in test 31.
-      const { data: order, error } = await db
+      const { data: created, error } = await db
         .rpc('create_order', {
           p_buyer_id: user?.id ?? null,
           p_ticket_type_id: body.ticket_type_id,
@@ -176,7 +177,8 @@ Deno.serve(async (req) => {
         })
         .single();
 
-      if (error || !order) throw new Error(error?.message ?? 'ORDER_CREATION_FAILED');
+      if (error || !created) throw new Error(error?.message ?? 'ORDER_CREATION_FAILED');
+      const order = created as OrderRow;
 
       // A fully discounted or free basket needs no payment provider at all.
       if (order.total_cents === 0) {
@@ -261,19 +263,27 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Everything below here belongs to somebody. `guest` is only ever set on the
+    // single-ticket path above, so requireUser() has already run and thrown for
+    // anybody without a session — this line is what says so out loud, to the
+    // type checker and to the next reader. If the invariant ever changes it
+    // becomes a clean 401 instead of reading `.id` off null.
+    if (!user) throw new ApiError('AUTH_REQUIRED', 'Na toto sa treba prihlásiť.', 401);
+
     if (kind === 'cart') {
       // Everything about the basket — which tickets, how many, whether the
       // reservations are still alive, the discount split and both fees — is
       // decided by create_checkout() against rows the browser cannot write.
       // This function only learns the total afterwards.
-      const { data: checkout, error } = await db
+      const { data: startedCheckout, error } = await db
         .rpc('create_checkout', {
           p_buyer_id: user.id,
           p_promo_code: typeof body.promo_code === 'string' ? body.promo_code.trim() : null,
         })
         .single();
 
-      if (error || !checkout) throw new Error(error?.message ?? 'CHECKOUT_FAILED');
+      if (error || !startedCheckout) throw new Error(error?.message ?? 'CHECKOUT_FAILED');
+      const checkout = startedCheckout as CheckoutRow;
 
       const { data: orders } = await db
         .from('orders')
@@ -399,14 +409,15 @@ Deno.serve(async (req) => {
 
       // create_boost_order() checks that this user may promote this event, and
       // it does that with auth.uid() — so it runs under the caller's JWT.
-      const { data: boost, error } = await userClient(req)
+      const { data: createdBoost, error } = await userClient(req)
         .rpc('create_boost_order', {
           p_event: body.event_id,
           p_package: body.package_code,
         })
         .single();
 
-      if (error || !boost) throw new Error(error?.message ?? 'BOOST_ORDER_FAILED');
+      if (error || !createdBoost) throw new Error(error?.message ?? 'BOOST_ORDER_FAILED');
+      const boost = createdBoost as BoostRow;
 
       const session = await stripe.createCheckoutSession({
         mode: 'payment',

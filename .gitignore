@@ -49,3 +49,7 @@ Thumbs.db
 
 # local postgres verification cluster
 /tmp/blup-pgtest/
+
+# Deno writes these when type-checking the Edge Functions (scripts/check-functions-types.sh).
+supabase/functions/node_modules/
+supabase/functions/deno.lock

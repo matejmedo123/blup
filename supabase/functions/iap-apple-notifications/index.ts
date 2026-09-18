@@ -74,7 +74,13 @@ async function verifyAppleJws(jws: string): Promise<boolean> {
  * Pulls the SubjectPublicKeyInfo out of a DER certificate. Apple's leaf
  * certificates use prime256v1, so the SPKI block is located by its OID prefix.
  */
-function extractSpki(der: Uint8Array): Uint8Array {
+/**
+ * `Uint8Array<ArrayBuffer>` rather than a bare `Uint8Array`: TypeScript 5.7 made
+ * the array generic over its backing buffer and narrowed `BufferSource` to
+ * exclude a SharedArrayBuffer, so `crypto.subtle.importKey` will not take the
+ * unparameterised type. Nothing here produces a shared buffer.
+ */
+function extractSpki(der: Uint8Array): Uint8Array<ArrayBuffer> {
   // OID 1.2.840.10045.2.1 (ecPublicKey) + 1.2.840.10045.3.1.7 (prime256v1)
   const marker = [
     0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,
