@@ -393,3 +393,160 @@ $$;
 
 revoke execute on function public.duplicate_section(uuid) from public, anon;
 grant execute on function public.duplicate_section(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 6. A nech to kupujúci naozaj uvidí tak, ako to je
+-- ---------------------------------------------------------------------------
+/**
+ * Plán pre kupujúceho — s otočením sektorov a bez cudzej fotky haly.
+ *
+ * Dve zmeny oproti 0070, obe z toho istého hlásenia:
+ *
+ *   · `rotation` ide von, inak by sa tribúna nakreslená šikmo zobrazila rovno
+ *     a plán by ukazoval inú halu, než akú organizátor obkresloval,
+ *   · a keď je obrázok len podklad (predvolene), `image_url` sa nepošle. Nie
+ *     „pošle sa a appka ho nezobrazí" — nepošle sa. Fotka zákulisia alebo
+ *     papiera na stole nemá dôvod opustiť editor.
+ */
+create or replace function public.seat_map_for_event(p_event_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  with ev as (
+    select e.id, e.venue_map_id from public.events e where e.id = p_event_id
+  ),
+  claims as (
+    select c.seat_id from public.seat_claims(p_event_id) c
+  )
+  select case when (select venue_map_id from ev) is null then null else
+    jsonb_build_object(
+      'map', (to_jsonb(m) - 'created_by' - 'updated_by')
+             || case when m.image_is_backdrop
+                     then jsonb_build_object('image_url', null)
+                     else '{}'::jsonb end,
+      'sections', coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', s.id,
+            'name', s.name,
+            'colour', s.colour,
+            'kind', s.kind,
+            'note', s.note,
+            'landmark', public.section_is_landmark(s.kind),
+            'x', s.x, 'y', s.y, 'width', s.width, 'height', s.height,
+            'rotation', s.rotation,
+            'ticket_type_id', s.ticket_type_id,
+            'price_cents', tt.price_cents,
+            'numbered', exists (select 1 from public.venue_seats vs where vs.venue_section_id = s.id),
+            'seat_count', (select count(*) from public.venue_seats vs where vs.venue_section_id = s.id),
+            'available', case
+              when public.section_is_landmark(s.kind) then 0
+              when exists (select 1 from public.venue_seats vs where vs.venue_section_id = s.id)
+                then (select count(*) from public.venue_seats vs
+                      where vs.venue_section_id = s.id and vs.is_sellable
+                        and not exists (select 1 from claims cl where cl.seat_id = vs.id))
+              else coalesce((select a.available
+                             from public.ticket_type_availability(s.ticket_type_id) a), 0)
+            end,
+            'rows', (select count(distinct vs.row_label) from public.venue_seats vs
+                     where vs.venue_section_id = s.id),
+            'row_width', coalesce((select max(cnt) from (
+                select count(*) as cnt from public.venue_seats vs
+                where vs.venue_section_id = s.id group by vs.row_label) w), 0)
+          ) order by s.sort_order, s.name
+        )
+        from public.venue_sections s
+        left join public.ticket_types tt on tt.id = s.ticket_type_id
+        where s.venue_map_id = m.id
+      ), '[]'::jsonb)
+    )
+  end
+  from ev
+  left join public.venue_maps m on m.id = ev.venue_map_id;
+$$;
+
+grant execute on function public.seat_map_for_event(uuid) to anon, authenticated;
+
+/** Otočenie sa dá nastaviť rovnako ako všetko ostatné na sektore. */
+create or replace function public.update_section(
+  p_section_id     uuid,
+  p_name           text default null,
+  p_colour         text default null,
+  p_ticket_type_id uuid default null,
+  p_x              numeric default null,
+  p_y              numeric default null,
+  p_width          numeric default null,
+  p_height         numeric default null,
+  p_sort_order     integer default null,
+  p_kind           text default null,
+  p_note           text default null,
+  p_rotation       numeric default null
+)
+returns public.venue_sections
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_map uuid;
+  v_out public.venue_sections;
+begin
+  select venue_map_id into v_map from public.venue_sections where id = p_section_id;
+  if v_map is null then
+    raise exception 'SECTION_NOT_FOUND';
+  end if;
+  perform public.assert_can_manage_venue_map(v_map);
+
+  if p_kind is not null and p_kind not in
+     ('standard', 'vip', 'box', 'standing', 'wheelchair', 'stage', 'bar', 'entrance', 'other') then
+    raise exception 'INVALID_SECTION_KIND';
+  end if;
+
+  if p_ticket_type_id is not null and exists (
+    select 1 from public.venue_seats vs
+    join public.tickets t on t.venue_seat_id = vs.id and t.status in ('valid', 'used')
+    where vs.venue_section_id = p_section_id
+  ) then
+    raise exception 'SEATS_IN_USE'
+      using hint = 'Zo sektora sú už predané vstupenky, typ vstupenky sa nedá vymeniť.';
+  end if;
+
+  if p_kind is not null and public.section_is_landmark(p_kind)
+     and exists (select 1 from public.venue_sections
+                 where id = p_section_id and ticket_type_id is not null) then
+    raise exception 'SECTION_SELLS'
+      using hint = 'Sektor má typ vstupenky — orientačný bod nepredáva nič.';
+  end if;
+
+  update public.venue_sections
+  set name           = coalesce(p_name, name),
+      colour         = coalesce(p_colour, colour),
+      ticket_type_id = coalesce(p_ticket_type_id, ticket_type_id),
+      x              = coalesce(p_x, x),
+      y              = coalesce(p_y, y),
+      width          = coalesce(p_width, width),
+      height         = coalesce(p_height, height),
+      sort_order     = coalesce(p_sort_order, sort_order),
+      kind           = coalesce(p_kind, kind),
+      note           = coalesce(nullif(btrim(p_note), ''), note),
+      rotation       = coalesce(p_rotation, rotation)
+  where id = p_section_id
+  returning * into v_out;
+
+  return v_out;
+end;
+$$;
+
+revoke execute on function public.update_section(
+  uuid, text, text, uuid, numeric, numeric, numeric, numeric, integer, text, text, numeric
+) from public, anon;
+grant execute on function public.update_section(
+  uuid, text, text, uuid, numeric, numeric, numeric, numeric, integer, text, text, numeric
+) to authenticated;
+
+drop function if exists public.update_section(
+  uuid, text, text, uuid, numeric, numeric, numeric, numeric, integer, text, text
+);

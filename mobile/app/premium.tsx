@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   getPremiumStatus, getStore, getWebPremiumPricing, getWebPremiumStatus, PREMIUM_FEATURES,
-  purchasePremium, restorePurchases,
+  purchasePremium, restorePurchases, setPremiumPreview,
 } from '@/api/premium';
 import {
   canManageBilling, openBillingPortal, subscribePremium,
@@ -13,7 +13,7 @@ import {
 import { useAuth } from '@/auth/AuthProvider';
 import { messageFor } from '@/lib/errors';
 import {
-  Badge, Body, Button, Caption, Divider, LoadingState, Notice, Screen, SectionHeader,
+  Badge, Body, Button, Caption, Divider, LoadingState, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
 import { env } from '@/lib/env';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -78,6 +78,25 @@ export default function PremiumScreen() {
   // In a browser the store is Stripe, not Apple; the native-store warning below
   // would be both wrong and confusing there.
   const canBuy = (canManageBilling ? true : store.available) && !pricingMissing;
+
+  /**
+   * An admin has Premium from their role, which means they never see the half
+   * of the app that asks people to buy it — the locked states, the upsells,
+   * the screens that say "this needs Premium". That is exactly the half that
+   * decides whether anybody subscribes.
+   */
+  const togglePreview = async (off: boolean) => {
+    setError(null);
+    setBusy('preview');
+    try {
+      await setPremiumPreview(off);
+      await queryClient.invalidateQueries({ queryKey: ['premium'] });
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const buy = async (plan: 'monthly' | 'yearly') => {
     setError(null);
@@ -159,6 +178,23 @@ export default function PremiumScreen() {
       </View>
 
       {error ? <Notice tone="danger" title="Nepodarilo sa dokončiť" body={error} /> : null}
+
+      {/* Only an admin sees this, and only an admin may flip it — the database
+          refuses everybody else. */}
+      {isAdmin ? (
+        <View style={styles.preview}>
+          <Switch
+            value={status.data?.preview_off ?? false}
+            onValueChange={(next) => void togglePreview(next)}
+            label="Vypnúť si Premium (test)"
+            description={
+              status.data?.preview_off
+                ? 'Práve sa appka tvári, že Premium nemáš — vrátane servera, takže vidíš presne to, čo uvidí bežný človek.'
+                : 'Ako admin máš Premium automaticky, takže nikdy neuvidíš, čo vidia ostatní. Týmto si ho dočasne vypneš.'
+            }
+          />
+        </View>
+      ) : null}
 
       {/* "Máš Premium" was true for three different reasons and said the same
           sentence for all of them — and for an admin it said nothing at all,
@@ -348,6 +384,7 @@ const styles = StyleSheet.create({
   featureTitle: { ...typography.bodyStrong, color: colors.text },
   lookButton: { marginBottom: spacing.lg },
 
+  preview: { marginBottom: spacing.md },
   plans: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   planPriceMissing: { ...typography.caption, color: colors.textQuaternary },
   plan: {

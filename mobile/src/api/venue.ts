@@ -8,6 +8,15 @@ export interface VenueMap {
   image_url: string | null;
   image_width: number;
   image_height: number;
+  /**
+   * The picture is something to trace over, not the plan itself.
+   *
+   * Default. An organizer photographs the hall, draws the sectors on top of it
+   * and the buyer sees the sectors — not the photograph. Turning it off
+   * publishes the image as the background of the plan people buy from, which
+   * is only worth doing when it is a real seating chart rather than a snapshot.
+   */
+  image_is_backdrop: boolean;
 }
 
 export async function getVenueMaps(organizationId: string): Promise<VenueMap[]> {
@@ -168,12 +177,24 @@ export async function generateSeats(input: {
   perRow: number;
   /** Where the lettering starts, for a stand whose first row is not A. */
   startRow?: number;
+  /**
+   * How the rows are named, so the plan matches what is painted in the hall.
+   * Theatres letter them; stadiums number them.
+   */
+  rowStyle?: 'letters' | 'numbers';
+  /** For halls whose rows read "S1", "C-1" and so on. */
+  rowPrefix?: string;
+  /** First seat number in a row. A sector numbered 101–140 starts at 101. */
+  seatStart?: number;
 }): Promise<{ total: number; created: number; removed: number }> {
   const { data, error } = await supabase.rpc('generate_section_seats', {
     p_section_id: input.sectionId,
     p_rows: input.rows,
     p_per_row: input.perRow,
     p_start_row: input.startRow ?? 0,
+    p_row_style: input.rowStyle ?? 'letters',
+    p_row_prefix: input.rowPrefix ?? null,
+    p_seat_start: input.seatStart ?? 1,
   });
 
   if (error) throw error;
@@ -200,6 +221,8 @@ export async function updateSection(
     width?: number;
     height?: number;
     sortOrder?: number;
+    /** Degrees. A stand is rarely square to the room. */
+    rotation?: number;
   },
 ): Promise<void> {
   const { error } = await supabase.rpc('update_section', {
@@ -214,6 +237,7 @@ export async function updateSection(
     p_sort_order: patch.sortOrder ?? null,
     p_kind: patch.kind ?? null,
     p_note: patch.note ?? null,
+    p_rotation: patch.rotation ?? null,
   });
 
   if (error) throw error;
@@ -263,6 +287,62 @@ export async function setSeatState(
 
   if (error) throw error;
   return (data as number) ?? 0;
+}
+
+/**
+ * A copy of a sector: same size, colour, kind, rotation and seat layout.
+ *
+ * A stadium has four identical stands. Drawing them four times produces four
+ * slightly different rectangles, and on a plan that is visible.
+ *
+ * The copy gets no ticket type — a sector that sells, duplicated, would be two
+ * sectors selling the same stock at the same price.
+ */
+export async function duplicateSection(sectionId: string): Promise<Section> {
+  const { data, error } = await supabase.rpc('duplicate_section', {
+    p_section_id: sectionId,
+  });
+  if (error) throw error;
+  return data as Section;
+}
+
+/**
+ * Deletes seats that are not there — a pillar in the middle, a gangway.
+ *
+ * Different from taking a seat out of sale: a seat that exists and is not sold
+ * should stay visible on the plan, because somebody sits next to it and can see
+ * it is empty. A seat that does not exist should be gone.
+ *
+ * Refuses when any of them is sold or held.
+ */
+export async function deleteSeats(seatIds: string[]): Promise<number> {
+  const { data, error } = await supabase.rpc('delete_seats', { p_seat_ids: seatIds });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/** Renames one row, keeping the seats — and so keeping sold tickets attached. */
+export async function renameRow(
+  sectionId: string,
+  oldLabel: string,
+  newLabel: string,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('rename_section_row', {
+    p_section_id: sectionId,
+    p_old_label: oldLabel,
+    p_new_label: newLabel,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/** Whether the uploaded picture is only for tracing, or is the published plan. */
+export async function setBackdropOnly(mapId: string, backdropOnly: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('venue_maps')
+    .update({ image_is_backdrop: backdropOnly })
+    .eq('id', mapId);
+  if (error) throw error;
 }
 
 /** Every seat of a sector, for the editor's own list. */

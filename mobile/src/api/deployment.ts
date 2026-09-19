@@ -112,6 +112,26 @@ export const FEATURES: FeatureNeed[] = [
     migration: '20260101007800_admin_premium_grant',
     functions: ['admin_set_premium'],
   },
+  {
+    key: 'plan_editor',
+    label: 'Plán: podklad, otáčanie, kópia, mazanie miest, vlastné názvy radov',
+    migration: '20260101007900_plan_editor',
+    functions: ['duplicate_section', 'delete_seats', 'rename_section_row', 'seat_row_name'],
+    columns: ['venue_sections.rotation', 'venue_maps.image_is_backdrop'],
+  },
+  {
+    key: 'cart_seats',
+    label: 'V košíku je vidieť vybrané miesto',
+    migration: '20260101008000_cart_shows_seats',
+    functions: ['cart_view'],
+  },
+  {
+    key: 'premium_preview',
+    label: 'Admin si vie Premium vypnúť na testovanie',
+    migration: '20260101008100_premium_preview',
+    functions: ['set_premium_preview'],
+    columns: ['profiles.premium_preview_off'],
+  },
 ];
 
 export interface FeatureStatus extends FeatureNeed {

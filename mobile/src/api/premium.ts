@@ -78,6 +78,19 @@ export async function getPremiumStatus(): Promise<PremiumStatus> {
   return (data as PremiumStatus) ?? { is_premium: false, status: 'none' };
 }
 
+/**
+ * Turns Premium off for an admin, so they can see what everybody else sees.
+ *
+ * Deliberately a server call rather than a flag in the app. If the app only
+ * believed it had no Premium, the server would still let it through and a
+ * locked button would work when pressed — which tests nothing. This makes the
+ * whole system treat the admin as an ordinary account.
+ */
+export async function setPremiumPreview(off: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_premium_preview', { p_off: off });
+  if (error) throw error;
+}
+
 /** Sends a StoreKit receipt to the backend, which asks Apple and then decides. */
 export async function verifyAppleReceipt(receipt: string): Promise<PremiumStatus> {
   return callFunction<PremiumStatus>('iap-apple-verify', { receipt });

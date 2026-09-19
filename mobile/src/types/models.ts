@@ -431,6 +431,12 @@ export interface PremiumStatus {
    * "cancel your subscription" to people who had none.
    */
   source?: 'subscription' | 'admin' | 'granted' | 'none';
+  /**
+   * An admin has turned their own Premium off to look at the app the way most
+   * people see it. Distinguishes "you have none" from "you switched it off",
+   * which is the difference between being stuck and knowing the way back.
+   */
+  preview_off?: boolean;
   platform?: string;
   product_id?: string;
   expires_at?: string | null;

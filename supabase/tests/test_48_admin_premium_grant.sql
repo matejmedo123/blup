@@ -214,4 +214,65 @@ begin
   raise notice 'PASS adminovi sa Premium neprideľuje — má ho z roly';
 end $$;
 
+-- --- admin si Premium vie vypnúť, aby videl appku ako bežný človek ------------
+-- Vypnuté musí platiť aj na SERVERI. Keby si to appka myslela len sama pre
+-- seba, zamknuté tlačidlo by po stlačení fungovalo a netestovalo by sa nič.
+do $$
+declare
+  admin  uuid := 'a4848484-0000-0000-0000-000000000001';
+  status jsonb;
+  failed boolean := false;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', admin::text, true);
+
+  assert public.is_premium(admin), 'admin Premium má';
+
+  status := public.set_premium_preview(true);
+  assert not (status ->> 'is_premium')::boolean, 'a vie si ho vypnúť';
+
+  reset role;
+  assert not public.is_premium(admin),
+    'vypnuté platí aj mimo appky — inak by server púšťal to, čo obrazovka zamkla';
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', admin::text, true);
+  status := public.my_premium_status();
+  assert (status ->> 'preview_off')::boolean,
+    'a obrazovka vie rozoznať „nemáš" od „vypol si si to"';
+  assert status ->> 'source' = 'none', 'navonok je to obyčajný účet';
+
+  -- A späť.
+  perform public.set_premium_preview(false);
+  reset role;
+  assert public.is_premium(admin), 'zapnúť sa to dá rovnako ľahko';
+
+  -- Bežný účet si nemá čo prepínať.
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub',
+                     'a4848484-0000-0000-0000-000000000002', true);
+  begin
+    perform public.set_premium_preview(true);
+  exception when others then failed := true;
+  end;
+  reset role;
+  assert failed, 'prepínač je adminská vec';
+
+  raise notice 'PASS admin si Premium vie vypnúť a systém ho naozaj berie ako bežný účet';
+end $$;
+
+-- --- a nedá sa to obísť zápisom do vlastného profilu ---------------------------
+do $$
+declare clovek uuid := 'a4848484-0000-0000-0000-000000000002';
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', clovek::text, true);
+  update public.profiles set premium_preview_off = true where id = clovek;
+  reset role;
+
+  assert not (select premium_preview_off from public.profiles where id = clovek),
+    'o Premium na profile rozhodujú funkcie, nie priamy zápis — aj pri tomto stĺpci';
+  raise notice 'PASS prepínač sa nedá prepnúť mimo funkcie';
+end $$;
+
 rollback;
