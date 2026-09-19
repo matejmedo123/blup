@@ -106,6 +106,12 @@ export const FEATURES: FeatureNeed[] = [
     migration: '20260101007700_more_badges',
     functions: ['badge_metric_value', 'check_my_badges'],
   },
+  {
+    key: 'premium_grant',
+    label: 'Premium sa dá prideliť z adminu',
+    migration: '20260101007800_admin_premium_grant',
+    functions: ['admin_set_premium'],
+  },
 ];
 
 export interface FeatureStatus extends FeatureNeed {

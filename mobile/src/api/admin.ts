@@ -472,3 +472,27 @@ export async function decideEventClaim(
   });
   if (error) throw error;
 }
+
+/**
+ * Grants, extends or removes Premium for one person.
+ *
+ * `days = 0` removes it. Removing never touches a real subscription — somebody
+ * who actually pays keeps what they paid for, which is the whole difference
+ * between a grant and a subscription.
+ *
+ * Nothing here writes to `premium_subscriptions`. A fake row there would show
+ * up in the accounting as money that never arrived.
+ */
+export async function setUserPremium(
+  userId: string,
+  days: number,
+  reason?: string,
+): Promise<{ premium_until: string | null; is_premium: boolean }> {
+  const { data, error } = await supabase.rpc('admin_set_premium', {
+    p_user_id: userId,
+    p_days: days,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { premium_until: string | null; is_premium: boolean };
+}

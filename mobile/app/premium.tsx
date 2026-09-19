@@ -160,14 +160,27 @@ export default function PremiumScreen() {
 
       {error ? <Notice tone="danger" title="Nepodarilo sa dokončiť" body={error} /> : null}
 
+      {/* "Máš Premium" was true for three different reasons and said the same
+          sentence for all of them — and for an admin it said nothing at all,
+          because the status only ever looked at premium_subscriptions. An
+          admin then had every premium feature working while this screen told
+          them they had none. */}
       {isPremium ? (
         <Notice
           tone="success"
           title="Máš Premium"
           body={
-            status.data?.expires_at
-              ? `${status.data.auto_renew ? 'Obnoví sa' : 'Vyprší'} ${new Date(status.data.expires_at).toLocaleDateString('sk-SK')}.`
-              : 'Tvoje predplatné je aktívne.'
+            status.data?.source === 'admin'
+              ? 'Máš ho z adminskej roly — nie je to predplatné a nič sa neplatí. Platí, kým si admin.'
+              : status.data?.source === 'granted'
+                ? `Pridelil ti ho admin${
+                  status.data?.expires_at
+                    ? `, platí do ${new Date(status.data.expires_at).toLocaleDateString('sk-SK')}`
+                    : ''
+                }. Nie je to predplatné, takže sa samo neobnoví.`
+                : status.data?.expires_at
+                  ? `${status.data.auto_renew ? 'Obnoví sa' : 'Vyprší'} ${new Date(status.data.expires_at).toLocaleDateString('sk-SK')}.`
+                  : 'Tvoje predplatné je aktívne.'
           }
         />
       ) : null}
@@ -290,7 +303,7 @@ export default function PremiumScreen() {
       ) : null}
 
       {/* Managing an existing subscription — only where it was actually bought. */}
-      {isPremium && canManageBilling ? (
+      {isPremium && canManageBilling && status.data?.source === 'subscription' ? (
         web.data?.managed_here ? (
           <Button
             title="Predplatné"

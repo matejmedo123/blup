@@ -424,6 +424,13 @@ export interface PeopleMatch {
 export interface PremiumStatus {
   is_premium: boolean;
   status: string;
+  /**
+   * Why this person has Premium, which is three different situations wearing
+   * one word: a subscription can be cancelled, a grant runs out, and an admin
+   * has it for as long as they are an admin. Without it the screen offered
+   * "cancel your subscription" to people who had none.
+   */
+  source?: 'subscription' | 'admin' | 'granted' | 'none';
   platform?: string;
   product_id?: string;
   expires_at?: string | null;
