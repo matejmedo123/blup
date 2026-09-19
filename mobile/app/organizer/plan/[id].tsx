@@ -10,8 +10,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEvent, updateEvent } from '@/api/events';
 import { useAuth } from '@/auth/AuthProvider';
 import {
-  clearVenueMapImage, cloneVenueMap, createSection, createVenueMap, deleteSection, generateSeats,
-  getReusablePlans, getSectionSeats, getVenueMap, getVenueSections, removeVenuePlan, setSeatState,
+  clearVenueMapImage, cloneVenueMap, createSection, createVenueMap, deleteSeats, deleteSection,
+  duplicateSection, generateSeats, getReusablePlans, getSectionSeats, getVenueMap,
+  getVenueSections, removeVenuePlan, renameRow, setBackdropOnly, setSeatState,
   updateSection, updateVenueMap,
 } from '@/api/venue';
 import {
@@ -23,7 +24,7 @@ import { messageFor } from '@/lib/errors';
 import { formatEventDateLong } from '@/lib/format';
 import { useDialog } from '@/components/Dialog';
 import {
-  Body, Button, Caption, Chip, Input, LoadingState, Notice, Screen, SectionHeader,
+  Body, Button, Caption, Chip, Input, LoadingState, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -109,6 +110,15 @@ export default function PlanEditorScreen() {
   } | null>(null);
   const [rows, setRows] = useState('');
   const [perRow, setPerRow] = useState('');
+  /**
+   * How the rows are named. A theatre letters them; a stadium numbers them and
+   * often puts the sector in front — S1, C-1. Getting this wrong means a plan
+   * that disagrees with the signs painted on the actual wall, and the person
+   * at the door arbitrating.
+   */
+  const [rowStyle, setRowStyle] = useState<'letters' | 'numbers'>('letters');
+  const [rowPrefix, setRowPrefix] = useState('');
+  const [seatStart, setSeatStart] = useState('1');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -338,7 +348,11 @@ export default function PlanEditorScreen() {
       const r = Number(rows);
       const p = Number(perRow);
       if (Number.isInteger(r) && Number.isInteger(p) && r > 0 && p > 0) {
-        const made = await generateSeats({ sectionId: created.id, rows: r, perRow: p });
+        const made = await generateSeats({
+          sectionId: created.id, rows: r, perRow: p,
+          rowStyle, rowPrefix: rowPrefix.trim() || undefined,
+          seatStart: Number(seatStart) || 1,
+        });
         setNote(`${name} pridaný — ${made.total} miest.`);
       } else {
         setNote(`${name} pridaný — predáva sa na počet.`);
@@ -371,7 +385,11 @@ export default function PlanEditorScreen() {
     setNote(null);
     setBusy(true);
     try {
-      const made = await generateSeats({ sectionId: editing.id, rows: r, perRow: p });
+      const made = await generateSeats({
+        sectionId: editing.id, rows: r, perRow: p,
+        rowStyle, rowPrefix: rowPrefix.trim() || undefined,
+        seatStart: Number(seatStart) || 1,
+      });
       setNote(
         made.removed > 0
           ? `${editing.name}: ${made.total} miest (${made.created} pribudlo, ${made.removed} ubudlo).`
@@ -380,6 +398,113 @@ export default function PlanEditorScreen() {
       await refresh();
       await sections.refetch();
       await seats.refetch();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Deleting seats that are not there — a pillar in the middle, a gangway.
+   *
+   * Different from taking them out of sale, and the difference matters on the
+   * plan: a seat that exists and is not sold stays visible, because the person
+   * beside it can see it is empty. A seat that does not exist should be gone.
+   */
+  const removePicked = async () => {
+    if (picked.length === 0) { setError('Najprv klepni na miesta, ktorých sa to týka.'); return; }
+
+    const sure = await dialog.confirm({
+      title: `Zmazať ${picked.length} ${picked.length === 1 ? 'miesto' : 'miest'}?`,
+      body: 'Použi to tam, kde miesto naozaj nie je — stĺp, priechod. Ak sa má len prestať predávať, '
+        + 'vyber „Stiahnuť z predaja": zostane na pláne a je vidieť, že je prázdne.',
+      confirmLabel: 'Zmazať',
+      destructive: true,
+    });
+    if (!sure) return;
+
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      const gone = await deleteSeats(picked);
+      setNote(`Zmazaných miest: ${gone}.`);
+      setPicked([]);
+      await seats.refetch();
+      await refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Renames one row in place, so tickets already sold keep their seat. */
+  const renameOneRow = async (label: string) => {
+    const next = await dialog.prompt({
+      title: `Premenovať rad ${label}`,
+      body: 'Miesta si zachovajú identitu, takže predané vstupenky zostanú na svojich sedadlách.',
+      initialValue: label,
+      confirmLabel: 'Premenovať',
+    });
+    if (!next || next.trim() === label) return;
+
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      const changed = await renameRow(editing!.id, label, next.trim());
+      setNote(`Rad ${label} sa teraz volá ${next.trim()} (${changed} miest).`);
+      await seats.refetch();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleBackdrop = async (backdropOnly: boolean) => {
+    if (!mapId) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await setBackdropOnly(mapId, backdropOnly);
+      await queryClient.invalidateQueries({ queryKey: ['venue', mapId] });
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** A copy of this sector: same size, rotation and seat layout. */
+  const copySector = async () => {
+    if (!editing) return;
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      const copy = await duplicateSection(editing.id);
+      setNote(`Hotovo — „${copy.name}". Typ vstupenky jej ešte vyber.`);
+      await refresh();
+      setEditingId(copy.id);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Turns the sector by a fixed step. */
+  const rotateBy = async (degrees: number) => {
+    if (!editing) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const next = Math.round((((editing.rotation ?? 0) + degrees + 180) % 360 + 360) % 360 - 180);
+      await updateSection(editing.id, { rotation: next });
+      await refresh();
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -527,19 +652,40 @@ export default function PlanEditorScreen() {
     <Screen scroll>
       <Text style={styles.title}>Plán sály</Text>
       <Body muted style={styles.intro}>
-        Nahraj obrázok plánu — stačí odfotený papier — a ťahaním naň vyznač sektory.
-        Sektor bez miest sa predáva na počet, sektor s radmi po jednotlivých sedadlách.
+        Nahraj obrázok haly — stačí odfotený papier — a ťahaním naň obkresli sektory.
+        Obrázok je len podklad: kupujúcemu sa neposiela, ten uvidí sektory, ktoré si
+        podľa neho nakreslil. Sektor bez miest sa predáva na počet, sektor s radmi
+        po jednotlivých sedadlách.
       </Body>
 
       {error ? <Notice tone="danger" title="Nedá sa" body={error} /> : null}
       {note ? <Notice tone="success" title="Hotovo" body={note} /> : null}
 
       <Button
-        title={map.data?.image_url ? 'Vymeniť obrázok plánu' : 'Nahrať obrázok plánu'}
+        title={map.data?.image_url ? 'Vymeniť obrázok haly' : 'Nahrať obrázok haly'}
         variant="secondary"
         onPress={choosePlan}
         loading={busy}
       />
+
+      {/* Almost always a backdrop, which is why that is the default. The
+          exception is an official seating chart the venue publishes anyway —
+          then showing it to buyers helps rather than leaking a photo of
+          somebody's desk. */}
+      {map.data?.image_url ? (
+        <View style={styles.backdrop}>
+          <Switch
+            value={map.data.image_is_backdrop ?? true}
+            onValueChange={(next) => void toggleBackdrop(next)}
+            label="Obrázok je len podklad na kreslenie"
+            description={
+              map.data.image_is_backdrop ?? true
+                ? 'Kupujúcemu sa neposiela — uvidí len sektory, ktoré si nakreslil.'
+                : 'Obrázok sa zobrazí aj kupujúcim pod sektormi. Zapni to len pri oficiálnom pláne sály.'
+            }
+          />
+        </View>
+      ) : null}
 
       {!mapId && (reusable.data ?? []).length > 0 ? (
         <>
@@ -607,6 +753,9 @@ export default function PlanEditorScreen() {
               height: section.height * planHeight,
               borderColor: section.colour,
               backgroundColor: `${section.colour}2E`,
+              // Drawn at the angle it is stored at, otherwise the editor and
+              // the buyer's plan disagree about the same hall.
+              transform: [{ rotate: `${section.rotation ?? 0}deg` }],
             }, section.id === editingId && styles.sectorEditing]}
           >
             <Text style={styles.sectorName} numberOfLines={1}>{section.name}</Text>
@@ -718,9 +867,49 @@ export default function PlanEditorScreen() {
           <Input label="Miest v rade" value={perRow} onChangeText={setPerRow} placeholder="20" keyboardType="number-pad" editable={!busy} />
         </View>
       </View>
+      {/* How the rows are called. Not a detail: a plan whose rows disagree with
+          the signs painted on the wall leaves the person at the door
+          arbitrating between a ticket and a doorframe. */}
+      <Caption style={styles.label}>Ako sa volajú rady</Caption>
+      <View style={styles.chips}>
+        <Chip
+          label="A, B, C…"
+          selected={rowStyle === 'letters'}
+          onPress={() => setRowStyle('letters')}
+        />
+        <Chip
+          label="1, 2, 3…"
+          selected={rowStyle === 'numbers'}
+          onPress={() => setRowStyle('numbers')}
+        />
+      </View>
+      <View style={styles.seatRow}>
+        <View style={styles.flex}>
+          <Input
+            label="Predpona radu"
+            value={rowPrefix}
+            onChangeText={setRowPrefix}
+            placeholder="napr. S"
+            maxLength={4}
+            editable={!busy}
+          />
+        </View>
+        <View style={styles.flex}>
+          <Input
+            label="Prvé miesto"
+            value={seatStart}
+            onChangeText={setSeatStart}
+            placeholder="1"
+            keyboardType="number-pad"
+            editable={!busy}
+          />
+        </View>
+      </View>
+
       <Caption style={styles.hint}>
-        Rady sa označia A, B, C… od pódia. Nechaj prázdne a sektor sa bude predávať na počet.
-        Miesta, ktoré už niekto kúpil, sa prekreslením nezmažú — ak by sa mali, plán to odmietne.
+        {`Prvý rad bude „${rowPrefix.trim()}${rowStyle === 'numbers' ? '1' : 'A'}", prvé miesto ${Number(seatStart) || 1}.`}
+        {' Nechaj rady a miesta prázdne a sektor sa bude predávať na počet.'}
+        {' Miesta, ktoré už niekto kúpil, sa prekreslením nezmažú — ak by sa mali, plán to odmietne.'}
       </Caption>
 
       <Button
@@ -732,6 +921,32 @@ export default function PlanEditorScreen() {
 
       {editing ? (
         <>
+          {/* A stand is rarely square to the room. Fixed steps rather than a
+              free angle: the point is to match the hall, not to draw art, and
+              a dragged handle on a rectangle this small is a fight. */}
+          <Caption style={styles.label}>
+            Otočenie: {Math.round(editing.rotation ?? 0)}°
+          </Caption>
+          <View style={styles.actions}>
+            <Button title="↺ 15°" variant="secondary" compact onPress={() => rotateBy(-15)} disabled={busy} />
+            <Button title="↻ 15°" variant="secondary" compact onPress={() => rotateBy(15)} disabled={busy} />
+            <Button title="↺ 90°" variant="secondary" compact onPress={() => rotateBy(-90)} disabled={busy} />
+            <Button title="↻ 90°" variant="secondary" compact onPress={() => rotateBy(90)} disabled={busy} />
+            <Button title="Narovnať" variant="ghost" compact onPress={() => rotateBy(-(editing.rotation ?? 0))} disabled={busy} />
+          </View>
+
+          <Button
+            title="Kópia sektora"
+            variant="secondary"
+            onPress={copySector}
+            loading={busy}
+          />
+          <Caption style={styles.hint}>
+            Rovnaká veľkosť, farba, otočenie aj rozloženie miest — štadión má
+            štyri rovnaké tribúny. Typ vstupenky kópia nedostane: dva sektory
+            predávajúce ten istý sklad by predali jedno miesto dvakrát.
+          </Caption>
+
           <Button
             title="Prekresliť miesta"
             variant="secondary"
@@ -762,7 +977,10 @@ export default function PlanEditorScreen() {
             <View>
               {groupRows(seats.data ?? []).map(([label, inRow]) => (
                 <View key={label} style={styles.seatLine}>
-                  <Text style={styles.seatRowLabel}>{label}</Text>
+                  {/* The row's own name is the button that renames it. */}
+                  <Pressable onPress={() => renameOneRow(label)} disabled={busy} hitSlop={6}>
+                    <Text style={[styles.seatRowLabel, styles.seatRowLabelTap]}>{label}</Text>
+                  </Pressable>
                   {inRow.map((seat) => {
                     const on = picked.includes(seat.id);
                     return (
@@ -799,6 +1017,10 @@ export default function PlanEditorScreen() {
           <View style={styles.actions}>
             <Button title="Stiahnuť z predaja" variant="secondary" compact onPress={() => applyToPicked({ sellable: false })} disabled={busy} />
             <Button title="Vrátiť do predaja" variant="secondary" compact onPress={() => applyToPicked({ sellable: true })} disabled={busy} />
+            {/* For a seat that is not there at all. Out of sale keeps it on the
+                plan, which is right for a held-back seat and wrong for a
+                pillar. */}
+            <Button title="Zmazať miesta" variant="danger" compact onPress={removePicked} disabled={busy} />
           </View>
 
           <Caption style={styles.label}>Čo sú to za miesta</Caption>
@@ -1004,6 +1226,7 @@ function groupRows<T extends { row_label: string; seat_number: number }>(seats: 
 
 const styles = StyleSheet.create({
   title: { ...typography.title, color: colors.text },
+  backdrop: { marginBottom: spacing.md },
   intro: { marginTop: spacing.xs, marginBottom: spacing.lg },
   flex: { flex: 1, minWidth: 0 },
   label: { marginTop: spacing.md, marginBottom: spacing.xs },
@@ -1042,6 +1265,7 @@ const styles = StyleSheet.create({
 
   seatScroll: { marginVertical: spacing.sm },
   seatLine: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
+  seatRowLabelTap: { textDecorationLine: 'underline' },
   seatRowLabel: { ...typography.caption, color: colors.textSecondary, width: 26 },
   seatChip: {
     minWidth: 30, height: 30, borderRadius: radius.sm,

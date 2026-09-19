@@ -598,6 +598,10 @@ export default function SeatPickerScreen() {
                   height: section.height * planHeight,
                   borderColor: soldOut ? colors.border : section.colour,
                   backgroundColor: soldOut ? 'rgba(255,255,255,0.04)' : `${section.colour}33`,
+                  // The angle the sector was drawn at. A stand that leans in the
+                  // hall and sits square on the plan is a plan of somewhere
+                  // else.
+                  transform: [{ rotate: `${section.rotation ?? 0}deg` }],
                 },
                 // A stage is not a thing to pick. Drawn flat and dashed so it
                 // reads as part of the room rather than as something on sale.

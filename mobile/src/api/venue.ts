@@ -101,6 +101,7 @@ export async function getVenueSections(venueMapId: string): Promise<Section[]> {
       y: Number(row.y),
       width: Number(row.width),
       height: Number(row.height),
+      rotation: Number(row.rotation ?? 0),
       ticket_type_id: (row.ticket_type_id as string) ?? null,
       // The editor reads the sectors as stored; price and availability are the
       // buyer's view and come from seat_map_for_event().

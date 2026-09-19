@@ -85,6 +85,11 @@ export interface Section {
   y: number;
   width: number;
   height: number;
+  /**
+   * Degrees. A stand is rarely square to the room, and one drawn at an angle
+   * but rendered square is a plan of a different hall.
+   */
+  rotation: number;
   ticket_type_id: string | null;
   price_cents: number | null;
   numbered: boolean;
