@@ -747,6 +747,8 @@ megabajtu, skôr než sa ozvú ľudia.
 | „Na predaj vstupeniek potrebuješ overenie" | organizácia nie je `verified` |
 | Vstupenky sa v košíku samy strácajú | tak to má byť — rezervácia platí 15 minút |
 | Nejaká funkcia v appke „neexistuje" | databáza je staršia než web — **Admin → Stav nasadenia** povie, ktorá migrácia chýba |
+| „Could not find a relationship … schema cache" | migrácia prešla, ale PostgREST ju ešte nevidí. V SQL editore: `notify pgrst, 'reload schema';` |
+| V chate je pri odpovedi „Citovanú správu sa nepodarilo načítať" | to isté — vzťah medzi správami sa nedá rozlúštiť; po `reload schema` sa citácie vrátia |
 | Odznaky nepribúdajú | otvor **Odznaky** — obrazovka ich pri otvorení prepočíta; ak stále nie, chýba migrácia `20260101007700` |
 | Reklama sa nedá zaplatiť | `stripe_configured` je `false`, alebo na webe chýba nasadená `web-checkout` s podporou kampaní |
 | Nikomu sa reklama neukazuje | tak to má byť pri zlej zhode — pod prahom relevancie sa nezobrazí za žiadne peniaze a organizátor za to neplatí |

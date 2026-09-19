@@ -12,6 +12,8 @@ import {
   markConversationRead, sendMessage, setConversationMuted,
 } from '@/api/messages';
 import { pickImage, signChatImage, uploadChatImage } from '@/storage/uploads';
+import { BottomSheet } from '@/components/BottomSheet';
+import { useDialog } from '@/components/Dialog';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { subscribeToTable } from '@/lib/realtime';
 import { enterSubmits } from '@/lib/keyboard';
@@ -46,6 +48,7 @@ export default function ChatScreen() {
 export function ChatThread({ id, embedded = false }: { id?: string; embedded?: boolean }) {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
+  const dialog = useDialog();
   const { profile } = useAuth();
 
   const [draft, setDraft] = useState('');
@@ -57,6 +60,8 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
   // The message being answered. Held here rather than on the bubble, because
   // what it changes is the composer, not the message that was tapped.
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  /** The message a long press opened the menu for. */
+  const [menuFor, setMenuFor] = useState<Message | null>(null);
 
   // A Premium wallpaper, which only its owner sees: it is behind *your* chats,
   // not behind the conversation, so nobody else's room changes because you
@@ -182,8 +187,21 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
     }
   };
 
+  /**
+   * Deleting used to happen on the long press itself, with nothing in between.
+   * One accidental hold on your own message and it was gone — no question, no
+   * undo, and the other person had already read it.
+   */
   const remove = async (messageId: string) => {
     setError(null);
+    const sure = await dialog.confirm({
+      title: 'Zmazať správu?',
+      body: 'Ostatným v konverzácii zostane na jej mieste „Správa bola zmazaná". Vrátiť sa to nedá.',
+      confirmLabel: 'Zmazať',
+      destructive: true,
+    });
+    if (!sure) return;
+
     try {
       await deleteMessage(messageId);
       await queryClient.invalidateQueries({ queryKey: ['messages', id] });
@@ -330,8 +348,7 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
                   isMine={isMine}
                   showAuthor={showAuthor}
                   myId={profile?.id ?? null}
-                  onLongPress={isMine && !item.deleted_at ? () => void remove(item.id) : undefined}
-                  onReply={item.deleted_at ? undefined : () => setReplyTo(item)}
+                  onLongPress={item.deleted_at ? undefined : () => setMenuFor(item)}
                 />
               </View>
             );
@@ -423,19 +440,54 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      {/* What a long press opens. Reply is here rather than printed into every
+          bubble, and deleting is a separate, confirmed step rather than the
+          thing a long press did by itself. */}
+      <BottomSheet
+        visible={Boolean(menuFor)}
+        onClose={() => setMenuFor(null)}
+        title="Správa"
+        subtitle={menuFor?.body ?? (menuFor?.attachment_url ? '📷 Fotka' : undefined)}
+      >
+        <Pressable
+          style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
+          onPress={() => {
+            const target = menuFor;
+            setMenuFor(null);
+            if (target) setReplyTo(target);
+          }}
+        >
+          <Text style={styles.menuGlyph}>↩</Text>
+          <Text style={styles.menuLabel}>Odpovedať</Text>
+        </Pressable>
+
+        {menuFor?.sender_id === profile?.id ? (
+          <Pressable
+            style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
+            onPress={() => {
+              const target = menuFor;
+              setMenuFor(null);
+              if (target) void remove(target.id);
+            }}
+          >
+            <Text style={[styles.menuGlyph, styles.menuDanger]}>🗑</Text>
+            <Text style={[styles.menuLabel, styles.menuDanger]}>Zmazať</Text>
+          </Pressable>
+        ) : null}
+      </BottomSheet>
     </Screen>
   );
 }
 
 function MessageBubble({
-  message, isMine, showAuthor, myId, onLongPress, onReply,
+  message, isMine, showAuthor, myId, onLongPress,
 }: {
   message: Message;
   isMine: boolean;
   showAuthor: boolean;
   myId: string | null;
   onLongPress?: () => void;
-  onReply?: () => void;
 }) {
   if (message.deleted_at) {
     return (
@@ -466,7 +518,7 @@ function MessageBubble({
         {message.reply_to ? (
           <View style={[styles.quote, isMine && styles.quoteMine]}>
             <Mono style={[styles.quoteWho, isMine && styles.quoteWhoMine]}>
-              {message.reply_to.sender_id === myId ? 'Ty' : 'Odpoveď na'}
+              {message.reply_to.sender_id === myId ? 'TY' : 'ODPOVEĎ NA'}
             </Mono>
             <Text numberOfLines={2} style={[styles.quoteText, isMine && styles.quoteTextMine]}>
               {message.reply_to.deleted_at
@@ -475,9 +527,16 @@ function MessageBubble({
             </Text>
           </View>
         ) : message.reply_to_id ? (
+          /* We know this is a reply — reply_to_id says so — and we do not have
+             the message it answers. That is NOT the same as somebody deleting
+             it, and saying "Správa bola zmazaná" here was the app stating
+             something untrue: a missing relationship in the database made every
+             single reply render as a deletion. A deleted message keeps its row,
+             so if the quote were really deleted it would be in the branch
+             above, with deleted_at set. */
           <View style={[styles.quote, isMine && styles.quoteMine]}>
             <Text style={[styles.quoteText, isMine && styles.quoteTextMine]}>
-              Správa bola zmazaná
+              Citovanú správu sa nepodarilo načítať
             </Text>
           </View>
         ) : null}
@@ -488,17 +547,11 @@ function MessageBubble({
           <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]}>{message.body}</Text>
         ) : null}
 
+        {/* Just the time. "ODPOVEDAŤ" used to sit here in every single bubble,
+            in capitals, beside the clock — so every message carried a word that
+            was not part of it. Replying is a long press now, which is where a
+            phone looks for it anyway. */}
         <View style={styles.bubbleFooter}>
-          {onReply ? (
-            <Pressable
-              onPress={onReply}
-              accessibilityRole="button"
-              accessibilityLabel="Odpovedať na správu"
-              hitSlop={8}
-            >
-              <Mono style={[styles.replyAction, isMine && styles.replyActionMine]}>ODPOVEDAŤ</Mono>
-            </Pressable>
-          ) : null}
           <Mono style={[styles.bubbleTime, isMine && styles.bubbleTimeMine]}>
             {formatMessageTime(message.created_at)}
           </Mono>
@@ -679,6 +732,16 @@ const styles = StyleSheet.create({
   quoteTextMine: { color: 'rgba(255,255,255,0.8)' },
 
   bubbleFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  menuGlyph: { fontSize: 18, color: colors.textSecondary, width: 24, textAlign: 'center' },
+  menuLabel: { ...typography.body, color: colors.text },
+  menuDanger: { color: colors.danger },
+
   replyAction: { color: colors.textTertiary, fontSize: 9 },
   replyActionMine: { color: 'rgba(255,255,255,0.7)' },
   pendingThumb: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.surface },

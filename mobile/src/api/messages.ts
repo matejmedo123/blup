@@ -33,6 +33,41 @@ const SENDER = 'sender:profiles!messages_sender_id_fkey (id, display_name, usern
 const QUOTED =
   'reply_to:messages!messages_reply_to_id_fkey (id, body, attachment_url, sender_id, deleted_at)';
 
+/**
+ * Fills in the quoted messages when the embed could not.
+ *
+ * An embed needs a foreign key PostgREST knows about; fetching the same rows by
+ * id needs nothing at all. So when the relationship is missing, the quotes are
+ * not lost — they are fetched in one extra query and stitched on here.
+ *
+ * This matters more than it looks. Without it every reply fell through to the
+ * bubble's "the quoted message is gone" branch and rendered **Správa bola
+ * zmazaná** — for messages nobody had deleted. The app was stating something
+ * untrue, and it was indistinguishable from a real deletion.
+ */
+async function attachQuotes(messages: Message[]): Promise<Message[]> {
+  const wanted = [...new Set(
+    messages.filter((m) => m.reply_to_id && !m.reply_to).map((m) => m.reply_to_id as string),
+  )];
+  if (wanted.length === 0) return messages;
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, body, attachment_url, sender_id, deleted_at')
+    .in('id', wanted);
+
+  // Deliberately swallowed. A quote is worth a second query, not a broken
+  // screen — and the bubble already says honestly when it has no quote to show.
+  if (error) return messages;
+
+  const byId = new Map((data ?? []).map((row) => [(row as { id: string }).id, row]));
+  return messages.map((message) => (
+    message.reply_to_id && !message.reply_to && byId.has(message.reply_to_id)
+      ? { ...message, reply_to: byId.get(message.reply_to_id) as Message['reply_to'] }
+      : message
+  ));
+}
+
 export async function getMessages(conversationId: string, limit = 100): Promise<Message[]> {
   const rows = (fields: string) => supabase
     .from('messages')
@@ -47,7 +82,8 @@ export async function getMessages(conversationId: string, limit = 100): Promise<
   );
   // Oldest first for rendering; the query is newest-first so the limit keeps
   // the most recent page.
-  return ((data ?? []) as unknown as Message[]).slice().reverse();
+  const messages = ((data ?? []) as unknown as Message[]).slice().reverse();
+  return attachQuotes(messages);
 }
 
 export async function getConversation(conversationId: string) {
