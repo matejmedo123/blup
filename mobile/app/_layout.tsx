@@ -4,10 +4,10 @@ import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { QUERY_CACHE_KEY, queryClient } from '@/lib/queryClient';
 import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
 import { StripeBridge } from '@/payments/stripe';
@@ -32,23 +32,6 @@ import { Wordmark } from '@/components/Wordmark';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useAppFonts } from '@/theme/fonts';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      // Keep answers for a day so the offline agenda has something to show.
-      gcTime: 24 * 60 * 60 * 1000,
-      retry: (failureCount, error) => {
-        // Never retry an authorization failure — it will never succeed.
-        const message = (error as Error)?.message ?? '';
-        if (message.includes('NOT_AUTHORIZED') || message.includes('UNAUTHENTICATED')) return false;
-        return failureCount < 2;
-      },
-      refetchOnWindowFocus: false,
-    },
-  },
-});
-
 /**
  * Offline mode ("offline režim – event agenda aj bez netu").
  *
@@ -59,7 +42,7 @@ const queryClient = new QueryClient({
  */
 const persister = createAsyncStoragePersister({
   storage: AsyncStorage,
-  key: 'blup-query-cache',
+  key: QUERY_CACHE_KEY,
   throttleTime: 2000,
 });
 

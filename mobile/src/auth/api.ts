@@ -53,7 +53,10 @@ export async function signInWithEmail(email: string, password: string) {
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
+  // This device only. Supabase defaults to 'global', which revokes every
+  // refresh token the account has — signing out here would also sign the same
+  // person out on their phone and on the tab scanning tickets at the door.
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
   if (error) throw error;
 }
 

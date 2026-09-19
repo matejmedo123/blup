@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
+import { clearCachedUserData } from '@/lib/queryClient';
 import { supabase } from '@/lib/supabase';
 import { claimMyGuestTickets } from '@/api/tickets';
 import { isConfigured } from '@/lib/env';
@@ -95,6 +96,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (event === 'SIGNED_OUT') {
         setProfile(null);
+        // The cached answers belong to the account that just left. They are
+        // written to device storage so the agenda works offline, so without
+        // this they outlive the session — and the first thing the next person
+        // sees is the last person's basket count. Reported exactly that way:
+        // three tickets in the basket of an anonymous session that added none.
+        void clearCachedUserData();
       }
 
       // A ticket may have been sent to this address before there was an account
@@ -123,9 +130,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, loadProfile]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    // `scope: 'local'` signs out THIS device. The default is 'global', which
+    // revokes every refresh token the account has — so pressing "Odhlásiť sa"
+    // on a laptop also threw the same person out of the app on their phone,
+    // and out of the tab they had open at the door scanning tickets.
+    await supabase.auth.signOut({ scope: 'local' });
     setProfile(null);
     setSession(null);
+    // Also here, and not only in the SIGNED_OUT handler above: signing out
+    // while offline never reaches that event, and the cache would survive.
+    await clearCachedUserData();
   }, []);
 
   const value = useMemo<AuthState>(

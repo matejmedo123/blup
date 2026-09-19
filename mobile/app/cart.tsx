@@ -336,25 +336,47 @@ function Line({
   const roomInBasket = cap - basketQuantity + line.quantity;
   const ceiling = Math.min(line.max_per_order, line.available + line.quantity, roomInBasket);
 
+  // A numbered sector is not a quantity. Somebody holding row 5 seats 11 and 12
+  // cannot press "+" and get a thirteenth — which seat would it even be? — so
+  // the stepper is replaced by the seats themselves, which is also the answer
+  // to "ktoré sedenie som si vybral".
+  const seats = line.seats ?? [];
+  const numbered = seats.length > 0;
+
   return (
     <View style={styles.line}>
       <View style={styles.flex}>
         <Text style={styles.lineName}>{line.name}</Text>
         <Caption>{formatMoney(line.unit_price_cents, line.currency)} / ks</Caption>
+
+        {numbered ? (
+          <View style={styles.seatList}>
+            {seats.map((seat) => (
+              <Text key={seat.seat_id} style={styles.seatLabel} numberOfLines={1}>
+                Rad {seat.row} · miesto {seat.number}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
         {line.available === 0 ? (
           <Caption style={styles.last}>Toto sú posledné voľné</Caption>
         ) : null}
       </View>
 
-      <View style={styles.stepper}>
-        <Step glyph="−" disabled={busy} onPress={() => onChange(line.quantity - 1)} />
-        <Mono style={styles.count}>{String(line.quantity)}</Mono>
-        <Step
-          glyph="+"
-          disabled={busy || line.quantity >= ceiling}
-          onPress={() => onChange(line.quantity + 1)}
-        />
-      </View>
+      {numbered ? (
+        <Mono style={styles.count}>{`${line.quantity}×`}</Mono>
+      ) : (
+        <View style={styles.stepper}>
+          <Step glyph="−" disabled={busy} onPress={() => onChange(line.quantity - 1)} />
+          <Mono style={styles.count}>{String(line.quantity)}</Mono>
+          <Step
+            glyph="+"
+            disabled={busy || line.quantity >= ceiling}
+            onPress={() => onChange(line.quantity + 1)}
+          />
+        </View>
+      )}
 
       <Text style={styles.lineTotal}>{formatMoney(line.line_total_cents, line.currency)}</Text>
     </View>
@@ -439,6 +461,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  seatList: { marginTop: 4, gap: 2 },
+  seatLabel: { ...typography.metaSm, color: colors.accent },
+
   lineName: { ...typography.rowTitle, color: colors.text },
   lineTotal: { ...typography.bodyStrong, color: colors.text, minWidth: 78, textAlign: 'right' },
   last: { color: colors.danger },

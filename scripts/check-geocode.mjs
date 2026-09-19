@@ -58,5 +58,23 @@ const resolveTook = Date.now() - resolveStart;
 ok('presná adresa sa nájde', Boolean(hit), `${resolveTook} ms · ${hit?.label ?? '—'}`);
 ok('a trafí Nitru', Boolean(hit && Math.abs(hit.latitude - 48.31) < 0.1), hit ? `${hit.latitude.toFixed(3)}, ${hit.longitude.toFixed(3)}` : '');
 
+// BLUP listuje eventy na Slovensku. Adresa v Brne alebo vo Viedni sa v zozname
+// nedá odlíšiť od domácej, kým ju človek nedočíta do konca — a potom už má
+// event na mieste, kde sa nekoná.
+const FOREIGN = [
+  ['vaclavske namesti praha', 'Praha'],
+  ['stephansplatz wien', 'Viedeň'],
+  ['andrassy ut budapest', 'Budapešť'],
+];
+
+for (const [query, where] of FOREIGN) {
+  const hits = await suggestAddresses(query, { near: NEAR });
+  ok(
+    `${where} sa neponúka`,
+    hits.length === 0,
+    hits.length === 0 ? 'žiadny návrh' : `vrátilo ${hits.length}: ${hits[0].label}`,
+  );
+}
+
 console.log(failed === 0 ? '\nADRESY V PORIADKU' : `\nZLYHALO: ${failed}`);
 process.exit(failed === 0 ? 0 : 1);

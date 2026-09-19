@@ -14,9 +14,10 @@ import { addToCart } from '@/api/cart';
 import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
 import {
-  Badge, Body, Button, Caption, Chip, EmptyState, ErrorState, LoadingState, Notice, Screen,
+  Badge, Body, Button, Caption, EmptyState, ErrorState, LoadingState, Notice, Screen,
   SectionHeader,
 } from '@/components/ui';
+import { ZoomPan, type ZoomPanHandle } from '@/components/ZoomPan';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -61,9 +62,29 @@ export default function SeatPickerScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [party, setParty] = useState(2);
+  /**
+   * How many seats together, PER SECTOR.
+   *
+   * It used to be one number shared by every sector on the screen, and the
+   * screenshot said it better than I can: two sectors, each with its own
+   * stepper, both reading 2, both moving when either one was pressed — while
+   * only the sector you acted on went into the basket. One counter drawn in
+   * several places is a promise that they are separate.
+   */
+  const [parties, setParties] = useState<Record<string, number>>({});
+  const partyFor = (sectionId: string) => parties[sectionId] ?? 2;
+  const setPartyFor = (sectionId: string, value: number) =>
+    setParties((current) => ({ ...current, [sectionId]: value }));
   /** Which row of a big sector is being looked at. Null = the whole sector. */
-  const [openRow, setOpenRow] = useState<string | null>(null);
+  const planRef = React.useRef<ZoomPanHandle>(null);
+  /**
+   * How far in the plan currently is, reported by the surface itself.
+   *
+   * Up here with the rest of the state on purpose: the screen returns early
+   * while the map loads, and a hook below that return changes the hook count
+   * between renders — React then tears the tree down with #310.
+   */
+  const [planScale, setPlanScale] = useState(1);
   /** Ticks once a second so the hold clock counts down rather than sitting still. */
   const [now, setNow] = useState(() => Date.now());
 
@@ -181,20 +202,36 @@ export default function SeatPickerScreen() {
    * The limit is not how many seats there are — it is how wide the widest row
    * is against the screen. Fifty across fits on a laptop at fourteen pixels a
    * seat and does not fit on a phone at seven, and the same stand should behave
-   * differently on the two. Below the hittable size the sector is taken a row at
-   * a time instead, which is also how somebody thinks about a stand: "rad 12,
-   * niekde v strede".
+   * differently on the two.
+   */
+  /**
+   * How big a seat has to be drawn, and therefore how far in the plan starts.
+   *
+   * A stand with four hundred seats cannot be both legible and fully visible on
+   * a phone, and the old answer was to stop drawing a plan at all: pick a row
+   * from a list of chips, then a seat from a strip of numbers. It worked and it
+   * told you nothing about where you would be sitting.
+   *
+   * So the plan stays a plan. When the seats would come out too small to hit,
+   * it opens already zoomed to the point where they are — and you move around
+   * it. 24 points is roughly a fingertip.
    */
   const dotPitch = open ? planWidth / Math.max(open.row_width, 1) : 0;
   const rowPitch = open ? zoomHeight / Math.max(open.rows, 1) : 0;
-  const tooManyForDots = Boolean(open?.numbered) && Math.min(dotPitch, rowPitch) < 13;
+  const naturalPitch = open ? Math.min(dotPitch, rowPitch) : 0;
+  /**
+   * The seats appear once they are actually big enough to aim at.
+   *
+   * Drawing four hundred sub-pixel dots is not a plan of anything — it is grey
+   * noise, and on a stadium it is eight thousand views the phone has to lay
+   * out. Zoomed out you get the shape of the stand and where the rows run;
+   * zoom in and the seats are there.
+   */
+  const seatSize = naturalPitch * planScale;
+  const seatsVisible = seatSize >= 14;
 
   const rowsInOpen: string[] = [];
   for (const seat of seats) if (!rowsInOpen.includes(seat.row)) rowsInOpen.push(seat.row);
-
-  const shownSeats = tooManyForDots
-    ? seats.filter((seat) => seat.row === (openRow ?? rowsInOpen[0]))
-    : seats;
 
   /**
    * Puts what the server just told us straight into the cache.
@@ -272,7 +309,7 @@ export default function SeatPickerScreen() {
       setError(`${section.name} je vypredaný.`);
       return;
     }
-    if (section.numbered) { setOpenId(section.id); setOpenRow(null); return; }
+    if (section.numbered) { setOpenId(section.id); return; }
 
     if (!section.ticket_type_id) { setError('Tento sektor zatiaľ nie je v predaji.'); return; }
     setBusy(true);
@@ -333,10 +370,11 @@ export default function SeatPickerScreen() {
     setNote(null);
     setBusy(true);
     try {
-      const found = await suggestSeats(section.id, party);
+      const wanted = partyFor(section.id);
+      const found = await suggestSeats(section.id, wanted);
       if (found.length === 0) {
         setError(
-          `V sektore ${section.name} už nie je ${party} voľných miest vedľa seba. `
+          `V sektore ${section.name} už nie je ${wanted} voľných miest vedľa seba. `
           + 'Skús menej miest alebo iný sektor.',
         );
         return;
@@ -448,11 +486,36 @@ export default function SeatPickerScreen() {
         </View>
       ) : null}
 
-      {open && open.numbered && !tooManyForDots ? (
-        <View style={[styles.plan, { width: planWidth, height: zoomHeight }]}>
+      {open && open.numbered ? (
+        <ZoomPan
+          ref={planRef}
+          contentWidth={planWidth}
+          contentHeight={zoomHeight}
+          minScale={1}
+          maxScale={8}
+          onScaleChange={setPlanScale}
+          style={[styles.plan, { width: planWidth, height: zoomHeight }]}
+        >
           <View style={[styles.zoomFill, { backgroundColor: `${open.colour}1F`, borderColor: open.colour }]} />
 
-          {seats.map((seat) => {
+          {/* Zoomed out: the rows as bands, so the stand has a shape and it is
+              obvious which way it runs. No dots — at this size they would be
+              grey noise, and on a stadium eight thousand of them. */}
+          {!seatsVisible ? rowsInOpen.map((label, index) => (
+            <View
+              key={label}
+              style={[
+                styles.rowBand,
+                {
+                  top: (index + 0.12) * (zoomHeight / Math.max(open.rows, 1)),
+                  height: Math.max(2, (zoomHeight / Math.max(open.rows, 1)) * 0.76),
+                  backgroundColor: `${open.colour}55`,
+                },
+              ]}
+            />
+          )) : null}
+
+          {seatsVisible ? seats.map((seat) => {
             const across = Math.max(open.row_width, 1);
             const down = Math.max(open.rows, 1);
             const cellW = planWidth / across;
@@ -487,7 +550,7 @@ export default function SeatPickerScreen() {
                 ]}
               />
             );
-          })}
+          }) : null}
 
           {openSeats.isLoading ? (
             <View style={styles.planEmpty}><Caption>Načítavam miesta…</Caption></View>
@@ -495,7 +558,7 @@ export default function SeatPickerScreen() {
 
           {/* Which way the stage is, so "rad A" means something. */}
           <Text style={styles.zoomFront}>▲ k pódiu</Text>
-        </View>
+        </ZoomPan>
       ) : (
       <View
         nativeID="blup-plan-view"
@@ -512,11 +575,7 @@ export default function SeatPickerScreen() {
               contentFit="contain"
             />
           </View>
-        ) : (
-          <View style={styles.planEmpty}>
-            <Caption>Organizátor nenahral obrázok plánu — sektory sú nižšie.</Caption>
-          </View>
-        )}
+        ) : null}
 
         {sections.map((section) => {
           const soldOut = !section.landmark && section.available === 0;
@@ -562,7 +621,7 @@ export default function SeatPickerScreen() {
         <Button
           title="Späť na celý plán"
           variant="ghost"
-          onPress={() => { setOpenId(null); setOpenRow(null); }}
+          onPress={() => { setOpenId(null); }}
         />
       ) : null}
 
@@ -586,22 +645,39 @@ export default function SeatPickerScreen() {
               </Caption>
               {section.note ? <Caption>{section.note}</Caption> : null}
             </View>
+            {/* "44,00 €" beside a stepper showing 2 reads as a line total. It
+                is the price of one seat, so it says so. */}
             {section.price_cents !== null ? (
-              <Text style={styles.price}>{formatMoney(section.price_cents, 'EUR')}</Text>
+              <View style={styles.priceCell}>
+                <Text style={styles.price}>{formatMoney(section.price_cents, 'EUR')}</Text>
+                <Caption>za miesto</Caption>
+              </View>
             ) : null}
           </Pressable>
 
           {section.numbered && section.available > 0 ? (
             <View style={styles.together}>
-              <Caption style={styles.flex}>Koľkí idete?</Caption>
-              <Stepper value={party} onChange={setParty} min={1} max={10} disabled={busy} />
-              <Button
-                title="Nájdi nám miesta vedľa seba"
-                variant="secondary"
-                compact
-                onPress={() => findTogether(section)}
-                disabled={busy}
-              />
+              {/* On its own line. As a flex child beside the stepper and a
+                  long button it shrank until it wrapped one letter per line —
+                  which is exactly what the phone screenshot showed. */}
+              <Caption style={styles.togetherLabel}>Koľkí idete?</Caption>
+              <View style={styles.togetherControls}>
+                <Stepper
+                  value={partyFor(section.id)}
+                  onChange={(next) => setPartyFor(section.id, next)}
+                  min={1}
+                  max={10}
+                  disabled={busy}
+                />
+                <Button
+                  title="Nájdi nám miesta vedľa seba"
+                  variant="secondary"
+                  style={styles.togetherButton}
+                  compact
+                  onPress={() => findTogether(section)}
+                  disabled={busy}
+                />
+              </View>
             </View>
           ) : null}
         </View>
@@ -621,52 +697,25 @@ export default function SeatPickerScreen() {
       {open ? (
         <>
           <SectionHeader title={`${open.name} · miesta`} />
+
+          {/* Two buttons, because a mouse has no second finger and a phone
+              should not have to guess that pinching is allowed. */}
+          <View style={styles.zoomBar}>
+            <Button title="−" variant="secondary" compact onPress={() => planRef.current?.zoomBy(1 / 1.6)} />
+            <Button title="+" variant="secondary" compact onPress={() => planRef.current?.zoomBy(1.6)} />
+            <Button
+              title="Celý sektor"
+              variant="ghost"
+              compact
+              onPress={() => planRef.current?.reset()}
+            />
+          </View>
+
           <Caption style={styles.legend}>
-            {tooManyForDots
-              ? `${open.seat_count} miest je priveľa na to, aby sa zmestili na plán ako `
-                + 'guličky — vyber si rad a v ňom miesto. Držíme ti ho 15 minút.'
-              : 'Klepni na guličku na pláne. Držíme ti miesto 15 minút; klepnutím na svoje ho pustíš.'}
+            {seatsVisible
+              ? 'Klepni na miesto. Držíme ti ho 15 minút; klepnutím na svoje ho pustíš. Ťahaním sa po pláne posúvaš.'
+              : `${open.seat_count} miest — priblíž si plán a miesta sa objavia. Ťahaním sa po ňom posúvaš.`}
           </Caption>
-
-          {/* A stand, a row at a time. The same three states as the dots, at a
-              size somebody can actually hit with a thumb. */}
-          {tooManyForDots ? (
-            <>
-              <View style={styles.rowStrip}>
-                {rowsInOpen.map((label) => (
-                  <Chip
-                    key={label}
-                    label={`Rad ${label}`}
-                    selected={(openRow ?? rowsInOpen[0]) === label}
-                    onPress={() => setOpenRow(label)}
-                  />
-                ))}
-              </View>
-
-              <View style={styles.seatLine}>
-                {shownSeats.map((seat) => (
-                  <Pressable
-                    key={seat.id}
-                    disabled={busy || (!seat.free && !seat.mine)}
-                    onPress={() => tapSeat(seat)}
-                    accessibilityRole="button"
-                    accessibilityLabel={seatLabel(seat)}
-                    style={[
-                      styles.seatChip,
-                      seat.mine_claim === 'held' ? styles.seatChipMine
-                        : seat.mine ? styles.seatChipBought
-                          : seat.taken ? styles.seatChipTaken
-                            : !seat.sellable ? styles.seatChipBlocked
-                              : seat.kind !== 'standard' ? styles.seatChipSpecial
-                                : null,
-                    ]}
-                  >
-                    <Text style={styles.seatChipLabel}>{seat.number}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          ) : null}
 
           <View style={styles.legendRow}>
             <LegendDot style={styles.dotFree} label="voľné" />
@@ -803,13 +852,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   together: {
-    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
+  togetherLabel: { marginBottom: 2 },
+  togetherControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  // minWidth 0 so the label inside can shrink and wrap by word rather than
+  // pushing the row wider than the card.
+  togetherButton: { flex: 1, minWidth: 0 },
   swatch: { width: 14, height: 14, borderRadius: 4 },
   rowTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   rowName: { ...typography.bodyStrong, color: colors.text },
   landmarks: { marginTop: spacing.xs, marginBottom: spacing.md },
+  rowBand: { position: 'absolute', left: '6%', right: '6%', borderRadius: 2 },
+  zoomBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  priceCell: { alignItems: 'flex-end' },
   price: { ...typography.bodyStrong, color: colors.accent },
 
   stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

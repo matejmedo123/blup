@@ -29,6 +29,23 @@ const ENDPOINT = 'https://nominatim.openstreetmap.org/search';
  */
 const SUGGEST_ENDPOINT = 'https://photon.komoot.io/api/';
 
+/**
+ * Slovakia, and only Slovakia.
+ *
+ * BLUP lists events here. An address picker that offers a Hlavná in Brno or a
+ * Hauptstrasse in Vienna is offering somewhere the event cannot be, and it is
+ * easy to pick one by accident — the rows look identical until you read the
+ * country at the end.
+ *
+ * Two different mechanisms, because the two services differ: Nominatim takes a
+ * country list, Photon does not and is given a bounding box plus a check on the
+ * country code it returns. The box alone is not enough — it clips corners of
+ * Austria, Hungary, Poland and both neighbours to the east.
+ */
+const DEFAULT_COUNTRIES = 'sk';
+/** minLon, minLat, maxLon, maxLat — Slovakia with a little margin. */
+const SK_BBOX = '16.80,47.70,22.60,49.65';
+
 /** A slow suggestion is a useless suggestion — the letters have moved on. */
 const SUGGEST_TIMEOUT_MS = 3500;
 
@@ -112,7 +129,7 @@ export async function geocodeAddress(
   url.searchParams.set('limit', '1');
   url.searchParams.set('addressdetails', '1');
   // Slovakia and its neighbours, so "Hlavná 1" lands on the right Hlavná.
-  url.searchParams.set('countrycodes', options.countryCodes ?? 'sk,cz,at,hu,pl');
+  url.searchParams.set('countrycodes', options.countryCodes ?? DEFAULT_COUNTRIES);
   url.searchParams.set('accept-language', 'sk');
 
   const response = await fetch(url.toString(), {
@@ -200,6 +217,7 @@ export async function suggestAddresses(
 async function suggestViaPhoton(
   q: string,
   options: {
+    countryCodes?: string;
     signal?: AbortSignal;
     limit: number;
     near?: { latitude: number; longitude: number } | null;
@@ -207,7 +225,11 @@ async function suggestViaPhoton(
 ): Promise<GeocodeHit[]> {
   const url = new URL(SUGGEST_ENDPOINT);
   url.searchParams.set('q', q);
-  url.searchParams.set('limit', String(options.limit));
+  // Asks for more than the caller wants, because the country filter below
+  // throws some away and a list that comes back short is worse than one round
+  // trip's worth of extra rows.
+  url.searchParams.set('limit', String(Math.min(options.limit * 3, 20)));
+  url.searchParams.set('bbox', SK_BBOX);
   if (options.near) {
     url.searchParams.set('lat', String(options.near.latitude));
     url.searchParams.set('lon', String(options.near.longitude));
@@ -241,6 +263,13 @@ async function suggestViaPhoton(
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
 
       const p = feature.properties ?? {};
+
+      // The box leaks over the borders, so the country code decides. Photon
+      // sometimes omits it; a row nobody can place is not offered.
+      const country = (p.countrycode ?? '').toLowerCase();
+      const allowed = (options.countryCodes ?? DEFAULT_COUNTRIES)
+        .split(',').map((code) => code.trim().toLowerCase()).filter(Boolean);
+      if (!country || !allowed.includes(country)) continue;
       // Photon names the parts differently from Nominatim; slovakAddress only
       // needs road/house_number/city, so they are mapped rather than reformatted
       // in a second place.
@@ -260,6 +289,7 @@ async function suggestViaPhoton(
         label,
         city: p.city ?? p.town ?? p.village ?? p.county ?? null,
       });
+      if (hits.length >= options.limit) break;
     }
     return hits;
   } finally {
@@ -277,7 +307,7 @@ async function suggestViaNominatim(
   url.searchParams.set('format', 'jsonv2');
   url.searchParams.set('limit', String(options.limit));
   url.searchParams.set('addressdetails', '1');
-  url.searchParams.set('countrycodes', options.countryCodes ?? 'sk,cz,at,hu,pl');
+  url.searchParams.set('countrycodes', options.countryCodes ?? DEFAULT_COUNTRIES);
   url.searchParams.set('accept-language', 'sk');
 
   const response = await fetch(url.toString(), {

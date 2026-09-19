@@ -10,6 +10,17 @@ import { supabase } from '@/lib/supabase';
  * page mid-purchase and the basket, and its remaining seconds, are still there.
  */
 
+/** One seat a shopper is holding, as the basket names it. */
+export interface CartSeat {
+  seat_id: string;
+  section: string;
+  row: string;
+  number: number;
+  kind: string;
+  /** "Tribúna A, rad 5, miesto 12" — built by the database, not here. */
+  label: string;
+}
+
 export interface CartLine {
   ticket_type_id: string;
   name: string;
@@ -20,6 +31,11 @@ export interface CartLine {
   /** Still buyable by *this* shopper, i.e. excluding their own hold. */
   available: number;
   currency: string;
+  /**
+   * Which seats, when the sector is numbered. Empty for an event that sells by
+   * count — those baskets look exactly as they did.
+   */
+  seats?: CartSeat[];
 }
 
 export interface CartLimits {
