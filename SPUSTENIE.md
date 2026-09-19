@@ -12,6 +12,13 @@ Nepotrebuješ Mac, Apple developer účet ani server. Web je celá aplikácia.
 
 > Príkazy spúšťaj z koreňa rozbaleného projektu, ak nie je napísané inak.
 
+> **Už si raz nasadzoval?** Potom ťa zaujímajú štyri veci, ktoré odvtedy
+> pribudli: nová serverová funkcia `email-events` (**Fáza 5b·2**), dva nové
+> cron joby `blup-waitlist` a `blup-invites` (**Fáza 8**), adminské obrazovky
+> *Stav nasadenia* a *E-maily* (**Fáza 9b**), a tri kontroly, ktoré nepotrebujú
+> nasadenie — `npm run db:verify`, `check:dns` a `check:speed` (**Fáza 12**).
+> Zvyšok návodu sa nezmenil.
+
 ---
 
 ## Čo budeš potrebovať
@@ -439,9 +446,9 @@ npx supabase secrets set --env-file supabase/.env
 ./scripts/deploy-functions.sh
 ```
 
-Nasadí 16 funkcií. Skript vie, ktoré musia bežať bez overenia tokenu — Stripe
-ani cron nevedia poslať prihlasovací token, overujú sa podpisom alebo servisným
-kľúčom.
+Nasadí 18 funkcií. Skript vie, ktoré musia bežať bez overenia tokenu — Stripe,
+poskytovateľ pošty ani cron nevedia poslať prihlasovací token, overujú sa
+podpisom alebo servisným kľúčom.
 
 **✓ Kontrola:**
 
@@ -449,8 +456,44 @@ kľúčom.
 curl https://<project-ref>.supabase.co/functions/v1/config-status
 ```
 
-Vráti samé `true`/`false` — nikdy kľúč ani jeho časť. Musíš vidieť `true` pri
-`stripe`, `stripeWebhook`, `email` a `webPush`. Čo je `false`, to ešte nefunguje.
+Vráti samé `true`/`false` — nikdy kľúč ani jeho časť.
+
+### Ako sa to číta
+
+Toto je najrýchlejší spôsob, ako zistiť, čo ešte nefunguje. Každé `false` má
+presne jednu príčinu:
+
+| Pole | `false` znamená | Kde to napraviť |
+| --- | --- | --- |
+| `payments.stripe_configured` | chýba `STRIPE_SECRET_KEY` | **Fáza 4.1** |
+| `payments.webhook_configured` | chýba `STRIPE_WEBHOOK_SECRET` | **Fáza 4.4** |
+| `payments.connect_payouts` | to isté — sleduje ten istý kľúč | **Fáza 4.1** |
+| `premium.web_configured` | chýbajú `STRIPE_PRICE_PREMIUM_MONTHLY` / `_YEARLY` | **Fáza 4.3** |
+| `premium.apple_iap_configured` | chýba `APPLE_SHARED_SECRET` | len pre iOS appku |
+| `email.configured` | chýba `RESEND_API_KEY` | **Fáza 5b** |
+| `email.bounce_webhook` | chýba `RESEND_WEBHOOK_SECRET` | **Fáza 5b·2** |
+| `push.web_push_configured` | chýbajú VAPID kľúče | **Fáza 6** |
+| `push.expo_access_token` | chýba `EXPO_ACCESS_TOKEN` | len pre push do mobilnej appky |
+| `ai.llm_configured` | chýba `AI_API_KEY` | voliteľné, pozri nižšie |
+
+Dve veci, ktoré **netreba** mať na `true`, aby web fungoval:
+
+- **`ai.llm_configured`** — pokiaľ je `ranker_available: true`, odporúčania
+  beží SQL ranker priamo v databáze. Je rýchlejší, zadarmo a nič neposiela von.
+  LLM je len nadstavba; bez neho appka funguje celá.
+- **`push.expo_access_token`** — týka sa iba notifikácií do nainštalovanej
+  mobilnej appky. Web push (`web_push_configured`) je iná vec a funguje sám.
+
+`connect_payouts` sleduje len `STRIPE_SECRET_KEY`; či je Connect naozaj
+zapnutý a `STRIPE_CONNECT_*_URL` nastavené, ti táto odpoveď nepovie — to zistíš
+až tak, že organizátorovi nabehne overenie účtu (**Fáza 4.2 a 7**).
+
+Bez čoho sa **nedá predávať**: `stripe_configured` a `webhook_configured`.
+Kým sú na `false`, eventy zdarma fungujú, vstupenky sa kúpiť nedajú.
+
+> Keď funkcie odpovedajú, ale appka hlási, že niečo „neexistuje", nie je to
+> v kľúčoch — je to v databáze. Otvor **Admin → Stav nasadenia**: povie, ktorá
+> migrácia chýba, funkciu po funkcii.
 
 ---
 
@@ -554,7 +597,31 @@ update public.organizations set verification_status = 'verified';
 
 Platené vstupenky smie predávať len overená organizácia.
 
-**✓ Kontrola:** v bočnej navigácii vidíš **Admin** aj **Organizátor**.
+### 9b. Prejdi si adminské nastavenia
+
+Sú tri a všetky majú rozumnú predvolenú hodnotu, takže ťa nič nezastaví — ale
+oplatí sa vedieť, že existujú.
+
+**Admin → Stav nasadenia.** Otvor to hneď teraz, kým je všetko čerstvé.
+Porovná appku s databázou, funkciu po funkcii, a pri každej chýbajúcej povie,
+ktorá migrácia ju prináša. Keď niečo „nefunguje" po nahratí novej verzie webu,
+toto je prvá obrazovka, nie posledná — štyri hlásenia o rozbitých funkciách už
+raz boli jedna nespustená migrácia.
+
+**Admin → E-maily.** Fronta, podiel zlyhaní, odrazené adresy a tlačidlo
+*Poslať testovací e-mail* — ide rovnakou cestou ako vstupenky, nie skratkou,
+takže keď príde, funguje celý reťazec. Je tam preto, že e-mail, ktorý skončí
+v spame, vyzerá v dátach rovnako ako ten, čo dorazil.
+
+**Admin → Poplatky a sadzby.** Tu sú dve čísla, ktoré sa oplatí pozrieť:
+
+| Nastavenie | Predvolené | Čo robí |
+| --- | --- | --- |
+| `email_per_hour` | 500 | strop odoslaných e-mailov za hodinu. Vstupenky majú vždy prednosť, takže rozposielanie nikdy nezdrží vstupenku niekomu pri vchode |
+| `boost_cpm_cents` | 250 | čo stojí 1 000 zobrazení reklamy. Z toho sa počíta každá kampaň — 25 € je pri tejto sadzbe 10 000 zobrazení |
+
+**✓ Kontrola:** v bočnej navigácii vidíš **Admin** aj **Organizátor**, a
+v *Admin → Stav nasadenia* je všetko zelené.
 
 ---
 
@@ -600,8 +667,19 @@ Toto je tá fáza, ktorá rozhodne, či to naozaj funguje. Choď presne v tomto 
 
 Pred spustením ešte:
 
-- **Admin → Poplatky a sadzby** — skontroluj províziu a archívny poplatok.
+- **Admin → Poplatky a sadzby** — skontroluj províziu, archívny poplatok
+  a sadzbu za reklamu (`boost_cpm_cents`).
 - **Admin → Marketing** — doplň Meta pixel a Google Ads, ak ich máš.
+- **`npm run check:dns`** — posledná kontrola, či e-maily nebudú padať do spamu.
+  Ak hlási chýbajúce `rua=` v DMARC, doplň ho: bez neho sa nedozvieš, keď ti
+  niekto začne zneužívať doménu.
+- **Obmedz mapový kľúč na doménu.** `cartoKey` v `blup-config.js` je z princípu
+  verejný — stiahne si ho každý návštevník v JavaScripte. Nechráni ho tajnosť,
+  ale obmedzenie na `blup.sk` v účte poskytovateľa. Bez neho ti ho môže
+  ktokoľvek použiť na svojej stránke a míňať tvoj limit.
+- **Zapni späť potvrdzovanie e-mailu.** Ak si ho v **Authentication → Providers
+  → Email** vypol, aby si sa prehrýzol registráciou (Fáza 5c), teraz to vráť —
+  inak si ktokoľvek založí účet na cudziu adresu.
 - **Obchodné podmienky a ochrana údajov.** Predávaš cudzie vstupenky, takže musí
   byť jasné, že zmluva je medzi kupujúcim a organizátorom a peniaze pri zrušení
   vracia organizátor. Vytlačené je to aj na samotnej vstupenke.
@@ -659,7 +737,7 @@ megabajtu, skôr než sa ozvú ľudia.
 | Po platbe zlé presmerovanie | `APP_PUBLIC_URL` nesedí s doménou alebo má lomku na konci |
 | E-maily nechodia | doména nie je vo Verified, alebo `EMAIL_FROM` je na inej doméne |
 | E-maily padajú do spamu | spusti `npm run check:dns` — povie presne ktorý záznam chýba |
-| E-maily sa vôbec nehýbu | **Admin → E-maily**: keď fronta rastie a za hodinu neodišlo nič, nebeží cron `blup-emails` |
+| E-maily sa vôbec nehýbu | **Admin → E-maily**: keď fronta rastie a za hodinu neodišlo nič, nebeží cron `blup-tickets` (Fáza 8) |
 | E-mailov zlyháva viac než pár % | **Admin → E-maily** ukáže dôvody; skoro vždy je to doména, nie jedna adresa |
 | Potvrdzovací e-mail po registrácii nechodí | Supabase posiela cez vlastnú službu len 2/hodinu a len členom tímu — nastav SMTP na Resend, **Fáza 5c** |
 | Potvrdenie prišlo raz a potom už nie | narazil si na *Emails per hour* — zdvihni limit v **Authentication → Rate Limits** |
@@ -668,6 +746,10 @@ megabajtu, skôr než sa ozvú ľudia.
 | Geolokácia nefunguje | stránka nebeží cez HTTPS |
 | „Na predaj vstupeniek potrebuješ overenie" | organizácia nie je `verified` |
 | Vstupenky sa v košíku samy strácajú | tak to má byť — rezervácia platí 15 minút |
+| Nejaká funkcia v appke „neexistuje" | databáza je staršia než web — **Admin → Stav nasadenia** povie, ktorá migrácia chýba |
+| Odznaky nepribúdajú | otvor **Odznaky** — obrazovka ich pri otvorení prepočíta; ak stále nie, chýba migrácia `20260101007700` |
+| Reklama sa nedá zaplatiť | `stripe_configured` je `false`, alebo na webe chýba nasadená `web-checkout` s podporou kampaní |
+| Nikomu sa reklama neukazuje | tak to má byť pri zlej zhode — pod prahom relevancie sa nezobrazí za žiadne peniaze a organizátor za to neplatí |
 
 ---
 
