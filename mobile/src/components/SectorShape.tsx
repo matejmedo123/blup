@@ -268,7 +268,7 @@ export function seatSize(
   if (!shape) {
     const cellW = (bounds.width * planWidth) / across;
     const cellH = (bounds.height * planHeight) / down;
-    return Math.max(1, Math.min(cellW * 0.66, cellH * 0.7));
+    return Math.max(1, Math.min(cellW * 0.88, cellH * 0.74));
   }
 
   const band = bandOf(shape);
@@ -294,12 +294,12 @@ export function seatSize(
   const deep = Math.hypot((far.x - mid.x) * planWidth, (far.y - mid.y) * planHeight) / down;
 
   /*
-   * Air between the seats, not just enough to avoid touching.
+   * Seats nearly touch along a row, and rows are set apart.
    *
-   * At 0.8 of the gap the circles were measurably round and still read as a
-   * dashed stripe: a quarter of a seat between one and the next is not enough
-   * space for the eye to separate them, and a row looked like a smear rather
-   * than like seats. 0.62 leaves a clear gap and still fills the stand.
+   * That is what a seating plan looks like: a row is a solid run of seats, and
+   * the space is BETWEEN rows, where the aisle actually is. At 0.62 of the gap
+   * each way there was a full seat's worth of space in every direction and the
+   * stand read as scattered dots rather than as a block of seating.
    */
-  return Math.max(1, Math.min(along * 0.62, deep * 0.7));
+  return Math.max(1, Math.min(along * 0.88, deep * 0.74));
 }

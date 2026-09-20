@@ -40,8 +40,10 @@
 --    prejsť po dĺžke uzavretým vzorcom: žiadna tabuľka, žiadne dopočítavanie,
 --    žiadny šev.
 --
---    67 sektorov a 4 920 sedadiel, ktoré sa generujú rovno pri nasadení
---    predlohy — organizátor už len prepisuje názvy a ceny.
+--    67 sektorov a 12 272 sedadiel, ktoré sa generujú rovno pri nasadení
+--    predlohy — organizátor už len prepisuje názvy a ceny. Tribúna má rady
+--    a miesta ako naozajstná: štrnásť radov po šestnástich je blok sedadiel,
+--    šesť po dvanástich je hrsť bodiek.
 --
 -- Preto `apply_venue_preset` po novom pozná `rows`, `per_row` a `row_prefix`:
 -- sektor, ktorý ich má, dostane miesta hneď. Sektor bez nich zostáva na počet,
@@ -508,8 +510,8 @@ as $fn$
         "y": 0.2699,
         "width": 0.0707,
         "height": 0.064,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A102",
@@ -650,8 +652,8 @@ as $fn$
         "y": 0.2556,
         "width": 0.0673,
         "height": 0.0629,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A103",
@@ -792,8 +794,8 @@ as $fn$
         "y": 0.2501,
         "width": 0.061,
         "height": 0.0607,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A104",
@@ -934,8 +936,8 @@ as $fn$
         "y": 0.25,
         "width": 0.0528,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A105",
@@ -1076,8 +1078,8 @@ as $fn$
         "y": 0.25,
         "width": 0.0442,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A106",
@@ -1218,8 +1220,8 @@ as $fn$
         "y": 0.25,
         "width": 0.0398,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A107",
@@ -1360,8 +1362,8 @@ as $fn$
         "y": 0.25,
         "width": 0.0442,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A108",
@@ -1502,8 +1504,8 @@ as $fn$
         "y": 0.25,
         "width": 0.0528,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A109",
@@ -1644,8 +1646,8 @@ as $fn$
         "y": 0.2501,
         "width": 0.061,
         "height": 0.0607,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A110",
@@ -1786,8 +1788,8 @@ as $fn$
         "y": 0.2556,
         "width": 0.0673,
         "height": 0.0629,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "A111",
@@ -1928,8 +1930,8 @@ as $fn$
         "y": 0.2699,
         "width": 0.0707,
         "height": 0.064,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "D101",
@@ -2070,8 +2072,8 @@ as $fn$
         "y": 0.2929,
         "width": 0.0907,
         "height": 0.0851,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "D102",
@@ -2212,8 +2214,8 @@ as $fn$
         "y": 0.3516,
         "width": 0.0752,
         "height": 0.0848,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "D103",
@@ -2354,8 +2356,8 @@ as $fn$
         "y": 0.4249,
         "width": 0.0602,
         "height": 0.0732,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "D104",
@@ -2496,8 +2498,8 @@ as $fn$
         "y": 0.5019,
         "width": 0.0602,
         "height": 0.0732,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "D105",
@@ -2638,8 +2640,8 @@ as $fn$
         "y": 0.5636,
         "width": 0.0752,
         "height": 0.0848,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "D106",
@@ -2780,8 +2782,8 @@ as $fn$
         "y": 0.622,
         "width": 0.0907,
         "height": 0.0851,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "B101",
@@ -2922,8 +2924,8 @@ as $fn$
         "y": 0.6662,
         "width": 0.0737,
         "height": 0.0657,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B102",
@@ -3064,8 +3066,8 @@ as $fn$
         "y": 0.6827,
         "width": 0.0699,
         "height": 0.0635,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B103",
@@ -3206,8 +3208,8 @@ as $fn$
         "y": 0.6898,
         "width": 0.0626,
         "height": 0.0602,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B104",
@@ -3348,8 +3350,8 @@ as $fn$
         "y": 0.69,
         "width": 0.0534,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B105",
@@ -3490,8 +3492,8 @@ as $fn$
         "y": 0.69,
         "width": 0.044,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B106",
@@ -3632,8 +3634,8 @@ as $fn$
         "y": 0.69,
         "width": 0.044,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B107",
@@ -3774,8 +3776,8 @@ as $fn$
         "y": 0.69,
         "width": 0.0534,
         "height": 0.06,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B108",
@@ -3916,8 +3918,8 @@ as $fn$
         "y": 0.6898,
         "width": 0.0626,
         "height": 0.0602,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B109",
@@ -4058,8 +4060,8 @@ as $fn$
         "y": 0.6827,
         "width": 0.0699,
         "height": 0.0635,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "B110",
@@ -4200,8 +4202,8 @@ as $fn$
         "y": 0.6662,
         "width": 0.0737,
         "height": 0.0657,
-        "rows": 6,
-        "per_row": 14
+        "rows": 14,
+        "per_row": 16
       },
       {
         "name": "C101",
@@ -4342,8 +4344,8 @@ as $fn$
         "y": 0.5948,
         "width": 0.1058,
         "height": 0.1116,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "C102",
@@ -4484,8 +4486,8 @@ as $fn$
         "y": 0.5028,
         "width": 0.0652,
         "height": 0.109,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "C103",
@@ -4626,8 +4628,8 @@ as $fn$
         "y": 0.3882,
         "width": 0.0652,
         "height": 0.109,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "C104",
@@ -4768,8 +4770,8 @@ as $fn$
         "y": 0.2936,
         "width": 0.1058,
         "height": 0.1116,
-        "rows": 6,
-        "per_row": 12
+        "rows": 14,
+        "per_row": 14
       },
       {
         "name": "V01",
@@ -4910,8 +4912,8 @@ as $fn$
         "y": 0.1929,
         "width": 0.0941,
         "height": 0.0777,
-        "rows": 2,
-        "per_row": 6
+        "rows": 3,
+        "per_row": 8
       },
       {
         "name": "V02",
@@ -5052,8 +5054,8 @@ as $fn$
         "y": 0.1784,
         "width": 0.0889,
         "height": 0.0668,
-        "rows": 2,
-        "per_row": 6
+        "rows": 3,
+        "per_row": 8
       },
       {
         "name": "V03",
@@ -5194,8 +5196,8 @@ as $fn$
         "y": 0.178,
         "width": 0.078,
         "height": 0.06,
-        "rows": 2,
-        "per_row": 6
+        "rows": 3,
+        "per_row": 8
       },
       {
         "name": "V04",
@@ -5336,8 +5338,8 @@ as $fn$
         "y": 0.178,
         "width": 0.0714,
         "height": 0.06,
-        "rows": 2,
-        "per_row": 6
+        "rows": 3,
+        "per_row": 8
       },
       {
         "name": "V05",
@@ -5478,8 +5480,8 @@ as $fn$
         "y": 0.178,
         "width": 0.078,
         "height": 0.06,
-        "rows": 2,
-        "per_row": 6
+        "rows": 3,
+        "per_row": 8
       },
       {
         "name": "V06",
@@ -5620,8 +5622,8 @@ as $fn$
         "y": 0.1784,
         "width": 0.0889,
         "height": 0.0668,
-        "rows": 2,
-        "per_row": 6
+        "rows": 3,
+        "per_row": 8
       },
       {
         "name": "V07",
@@ -5762,8 +5764,8 @@ as $fn$
         "y": 0.1929,
         "width": 0.0941,
         "height": 0.0777,
-        "rows": 2,
-        "per_row": 6
+        "rows": 3,
+        "per_row": 8
       },
       {
         "name": "D201",
@@ -5904,8 +5906,8 @@ as $fn$
         "y": 0.2416,
         "width": 0.0888,
         "height": 0.0835,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "D202",
@@ -6046,8 +6048,8 @@ as $fn$
         "y": 0.295,
         "width": 0.0812,
         "height": 0.0836,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "D203",
@@ -6188,8 +6190,8 @@ as $fn$
         "y": 0.3593,
         "width": 0.0697,
         "height": 0.0784,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "D204",
@@ -6330,8 +6332,8 @@ as $fn$
         "y": 0.4299,
         "width": 0.0601,
         "height": 0.0683,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "D205",
@@ -6472,8 +6474,8 @@ as $fn$
         "y": 0.5018,
         "width": 0.0601,
         "height": 0.0683,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "D206",
@@ -6614,8 +6616,8 @@ as $fn$
         "y": 0.5623,
         "width": 0.0697,
         "height": 0.0784,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "D207",
@@ -6756,8 +6758,8 @@ as $fn$
         "y": 0.6214,
         "width": 0.0812,
         "height": 0.0836,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "D208",
@@ -6898,8 +6900,8 @@ as $fn$
         "y": 0.6749,
         "width": 0.0888,
         "height": 0.0835,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "B201",
@@ -7040,8 +7042,8 @@ as $fn$
         "y": 0.7181,
         "width": 0.0858,
         "height": 0.0756,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "B202",
@@ -7182,8 +7184,8 @@ as $fn$
         "y": 0.7452,
         "width": 0.083,
         "height": 0.07,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "B203",
@@ -7324,8 +7326,8 @@ as $fn$
         "y": 0.7597,
         "width": 0.0759,
         "height": 0.0623,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "B204",
@@ -7466,8 +7468,8 @@ as $fn$
         "y": 0.762,
         "width": 0.0659,
         "height": 0.06,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "B205",
@@ -7608,8 +7610,8 @@ as $fn$
         "y": 0.762,
         "width": 0.0604,
         "height": 0.06,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "B206",
@@ -7750,8 +7752,8 @@ as $fn$
         "y": 0.762,
         "width": 0.0659,
         "height": 0.06,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "B207",
@@ -7892,8 +7894,8 @@ as $fn$
         "y": 0.7597,
         "width": 0.0759,
         "height": 0.0623,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "B208",
@@ -8034,8 +8036,8 @@ as $fn$
         "y": 0.7452,
         "width": 0.083,
         "height": 0.07,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "B209",
@@ -8176,8 +8178,8 @@ as $fn$
         "y": 0.7181,
         "width": 0.0858,
         "height": 0.0756,
-        "rows": 8,
-        "per_row": 14
+        "rows": 16,
+        "per_row": 16
       },
       {
         "name": "C201",
@@ -8318,8 +8320,8 @@ as $fn$
         "y": 0.6585,
         "width": 0.101,
         "height": 0.0994,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "C202",
@@ -8460,8 +8462,8 @@ as $fn$
         "y": 0.583,
         "width": 0.0825,
         "height": 0.1009,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "C203",
@@ -8602,8 +8604,8 @@ as $fn$
         "y": 0.5024,
         "width": 0.0616,
         "height": 0.0909,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "C204",
@@ -8744,8 +8746,8 @@ as $fn$
         "y": 0.4067,
         "width": 0.0616,
         "height": 0.0909,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "C205",
@@ -8886,8 +8888,8 @@ as $fn$
         "y": 0.3161,
         "width": 0.0825,
         "height": 0.1009,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "C206",
@@ -9028,8 +9030,8 @@ as $fn$
         "y": 0.2421,
         "width": 0.101,
         "height": 0.0994,
-        "rows": 8,
-        "per_row": 12
+        "rows": 16,
+        "per_row": 14
       },
       {
         "name": "Skybox",
