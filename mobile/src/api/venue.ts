@@ -443,3 +443,40 @@ export async function removeVenuePlan(input: {
   if (error) throw error;
   return data as PlanRemoval;
 }
+
+/** One of the ready-made hall shapes. */
+export interface VenuePreset {
+  code: string;
+  name: string;
+  description: string;
+  sections: {
+    name: string; kind: SectionKind; colour: string;
+    x: number; y: number; width: number; height: number; rotation: number;
+  }[];
+}
+
+export async function getVenuePresets(): Promise<VenuePreset[]> {
+  const { data, error } = await supabase.rpc('venue_presets');
+  if (error) throw error;
+  return (data ?? []) as VenuePreset[];
+}
+
+/**
+ * Draws a ready-made hall onto an event that has no plan yet.
+ *
+ * Drawing a hall from nothing is the hardest part of setting up seating and
+ * the least interesting: a theatre has stalls and a balcony, a stadium has
+ * four stands around a pitch. The shapes are always the same and nobody wants
+ * to click them out again.
+ *
+ * Sectors arrive with no ticket type unless their name matches one exactly.
+ * Guessing by order or by price would sell the cheap seats at the dear price.
+ */
+export async function applyVenuePreset(eventId: string, preset: string): Promise<string> {
+  const { data, error } = await supabase.rpc('apply_venue_preset', {
+    p_event_id: eventId,
+    p_preset: preset,
+  });
+  if (error) throw error;
+  return data as string;
+}

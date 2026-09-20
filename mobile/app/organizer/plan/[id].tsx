@@ -10,9 +10,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEvent, updateEvent } from '@/api/events';
 import { useAuth } from '@/auth/AuthProvider';
 import {
-  clearVenueMapImage, cloneVenueMap, createSection, createVenueMap, deleteSeats, deleteSection,
+  applyVenuePreset, clearVenueMapImage, cloneVenueMap, createSection, createVenueMap,
+  deleteSeats, deleteSection,
   duplicateSection, generateSeats, getReusablePlans, getSectionSeats, getVenueMap,
-  getVenueSections, removeVenuePlan, renameRow, setBackdropOnly, setSeatState,
+  getVenuePresets, getVenueSections, removeVenuePlan, renameRow, setBackdropOnly, setSeatState,
   updateSection, updateVenueMap,
 } from '@/api/venue';
 import {
@@ -191,6 +192,15 @@ export default function PlanEditorScreen() {
   // Other nights in the same hall. An arena runs fifty a year on one plan, and
   // a sector is tied to a ticket type, which belongs to one event — so without
   // this the same stadium gets drawn fifty times.
+  // Offered only while the event has no plan — a preset replaces a plan, and
+  // replacing one would throw away sectors that tickets already point at.
+  const presets = useQuery({
+    queryKey: ['venue', 'presets'],
+    queryFn: getVenuePresets,
+    enabled: !mapId,
+    staleTime: Infinity,
+  });
+
   const reusable = useQuery({
     queryKey: ['venue', 'reusable', event.data?.organization_id, id],
     queryFn: () => getReusablePlans({
@@ -663,6 +673,27 @@ export default function PlanEditorScreen() {
     }
   };
 
+  /**
+   * Not called `usePreset`: a name starting with `use` is a hook to the lint
+   * rule, which then reports a rules-of-hooks violation that is not there.
+   * The same trap already caught `useFreeBoost` on the promo screen.
+   */
+  const applyPreset = async (code: string) => {
+    if (!id) return;
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      await applyVenuePreset(id, code);
+      await refresh();
+      setNote('Hala je nakreslená. Teraz už len názvy, rady a typy vstupeniek.');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleBackdrop = async (backdropOnly: boolean) => {
     if (!mapId) return;
     setError(null);
@@ -851,7 +882,7 @@ export default function PlanEditorScreen() {
     <Screen scroll>
       <Text style={styles.title}>Plán sály</Text>
       <Body muted style={styles.intro}>
-        Nahraj obrázok haly — stačí odfotený papier — a ťahaním naň obkresli sektory.
+        Vyber si hotovú halu a uprav ju, alebo nahraj obrázok a obkresli si ju sám.
         Obrázok je len podklad: kupujúcemu sa neposiela, ten uvidí sektory, ktoré si
         podľa neho nakreslil. Sektor bez miest sa predáva na počet, sektor s radmi
         po jednotlivých sedadlách.
@@ -859,6 +890,52 @@ export default function PlanEditorScreen() {
 
       {error ? <Notice tone="danger" title="Nedá sa" body={error} /> : null}
       {note ? <Notice tone="success" title="Hotovo" body={note} /> : null}
+
+      {/* The quickest way in: pick the shape, then edit only what is actually
+          different about this hall — the names, the rows and which ticket type
+          sells in which sector. */}
+      {!mapId && (presets.data ?? []).length > 0 ? (
+        <>
+          <SectionHeader title="Začni z hotovej haly" />
+          <Caption style={styles.hint}>
+            Nakreslí tvar za teba. Sektor dostane cenu, len keď sa jeho názov
+            presne zhoduje s typom vstupenky — hádať podľa poradia by predalo
+            lacné miesta za drahé.
+          </Caption>
+          {(presets.data ?? []).map((preset) => (
+            <Pressable
+              key={preset.code}
+              style={styles.row}
+              onPress={() => applyPreset(preset.code)}
+              disabled={busy}
+            >
+              <View style={styles.presetShape}>
+                {preset.sections.map((section) => (
+                  <View
+                    key={section.name}
+                    style={{
+                      position: 'absolute',
+                      left: `${section.x * 100}%`,
+                      top: `${section.y * 100}%`,
+                      width: `${section.width * 100}%`,
+                      height: `${section.height * 100}%`,
+                      borderRadius: 2,
+                      backgroundColor: `${section.colour}66`,
+                      borderWidth: 1,
+                      borderColor: section.colour,
+                    }}
+                  />
+                ))}
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.rowName}>{preset.name}</Text>
+                <Caption>{preset.description}</Caption>
+              </View>
+              <Text style={styles.presetArrow}>→</Text>
+            </Pressable>
+          ))}
+        </>
+      ) : null}
 
       <Button
         title={map.data?.image_url ? 'Vymeniť obrázok haly' : 'Nahrať obrázok haly'}
@@ -935,11 +1012,15 @@ export default function PlanEditorScreen() {
               contentFit="contain"
             />
           </View>
-        ) : (
+        ) : existing.length === 0 ? (
+          // Only while the plan really is empty. It used to print over the
+          // middle of the surface whatever was on it, so on a stadium it ran
+          // straight across the pitch and through two sector names — saying
+          // "you can draw without a picture" to somebody who already had.
           <View style={styles.planEmpty} pointerEvents="none">
-            <Caption>Zatiaľ bez obrázka — sektory sa dajú vyznačiť aj na prázdno.</Caption>
+            <Caption>Bez obrázka — kresli voľne.</Caption>
           </View>
-        )}
+        ) : null}
 
         {existing.map((section) => {
           // While a sector is being dragged it is drawn from the gesture, not
@@ -1503,6 +1584,16 @@ function groupRows<T extends { row_label: string; seat_number: number }>(seats: 
 const styles = StyleSheet.create({
   title: { ...typography.title, color: colors.text },
   backdrop: { marginBottom: spacing.md },
+  presetShape: {
+    width: 64,
+    height: 48,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  presetArrow: { ...typography.rowTitle, color: colors.accent },
   intro: { marginTop: spacing.xs, marginBottom: spacing.lg },
   flex: { flex: 1, minWidth: 0 },
   label: { marginTop: spacing.md, marginBottom: spacing.xs },

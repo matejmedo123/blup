@@ -283,4 +283,77 @@ begin
   raise notice 'PASS sektor sa skopíruje aj s miestami, ale nepredáva ten istý sklad';
 end $$;
 
+-- --- predlohy hál --------------------------------------------------------------
+do $$
+declare
+  admin  uuid := 'a4949494-0000-0000-0000-000000000001';
+  ev2    uuid := 'e4949494-0000-0000-0000-000000000002';
+  v_map  uuid;
+  failed text;
+  n      integer;
+begin
+  assert jsonb_array_length(public.venue_presets()) = 5, 'päť predlôh';
+
+  insert into public.events (id, creator_id, organization_id, title, category, start_at,
+                             latitude, longitude, is_free, price_cents, status)
+  values (ev2, 'a4949494-0000-0000-0000-000000000002',
+          'd4949494-0000-0000-0000-000000000001', 'Divadlo', 'theatre',
+          now() + interval '30 days', 48.1486, 17.1077, false, 1500, 'published');
+
+  -- Typ vstupenky, ktorý sa volá presne ako sektor v predlohe.
+  insert into public.ticket_types (id, event_id, name, price_cents, quantity_total)
+  values ('c4949494-0000-0000-0000-000000000009', ev2, 'Parter', 1500, 200);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', admin::text, true);
+  v_map := public.apply_venue_preset(ev2, 'theatre');
+  reset role;
+
+  select count(*) into n from public.venue_sections where venue_map_id = v_map;
+  assert n = 5, format('divadlo má päť sektorov, má %s', n);
+  assert (select venue_map_id from public.events where id = ev2) = v_map,
+    'a plán je na evente';
+
+  assert (select ticket_type_id from public.venue_sections
+          where venue_map_id = v_map and name = 'Parter')
+         = 'c4949494-0000-0000-0000-000000000009',
+    'sektor s rovnakým názvom sa napojí na typ vstupenky';
+  assert (select ticket_type_id from public.venue_sections
+          where venue_map_id = v_map and name = 'Balkón') is null,
+    'ostatné zostanú bez ceny — hádať podľa poradia by predalo lacné za drahé';
+  assert (select kind from public.venue_sections
+          where venue_map_id = v_map and name = 'Pódium') = 'stage',
+    'pódium je pódium, nie sektor na predaj';
+
+  -- Druhýkrát už nie: prepísať existujúci plán by zahodilo sektory, na ktoré
+  -- sú predané vstupenky.
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', admin::text, true);
+  begin
+    perform public.apply_venue_preset(ev2, 'stadium');
+  exception when others then failed := sqlerrm;
+  end;
+  reset role;
+  assert failed like '%PLAN_ALREADY_EXISTS%', 'predloha neprepíše hotový plán';
+
+  raise notice 'PASS predloha nakreslí halu a napojí len to, čo sedí podľa názvu';
+end $$;
+
+-- --- a predlohu kreslí BLUP, nie organizátor ------------------------------------
+do $$
+declare failed text;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub',
+                     'a4949494-0000-0000-0000-000000000002', true);
+  begin
+    perform public.apply_venue_preset('e4949494-0000-0000-0000-000000000001', 'club');
+  exception when others then failed := sqlerrm;
+  end;
+  reset role;
+  assert failed like '%VENUE_PLAN_IS_ADMIN_ONLY%',
+    'predloha je stále plán sály, takže platia tie isté pravidlá';
+  raise notice 'PASS predlohu smie použiť len admin';
+end $$;
+
 rollback;

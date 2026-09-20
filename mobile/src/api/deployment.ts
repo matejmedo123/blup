@@ -132,6 +132,12 @@ export const FEATURES: FeatureNeed[] = [
     functions: ['set_premium_preview'],
     columns: ['profiles.premium_preview_off'],
   },
+  {
+    key: 'venue_presets',
+    label: 'Päť hotových hál na začiatok',
+    migration: '20260101008200_venue_presets',
+    functions: ['venue_presets', 'apply_venue_preset'],
+  },
 ];
 
 export interface FeatureStatus extends FeatureNeed {
