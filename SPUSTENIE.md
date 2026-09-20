@@ -12,12 +12,16 @@ Nepotrebuješ Mac, Apple developer účet ani server. Web je celá aplikácia.
 
 > Príkazy spúšťaj z koreňa rozbaleného projektu, ak nie je napísané inak.
 
-> **Už si raz nasadzoval?** Potom ťa zaujímajú štyri veci, ktoré odvtedy
-> pribudli: nová serverová funkcia `email-events` (**Fáza 5b·2**), dva nové
-> cron joby `blup-waitlist` a `blup-invites` (**Fáza 8**), adminské obrazovky
-> *Stav nasadenia* a *E-maily* (**Fáza 9b**), a tri kontroly, ktoré nepotrebujú
-> nasadenie — `npm run db:verify`, `check:dns` a `check:speed` (**Fáza 12**).
-> Zvyšok návodu sa nezmenil.
+> **Už si raz nasadzoval?** Potom ťa zaujíma päť vecí, ktoré odvtedy pribudli:
+> nová serverová funkcia `email-events` (**Fáza 5b·2**), dva nové cron joby
+> `blup-waitlist` a `blup-invites` (**Fáza 8**), adminské obrazovky *Stav
+> nasadenia* a *E-maily* (**Fáza 9b**), editor plánu haly s piatimi hotovými
+> predlohami (**Fáza 10b**) a kontroly, ktoré nepotrebujú nasadenie —
+> `npm run db:verify`, `check:dns`, `check:speed`, `check:webevents`
+> a `./scripts/preview.sh` (**Fáza 12**). Zvyšok návodu sa nezmenil.
+>
+> Migrácií je teraz **85**; `npx supabase db push` dobehne len tie, ktoré ti
+> chýbajú, a **Admin → Stav nasadenia** povie, či si niektorú nepreskočil.
 
 ---
 
@@ -69,7 +73,7 @@ npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-Aplikuje sa 79 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+Aplikuje sa 85 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
 účtovníctvo. Trvá to pol minúty.
 
 4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
@@ -92,8 +96,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje všetkých 79 migrácií od nuly a prejde
-**135 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
+Postaví dočasnú databázu, aplikuje všetkých 85 migrácií od nuly a prejde
+**454 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
 Ak toto prejde, schéma je v poriadku a každý neskorší problém je v konfigurácii.
@@ -651,6 +655,38 @@ Toto je tá fáza, ktorá rozhodne, či to naozaj funguje. Choď presne v tomto 
 **✓ Kontrola:** prešli všetky body 1 – 8. Ak nie bod 6, choď rovno na webhook
 (Fáza 4.4) — v Stripe **Developers → Webhooks → Attempts** uvidíš, čo sa stalo.
 
+### 10b. Ak predávaš na sedenie
+
+Toto nemusíš nastavovať vôbec — event bez sedenia predáva vstupenky na kus a je
+hotovo. Ale keď máš halu, kino alebo štadión, plán sa kreslí v **Organizátor →
+Miesta → Plán**. Tri veci sa oplatí vedieť dopredu, lebo inak sa hľadajú ťažko.
+
+**Nemusíš kresliť od nuly.** V editore je päť hotových predlôh — divadlo,
+kino, športová hala, štadión a koncertná sála. Vyber predlohu, prepíš názvy
+sektorov a radov na tie, ktoré máte na dverách, a si hotový. Predlohu smie
+nasadiť len admin a len do prázdneho plánu.
+
+**Fotka haly je iba podklad.** Keď nahráš pôdorys, kreslíš podľa neho — ale ku
+kupujúcemu sa tá fotka nedostane, do plánu sa posiela len to, čo si nakreslil.
+To je predvolené správanie; keby si niekedy chcel obrázok naozaj ukázať, je to
+prepínač pri nahratí. A kresliť sa dá aj úplne bez podkladu — *Bez obrázka —
+kresli voľne.*
+
+**Sektor nemusí byť obdĺžnik.** Tribúna, ktorá sa zatáča okolo ihriska, sa
+nakreslí klikaním bodov po obvode (3 až 40 bodov). Otáčanie je voľné — chytíš
+guľôčku a točíš, nie po pätnástich stupňoch. Sektor sa dá skopírovať aj
+s miestami a rozmermi, premenovať rad bez straty miest a vymazať jednotlivé
+miesta tam, kde v skutočnosti stojí stĺp. **Predané miesto sa vymazať nedá** —
+to je naschvál.
+
+Na pláne pre kupujúceho sa jednotlivé sedadlá objavia až pri poriadnom
+priblížení; nad tým sa rady kreslia ako pásy, aby sa plán veľkej haly dal
+vôbec prečítať. V košíku potom vidí presne to, čo si vybral — sektor, rad
+a číslo sedadla.
+
+**✓ Kontrola:** kúp si na skúšku konkrétne sedadlo a pozri sa do košíka.
+Musí tam byť jeho označenie, nie len „1× Vstupenka".
+
 ---
 
 ## Fáza 11 · Prepnutie naostro (20 minút)
@@ -709,18 +745,37 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 
 **✓ Kontrola:** `22 prešlo, 0 zlyhalo` a `19 prešlo, 0 zlyhalo`.
 
-### A tri, ktoré netreba nasadenie
+### A štyri, ktoré netreba nasadenie
 
 ```bash
-npm run db:verify     # 79 migrácií a 47 testovacích súborov na dočasnej databáze
-npm run check:dns     # SPF, DKIM, DMARC a návratová cesta nedoručeniek
-npm run check:speed   # rýchlosť stránky na priemernom telefóne, s rozpočtom
+npm run db:verify        # 85 migrácií a 49 testovacích súborov na dočasnej databáze
+npm run check:dns        # SPF, DKIM, DMARC a návratová cesta nedoručeniek
+npm run check:speed      # rýchlosť stránky na priemernom telefóne, s rozpočtom
+npm run check:webevents  # DOM udalosti, ktoré na webe ticho nerobia nič
 ```
 
 `check:speed` postaví build, otvorí ho v prehliadači spomalenom na telefón na
 4 Mbit a zlyhá, keď stránka prekročí rozpočet — dnes je to 920 kB a prvé
 písmeno po ~460 ms. Je to jediný spôsob, ako si všimnúť, že niečo pridalo pol
 megabajtu, skôr než sa ozvú ľudia.
+
+`check:webevents` stráži jednu zradu react-native-web: `onWheel`, `onScroll`
+a im podobné sa dajú napísať, prejdú kontrolou typov, zbuildujú sa — a nikdy sa
+nezavolajú, lebo ich knižnica na web neprenáša. Kolieskom myši sa raz nedalo
+priblížiť plán haly presne preto.
+
+### A jeden, ktorým si appku naozaj pozrieš
+
+```bash
+npm run preview          # alebo priamo ./scripts/preview.sh
+```
+
+Postaví lokálnu databázu s migráciami a náhľadovými dátami, spustí proti nej
+backend a otvorí web — takže sa obrazovky dajú **vidieť** ešte pred nasadením.
+Nie je to Supabase a nie je to na testovanie bezpečnosti (beží ako jeden
+prihlásený človek). Je to na to, aby sa chyby, ktoré sú vidieť iba očami —
+text cez text, otočený sektor, tlačidlo mimo obrazovky — našli tu a nie
+v ostrej prevádzke.
 
 ---
 
@@ -752,6 +807,10 @@ megabajtu, skôr než sa ozvú ľudia.
 | Odznaky nepribúdajú | otvor **Odznaky** — obrazovka ich pri otvorení prepočíta; ak stále nie, chýba migrácia `20260101007700` |
 | Reklama sa nedá zaplatiť | `stripe_configured` je `false`, alebo na webe chýba nasadená `web-checkout` s podporou kampaní |
 | Nikomu sa reklama neukazuje | tak to má byť pri zlej zhode — pod prahom relevancie sa nezobrazí za žiadne peniaze a organizátor za to neplatí |
+| Fotka haly nie je v pláne pre kupujúceho | tak to má byť — podklad slúži len na kreslenie. Prepínač je pri nahratí obrázka |
+| Sedadlá na pláne nie sú vidieť | priblíž viac; pod prahom sa kreslia rady ako pásy, aby sa veľká hala dala prečítať |
+| Predlohu haly nemôžem nasadiť | smie ju nasadiť len admin a len do prázdneho plánu |
+| Miesto sa nedá vymazať | je predané. To je naschvál — najprv zruš vstupenku |
 
 ---
 
