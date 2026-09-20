@@ -54,6 +54,13 @@ import { colors, radius, spacing, typography } from '@/theme';
  * entrance — which are drawn so somebody can find themselves on it and are not
  * for sale.
  */
+/**
+ * The size every seat is laid out at, before the zoom shrinks it.
+ *
+ * Big enough that nothing about it is sub-pixel; the transform does the rest.
+ */
+const DOT_BOX = 24;
+
 export default function SeatPickerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -894,23 +901,28 @@ export default function SeatPickerScreen() {
                     style={[
                       styles.dot,
                       {
-                        width: at.size,
-                        height: at.size,
                         /*
-                         * Not size / 2.
+                         * A seat is a 24pt box, shrunk by a transform — never
+                         * a 1.6pt box blown up by one.
                          *
-                         * A seat is drawn in the plan's own units, so its box
-                         * is a couple of units across and the browser rounds
-                         * that up to whole pixels while leaving the radius
-                         * where it was: a 2px box with a 0.79px radius, which
-                         * the zoom then blows up into a crisp rounded SQUARE.
-                         * A radius larger than the box is clamped to exactly
-                         * half of it, whatever the rounding did, so it is a
-                         * circle at every zoom.
+                         * Laid out at its true size in the plan's units, a
+                         * seat's box is under two CSS pixels, and the browser
+                         * rounds that to whole device pixels SEPARATELY in
+                         * width and height depending on the sub-pixel it
+                         * lands on: 1x2 here, 2x1 there, 2x2 next door. The
+                         * zoom then multiplies those by fifteen, which is why
+                         * the same stand came out as a mixture of capsules,
+                         * specks and circles. A box that is 24 points before
+                         * the transform has nothing left to round.
                          */
-                        borderRadius: at.size,
-                        left: at.left - at.size / 2,
-                        top: at.top - at.size / 2,
+                        width: DOT_BOX,
+                        height: DOT_BOX,
+                        borderRadius: DOT_BOX / 2,
+                        left: at.left - DOT_BOX / 2,
+                        top: at.top - DOT_BOX / 2,
+                        // Scales about the centre, so the seat stays where it
+                        // was put.
+                        transform: [{ scale: at.size / DOT_BOX }],
                       },
                       seat.mine_claim === 'held' ? styles.dotMine
                         : seat.mine ? styles.dotBought
