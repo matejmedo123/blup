@@ -133,7 +133,27 @@ export function splitOf(shape: ShapePoint[]): number {
  * `at(u, v)`: u runs 0..1 along the band, v runs 0..1 across it, 0 being the
  * first half of the outline.
  */
+/*
+ * One band per outline, not one per seat.
+ *
+ * `bandOf` measures both edges and every row it is asked for — a few thousand
+ * points of work. The layout calls it once per seat, and a stand has three
+ * hundred of them, so without this the same measurement was redone until it
+ * was the most expensive thing on the screen. The outline is the key: it is
+ * the only thing the answer depends on, and it is replaced rather than
+ * edited when a sector is redrawn.
+ */
+const bands = new WeakMap<ShapePoint[], ReturnType<typeof measureBand>>();
+
 export function bandOf(shape: ShapePoint[]) {
+  const known = bands.get(shape);
+  if (known) return known;
+  const made = measureBand(shape);
+  bands.set(shape, made);
+  return made;
+}
+
+function measureBand(shape: ShapePoint[]) {
   const n = shape.length;
   const half = splitOf(shape);
   const front = shape.slice(0, half);
@@ -279,9 +299,17 @@ export function seatSize(
   perRow: number,
   planWidth: number,
   planHeight: number,
+  /**
+   * How many seats row `r` actually has. A wider row holds more of them, not
+   * the same ones further apart, so the distance between two neighbours — the
+   * one number a seat has to fit into — can only be read off a row together
+   * with its own count. Left out, every row is assumed to hold `perRow`.
+   */
+  seatsInRow?: (row: number) => number,
 ) {
   const across = Math.max(perRow, 1);
   const down = Math.max(rows, 1);
+  const count = (r: number) => Math.max(seatsInRow?.(r) ?? across, 1);
 
   if (!shape) {
     const cellW = (bounds.width * planWidth) / across;
@@ -290,9 +318,6 @@ export function seatSize(
   }
 
   const band = bandOf(shape);
-  // The same shortest row the layout spaces every row by, so the seat size and
-  // the gap it has to sit in are worked out from one number rather than two
-  // that can disagree.
   const scaleX = planWidth;
   const scaleY = planHeight;
   const lengthOf = (v: number) => {
@@ -305,7 +330,12 @@ export function seatSize(
     }
     return total;
   };
-  const along = Math.min(lengthOf(0.5 / down), lengthOf((down - 0.5) / down)) / across;
+  // The tightest row there is, measured against the seats that row holds:
+  // one seat has to fit in that gap and every other row has more room.
+  let along = Infinity;
+  for (let r = 0; r < down; r += 1) {
+    along = Math.min(along, lengthOf((r + 0.5) / down) / count(r));
+  }
 
   const mid = band.at(0.5, 0);
   const far = band.at(0.5, 1);

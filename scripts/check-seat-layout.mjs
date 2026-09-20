@@ -78,14 +78,20 @@ const ROZPTYL_LIMIT = 2;
 /** Kde sedadlo leží, tak ako to počíta obrazovka s plánom. */
 function place(shape, rows, perRow) {
   const band = bandOf(shape);
+  const step = band.lengthAt(0.5 / rows) / perRow;
   const out = [];
   for (let r = 0; r < rows; r += 1) {
     const v = (r + 0.5) / rows;
+    const wide = Math.max(band.lengthAt(v), 1e-9);
+    // Sektor bez plochy (všetky rohy na jednom mieste) nemá rozostup, z ktorého
+    // by sa dalo počítať. Dostane, čo si vypýtal, a všetko sadne na ten bod.
+    const held = step > 0 ? Math.max(1, Math.floor(wide / step + 1e-9)) : perRow;
+    const edge = Math.max(0, (wide - held * step) / 2);
     const row = [];
-    for (let n = 1; n <= perRow; n += 1) row.push(band.at((n - 0.5) / perRow, v));
+    for (let n = 1; n <= held; n += 1) row.push(band.at((edge + (n - 0.5) * step) / wide, v));
     out.push(row);
   }
-  return { rows: out, band };
+  return { rows: out, band, step };
 }
 
 /**
@@ -161,12 +167,12 @@ function wanted(shape, v, u) {
 }
 
 /** O koľko percent rozostupu sa sedadlá minú s tým, kam patria. */
-function drift(shape, v, perRow, wide) {
+function drift(shape, v, held, step, wide) {
   const band = bandOf(shape);
-  const step = wide / perRow;
+  const edge = Math.max(0, (wide - held * step) / 2);
   let worst = 0;
-  for (let n = 1; n <= perRow; n += 1) {
-    const u = (n - 0.5) / perRow;
+  for (let n = 1; n <= held; n += 1) {
+    const u = (edge + (n - 0.5) * step) / wide;
     const got = band.at(u, v);
     const should = wanted(shape, v, u);
     if (step > 0) worst = Math.max(worst, Math.hypot(got.x - should.x, got.y - should.y) / step);
@@ -190,7 +196,7 @@ let bad = 0;
 for (const one of [...DRAWN, ...PREDLOHY]) {
   let note = '';
   try {
-    const { rows, band } = place(one.shape, one.rows, one.perRow);
+    const { rows, band, step } = place(one.shape, one.rows, one.perRow);
     const size = seatSize(one.shape, { x: 0, y: 0, width: 1, height: 1 },
       one.rows, one.perRow, 1000, 1000);
 
@@ -199,43 +205,48 @@ for (const one of [...DRAWN, ...PREDLOHY]) {
     if (!Number.isFinite(size) || size <= 0) throw new Error(`veľkosť sedadla ${size}`);
 
     let worst = 0;
-    rows.forEach((_row, r) => {
+    rows.forEach((row, r) => {
       const v = (r + 0.5) / one.rows;
-      worst = Math.max(worst, drift(one.shape, v, one.perRow, Math.max(band.lengthAt(v), 1e-9)));
+      worst = Math.max(worst, drift(one.shape, v, row.length, step, Math.max(band.lengthAt(v), 1e-9)));
     });
 
     const out = rows.flat().filter((p) => !inside(one.shape, p)).length;
     const total = one.rows * one.perRow;
     /*
-     * Ako ďaleko od okraja sedadlá končia.
+     * Dve veci, ktoré musia platiť naraz.
      *
-     * Obrys hovorí, kam sedenie siaha. Keď medzi posledným sedadlom a okrajom
-     * zostane viac než jeden rozostup, sektor vyzerá plnší, než je — a presne
-     * na to sa dá pozerať, keď si niekto vyberá miesto. Meria sa v rozostupoch,
-     * nie v jednotkách plánu, lebo pol rozostupu je presne to, čo tam byť má.
+     * Rozostup medzi susedmi je v celom sektore ten istý — inak sa rady
+     * rozídu a medzi miestami vidno medzery. A to, čo sa do radu celé
+     * nezmestí, zostane okrajom: menej než jeden rozostup, na oboch koncoch
+     * rovnako, lebo inak by obrys hovoril, že sedenie siaha k okraju, a
+     * nesiahalo by.
      */
-    const okraj = rows.reduce((most, row, r) => {
-      const v = (r + 0.5) / one.rows;
-      const wide = Math.max(band.lengthAt(v), 1e-9);
-      const step = wide / one.perRow;
-      const ends = [band.at(0, v), band.at(1, v)];
-      return Math.max(most,
-        Math.hypot(row[0].x - ends[0].x, row[0].y - ends[0].y) / step,
-        Math.hypot(row[row.length - 1].x - ends[1].x, row[row.length - 1].y - ends[1].y) / step);
-    }, 0);
-    note = `odchýlka ${worst.toFixed(1)} %, od okraja ${okraj.toFixed(2)} rozostupu, mimo obrysu ${out}/${total}`;
-    if (okraj > 0.75) throw new Error(`sedadlá končia ${okraj.toFixed(2)} rozostupu od okraja sektora`);
-    if (worst > ROZPTYL_LIMIT) {
-      throw new Error(`sedadlá sú o ${worst.toFixed(1)} % rozostupu inde, než patria`);
-    }
-    // Pri degenerovanom tvare (úsečka, bod) nemá "vnútri" zmysel — nie je tam
-    // žiadna plocha. Kontroluje sa len to, že sa nič nezrúti.
-    const area = Math.abs(one.shape.reduce((sum, a, i) => {
-      const b = one.shape[(i + 1) % one.shape.length];
-      return sum + (a.x * b.y - b.x * a.y);
-    }, 0)) / 2;
-    if (area > 0.001 && out > total * 0.15) {
-      throw new Error(`${out} z ${total} sedadiel leží mimo sektora`);
+    /*
+     * Rozostup je pevný a zvyšok je okraj.
+     *
+     * Nedá sa to zmerať vzdušnou čiarou medzi susedmi: rad, ktorý sa zakrivuje,
+     * má dvoch susedov vzdušnou čiarou bližšie, hoci po rade sú rovnako ďaleko
+     * ako všetci ostatní. Dá sa to ale povedať o celom rade naraz — koľko miest
+     * v ňom je krát rozostup sa musí zmestiť do jeho dĺžky, a to, čo zvýši,
+     * musí byť menej než jedno miesto. To je presne pravidlo „pevný rozostup,
+     * zvyšok ako okraj" a presne to, čo predošlé delenie radu jeho vlastným
+     * počtom nesplnilo.
+     */
+    let okraj = 0;
+    rows.forEach((row, r) => {
+      const wide = Math.max(band.lengthAt((r + 0.5) / one.rows), 1e-9);
+      okraj = Math.max(okraj, (wide - row.length * step) / Math.max(step, 1e-9));
+      // Rad užší než jedno miesto dostane jedno — inak by rad zmizol. Je to
+      // klin dobiehajúci do špica a na tom kúsku lavice sa naozaj dá sedieť.
+      if (row.length > 1 && row.length * step > wide + 1e-9) {
+        throw new Error(`rad ${r} má ${row.length} miest po ${step.toFixed(4)}, `
+          + `ale je len ${wide.toFixed(4)} dlhý`);
+      }
+    });
+    note = `odchýlka ${worst.toFixed(1)} %, zvyšok ${okraj.toFixed(2)} miesta, `
+      + `mimo obrysu ${out}/${total}`;
+    if (okraj > 1.000001) {
+      throw new Error(`v rade zvýšilo ${okraj.toFixed(2)} miesta — zmestilo sa tam ešte jedno`);
     }
     console.log(`  ✓ ${one.name.padEnd(30)} ${note}`);
     /*

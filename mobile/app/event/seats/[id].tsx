@@ -62,6 +62,10 @@ import { colors, radius, spacing, typography } from '@/theme';
  */
 const DOT_BOX = 24;
 
+/** Roughly how big the card over a seat is, for deciding which side it fits. */
+const PEEK_W = 190;
+const PEEK_H = 62;
+
 export default function SeatPickerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -265,6 +269,25 @@ export default function SeatPickerScreen() {
     [rowWidths],
   );
 
+  /**
+   * How big a seat is drawn in each sector — worked out once per sector.
+   *
+   * It depends on the sector's outline and on how many seats each of its rows
+   * holds, and on nothing about the seat itself. Worked out per seat instead,
+   * a stand of three hundred measured its own outline three hundred times.
+   */
+  const seatSizes = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const section of sections) {
+      const inRow = rowWidths.get(section.id);
+      out.set(section.id, seatSize(
+        section.shape, section, section.rows, section.row_width, planWidth, planHeight,
+        inRow ? (row) => inRow.get(row) ?? section.row_width : undefined,
+      ));
+    }
+    return out;
+  }, [sections, rowWidths, planWidth, planHeight]);
+
 
 
   /**
@@ -326,10 +349,10 @@ export default function SeatPickerScreen() {
     const down = Math.max(section.rows, 1);
     const width = section.width * planWidth;
     const height = section.height * planHeight;
-    // One size for every seat in the sector, worked out once. Sized from its
-    // own neighbour gap instead, a narrowing stand came out as a mixture of
-    // dots, circles and blobs.
-    const size = seatSize(section.shape, section, section.rows, section.row_width, planWidth, planHeight);
+    // One size for every seat in the sector, worked out once for the whole
+    // sector. Sized from its own neighbour gap instead, a narrowing stand came
+    // out as a mixture of dots, circles and blobs.
+    const size = seatSizes.get(section.id) ?? 1;
 
     if (!section.shape) {
       const cellW = width / across;
@@ -353,29 +376,48 @@ export default function SeatPickerScreen() {
     const v = (seat.row_index + 0.5) / down;
 
     /*
-     * A row is spread across its own width — the whole of it.
+     * A row runs the whole width of the sector — and a wider row holds more
+     * seats, rather than the same seats further apart.
      *
-     * The other rule was one spacing for the whole sector, taken from the
-     * shortest row and centred, so every row lined up into columns. It does,
-     * and in a sector whose rows differ in length it leaves the wide rows
-     * mostly empty: a drawn five-corner sector filled 63% of itself, an arc
-     * stand 57%, and a sector running to a point 9%. The outline says the
-     * seating reaches the edge and the seating does not — which is the one
-     * thing a plan is for.
+     * Two rules came before this one and both were wrong in the same place.
+     * One spacing for the sector, taken from the shortest row and centred,
+     * lined every row into columns and left the wide rows mostly empty: a
+     * drawn five-corner sector filled 63% of itself, an arc stand 57%, a
+     * sector running to a point 9%. Spreading each row across its own width
+     * filled the sector but stretched the seating — the back row of a wedge
+     * had the same fourteen seats as the front, just further apart, which is
+     * not how a stand is built.
      *
-     * So every row runs from one edge of the sector to the other. Rows of
-     * different lengths then sit at slightly different spacings, which is
-     * what a stand that narrows actually looks like, and is the same
-     * parameter the database lays the grid out on when it decides which
-     * seats exist at all.
+     * Seats are a fixed size and sit a fixed distance apart; a row that is
+     * half as long again simply fits half as many again. The database is what
+     * decides that, when it works out which seats exist at all, so the
+     * number to spread a row over is the number of seats that row HAS.
      */
-    const here = band.at((seat.number - 0.5) / across, v);
+    /*
+     * The spacing is the same in every row; what does not fit stays as a
+     * margin at both ends.
+     *
+     * Dividing a row by its own seat count fills it exactly, and gets the
+     * spacing a little wrong in every row — thirteen seats in a row that has
+     * room for 13.4 come out further apart than fourteen in the row below.
+     * The columns drift and the difference reads as gaps. A row is built the
+     * way a stand is: seats a fixed distance apart, as many as fit, and the
+     * remainder is the aisle at either end.
+     *
+     * The spacing comes from row A, the same row the database counted from.
+     */
+    const inRow = Math.max(seatsPerRow(section.id).get(seat.row_index) ?? across, 1);
+    const first = Math.max(seatsPerRow(section.id).get(0) ?? across, 1);
+    const wide = Math.max(band.lengthAt(v), 1e-9);
+    const step = band.lengthAt(0.5 / down) / first;
+    const edge = Math.max(0, (wide - inRow * step) / 2);
+    const here = band.at((edge + (seat.number - 0.5) * step) / wide, v);
     return {
       left: (here.x - section.x) * planWidth,
       top: (here.y - section.y) * planHeight,
       size,
     };
-  }, [planWidth, planHeight, seatsPerRow]);
+  }, [planWidth, planHeight, seatsPerRow, seatSizes]);
 
   /**
    * The sector named in the card above the plan.
@@ -484,7 +526,7 @@ export default function SeatPickerScreen() {
      * on screen where you can see what you picked.
      */
     const dot = section.rows > 0 && section.row_width > 0
-      ? seatSize(section.shape, section, section.rows, section.row_width, planWidth, planHeight)
+      ? seatSizes.get(section.id) ?? 0
       : 0;
     const readable = dot > 0 ? 13 / dot : Infinity;
     const target = Math.max(1, Math.min(18, readable, Math.min(fillW, fillH)));
@@ -492,7 +534,7 @@ export default function SeatPickerScreen() {
       { x: (section.x + section.width / 2) * planWidth, y: (section.y + section.height / 2) * planHeight },
       target,
     );
-  }, [planWidth, planHeight, frame]);
+  }, [planWidth, planHeight, frame, seatSizes]);
 
 
   if (seatMap.isLoading) return <Screen><LoadingState label="Načítavam plán…" /></Screen>;
@@ -913,7 +955,12 @@ export default function SeatPickerScreen() {
                      * across four other stands. Undoing the zoom here leaves
                      * it where it belongs and the size it was meant to be.
                      */
-                    transform: [{ scale: 1 / Math.max(scale, 0.2) }],
+                    // Both, in one list: a transform given here replaces the
+                    // one in the stylesheet rather than adding to it, and the
+                    // one in the stylesheet is what centres the name on the
+                    // sector.
+                    transform: [{ translateX: -60 }, { translateY: -8 },
+                      { scale: 1 / Math.max(scale, 0.2) }],
                   }]}
                 >
                   <Text
@@ -938,7 +985,7 @@ export default function SeatPickerScreen() {
                 <SeatField
                   width={width}
                   height={height}
-                  radius={seatSize(section.shape, section, section.rows, section.row_width, planWidth, planHeight) / 2}
+                  radius={(seatSizes.get(section.id) ?? 1) / 2}
                   seats={seats.map((seat) => {
                     const at = seatSpot(section, seat);
                     return at ? { seat, x: at.left, y: at.top } : null;
@@ -959,6 +1006,20 @@ export default function SeatPickerScreen() {
         {peek ? (() => {
           const section = peek.section;
           const at = seatSpot(section, peek.seat);
+          /*
+           * Which side of the seat the card goes on.
+           *
+           * The plan clips what leaves it, so a card sitting to the right of a
+           * seat in the right-hand stand was cut in half — and the half that
+           * went missing was the seat number. Near an edge it goes the other
+           * way instead.
+           */
+          const spotX = frame.width / 2 + view.x
+            + (section.x * planWidth + (at?.left ?? 0) - planWidth / 2) * scale;
+          const spotY = frame.height / 2 + view.y
+            + (section.y * planHeight + (at?.top ?? 0) - planHeight / 2) * scale;
+          const flipX = frame.width > 0 && spotX + PEEK_W + 14 > frame.width;
+          const flipY = spotY - PEEK_H < 0;
           const state = peek.seat.mine_claim === 'held' ? 'držíš v košíku'
             : peek.seat.mine ? 'máš kúpené'
               : peek.seat.taken ? 'obsadené'
@@ -973,7 +1034,23 @@ export default function SeatPickerScreen() {
                 {
                   left: section.x * planWidth + (at?.left ?? 0),
                   top: section.y * planHeight + (at?.top ?? 0),
+                  /*
+                   * Undo the zoom about the card's own corner.
+                   *
+                   * A scale with no origin given runs about the middle, so a
+                   * card 170 wide shrunk eight times moved its own corner
+                   * seventy units off the seat — and seventy units of a plan
+                   * zoomed eight times is five hundred pixels. The card was
+                   * on the page, correct, and nowhere near the seat it was
+                   * about.
+                   */
+                  transformOrigin: 'top left',
                   transform: [{ scale: 1 / Math.max(scale, 0.2) }],
+                  // The step aside from the seat is in the plan's units too,
+                  // so the zoom multiplies it: fourteen units became a
+                  // hundred and twelve pixels.
+                  marginLeft: (flipX ? -(PEEK_W + 14) : 14) / Math.max(scale, 0.2),
+                  marginTop: (flipY ? 14 : -PEEK_H) / Math.max(scale, 0.2),
                 },
               ]}
             >

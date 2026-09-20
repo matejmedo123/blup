@@ -282,27 +282,39 @@ begin
   n_all := (res ->> 'total')::integer;
   reset role;
 
-  -- Na páse nevypadne nič: každé miesto niekam patrí.
-  assert n_all = 60, format('pás dostane celú mriežku, dostal %s', n_all);
+  -- Na páse nevypadne nič: každé miesto niekam patrí. Koľko ich je, sa ale
+  -- riadi šírkou radu — do užšieho sa ich zmestí menej — takže mriežka
+  -- 6 × 10 nedá šesťdesiat. Rad A áno, ten rozostup udáva.
+  assert n_all between 40 and 60,
+    format('pás má mať medzi 40 a 60 miestami, má %s', n_all);
+  assert (select count(*) from public.venue_seats
+          where venue_section_id = bent and row_label = 'A') = 10,
+    'rad A má toľko miest, koľko si organizátor vypýtal';
+  assert (select count(*) from public.venue_seats
+          where venue_section_id = bent and row_label = 'F')
+       < (select count(*) from public.venue_seats
+          where venue_section_id = bent and row_label = 'A'),
+    'do užšieho radu sa zmestí menej miest, nie tie isté ďalej od seba';
 
   -- A každé z nich leží vnútri toho, čo je nakreslené. Toto je tá vlastnosť,
-  -- na ktorej celé kreslenie sektorov stojí.
+  -- na ktorej celé kreslenie sektorov stojí. Rad sa delí svojím vlastným
+  -- počtom miest, nie vypýtaným — to je tá istá zmena.
   select count(*) into outside
   from public.venue_seats vs
   join public.venue_sections s on s.id = vs.venue_section_id
   cross join lateral (
-    select dense_rank() over (order by vs2.row_label) - 1 as r
-    from public.venue_seats vs2 where vs2.id = vs.id
-  ) ignored
+    select count(*) as per from public.venue_seats vs2
+    where vs2.venue_section_id = vs.venue_section_id and vs2.row_label = vs.row_label
+  ) wide
   where vs.venue_section_id = bent
     and not public.jsonb_to_polygon(s.shape) @> public.band_point(
           s.shape,
-          (vs.seat_number - 0.5) / 10.0,
+          (vs.seat_number - 0.5) / wide.per,
           (ascii(vs.row_label) - ascii('A') + 0.5) / 6.0);
   assert outside = 0, format('%s miest leží mimo nakreslenej plochy', outside);
 
-  -- Predný rad zužujúcej sa tribúny je kratší než zadný: rovnaký počet miest
-  -- na kratšej hrane znamená, že sedia hustejšie.
+  -- Predný rad zužujúcej sa tribúny je kratší než zadný — preto ich má aj
+  -- menej.
   select abs((public.band_point(s.shape, 0.95, 0.05))[0] - (public.band_point(s.shape, 0.05, 0.05))[0])
     into back from public.venue_sections s where s.id = bent;
   select abs((public.band_point(s.shape, 0.95, 0.95))[0] - (public.band_point(s.shape, 0.05, 0.95))[0])
