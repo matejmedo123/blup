@@ -369,8 +369,13 @@ export default function SeatPickerScreen() {
    */
   const shown = useMemo(() => {
     const picked = chosenId ? sections.find((section) => section.id === chosenId) ?? null : null;
+    // What you picked while you are still there; once you have dragged away,
+    // whatever is now in the middle of the frame. The pick is also what shows
+    // in the moment between choosing it and the plan arriving, when nothing is
+    // focused yet — otherwise the dropdown would blink back to its placeholder
+    // exactly as you used it.
     if (picked && onScreen(picked)) return picked;
-    return focused;
+    return focused ?? picked;
   }, [chosenId, sections, onScreen, focused]);
 
 
@@ -983,6 +988,7 @@ export default function SeatPickerScreen() {
         {pickerList.map((section) => (
           <Pressable
             key={section.id}
+            testID={`sector-option-${section.name}`}
             style={styles.row}
             disabled={busy}
             onPress={() => {
