@@ -118,3 +118,28 @@ export function sectorLabelStyle(width: number, height: number) {
 export function sectorRadius(width: number, height: number) {
   return Math.max(2, Math.min(radius.sm, Math.min(width, height) / 4));
 }
+
+/**
+ * How wide the sector is at a given height, in plan fractions.
+ *
+ * A stand that narrows towards the pitch does not hold the same number of
+ * chairs in every row, and its rows are not the same length either. Laying
+ * them out across the bounding box draws them straight through the sloping
+ * edge — the seats end up outside the stand they belong to.
+ *
+ * So a row is laid out across the sector's actual width AT THAT ROW: the
+ * horizontal line through it, clipped by the outline. Null when the line
+ * misses the shape entirely, which happens at the very top and bottom of a
+ * pointed sector.
+ */
+export function rowExtent(shape: ShapePoint[], y: number): { x0: number; x1: number } | null {
+  const crossings: number[] = [];
+  for (let i = 0; i < shape.length; i += 1) {
+    const a = shape[i];
+    const b = shape[(i + 1) % shape.length];
+    if ((a.y > y) === (b.y > y)) continue;
+    crossings.push(a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x));
+  }
+  if (crossings.length < 2) return null;
+  return { x0: Math.min(...crossings), x1: Math.max(...crossings) };
+}

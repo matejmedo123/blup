@@ -22,9 +22,19 @@ import {
  * nothing. `onMoveShouldSetPanResponder` only claims the gesture once a finger
  * has actually travelled, so a tap still reaches the seat underneath.
  */
+export interface ZoomPanView { scale: number; x: number; y: number }
+
 export interface ZoomPanHandle {
   reset: () => void;
   zoomBy: (factor: number) => void;
+  /**
+   * Put a point of the drawing in the middle of the frame at a given zoom.
+   *
+   * Used to go to a sector somebody tapped, rather than opening it in a view
+   * of its own: the stand fills the screen but its neighbours are still there,
+   * one drag away, which is how a plan of a hall is read.
+   */
+  focus: (point: { x: number; y: number }, scale: number) => void;
 }
 
 interface Props {
@@ -38,13 +48,17 @@ interface Props {
   maxScale?: number;
   style?: StyleProp<ViewStyle>;
   onScaleChange?: (scale: number) => void;
+  /** The whole transform, plus the frame it is inside — for deciding what is on screen. */
+  onViewChange?: (view: ZoomPanView, frame: { width: number; height: number }) => void;
 }
 
 export const ZoomPan = React.forwardRef<ZoomPanHandle, Props>(function ZoomPan({
   children, contentWidth, contentHeight,
-  initialScale = 1, minScale = 1, maxScale = 6, style, onScaleChange,
+  initialScale = 1, minScale = 1, maxScale = 6, style, onScaleChange, onViewChange,
 }, ref) {
   const [frame, setFrame] = React.useState({ width: 0, height: 0 });
+  const frameSizeRef = React.useRef(frame);
+  frameSizeRef.current = frame;
   const [view, setView] = React.useState({ scale: initialScale, x: 0, y: 0 });
 
   // The gesture reads and writes these directly. State alone would lag a finger
@@ -71,12 +85,21 @@ export const ZoomPan = React.forwardRef<ZoomPanHandle, Props>(function ZoomPan({
     live.current = clamped;
     setView(clamped);
     onScaleChange?.(clamped.scale);
-  }, [clamp, onScaleChange]);
+    onViewChange?.(clamped, frameSizeRef.current);
+  }, [clamp, onScaleChange, onViewChange]);
 
   React.useImperativeHandle(ref, () => ({
     reset: () => apply({ scale: initialScale, x: 0, y: 0 }),
     zoomBy: (factor: number) => apply({ ...live.current, scale: live.current.scale * factor }),
-  }), [apply, initialScale]);
+    // The offset that brings a point of the content to the centre: the content
+    // is centred first, so a point at its middle needs no offset at all, and
+    // one at the edge needs half the content's scaled size.
+    focus: (point, scale) => apply({
+      scale,
+      x: (contentWidth / 2 - point.x) * scale,
+      y: (contentHeight / 2 - point.y) * scale,
+    }),
+  }), [apply, initialScale, contentWidth, contentHeight]);
 
   const responder = React.useMemo(() => PanResponder.create({
     // Not on start: a press must be allowed to reach the seat under it. The

@@ -16,6 +16,11 @@ PGBIN="${PGBIN:-$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -
 WORKDIR="${BLUP_PG_WORKDIR:-/tmp/blup-pgtest}"
 PGDATA="$WORKDIR/data"
 SOCKET="$WORKDIR/socket"
+# Talk to the throwaway cluster over TCP rather than a unix socket. Some
+# sandboxes sweep socket files out of /tmp while the server is still running,
+# and every psql after that reports "no such file or directory" as though the
+# database had never started — which looks exactly like a broken migration.
+PGPORT="${BLUP_VERIFY_PORT:-55433}"
 DB="blup_verify"
 
 export PATH="$PGBIN:$PATH"
@@ -45,19 +50,19 @@ else
 fi
 
 RUN "initdb -D '$PGDATA' -U postgres --auth=trust >/dev/null"
-RUN "pg_ctl -D '$PGDATA' -o \"-k '$SOCKET' -h ''\" -w -l '$WORKDIR/pg.log' start >/dev/null"
+RUN "pg_ctl -D '$PGDATA' -o '-h 127.0.0.1 -p $PGPORT' -w -l '$WORKDIR/pg.log' start >/dev/null"
 
-PSQL="psql -h $SOCKET -U postgres -v ON_ERROR_STOP=1 --quiet"
+PSQL="psql -h 127.0.0.1 -p $PGPORT -U postgres -v ON_ERROR_STOP=1 --quiet"
 if [ "$(id -u)" = "0" ]; then
-  PSQL="su ${BLUP_PG_USER:-postgres} -s /bin/bash -c \"PATH=$PATH psql -h $SOCKET -U postgres -v ON_ERROR_STOP=1 --quiet"
+  PSQL="su ${BLUP_PG_USER:-postgres} -s /bin/bash -c \"PATH=$PATH psql -h 127.0.0.1 -p $PGPORT -U postgres -v ON_ERROR_STOP=1 --quiet"
 fi
 
 run_sql() {
   if [ "$(id -u)" = "0" ]; then
     su "${BLUP_PG_USER:-postgres}" -s /bin/bash -c \
-      "PATH=$PATH psql -h '$SOCKET' -U postgres -v ON_ERROR_STOP=1 --quiet $*"
+      "PATH=$PATH psql -h 127.0.0.1 -p $PGPORT -U postgres -v ON_ERROR_STOP=1 --quiet $*"
   else
-    psql -h "$SOCKET" -U postgres -v ON_ERROR_STOP=1 --quiet $*
+    psql -h 127.0.0.1 -p "$PGPORT" -U postgres -v ON_ERROR_STOP=1 --quiet $*
   fi
 }
 

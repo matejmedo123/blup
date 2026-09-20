@@ -267,3 +267,118 @@ $fn$;
 
 revoke execute on function public.reflow_section_seats(uuid) from public, anon;
 grant execute on function public.reflow_section_seats(uuid) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Predloha nasype sedadlá len tam, kde tribúna naozaj je
+-- ---------------------------------------------------------------------------
+-- apply_venue_preset vkladal miesta holou mriežkou rady × miesta. Sektor
+-- v predlohe je pritom výseč prstenca, takže sedadlá v rohoch skončili mimo
+-- obrysu — a kupujúci ich tam aj videl ležať. Teraz ide cez section_seat_grid
+-- rovnako ako editor, takže platí to isté pravidlo na oboch cestách.
+--
+-- Musí to byť tu a nie pri samotnej predlohe: section_seat_grid vzniká až
+-- v tejto migrácii.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.apply_venue_preset(
+  p_event_id uuid,
+  p_preset   text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $fn$
+declare
+  v_event  public.events%rowtype;
+  v_preset jsonb;
+  v_sec    jsonb;
+  v_map    uuid;
+  v_order  integer := 0;
+  v_id     uuid;
+  v_rows   integer;
+  v_per    integer;
+begin
+  -- Oprávnenie ako prvé, pred akýmkoľvek pravidlom o tom, či sa to dá.
+  -- Inak by sa cudzí človek z odpovede dozvedel, či event plán má — a dostal
+  -- by inú chybu podľa toho, čo je v databáze.
+  perform public.assert_can_manage_venue_map(null);
+
+  select * into v_event from public.events where id = p_event_id;
+  if not found then
+    raise exception 'EVENT_NOT_AVAILABLE';
+  end if;
+  if v_event.organization_id is null then
+    raise exception 'EVENT_HAS_NO_ORGANIZATION'
+      using hint = 'Plán patrí organizácii, aby sa dal použiť aj na ďalšie večery.';
+  end if;
+  if v_event.venue_map_id is not null then
+    raise exception 'PLAN_ALREADY_EXISTS'
+      using hint = 'Event už plán má. Najprv ho odpoj alebo zmaž.';
+  end if;
+
+  select value into v_preset
+  from jsonb_array_elements(public.venue_presets()) value
+  where value ->> 'code' = p_preset;
+
+  if v_preset is null then
+    raise exception 'UNKNOWN_PRESET';
+  end if;
+
+  insert into public.venue_maps (organization_id, name, image_width, image_height, created_by)
+  values (v_event.organization_id, v_preset ->> 'name', 1600, 1200, auth.uid())
+  returning id into v_map;
+
+  for v_sec in select * from jsonb_array_elements(v_preset -> 'sections')
+  loop
+    v_order := v_order + 1;
+    insert into public.venue_sections (
+      venue_map_id, ticket_type_id, name, colour,
+      x, y, width, height, rotation, kind, sort_order, shape
+    )
+    values (
+      v_map,
+      (select tt.id from public.ticket_types tt
+       where tt.event_id = p_event_id and tt.name = v_sec ->> 'name'
+       limit 1),
+      v_sec ->> 'name',
+      v_sec ->> 'colour',
+      (v_sec ->> 'x')::numeric,
+      (v_sec ->> 'y')::numeric,
+      (v_sec ->> 'width')::numeric,
+      (v_sec ->> 'height')::numeric,
+      coalesce((v_sec ->> 'rotation')::numeric, 0),
+      v_sec ->> 'kind',
+      v_order,
+      case when jsonb_typeof(v_sec -> 'shape') = 'array' then v_sec -> 'shape' else null end
+    )
+    returning id into v_id;
+
+    v_rows := nullif(v_sec ->> 'rows', '')::integer;
+    v_per  := nullif(v_sec ->> 'per_row', '')::integer;
+
+    -- Státie je plocha, nie rad stoličiek, a orientačný bod sa nepredáva
+    -- vôbec. Ani jednému sa miesta negenerujú, nech to predloha pýta čokoľvek.
+    if v_rows is not null and v_per is not null
+       and v_rows between 1 and 200 and v_per between 1 and 200
+       and coalesce(v_sec ->> 'kind', 'standard')
+           not in ('standing', 'stage', 'bar', 'entrance', 'other') then
+      -- Cez section_seat_grid, nie cez holú mriežku: sektor v predlohe je
+      -- výseč prstenca, a obyčajná mriežka doň nasype sedadlá aj do rohov,
+      -- kde tribúna nie je. Kupujúci ich vidí ležať mimo obrysu.
+      insert into public.venue_seats (venue_section_id, row_label, seat_number, is_sellable)
+      select v_id, g.row_label, g.seat_number, true
+      from public.section_seat_grid(
+        v_id, v_rows, v_per, 0,
+        coalesce(v_sec ->> 'row_style', 'letters'), v_sec ->> 'row_prefix', 1) g;
+    end if;
+  end loop;
+
+  update public.events set venue_map_id = v_map where id = p_event_id;
+  return v_map;
+end;
+$fn$;
+
+revoke execute on function public.apply_venue_preset(uuid, text) from public, anon;
+grant execute on function public.apply_venue_preset(uuid, text) to authenticated;
