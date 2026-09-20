@@ -133,6 +133,35 @@ export default function PlanEditorScreen() {
   const [draft, setDraft] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
 
+  /**
+   * Which gesture is under way on an EXISTING sector. Null while drawing a new
+   * rectangle — that is the old behaviour and it stays the default, because an
+   * empty stretch of plan means "there is no sector here yet".
+   *
+   * Declared here with the rest of the state, not beside the handlers that use
+   * it: the screen returns early while the event and the map load, and a hook
+   * below that return changes the hook count between renders.
+   */
+  const [drag, setDrag] = useState<
+    {
+      mode: 'move' | 'resize' | 'rotate';
+      id: string;
+      x: number; y: number; w: number; h: number;
+      rotation: number;
+    } | null
+  >(null);
+  const dragStart = useRef<
+    {
+      x: number;
+      y: number;
+      rect: { x: number; y: number; w: number; h: number };
+      rotation: number;
+      /** Where the sector turns around, and the angle the finger started at. */
+      centre: { x: number; y: number };
+      pointerAngle: number;
+    } | null
+  >(null);
+
   const event = useQuery({
     queryKey: ['event', id],
     queryFn: () => getEvent(id!),
@@ -270,17 +299,154 @@ export default function PlanEditorScreen() {
     }
   };
 
-  // --- drawing --------------------------------------------------------------
+  // --- drawing, moving and resizing -----------------------------------------
+  const HANDLE = 30;
+  /** How far above the sector the rotation knob floats. */
+  const ROTATE_ARM = 34;
+
+  /** The sector under a point, topmost first — the one drawn last wins. */
+  const sectorAt = (x: number, y: number) => {
+    for (let i = existing.length - 1; i >= 0; i--) {
+      const section = existing[i];
+      // Hit-tested against the unrotated rectangle. Exact at 0°, which is
+      // almost every sector; for a turned one it is the same area seen
+      // straight, which is close enough to grab and far simpler than
+      // inverse-rotating every press.
+      const left = section.x * planWidth;
+      const top = section.y * planHeight;
+      const right = left + section.width * planWidth;
+      const bottom = top + section.height * planHeight;
+      if (x >= left && x <= right && y >= top && y <= bottom) return section;
+    }
+    return null;
+  };
+
+  /** The angle from a sector's centre to a point, with "straight up" as 0°. */
+  const angleFrom = (centre: { x: number; y: number }, x: number, y: number) => (
+    (Math.atan2(y - centre.y, x - centre.x) * 180) / Math.PI + 90
+  );
+
   const onStart = (e: GestureResponderEvent) => {
     const { locationX, locationY } = e.nativeEvent;
+
+    if (editing) {
+      const rect = {
+        x: editing.x * planWidth,
+        y: editing.y * planHeight,
+        w: editing.width * planWidth,
+        h: editing.height * planHeight,
+      };
+      const centre = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+      const rotation = editing.rotation ?? 0;
+
+      // 1. The rotation handle, floating above the top edge and turning with
+      //    the sector — so it is always at the sector's "up", whatever that
+      //    currently means.
+      const knob = rotateAround(
+        { x: centre.x, y: rect.y - ROTATE_ARM },
+        centre,
+        rotation,
+      );
+      if (Math.hypot(locationX - knob.x, locationY - knob.y) <= HANDLE) {
+        dragStart.current = {
+          x: locationX,
+          y: locationY,
+          rect,
+          rotation,
+          centre,
+          pointerAngle: angleFrom(centre, locationX, locationY),
+        };
+        setDrag({ mode: 'rotate', id: editing.id, ...rect, rotation });
+        return true;
+      }
+
+      // 2. The resize corner.
+      const onHandle = locationX >= rect.x + rect.w - HANDLE
+        && locationX <= rect.x + rect.w + HANDLE / 2
+        && locationY >= rect.y + rect.h - HANDLE
+        && locationY <= rect.y + rect.h + HANDLE / 2;
+
+      if (onHandle) {
+        dragStart.current = {
+          x: locationX, y: locationY, rect, rotation, centre,
+          pointerAngle: angleFrom(centre, locationX, locationY),
+        };
+        setDrag({ mode: 'resize', id: editing.id, ...rect, rotation });
+        return true;
+      }
+    }
+
+    // 3. An existing sector: select it and move it. Dragging a sector that is
+    //    already there is what somebody expects to be able to do, and until
+    //    now the only way to move one was to delete it and draw it again.
+    const hit = sectorAt(locationX, locationY);
+    if (hit) {
+      const rect = {
+        x: hit.x * planWidth,
+        y: hit.y * planHeight,
+        w: hit.width * planWidth,
+        h: hit.height * planHeight,
+      };
+      const centre = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+      dragStart.current = {
+        x: locationX, y: locationY, rect,
+        rotation: hit.rotation ?? 0,
+        centre,
+        pointerAngle: angleFrom(centre, locationX, locationY),
+      };
+      setEditingId(hit.id);
+      setDraft(null);
+      setDrag({ mode: 'move', id: hit.id, ...rect, rotation: hit.rotation ?? 0 });
+      return true;
+    }
+
+    // 3. Empty plan: draw a new one.
     origin.current = { x: locationX, y: locationY };
     setDraft({ x: locationX, y: locationY, w: 0, h: 0 });
     return true;
   };
 
   const onMove = (e: GestureResponderEvent) => {
-    if (!origin.current) return;
     const { locationX, locationY } = e.nativeEvent;
+
+    if (drag && dragStart.current) {
+      const from = dragStart.current;
+      const dx = locationX - from.x;
+      const dy = locationY - from.y;
+
+      if (drag.mode === 'rotate') {
+        // The sector follows the finger. Snapped only very near a right angle,
+        // so straightening a stand is easy without the angle ever feeling
+        // like it is fighting you.
+        const turned = from.rotation + (angleFrom(from.centre, locationX, locationY) - from.pointerAngle);
+        const wrapped = ((turned + 180) % 360 + 360) % 360 - 180;
+        const nearest = Math.round(wrapped / 90) * 90;
+        setDrag({
+          ...drag,
+          rotation: Math.abs(wrapped - nearest) <= 3 ? nearest : Math.round(wrapped * 10) / 10,
+        });
+        return;
+      }
+
+      if (drag.mode === 'move') {
+        // Kept inside the plan: a sector half off the edge is stored as
+        // fractions outside 0..1, which the database refuses anyway.
+        setDrag({
+          ...drag,
+          x: Math.max(0, Math.min(planWidth - from.rect.w, from.rect.x + dx)),
+          y: Math.max(0, Math.min(planHeight - from.rect.h, from.rect.y + dy)),
+        });
+      } else {
+        setDrag({
+          ...drag,
+          w: Math.max(18, Math.min(planWidth - from.rect.x, from.rect.w + dx)),
+          h: Math.max(18, Math.min(planHeight - from.rect.y, from.rect.h + dy)),
+        });
+      }
+      return;
+    }
+
+    if (!origin.current) return;
     const start = origin.current;
     // Dragging up or left is as valid as down or right, so the rectangle is
     // normalised rather than requiring one direction.
@@ -294,6 +460,39 @@ export default function PlanEditorScreen() {
 
   const onEnd = () => {
     origin.current = null;
+
+    if (drag) {
+      const moved = drag;
+      const from = dragStart.current;
+      dragStart.current = null;
+      setDrag(null);
+
+      // A tap that selected a sector is not a move. Without this every tap
+      // would write to the database and count as an edit.
+      const shifted = !from
+        || Math.abs(moved.x - from.rect.x) > 1 || Math.abs(moved.y - from.rect.y) > 1
+        || Math.abs(moved.w - from.rect.w) > 1 || Math.abs(moved.h - from.rect.h) > 1
+        || Math.abs(moved.rotation - from.rotation) > 0.05;
+      if (!shifted) return;
+
+      void (async () => {
+        setError(null);
+        try {
+          await updateSection(moved.id, {
+            x: moved.x / planWidth,
+            y: moved.y / planHeight,
+            width: moved.w / planWidth,
+            height: moved.h / planHeight,
+            rotation: moved.rotation,
+          });
+          await refresh();
+        } catch (caught) {
+          setError(messageFor(caught));
+        }
+      })();
+      return;
+    }
+
     // A tap is not a rectangle. Below this it was almost certainly a misfire.
     if (draft && (draft.w < 18 || draft.h < 18)) setDraft(null);
   };
@@ -742,25 +941,87 @@ export default function PlanEditorScreen() {
           </View>
         )}
 
-        {existing.map((section) => (
-          <View
-            key={section.id}
-            pointerEvents="none"
-            style={[styles.sector, {
-              left: section.x * planWidth,
-              top: section.y * planHeight,
-              width: section.width * planWidth,
-              height: section.height * planHeight,
-              borderColor: section.colour,
-              backgroundColor: `${section.colour}2E`,
-              // Drawn at the angle it is stored at, otherwise the editor and
-              // the buyer's plan disagree about the same hall.
-              transform: [{ rotate: `${section.rotation ?? 0}deg` }],
-            }, section.id === editingId && styles.sectorEditing]}
-          >
-            <Text style={styles.sectorName} numberOfLines={1}>{section.name}</Text>
-          </View>
-        ))}
+        {existing.map((section) => {
+          // While a sector is being dragged it is drawn from the gesture, not
+          // from what is stored — otherwise it would snap back on every frame
+          // until the save landed.
+          const live = drag?.id === section.id ? drag : null;
+          const left = live ? live.x : section.x * planWidth;
+          const top = live ? live.y : section.y * planHeight;
+          const width = live ? live.w : section.width * planWidth;
+          const height = live ? live.h : section.height * planHeight;
+
+          return (
+            <View
+              key={section.id}
+              pointerEvents="none"
+              style={[styles.sector, {
+                left,
+                top,
+                width,
+                height,
+                borderColor: section.colour,
+                backgroundColor: `${section.colour}2E`,
+                // Drawn at the angle it is stored at, otherwise the editor and
+                // the buyer's plan disagree about the same hall.
+                transform: [{ rotate: `${live ? live.rotation : (section.rotation ?? 0)}deg` }],
+              }, section.id === editingId && styles.sectorEditing]}
+            >
+              <Text style={styles.sectorName} numberOfLines={1}>{section.name}</Text>
+            </View>
+          );
+        })}
+
+        {/* The two handles of the sector being edited, drawn outside its own
+            view: a handle inside a rotated element rotates with it, and its
+            hit box then no longer matches where it appears. These are placed
+            in plan coordinates and turned by hand, so what you press is what
+            you see. */}
+        {editing ? (() => {
+          const live = drag?.id === editing.id ? drag : null;
+          const rect = {
+            x: live ? live.x : editing.x * planWidth,
+            y: live ? live.y : editing.y * planHeight,
+            w: live ? live.w : editing.width * planWidth,
+            h: live ? live.h : editing.height * planHeight,
+          };
+          const rotation = live ? live.rotation : (editing.rotation ?? 0);
+          const centre = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+          const knob = rotateAround({ x: centre.x, y: rect.y - ROTATE_ARM }, centre, rotation);
+          const corner = rotateAround({ x: rect.x + rect.w, y: rect.y + rect.h }, centre, rotation);
+
+          return (
+            <>
+              <View
+                pointerEvents="none"
+                style={[styles.handle, styles.knob, {
+                  left: knob.x - 14,
+                  top: knob.y - 14,
+                  borderColor: editing.colour,
+                }]}
+              >
+                <Text style={styles.knobGlyph}>↻</Text>
+              </View>
+
+              <View
+                pointerEvents="none"
+                style={[styles.handle, {
+                  left: corner.x - 14,
+                  top: corner.y - 14,
+                  borderColor: editing.colour,
+                }]}
+              />
+
+              {/* The angle while it turns, because a degree read off a
+                  rectangle by eye is a guess. */}
+              {live?.mode === 'rotate' ? (
+                <View pointerEvents="none" style={[styles.angle, { left: centre.x - 28, top: centre.y - 12 }]}>
+                  <Text style={styles.angleText}>{Math.round(live.rotation)}°</Text>
+                </View>
+              ) : null}
+            </>
+          );
+        })() : null}
 
         {draft ? (
           <View
@@ -921,15 +1182,13 @@ export default function PlanEditorScreen() {
 
       {editing ? (
         <>
-          {/* A stand is rarely square to the room. Fixed steps rather than a
-              free angle: the point is to match the hall, not to draw art, and
-              a dragged handle on a rectangle this small is a fight. */}
+          {/* Turned by dragging the ↻ knob above the sector — any angle, not a
+              list of them. The buttons stay for the two things a hand is bad
+              at: an exact quarter turn, and getting back to straight. */}
           <Caption style={styles.label}>
-            Otočenie: {Math.round(editing.rotation ?? 0)}°
+            Otočenie: {Math.round(editing.rotation ?? 0)}° — ťahaj za ↻ nad sektorom
           </Caption>
           <View style={styles.actions}>
-            <Button title="↺ 15°" variant="secondary" compact onPress={() => rotateBy(-15)} disabled={busy} />
-            <Button title="↻ 15°" variant="secondary" compact onPress={() => rotateBy(15)} disabled={busy} />
             <Button title="↺ 90°" variant="secondary" compact onPress={() => rotateBy(-90)} disabled={busy} />
             <Button title="↻ 90°" variant="secondary" compact onPress={() => rotateBy(90)} disabled={busy} />
             <Button title="Narovnať" variant="ghost" compact onPress={() => rotateBy(-(editing.rotation ?? 0))} disabled={busy} />
@@ -1211,6 +1470,23 @@ function PlanRequestForm({ eventId, title }: { eventId: string; title: string | 
   );
 }
 
+/** Turns a point around a centre by `degrees`, which is what a rotated
+ *  sector's handles need: they have to sit where the sector's corners are
+ *  drawn, not where its unrotated rectangle is. */
+function rotateAround(
+  point: { x: number; y: number },
+  centre: { x: number; y: number },
+  degrees: number,
+): { x: number; y: number } {
+  const radians = (degrees * Math.PI) / 180;
+  const dx = point.x - centre.x;
+  const dy = point.y - centre.y;
+  return {
+    x: centre.x + dx * Math.cos(radians) - dy * Math.sin(radians),
+    y: centre.y + dx * Math.sin(radians) + dy * Math.cos(radians),
+  };
+}
+
 /** Seats grouped by row, in the order the rows are lettered. */
 function groupRows<T extends { row_label: string; seat_number: number }>(seats: T[]): [string, T[]][] {
   const byRow = new Map<string, T[]>();
@@ -1251,6 +1527,25 @@ const styles = StyleSheet.create({
   },
 
   sector: { position: 'absolute', borderWidth: 2, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  handle: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 2,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  knob: { alignItems: 'center', justifyContent: 'center' },
+  knobGlyph: { fontSize: 15, color: colors.page },
+  angle: {
+    position: 'absolute',
+    width: 56,
+    alignItems: 'center',
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(10,13,18,0.85)',
+  },
+  angleText: { ...typography.monoStrong, color: '#FFFFFF' },
   sectorEditing: { borderStyle: 'dashed', borderWidth: 3 },
   sectorName: { color: colors.text, fontWeight: '700', fontSize: 12 },
   draft: { position: 'absolute', borderWidth: 2, borderStyle: 'dashed', borderRadius: radius.sm },

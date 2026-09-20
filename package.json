@@ -27,6 +27,7 @@
     "check:emails": "./scripts/check-emails.sh",
     "check:dns": "node scripts/check-dns.mjs",
     "check:speed": "node scripts/check-speed.mjs",
+    "check:webevents": "node scripts/check-web-events.mjs",
     "check:functions": "./scripts/check-functions-types.sh",
     "web": "npm --prefix mobile run web"
   },

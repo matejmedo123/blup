@@ -118,16 +118,33 @@ export const ZoomPan = React.forwardRef<ZoomPanHandle, Props>(function ZoomPan({
     onPanResponderTerminationRequest: () => false,
   }), [apply]);
 
-  // A mouse has no second finger. Wheel is what a desktop reaches for, and
-  // without it the plan is only pannable there.
-  const wheel = Platform.OS === 'web'
-    ? {
-      onWheel: (event: { deltaY: number; preventDefault?: () => void }) => {
-        event.preventDefault?.();
-        apply({ ...live.current, scale: live.current.scale * (event.deltaY > 0 ? 0.92 : 1.08) });
-      },
-    }
-    : {};
+  /**
+   * A mouse has no second finger, so the wheel is how a desktop zooms.
+   *
+   * Attached to the DOM node rather than passed as an `onWheel` prop, because
+   * react-native-web forwards a fixed list of handlers to the element and
+   * `onWheel` is not on it. Written as a prop it type-checks, renders, and
+   * does nothing at all — the plan would have been pannable on a desktop and
+   * not zoomable, which is exactly the kind of failure that ships.
+   *
+   * `passive: false` so preventDefault actually applies: a passive wheel
+   * listener cannot stop the page scrolling underneath.
+   */
+  const frameRef = React.useRef<View>(null);
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+    const node = frameRef.current as unknown as HTMLElement | null;
+    if (!node?.addEventListener) return undefined;
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      apply({ ...live.current, scale: live.current.scale * (event.deltaY > 0 ? 0.92 : 1.08) });
+    };
+
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, [apply]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -136,11 +153,11 @@ export const ZoomPan = React.forwardRef<ZoomPanHandle, Props>(function ZoomPan({
 
   return (
     <View
+      ref={frameRef}
       style={[styles.frame, style]}
       onLayout={onLayout}
       nativeID="blup-plan-surface"
       {...responder.panHandlers}
-      {...(wheel as object)}
     >
       <View
         style={{
