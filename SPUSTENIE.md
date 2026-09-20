@@ -17,7 +17,7 @@ Nepotrebuješ Mac, Apple developer účet ani server. Web je celá aplikácia.
 > `blup-waitlist` a `blup-invites` (**Fáza 8**), adminské obrazovky *Stav
 > nasadenia* a *E-maily* (**Fáza 9b**), editor plánu haly s piatimi hotovými
 > predlohami (**Fáza 10b**) a kontroly, ktoré nepotrebujú nasadenie —
-> `npm run db:verify`, `check:dns`, `check:speed`, `check:webevents`
+> `npm run db:verify`, `check:dns`, `check:speed`, `check:webevents`, `check:seats`
 > a `./scripts/preview.sh` (**Fáza 12**). Zvyšok návodu sa nezmenil.
 >
 > Migrácií je teraz **89**; `npx supabase db push` dobehne len tie, ktoré ti
@@ -773,13 +773,14 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 
 **✓ Kontrola:** `22 prešlo, 0 zlyhalo` a `19 prešlo, 0 zlyhalo`.
 
-### A štyri, ktoré netreba nasadenie
+### A päť, ktoré netreba nasadenie
 
 ```bash
 npm run db:verify        # 89 migrácií a 50 testovacích súborov na dočasnej databáze
 npm run check:dns        # SPF, DKIM, DMARC a návratová cesta nedoručeniek
 npm run check:speed      # rýchlosť stránky na priemernom telefóne, s rozpočtom
 npm run check:webevents  # DOM udalosti, ktoré na webe ticho nerobia nič
+npm run check:seats      # rozloženie sedadiel v ručne nakreslených sektoroch
 ```
 
 `check:speed` postaví build, otvorí ho v prehliadači spomalenom na telefón na
@@ -791,6 +792,16 @@ megabajtu, skôr než sa ozvú ľudia.
 a im podobné sa dajú napísať, prejdú kontrolou typov, zbuildujú sa — a nikdy sa
 nezavolajú, lebo ich knižnica na web neprenáša. Kolieskom myši sa raz nedalo
 priblížiť plán haly presne preto.
+
+`check:seats` rozloží sedadlá do sektorov, aké vzniknú klepaním po obryse v
+editore — tri rohy, päť, zalomená tribúna, tvar L — a porovná, kam sadli, s
+tým, kam podľa definície patria. Predlohy kreslia obrys samy (18 alebo 32
+bodov pravidelne po obvode); človek klepne pár rohov, kde chce, a to je úplne
+iný vstup do tej istej matematiky. Sektor nakreslený tromi klepnutiami kvôli
+tomu padal a v zalomených sektoroch sa sedadlá v rade zhŕkli ku koncu. Skript
+hlási aj sektory, kde sedadlá vyplnia málo z radu — to nie je chyba výpočtu,
+to je sektor vybiehajúci do špica, do ktorého si niekto vypýtal rovnaký počet
+sedadiel v každom rade.
 
 ### A jeden, ktorým si appku naozaj pozrieš
 

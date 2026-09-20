@@ -353,23 +353,23 @@ export default function SeatPickerScreen() {
     const v = (seat.row_index + 0.5) / down;
 
     /*
-     * Every row gets the SAME spacing, centred.
+     * A row is spread across its own width — the whole of it.
      *
-     * A stand narrows towards the pitch, so its front row is shorter than its
-     * back one. Spreading each row across its own width means the spacing
-     * shrinks row by row — measured, 47.1 points in the back row against 40.5
-     * in the front — and the seats stop lining up into columns. It is
-     * geometrically honest and it reads as a mess.
+     * The other rule was one spacing for the whole sector, taken from the
+     * shortest row and centred, so every row lined up into columns. It does,
+     * and in a sector whose rows differ in length it leaves the wide rows
+     * mostly empty: a drawn five-corner sector filled 63% of itself, an arc
+     * stand 57%, and a sector running to a point 9%. The outline says the
+     * seating reaches the edge and the seating does not — which is the one
+     * thing a plan is for.
      *
-     * One spacing for the sector, taken from its shortest row so nothing
-     * overflows, and each row centred on the stand: the block is a clean grid
-     * that curves with the stand, which is what a seating plan looks like.
+     * So every row runs from one edge of the sector to the other. Rows of
+     * different lengths then sit at slightly different spacings, which is
+     * what a stand that narrows actually looks like, and is the same
+     * parameter the database lays the grid out on when it decides which
+     * seats exist at all.
      */
-    const room = Math.min(band.lengthAt(0.5 / down), band.lengthAt((down - 0.5) / down));
-    const here = band.at(
-      0.5 + (room / Math.max(band.lengthAt(v), 1e-6)) * ((seat.number - 0.5) / across - 0.5),
-      v,
-    );
+    const here = band.at((seat.number - 0.5) / across, v);
     return {
       left: (here.x - section.x) * planWidth,
       top: (here.y - section.y) * planHeight,
@@ -903,10 +903,25 @@ export default function SeatPickerScreen() {
                   style={[styles.sectorLabel, {
                     left: (m.cx - section.x) * planWidth,
                     top: (m.cy - section.y) * planHeight,
+                    /*
+                     * A name is text, and text has a size.
+                     *
+                     * The label lives inside the plan so that it travels with
+                     * the stand it names — which also means the zoom
+                     * multiplies it. Sized to fit the stand and then blown up
+                     * eight times, "A104" came out ninety pixels tall and lay
+                     * across four other stands. Undoing the zoom here leaves
+                     * it where it belongs and the size it was meant to be.
+                     */
+                    transform: [{ scale: 1 / Math.max(scale, 0.2) }],
                   }]}
                 >
                   <Text
-                    style={[styles.sectorName, sectorLabelStyle(m.roomW * planWidth * scale, m.roomH * planHeight * scale)]}
+                    style={[
+                      styles.sectorName,
+                      sectorLabelStyle(m.roomW * planWidth * scale, m.roomH * planHeight * scale),
+                      quiet ? styles.sectorNameQuiet : null,
+                    ]}
                     numberOfLines={1}
                   >
                     {section.name}
@@ -1221,6 +1236,7 @@ const styles = StyleSheet.create({
   clockLow: { color: colors.danger },
 
   planHost: { alignSelf: 'center' },
+  sectorNameQuiet: { opacity: 0.35 },
   plan: {
     alignSelf: 'center',
     borderRadius: radius.lg,

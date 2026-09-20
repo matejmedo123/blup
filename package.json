@@ -29,8 +29,9 @@
     "check:speed": "node scripts/check-speed.mjs",
     "check:webevents": "node scripts/check-web-events.mjs",
     "check:functions": "./scripts/check-functions-types.sh",
-  "preview": "./scripts/preview.sh",
-    "web": "npm --prefix mobile run web"
+    "preview": "./scripts/preview.sh",
+    "web": "npm --prefix mobile run web",
+    "check:seats": "node scripts/check-seat-layout.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.112.3",
