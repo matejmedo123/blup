@@ -342,7 +342,26 @@ export default function SeatPickerScreen() {
      * outline happened to have its points.
      */
     const band = bandOf(section.shape);
-    const here = band.at((seat.number - 0.5) / across, (seat.row_index + 0.5) / down);
+    const v = (seat.row_index + 0.5) / down;
+
+    /*
+     * Every row gets the SAME spacing, centred.
+     *
+     * A stand narrows towards the pitch, so its front row is shorter than its
+     * back one. Spreading each row across its own width means the spacing
+     * shrinks row by row — measured, 47.1 points in the back row against 40.5
+     * in the front — and the seats stop lining up into columns. It is
+     * geometrically honest and it reads as a mess.
+     *
+     * One spacing for the sector, taken from its shortest row so nothing
+     * overflows, and each row centred on the stand: the block is a clean grid
+     * that curves with the stand, which is what a seating plan looks like.
+     */
+    const room = Math.min(band.lengthAt(0.5 / down), band.lengthAt((down - 0.5) / down));
+    const here = band.at(
+      0.5 + (room / Math.max(band.lengthAt(v), 1e-6)) * ((seat.number - 0.5) / across - 0.5),
+      v,
+    );
     return {
       left: (here.x - section.x) * planWidth,
       top: (here.y - section.y) * planHeight,
@@ -877,13 +896,21 @@ export default function SeatPickerScreen() {
                       {
                         width: at.size,
                         height: at.size,
-                        borderRadius: at.size / 2,
+                        /*
+                         * Not size / 2.
+                         *
+                         * A seat is drawn in the plan's own units, so its box
+                         * is a couple of units across and the browser rounds
+                         * that up to whole pixels while leaving the radius
+                         * where it was: a 2px box with a 0.79px radius, which
+                         * the zoom then blows up into a crisp rounded SQUARE.
+                         * A radius larger than the box is clamped to exactly
+                         * half of it, whatever the rounding did, so it is a
+                         * circle at every zoom.
+                         */
+                        borderRadius: at.size,
                         left: at.left - at.size / 2,
                         top: at.top - at.size / 2,
-                        // Drawn thin enough that the zoom brings it back to
-                        // about a pixel, and never thicker than a third of
-                        // the dot.
-                        borderWidth: Math.min(at.size / 3, 1.4 / Math.max(scale, 0.2)),
                       },
                       seat.mine_claim === 'held' ? styles.dotMine
                         : seat.mine ? styles.dotBought
@@ -1325,17 +1352,18 @@ const styles = StyleSheet.create({
   seatChipSpecial: { borderColor: colors.warning },
   seatChipLabel: { ...typography.caption, color: colors.text },
 
-  /* No borderWidth here: it is set per dot from the zoom. Everything inside
-     the plan is drawn in the plan's own units and then scaled, so a 1.5pt
-     outline becomes a 12pt ring at eight times in — the seats turn into
-     touching doughnuts. */
-  dot: { position: 'absolute' },
-  dotFree: { backgroundColor: 'rgba(255,255,255,0.10)', borderColor: colors.textSecondary },
-  dotMine: { backgroundColor: colors.accent, borderColor: '#FFFFFF' },
-  dotBought: { backgroundColor: colors.success, borderColor: '#FFFFFF' },
-  dotSpecial: { backgroundColor: 'rgba(255,255,255,0.10)', borderColor: colors.warning },
-  dotTaken: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, opacity: 0.6 },
-  dotBlocked: { backgroundColor: 'transparent', borderColor: colors.border, opacity: 0.4 },
+  /* Filled, never outlined.
+     A seat's box is a couple of plan units across. A border cannot be thinner
+     than one of those, so at any real zoom the outline was half the seat and
+     what you saw was a ring, not a dot. Solid colour says the same thing and
+     survives being scaled fifteen times. */
+  dot: { position: 'absolute', borderWidth: 0 },
+  dotFree: { backgroundColor: 'rgba(198,207,219,0.92)' },
+  dotMine: { backgroundColor: colors.accent },
+  dotBought: { backgroundColor: colors.success },
+  dotSpecial: { backgroundColor: colors.warning },
+  dotTaken: { backgroundColor: 'rgba(120,132,150,0.45)' },
+  dotBlocked: { backgroundColor: 'rgba(120,132,150,0.22)' },
 });
 
 /** One entry in the legend: the same dot style, at a readable size. */

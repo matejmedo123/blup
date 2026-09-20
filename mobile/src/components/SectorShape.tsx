@@ -224,13 +224,25 @@ export function bandOf(shape: ShapePoint[]) {
     return { x: a.x + (c.x - a.x) * g, y: a.y + (c.y - a.y) * g };
   };
 
-  return {
-    at(u: number, v: number): ShapePoint {
-      const a = pick(f, u);
-      const c = pick(b, u);
-      return { x: a.x + (c.x - a.x) * v, y: a.y + (c.y - a.y) * v };
-    },
+  const at = (u: number, v: number): ShapePoint => {
+    const a = pick(f, u);
+    const c = pick(b, u);
+    return { x: a.x + (c.x - a.x) * v, y: a.y + (c.y - a.y) * v };
   };
+
+  /** How long the line across the stand is at depth v. */
+  const lengthAt = (v: number) => {
+    let total = 0;
+    let prev = at(0, v);
+    for (let i = 1; i <= 48; i += 1) {
+      const here = at(i / 48, v);
+      total += Math.hypot(here.x - prev.x, here.y - prev.y);
+      prev = here;
+    }
+    return total;
+  };
+
+  return { at, lengthAt };
 }
 
 /**
@@ -260,13 +272,22 @@ export function seatSize(
   }
 
   const band = bandOf(shape);
-  const span = (v: number) => {
-    const a = band.at(0, v);
-    const b = band.at(1, v);
-    return Math.hypot((b.x - a.x) * planWidth, (b.y - a.y) * planHeight);
+  // The same shortest row the layout spaces every row by, so the seat size and
+  // the gap it has to sit in are worked out from one number rather than two
+  // that can disagree.
+  const scaleX = planWidth;
+  const scaleY = planHeight;
+  const lengthOf = (v: number) => {
+    let total = 0;
+    let prev = band.at(0, v);
+    for (let i = 1; i <= 48; i += 1) {
+      const here = band.at(i / 48, v);
+      total += Math.hypot((here.x - prev.x) * scaleX, (here.y - prev.y) * scaleY);
+      prev = here;
+    }
+    return total;
   };
-  // Both edges, because either can be the short one.
-  const along = Math.min(span(0), span(1)) / across;
+  const along = Math.min(lengthOf(0.5 / down), lengthOf((down - 0.5) / down)) / across;
 
   const mid = band.at(0.5, 0);
   const far = band.at(0.5, 1);
