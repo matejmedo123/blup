@@ -17,7 +17,7 @@ import {
   Badge, Body, Button, Caption, EmptyState, ErrorState, Input, LoadingState, Notice, Screen,
 } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
-import { SectorShape, rowExtent, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
+import { SectorShape, bandOf, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
 import { ZoomPan, type ZoomPanHandle, type ZoomPanView } from '@/components/ZoomPan';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -243,36 +243,7 @@ export default function SeatPickerScreen() {
     [rowWidths],
   );
 
-  /**
-   * Which place in its row each seat is, and how many the row holds.
-   *
-   * A shaped sector's rows are laid across the sector's width at that row, so
-   * what matters is a seat's position among the seats that actually exist in
-   * its row — not its number, which keeps the column of the grid the shape was
-   * cut from and may start at four.
-   */
-  const seatOrders = useMemo(() => {
-    const out = new Map<string, Map<string, { index: number; of: number }>>();
-    for (const [sectionId, rows] of seatsBySection) {
-      const byRow = new Map<number, Seat[]>();
-      for (const seat of rows) {
-        const list = byRow.get(seat.row_index);
-        if (list) list.push(seat);
-        else byRow.set(seat.row_index, [seat]);
-      }
-      const places = new Map<string, { index: number; of: number }>();
-      for (const list of byRow.values()) {
-        list.sort((a, b) => a.number - b.number);
-        list.forEach((seat, index) => places.set(seat.id, { index, of: list.length }));
-      }
-      out.set(sectionId, places);
-    }
-    return out;
-  }, [seatsBySection]);
-  const seatOrder = useCallback(
-    (sectionId: string) => seatOrders.get(sectionId) ?? new Map<string, { index: number; of: number }>(),
-    [seatOrders],
-  );
+
 
   /**
    * What the pointer is over, worked out once for the whole plan.
@@ -333,35 +304,48 @@ export default function SeatPickerScreen() {
     const down = Math.max(section.rows, 1);
     const width = section.width * planWidth;
     const height = section.height * planHeight;
-    const cellH = height / down;
-    const top = (seat.row_index + 0.5) * cellH;
 
     if (!section.shape) {
       const cellW = width / across;
+      const cellH = height / down;
       const inRow = seatsPerRow(section.id).get(seat.row_index) ?? across;
       const indent = ((across - inRow) / 2) * cellW;
       return {
         left: indent + (seat.number - 0.5) * cellW,
-        top,
+        top: (seat.row_index + 0.5) * cellH,
         size: Math.min(cellW * 0.82, cellH * 0.78),
       };
     }
 
-    // In plan fractions, because that is what the outline is stored in.
-    const y = section.y + (seat.row_index + 0.5) / down * section.height;
-    const span = rowExtent(section.shape, y);
-    if (!span) return null;
+    /*
+     * A drawn sector is laid out along its own outline, not across its
+     * bounding box.
+     *
+     * Rows run ALONG the stand and the row number counts ACROSS it, which is
+     * what makes a side stand's rows run vertically, a corner stand's rows
+     * curve with it, and the front row of a wedge come out shorter than the
+     * back one. Across the box instead, a side stand's rows ran horizontally
+     * — straight across the stand rather than along it — and a wedge's
+     * collapsed into a bar.
+     */
+    const band = bandOf(section.shape);
+    const u = (seat.number - 0.5) / across;
+    const v = (seat.row_index + 0.5) / down;
+    const here = band.at(u, v);
 
-    const order = seatOrder(section.id).get(seat.id);
-    if (!order) return null;
-    const rowWidth = (span.x1 - span.x0) * planWidth;
-    const cellW = rowWidth / Math.max(order.of, 1);
+    // The neighbouring seat and the next row, to size the dot against the room
+    // it actually has — which on a wedge is different in every row.
+    const alongStep = band.at(Math.min(1, u + 1 / across), v);
+    const acrossStep = band.at(u, Math.min(1, v + 1 / down));
+    const along = Math.hypot((alongStep.x - here.x) * planWidth, (alongStep.y - here.y) * planHeight);
+    const deep = Math.hypot((acrossStep.x - here.x) * planWidth, (acrossStep.y - here.y) * planHeight);
+
     return {
-      left: (span.x0 - section.x) * planWidth + (order.index + 0.5) * cellW,
-      top,
-      size: Math.min(cellW * 0.82, cellH * 0.78),
+      left: (here.x - section.x) * planWidth,
+      top: (here.y - section.y) * planHeight,
+      size: Math.max(1, Math.min(along * 0.8, deep * 0.78)),
     };
-  }, [planWidth, planHeight, seatsPerRow, seatOrder]);
+  }, [planWidth, planHeight, seatsPerRow]);
 
   /**
    * The sector named in the card above the plan.

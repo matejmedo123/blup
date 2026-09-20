@@ -149,3 +149,45 @@ export function rowExtent(shape: ShapePoint[], y: number): { x0: number; x1: num
   if (crossings.length < 2) return null;
   return { x0: Math.min(...crossings), x1: Math.max(...crossings) };
 }
+
+/**
+ * A sector's outline read as a band, so seats can be laid along it.
+ *
+ * A stand is a band: two long edges — the one by the pitch and the one at the
+ * back — and two short ends. Rows run ALONG it and the row number counts
+ * ACROSS it. That is what makes the rows of a side stand run vertically, a
+ * corner stand's rows curve, and the front row of a wedge be shorter than the
+ * back one — without any of those being special cases.
+ *
+ * The outline is traced around the perimeter, by the drawing tool and by the
+ * presets alike, so its first half is one long edge and its second half is the
+ * other, backwards. That is the whole convention.
+ *
+ * `at(u, v)`: u runs 0..1 along the band, v runs 0..1 across it, 0 being the
+ * first half of the outline.
+ */
+export function bandOf(shape: ShapePoint[]) {
+  const n = shape.length;
+  const half = Math.max(2, Math.floor(n / 2));
+  const front = shape.slice(0, half);
+  const back = shape.slice(half).reverse();
+
+  const walk = (chain: ShapePoint[], u: number): ShapePoint => {
+    if (chain.length === 0) return { x: 0.5, y: 0.5 };
+    if (chain.length === 1) return chain[0];
+    const t = Math.min(0.999999, Math.max(0, u)) * (chain.length - 1);
+    const i = Math.floor(t);
+    const f = t - i;
+    const a = chain[i];
+    const b = chain[Math.min(chain.length - 1, i + 1)];
+    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+  };
+
+  return {
+    at(u: number, v: number): ShapePoint {
+      const a = walk(front, u);
+      const b = walk(back, u);
+      return { x: a.x + (b.x - a.x) * v, y: a.y + (b.y - a.y) * v };
+    },
+  };
+}

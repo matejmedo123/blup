@@ -240,19 +240,21 @@ begin
 end $$;
 
 
--- --- miesta sa prispôsobia nakreslenému tvaru ---------------------------------------
+-- --- miesta kopírujú obrys sektora -------------------------------------------------
 --
--- Toto je ten rozdiel, kvôli ktorému funkcia vznikla: do zatáčajúcej sa
--- tribúny sa nesmú vygenerovať sedadlá v rohoch, kde v hale nie je nič.
+-- Toto je ten rozdiel, kvôli ktorému funkcia vznikla. Sektor je pás: rad ide
+-- pozdĺž neho, číslo radu naprieč. Položené cez ohraničenie mali bočné tribúny
+-- rady kolmo na to, ako sa v nich sedí.
 do $$
 declare
   admin uuid := 'a5050505-0000-0000-0000-000000000002';
   org   uuid := 'b5050505-0000-0000-0000-000000000002';
   vmap  uuid := 'd5050505-0000-0000-0000-000000000002';
-  plain uuid := 'e5050505-0000-0000-0000-000000000002';
   bent  uuid := 'e5050505-0000-0000-0000-000000000003';
-  n_plain integer;
-  n_bent  integer;
+  n_all integer;
+  outside integer;
+  front numeric;
+  back  numeric;
   res jsonb;
 begin
   insert into auth.users (id, email, email_confirmed_at)
@@ -265,38 +267,51 @@ begin
   insert into public.venue_maps (id, organization_id, name, image_width, image_height, created_by)
   values (vmap, org, 'Tvar', 1600, 1200, admin);
 
-  -- Dva rovnako veľké sektory. Jeden obdĺžnik, druhý trojuholník v tom istom
-  -- ohraničení — do trojuholníka sa vojde zhruba polovica mriežky.
+  -- Zužujúca sa tribúna: zadná hrana široká, predná pri ihrisku úzka. Obrys je
+  -- obkreslený po obvode, tak ako ho kreslí editor.
   insert into public.venue_sections (id, venue_map_id, name, colour, x, y, width, height, kind, sort_order)
-  values (plain, vmap, 'Obdĺžnik', '#0080FF', 0.10, 0.10, 0.40, 0.40, 'standard', 1),
-         (bent,  vmap, 'Trojuholník', '#F43F5E', 0.10, 0.10, 0.40, 0.40, 'standard', 2);
+  values (bent, vmap, 'Tribúna', '#F43F5E', 0.10, 0.10, 0.60, 0.30, 'standard', 1);
 
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', admin::text, true);
-
   perform public.set_section_shape(bent, '[
-    {"x":0.10,"y":0.10},{"x":0.50,"y":0.10},{"x":0.10,"y":0.50}
+    {"x":0.10,"y":0.10},{"x":0.40,"y":0.10},{"x":0.70,"y":0.10},
+    {"x":0.60,"y":0.40},{"x":0.40,"y":0.40},{"x":0.20,"y":0.40}
   ]'::jsonb);
-
-  res := public.generate_section_seats(plain, 10, 10);
-  n_plain := (res ->> 'total')::integer;
-  res := public.generate_section_seats(bent, 10, 10);
-  n_bent := (res ->> 'total')::integer;
+  res := public.generate_section_seats(bent, 6, 10);
+  n_all := (res ->> 'total')::integer;
   reset role;
 
-  assert n_plain = 100, format('obdĺžnik dostane celú mriežku, dostal %s', n_plain);
-  assert n_bent < n_plain, 'trojuholník nesmie dostať toľko miest ako obdĺžnik';
-  assert n_bent between 35 and 65,
-    format('do polovice plochy sa má zmestiť zhruba polovica miest, je ich %s', n_bent);
+  -- Na páse nevypadne nič: každé miesto niekam patrí.
+  assert n_all = 60, format('pás dostane celú mriežku, dostal %s', n_all);
 
-  -- A konkrétne: posledný rad má v trojuholníku byť najkratší, nie rovnaký.
-  assert (select count(*) from public.venue_seats where venue_section_id = bent and row_label = 'A')
-       > (select count(*) from public.venue_seats where venue_section_id = bent and row_label = 'J'),
-    'v zužujúcom sa sektore musia byť zadné rady kratšie';
+  -- A každé z nich leží vnútri toho, čo je nakreslené. Toto je tá vlastnosť,
+  -- na ktorej celé kreslenie sektorov stojí.
+  select count(*) into outside
+  from public.venue_seats vs
+  join public.venue_sections s on s.id = vs.venue_section_id
+  cross join lateral (
+    select dense_rank() over (order by vs2.row_label) - 1 as r
+    from public.venue_seats vs2 where vs2.id = vs.id
+  ) ignored
+  where vs.venue_section_id = bent
+    and not public.jsonb_to_polygon(s.shape) @> public.band_point(
+          s.shape,
+          (vs.seat_number - 0.5) / 10.0,
+          (ascii(vs.row_label) - ascii('A') + 0.5) / 6.0);
+  assert outside = 0, format('%s miest leží mimo nakreslenej plochy', outside);
 
-  raise notice 'PASS miesta sa prispôsobia tvaru, ktorý je nakreslený';
+  -- Predný rad zužujúcej sa tribúny je kratší než zadný: rovnaký počet miest
+  -- na kratšej hrane znamená, že sedia hustejšie.
+  select abs((public.band_point(s.shape, 0.95, 0.05))[0] - (public.band_point(s.shape, 0.05, 0.05))[0])
+    into back from public.venue_sections s where s.id = bent;
+  select abs((public.band_point(s.shape, 0.95, 0.95))[0] - (public.band_point(s.shape, 0.05, 0.95))[0])
+    into front from public.venue_sections s where s.id = bent;
+  assert front < back,
+    format('predný rad má byť kratší než zadný, je %s proti %s', front, back);
+
+  raise notice 'PASS miesta kopírujú obrys sektora, nie jeho ohraničenie';
 end $$;
-
 
 -- --- státie sa predáva na počet, nie po sedadlách -----------------------------------
 --
