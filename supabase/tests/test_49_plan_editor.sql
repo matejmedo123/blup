@@ -356,4 +356,94 @@ begin
   raise notice 'PASS predlohu smie použiť len admin';
 end $$;
 
+-- --- sektor, ktorý sa zatáča ----------------------------------------------------
+do $$
+declare
+  admin  uuid := 'a4949494-0000-0000-0000-000000000001';
+  sec    uuid := 'b4949494-0000-0000-0000-000000000001';
+  out    public.venue_sections;
+  plan   jsonb;
+  failed text;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', admin::text, true);
+
+  out := public.set_section_shape(sec, '[
+    {"x":0.10,"y":0.10},{"x":0.40,"y":0.12},{"x":0.46,"y":0.30},
+    {"x":0.30,"y":0.44},{"x":0.08,"y":0.34}
+  ]'::jsonb);
+
+  assert out.shape is not null, 'tribúna sa dá nakresliť aj ako päťuholník';
+  -- Tvar nesie natočenie sám: body sú tam, kam sa klikalo. Keby k tomu zostalo
+  -- ešte `rotation`, obrys by sa otočil druhýkrát a odišiel by od tých bodov.
+  assert out.rotation = 0, 'nakreslený tvar vynuluje otočenie';
+  -- Ohraničenie sa dorovná samo: mriežka miest a klikanie s ním pracujú, a
+  -- keby zostalo po starom, sektor by sa dal chytiť inde, než je nakreslený.
+  assert out.x = 0.08, format('ľavý okraj z bodov, je %s', out.x);
+  assert out.y = 0.10, 'horný okraj z bodov';
+  assert abs(out.width - 0.38) < 0.0001, format('šírka z bodov, je %s', out.width);
+  assert abs(out.height - 0.34) < 0.0001, 'výška z bodov';
+
+  reset role;
+  plan := public.seat_map_for_event('e4949494-0000-0000-0000-000000000001');
+  assert jsonb_array_length(plan -> 'sections' -> 0 -> 'shape') = 5,
+    'a tvar sa dostane aj ku kupujúcemu — inak by videl obdĺžnik na inom mieste';
+
+  -- Dva body nie sú tvar.
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', admin::text, true);
+  begin
+    perform public.set_section_shape(sec, '[{"x":0.1,"y":0.1},{"x":0.2,"y":0.2}]'::jsonb);
+  exception when others then failed := sqlerrm;
+  end;
+  assert failed like '%SHAPE_TOO_SHORT%', 'dva body nie sú plocha';
+
+  -- Späť na obdĺžnik.
+  out := public.set_section_shape(sec, null);
+  reset role;
+  assert out.shape is null, 'tvar sa dá zrušiť';
+  assert out.x = 0.08, 'a sektor pritom nikam neskočí';
+
+  raise notice 'PASS sektor sa dá nakresliť aj ako zatáčajúca sa tribúna';
+end $$;
+
+-- --- a kópia zatáčajúcej sa tribúny sa zatáča tiež -------------------------------
+do $$
+declare
+  admin uuid := 'a4949494-0000-0000-0000-000000000001';
+  sec   uuid := 'b4949494-0000-0000-0000-000000000001';
+  copy  public.venue_sections;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', admin::text, true);
+
+  perform public.set_section_shape(sec, '[
+    {"x":0.10,"y":0.10},{"x":0.40,"y":0.12},{"x":0.30,"y":0.40}
+  ]'::jsonb);
+  copy := public.duplicate_section(sec);
+  reset role;
+
+  assert jsonb_array_length(copy.shape) = 3, 'kópia má ten istý tvar';
+  -- Posunuté body, nie pôvodné: inak by mala tvar na starom mieste a
+  -- ohraničenie na novom, a klikalo by sa vedľa.
+  assert (copy.shape -> 0 ->> 'x')::numeric <> 0.10,
+    'a body sa posunuli spolu s ňou';
+
+  raise notice 'PASS kópia si berie aj tvar, nielen rozmery';
+end $$;
+
+-- --- predlohy majú oblúky --------------------------------------------------------
+do $$
+declare shaped integer;
+begin
+  select count(*) into shaped
+  from jsonb_array_elements(public.venue_presets()) p,
+       jsonb_array_elements(p -> 'sections') s
+  where jsonb_typeof(s -> 'shape') = 'array';
+
+  assert shaped >= 6,
+    format('štadión aj balkón sa zatáčajú, tvarovaných sektorov je %s', shaped);
+  raise notice 'PASS predlohy kreslia tribúny tak, ako naozaj stoja';
+end $$;
+
 rollback;

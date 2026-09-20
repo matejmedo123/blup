@@ -13,7 +13,8 @@ import {
   applyVenuePreset, clearVenueMapImage, cloneVenueMap, createSection, createVenueMap,
   deleteSeats, deleteSection,
   duplicateSection, generateSeats, getReusablePlans, getSectionSeats, getVenueMap,
-  getVenuePresets, getVenueSections, removeVenuePlan, renameRow, setBackdropOnly, setSeatState,
+  getVenuePresets, getVenueSections, removeVenuePlan, renameRow, setBackdropOnly,
+  setSeatState, setSectionShape,
   updateSection, updateVenueMap,
 } from '@/api/venue';
 import {
@@ -24,6 +25,7 @@ import { pickImage, uploadVenuePlan } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong } from '@/lib/format';
 import { useDialog } from '@/components/Dialog';
+import { SectorShape } from '@/components/SectorShape';
 import {
   Body, Button, Caption, Chip, Input, LoadingState, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
@@ -143,6 +145,15 @@ export default function PlanEditorScreen() {
    * it: the screen returns early while the event and the map load, and a hook
    * below that return changes the hook count between renders.
    */
+  /**
+   * Points being tapped out for a sector that is not a rectangle.
+   *
+   * Null when not drawing one. Tapping rather than dragging on purpose: a
+   * curved stand is five or six corners, and dragging a freehand outline on a
+   * phone produces forty points and a shape nobody meant.
+   */
+  const [shapePoints, setShapePoints] = useState<{ x: number; y: number }[] | null>(null);
+
   const [drag, setDrag] = useState<
     {
       mode: 'move' | 'resize' | 'rotate';
@@ -339,6 +350,18 @@ export default function PlanEditorScreen() {
   const onStart = (e: GestureResponderEvent) => {
     const { locationX, locationY } = e.nativeEvent;
 
+    // Drawing an outline: every press is a corner, nothing else applies.
+    if (shapePoints) {
+      setShapePoints([
+        ...shapePoints,
+        {
+          x: Math.min(1, Math.max(0, locationX / planWidth)),
+          y: Math.min(1, Math.max(0, locationY / planHeight)),
+        },
+      ]);
+      return true;
+    }
+
     if (editing) {
       const rect = {
         x: editing.x * planWidth,
@@ -417,6 +440,7 @@ export default function PlanEditorScreen() {
   };
 
   const onMove = (e: GestureResponderEvent) => {
+    if (shapePoints) return;
     const { locationX, locationY } = e.nativeEvent;
 
     if (drag && dragStart.current) {
@@ -469,6 +493,7 @@ export default function PlanEditorScreen() {
   };
 
   const onEnd = () => {
+    if (shapePoints) return;
     origin.current = null;
 
     if (drag) {
@@ -641,6 +666,42 @@ export default function PlanEditorScreen() {
       setNote(`Zmazaných miest: ${gone}.`);
       setPicked([]);
       await seats.refetch();
+      await refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveShape = async () => {
+    if (!editing || !shapePoints) return;
+    if (shapePoints.length < 3) {
+      setError('Tvar potrebuje aspoň tri body — klepni po obryse sektora.');
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      await setSectionShape(editing.id, shapePoints);
+      setShapePoints(null);
+      setNote('Tvar uložený.');
+      await refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearShape = async () => {
+    if (!editing) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await setSectionShape(editing.id, null);
+      setShapePoints(null);
+      setNote('Sektor je zase obdĺžnik.');
       await refresh();
     } catch (caught) {
       setError(messageFor(caught));
@@ -1041,17 +1102,63 @@ export default function PlanEditorScreen() {
                 top,
                 width,
                 height,
-                borderColor: section.colour,
-                backgroundColor: `${section.colour}2E`,
+                // A shaped sector draws its own outline; its box stays
+                // invisible so a curved stand is not sitting inside a
+                // rectangle nobody drew.
+                borderColor: section.shape ? 'transparent' : section.colour,
+                backgroundColor: section.shape ? 'transparent' : `${section.colour}2E`,
                 // Drawn at the angle it is stored at, otherwise the editor and
                 // the buyer's plan disagree about the same hall.
-                transform: [{ rotate: `${live ? live.rotation : (section.rotation ?? 0)}deg` }],
+                // A drawn shape carries its own angle; rotating it again would move the
+                // outline away from the points somebody tapped.
+                transform: [{ rotate: section.shape ? '0deg' : `${live ? live.rotation : (section.rotation ?? 0)}deg` }],
               }, section.id === editingId && styles.sectorEditing]}
             >
+              {section.shape ? (
+                <SectorShape
+                  shape={section.shape}
+                  // The STORED box, not the live one. The points are absolute
+                  // plan fractions, so mapping them against a box that is
+                  // moving would slide the polygon the opposite way and the
+                  // sector would look stuck while being dragged.
+                  bounds={section}
+                  planWidth={planWidth}
+                  planHeight={planHeight}
+                  colour={section.colour}
+                />
+              ) : null}
               <Text style={styles.sectorName} numberOfLines={1}>{section.name}</Text>
             </View>
           );
         })}
+
+        {/* The outline being tapped out: the corners so far, and the shape they
+            already make. Without seeing it, tapping five points on a dark plan
+            is guesswork. */}
+        {shapePoints ? (
+          <>
+            {shapePoints.length >= 3 ? (
+              <SectorShape
+                shape={shapePoints}
+                bounds={{ x: 0, y: 0, width: 1, height: 1 }}
+                planWidth={planWidth}
+                planHeight={planHeight}
+                colour={colour}
+              />
+            ) : null}
+            {shapePoints.map((point, index) => (
+              <View
+                key={`${point.x}-${point.y}-${index}`}
+                pointerEvents="none"
+                style={[styles.shapeDot, {
+                  left: point.x * planWidth - 7,
+                  top: point.y * planHeight - 7,
+                  borderColor: colour,
+                }]}
+              />
+            ))}
+          </>
+        ) : null}
 
         {/* The two handles of the sector being edited, drawn outside its own
             view: a handle inside a rotated element rotates with it, and its
@@ -1267,13 +1374,56 @@ export default function PlanEditorScreen() {
               list of them. The buttons stay for the two things a hand is bad
               at: an exact quarter turn, and getting back to straight. */}
           <Caption style={styles.label}>
-            Otočenie: {Math.round(editing.rotation ?? 0)}° — ťahaj za ↻ nad sektorom
+            {editing.shape
+              ? 'Otočenie je súčasťou nakresleného tvaru — prekresli ho, ak má stáť inak.'
+              : `Otočenie: ${Math.round(editing.rotation ?? 0)}° — ťahaj za ↻ nad sektorom`}
           </Caption>
-          <View style={styles.actions}>
-            <Button title="↺ 90°" variant="secondary" compact onPress={() => rotateBy(-90)} disabled={busy} />
-            <Button title="↻ 90°" variant="secondary" compact onPress={() => rotateBy(90)} disabled={busy} />
-            <Button title="Narovnať" variant="ghost" compact onPress={() => rotateBy(-(editing.rotation ?? 0))} disabled={busy} />
-          </View>
+          {editing.shape ? null : (
+            <View style={styles.actions}>
+              <Button title="↺ 90°" variant="secondary" compact onPress={() => rotateBy(-90)} disabled={busy} />
+              <Button title="↻ 90°" variant="secondary" compact onPress={() => rotateBy(90)} disabled={busy} />
+              <Button title="Narovnať" variant="ghost" compact onPress={() => rotateBy(-(editing.rotation ?? 0))} disabled={busy} />
+            </View>
+          )}
+
+          {/* A stand in the corner of a stadium curves, a terrace behind a goal
+              is a trapezium. Tapped out corner by corner rather than dragged:
+              a freehand outline on a phone is forty points and a shape nobody
+              meant. */}
+          <Caption style={styles.label}>Tvar sektora</Caption>
+          {shapePoints ? (
+            <>
+              <Caption style={styles.hint}>
+                Klepaj po obryse sektora — {shapePoints.length}{' '}
+                {shapePoints.length === 1 ? 'bod' : shapePoints.length < 5 ? 'body' : 'bodov'}.
+                Treba aspoň tri.
+              </Caption>
+              <View style={styles.actions}>
+                <Button title="Hotovo" compact onPress={saveShape} loading={busy} />
+                <Button
+                  title="Späť o bod"
+                  variant="secondary"
+                  compact
+                  disabled={shapePoints.length === 0}
+                  onPress={() => setShapePoints(shapePoints.slice(0, -1))}
+                />
+                <Button title="Zrušiť" variant="ghost" compact onPress={() => setShapePoints(null)} />
+              </View>
+            </>
+          ) : (
+            <View style={styles.actions}>
+              <Button
+                title={editing.shape ? 'Prekresliť tvar' : 'Nakresliť tvar'}
+                variant="secondary"
+                compact
+                onPress={() => setShapePoints([])}
+                disabled={busy}
+              />
+              {editing.shape ? (
+                <Button title="Späť na obdĺžnik" variant="ghost" compact onPress={clearShape} disabled={busy} />
+              ) : null}
+            </View>
+          )}
 
           <Button
             title="Kópia sektora"
@@ -1625,6 +1775,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 2,
     backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  shapeDot: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
   knob: { alignItems: 'center', justifyContent: 'center' },
   knobGlyph: { fontSize: 15, color: colors.page },

@@ -90,6 +90,12 @@ export interface Section {
    * but rendered square is a plan of a different hall.
    */
   rotation: number;
+  /**
+   * The outline, when the sector is not a rectangle — a corner stand that
+   * curves, a terrace behind a goal, a balcony. Null for the ordinary case.
+   * x/y/width/height stay the bounding box of these points.
+   */
+  shape: { x: number; y: number }[] | null;
   ticket_type_id: string | null;
   price_cents: number | null;
   numbered: boolean;

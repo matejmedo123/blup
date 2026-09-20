@@ -102,6 +102,7 @@ export async function getVenueSections(venueMapId: string): Promise<Section[]> {
       width: Number(row.width),
       height: Number(row.height),
       rotation: Number(row.rotation ?? 0),
+      shape: (row.shape as { x: number; y: number }[]) ?? null,
       ticket_type_id: (row.ticket_type_id as string) ?? null,
       // The editor reads the sectors as stored; price and availability are the
       // buyer's view and come from seat_map_for_event().
@@ -335,6 +336,25 @@ export async function renameRow(
   });
   if (error) throw error;
   return (data as number) ?? 0;
+}
+
+/**
+ * Gives a sector an outline, or takes it away again.
+ *
+ * Its own call rather than another field on updateSection(): a shape also moves
+ * x/y/width/height to its bounding box, so a call carrying both would be
+ * arguing with itself.
+ */
+export async function setSectionShape(
+  sectionId: string,
+  shape: { x: number; y: number }[] | null,
+): Promise<Section> {
+  const { data, error } = await supabase.rpc('set_section_shape', {
+    p_section_id: sectionId,
+    p_shape: shape && shape.length >= 3 ? shape : null,
+  });
+  if (error) throw error;
+  return data as Section;
 }
 
 /** Whether the uploaded picture is only for tracing, or is the published plan. */
