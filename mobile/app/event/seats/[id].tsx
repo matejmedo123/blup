@@ -203,10 +203,24 @@ export default function SeatPickerScreen() {
    * handful at once: a stadium has sixty-seven stands and nobody is looking at
    * sixty-seven of them.
    */
-  const wanted = useMemo(
-    () => sections.filter((section) => showsSeats(section)).slice(0, 8).map((section) => section.id),
-    [sections, showsSeats],
-  );
+  const wanted = useMemo(() => {
+    if (frame.width === 0) return [];
+    // Nearest the middle of the frame first. Taking them in the plan's own
+    // order meant the cap was spent on whichever sectors happen to be drawn
+    // first — on a stadium, the ring nearer the pitch — so the stands you had
+    // actually zoomed to came out empty while the row behind them had seats.
+    const here = sections
+      .filter((section) => showsSeats(section))
+      .map((section) => {
+        const cx = frame.width / 2 + view.x
+          + ((section.x + section.width / 2) * planWidth - planWidth / 2) * scale;
+        const cy = frame.height / 2 + view.y
+          + ((section.y + section.height / 2) * planHeight - planHeight / 2) * scale;
+        return { id: section.id, d: Math.hypot(cx - frame.width / 2, cy - frame.height / 2) };
+      })
+      .sort((a, b) => a.d - b.d);
+    return here.slice(0, 16).map((one) => one.id);
+  }, [sections, showsSeats, frame, view, planWidth, planHeight, scale]);
 
   const seatQueries = useQueries({
     queries: wanted.map((sectionId) => ({

@@ -390,4 +390,58 @@ begin
   raise notice 'PASS státie sa predáva na počet, sedenie po miestach';
 end $$;
 
+
+-- --- tribúny predlohy sa naozaj zatáčajú --------------------------------------------
+--
+-- Toto by bolo bývalo chytilo celú tú vec: obrys mal správny počet bodov a
+-- ležal na správnom mieste, len bol úplne rovný — superelipsa s privysokým
+-- exponentom má dokonale ploché strany. Test na počet bodov o tom mlčí,
+-- test na priehyb nie.
+do $$
+declare
+  v_flat integer;
+  v_gap  numeric;
+begin
+  -- Priehyb: ako ďaleko je stredný bod dlhej hrany od priamky medzi jej
+  -- koncami. Pri rovnej hrane je to nula.
+  select count(*) into v_flat
+  from jsonb_array_elements(public.venue_presets()) p,
+       jsonb_array_elements(p -> 'sections') s,
+       lateral (select jsonb_array_length(s -> 'shape') / 2 as half) h,
+       lateral (
+         select (s -> 'shape' -> 0 ->> 'x')::numeric ax, (s -> 'shape' -> 0 ->> 'y')::numeric ay,
+                (s -> 'shape' -> (h.half / 2) ->> 'x')::numeric mx, (s -> 'shape' -> (h.half / 2) ->> 'y')::numeric my,
+                (s -> 'shape' -> (h.half - 1) ->> 'x')::numeric ex, (s -> 'shape' -> (h.half - 1) ->> 'y')::numeric ey
+       ) e
+  where p ->> 'code' = 'stadium'
+    and jsonb_typeof(s -> 'shape') = 'array'
+    and h.half >= 4
+    -- rohové a bočné tribúny; tú presne na stredovej čiare vynechávame, tá
+    -- rovná byť smie a na skutočnom štadióne aj je
+    and abs((s ->> 'x')::numeric + (s ->> 'width')::numeric / 2 - 0.5) > 0.08
+    and abs((e.ex - e.ax) * (e.ay - e.my) - (e.ax - e.mx) * (e.ey - e.ay))
+        / greatest(sqrt((e.ex - e.ax) ^ 2 + (e.ey - e.ay) ^ 2), 0.0001) < 0.0002;
+
+  assert v_flat = 0,
+    format('%s tribún štadióna je úplne rovných — prstenec sa nezatáča', v_flat);
+
+  -- A miesta v rade sú rozložené rovnomerne. Nerovnomerný rozostup znamená,
+  -- že sa obrys vzorkuje po parametri, ktorý nie je dĺžka oblúka.
+  select max(g) / min(g) into v_gap
+  from jsonb_array_elements(public.venue_presets()) p,
+       jsonb_array_elements(p -> 'sections') s,
+       lateral (select jsonb_array_length(s -> 'shape') / 2 as half) h,
+       lateral (
+         select sqrt(((s -> 'shape' -> i ->> 'x')::numeric - (s -> 'shape' -> (i + 1) ->> 'x')::numeric) ^ 2
+                   + ((s -> 'shape' -> i ->> 'y')::numeric - (s -> 'shape' -> (i + 1) ->> 'y')::numeric) ^ 2) as g
+         from generate_series(0, h.half - 2) i
+       ) d
+  where p ->> 'code' = 'stadium' and s ->> 'name' = 'A106';
+
+  assert v_gap < 1.35,
+    format('rozostupy na obryse sa líšia %sx — obrys sa vzorkuje po uhle, nie po dĺžke', round(v_gap, 2));
+
+  raise notice 'PASS tribúny sa zatáčajú a body obrysu sú rozložené rovnomerne';
+end $$;
+
 rollback;
