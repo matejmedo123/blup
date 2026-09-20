@@ -97,7 +97,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ```
 
 Postaví dočasnú databázu, aplikuje všetkých 89 migrácií od nuly a prejde
-**461 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
+**462 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
 Ak toto prejde, schéma je v poriadku a každý neskorší problém je v konfigurácii.
