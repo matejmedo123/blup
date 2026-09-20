@@ -256,7 +256,7 @@ export function seatSize(
   if (!shape) {
     const cellW = (bounds.width * planWidth) / across;
     const cellH = (bounds.height * planHeight) / down;
-    return Math.max(1, Math.min(cellW * 0.82, cellH * 0.78));
+    return Math.max(1, Math.min(cellW * 0.66, cellH * 0.7));
   }
 
   const band = bandOf(shape);
@@ -272,5 +272,13 @@ export function seatSize(
   const far = band.at(0.5, 1);
   const deep = Math.hypot((far.x - mid.x) * planWidth, (far.y - mid.y) * planHeight) / down;
 
-  return Math.max(1, Math.min(along * 0.8, deep * 0.78));
+  /*
+   * Air between the seats, not just enough to avoid touching.
+   *
+   * At 0.8 of the gap the circles were measurably round and still read as a
+   * dashed stripe: a quarter of a seat between one and the next is not enough
+   * space for the eye to separate them, and a row looked like a smear rather
+   * than like seats. 0.62 leaves a clear gap and still fills the stand.
+   */
+  return Math.max(1, Math.min(along * 0.62, deep * 0.7));
 }
