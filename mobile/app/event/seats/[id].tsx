@@ -417,32 +417,26 @@ export default function SeatPickerScreen() {
    */
   const zoomToSection = useCallback((section: Section) => {
     /*
-     * Enough that the stand fills most of the frame — and then, only if its
-     * seats would still be too small to aim at, a little more.
+     * Aim AT the sector: it fills the frame, and its neighbours are just off
+     * the edges.
      *
-     * Aiming straight for a fixed number of pixels per seat overshoots badly:
-     * a stand fourteen seats across in a stadium of sixty-seven is a sliver of
-     * the plan, and 20 points a seat means zooming until nothing but half of
-     * it is on screen.
+     * Stopping short of that — at whatever zoom makes a seat readable — put
+     * the stand you picked somewhere among four others that look exactly like
+     * it, and then you are hunting for the one you chose. Landing on it leaves
+     * no question, and zooming back out from there is one gesture.
      */
-    const acrossPx = (section.width * planWidth) / Math.max(section.row_width, 1);
-    const downPx = (section.height * planHeight) / Math.max(section.rows, 1);
-    const natural = section.numbered ? Math.min(acrossPx, downPx) : 0;
-
-    // Just far enough that a seat is comfortably tappable — NOT far enough to
-    // fill the frame with the stand. A stand in a stadium is a thirtieth of
-    // the plan wide; filling the frame with it means scale 22, and then the
-    // screen is one sector and you are back to where this started. At a
-    // readable seat you get the stand and three or four of its neighbours,
-    // which is what a plan is for.
-    const target = natural > 0
-      ? Math.min(18, Math.max(1, 16 / natural))
-      : Math.min(6, Math.max(1, 0.7 / Math.max(section.width, section.height)));
+    const fillW = frame.width > 0
+      ? (frame.width * 0.86) / Math.max(section.width * planWidth, 1)
+      : 1 / Math.max(section.width, 0.001);
+    const fillH = frame.height > 0
+      ? (frame.height * 0.86) / Math.max(section.height * planHeight, 1)
+      : 1 / Math.max(section.height, 0.001);
+    const target = Math.min(18, Math.max(1, Math.min(fillW, fillH)));
     planRef.current?.focus(
       { x: (section.x + section.width / 2) * planWidth, y: (section.y + section.height / 2) * planHeight },
       target,
     );
-  }, [planWidth, planHeight]);
+  }, [planWidth, planHeight, frame]);
 
 
   if (seatMap.isLoading) return <Screen><LoadingState label="Načítavam plán…" /></Screen>;
