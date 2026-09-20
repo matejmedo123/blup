@@ -20,7 +20,7 @@ Nepotrebuješ Mac, Apple developer účet ani server. Web je celá aplikácia.
 > `npm run db:verify`, `check:dns`, `check:speed`, `check:webevents`
 > a `./scripts/preview.sh` (**Fáza 12**). Zvyšok návodu sa nezmenil.
 >
-> Migrácií je teraz **85**; `npx supabase db push` dobehne len tie, ktoré ti
+> Migrácií je teraz **88**; `npx supabase db push` dobehne len tie, ktoré ti
 > chýbajú, a **Admin → Stav nasadenia** povie, či si niektorú nepreskočil.
 
 ---
@@ -73,7 +73,7 @@ npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-Aplikuje sa 85 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+Aplikuje sa 88 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
 účtovníctvo. Trvá to pol minúty.
 
 4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
@@ -96,8 +96,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje všetkých 85 migrácií od nuly a prejde
-**454 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
+Postaví dočasnú databázu, aplikuje všetkých 88 migrácií od nuly a prejde
+**461 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
 Ak toto prejde, schéma je v poriadku a každý neskorší problém je v konfigurácii.
@@ -661,10 +661,17 @@ Toto nemusíš nastavovať vôbec — event bez sedenia predáva vstupenky na ku
 hotovo. Ale keď máš halu, kino alebo štadión, plán sa kreslí v **Organizátor →
 Miesta → Plán**. Tri veci sa oplatí vedieť dopredu, lebo inak sa hľadajú ťažko.
 
-**Nemusíš kresliť od nuly.** V editore je päť hotových predlôh — divadlo,
-kino, športová hala, štadión a koncertná sála. Vyber predlohu, prepíš názvy
-sektorov a radov na tie, ktoré máte na dverách, a si hotový. Predlohu smie
-nasadiť len admin a len do prázdneho plánu.
+**Nemusíš kresliť od nuly.** V editore je päť hotových predlôh — *Divadlo*,
+*Hala / koncert*, *Futbalový štadión*, *Klub* a *Kino / konferencia*. Vyber
+predlohu, prepíš názvy sektorov a radov na tie, ktoré máte na dverách, a si
+hotový. Predlohu smie nasadiť len admin a len do prázdneho plánu.
+
+Futbalový štadión je prekreslený podľa naozajstného: ihrisko, hlavná tribúna
+**A101 – A111** s lóžami **V01 – V07** a skyboxom, protiľahlá dvojposchodová
+**B101 – B110** a **B201 – B209**, dva kotle **C** a **D**, brány. 67 sektorov
+a **4 920 sedadiel, ktoré sa vygenerujú rovno pri nasadení** — nekreslíš, len
+prepisuješ ceny. Sektory sa volajú presne tak, ako ich má človek na lístku,
+lebo podľa toho hľadá turniket.
 
 **Fotka haly je iba podklad.** Keď nahráš pôdorys, kreslíš podľa neho — ale ku
 kupujúcemu sa tá fotka nedostane, do plánu sa posiela len to, čo si nakreslil.
@@ -672,17 +679,33 @@ To je predvolené správanie; keby si niekedy chcel obrázok naozaj ukázať, je
 prepínač pri nahratí. A kresliť sa dá aj úplne bez podkladu — *Bez obrázka —
 kresli voľne.*
 
-**Sektor nemusí byť obdĺžnik.** Tribúna, ktorá sa zatáča okolo ihriska, sa
-nakreslí klikaním bodov po obvode (3 až 40 bodov). Otáčanie je voľné — chytíš
-guľôčku a točíš, nie po pätnástich stupňoch. Sektor sa dá skopírovať aj
-s miestami a rozmermi, premenovať rad bez straty miest a vymazať jednotlivé
-miesta tam, kde v skutočnosti stojí stĺp. **Predané miesto sa vymazať nedá** —
-to je naschvál.
+**Sektor nemusí byť obdĺžnik — a miesta to vedia.** Tribúna, ktorá sa zatáča
+okolo ihriska, sa nakreslí klikaním bodov po obvode (3 až 40 bodov). Otáčanie
+je voľné — chytíš guľôčku a točíš, nie po pätnástich stupňoch.
+
+Keď potom do takého sektora necháš vygenerovať miesta, **mriežka sa oreže
+tvarom**: sedadlo, ktoré by padlo do rohu, kde v hale nič nie je, sa nevytvorí.
+Oblúková tribúna 12 × 30 tak nemá 360 miest, ale 186 — presne tie, ktoré tam
+naozaj sú. Čísla miest si držia svoj stĺpec, takže rad môže začínať štvorkou;
+to je správne a v halách to tak býva. Kto chce súvislé číslovanie, premenuje si
+rad v editore.
+
+Sektor sa dá skopírovať aj s miestami a rozmermi, premenovať rad bez straty
+miest a vymazať jednotlivé miesta tam, kde v skutočnosti stojí stĺp.
+**Predané miesto sa vymazať nedá** — to je naschvál.
+
+**Státie nemá sedadlá.** Sektor označený ako státie sa predáva na počet
+vstupeniek a miesta doň nejdú vygenerovať vôbec — ani cez editor, ani
+obchádzkou. Číslo radu na vstupenke do priestoru, kde sa stojí, je horšie než
+žiadne: človek ho pri vstupe hľadá. Sektor, ktorý už miesta má, sa na státie
+prepnúť nedá, kým sa tie miesta nezmažú.
 
 Na pláne pre kupujúceho sa jednotlivé sedadlá objavia až pri poriadnom
 priblížení; dovtedy sa rady kreslia ako pásy, aby sa plán veľkej haly dal
-vôbec prečítať. V košíku potom vidí presne to, čo si vybral — sektor, rad
-a číslo sedadla.
+vôbec prečítať. Keď potom prejde myšou po sedadle (alebo sa ho dotkne na
+telefóne), **vyskočí mu bublina**: sektor, rad, číslo miesta, cena a či je
+voľné — plus poznámka organizátora, keď nejaká je („za stĺpom", „miesto pre
+vozík"). V košíku vidí presne to, čo si vybral — sektor, rad a číslo sedadla.
 
 **✓ Kontrola:** kúp si na skúšku konkrétne sedadlo a pozri sa do košíka.
 Musí tam byť jeho označenie, nie len „1× Vstupenka".
@@ -748,7 +771,7 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 ### A štyri, ktoré netreba nasadenie
 
 ```bash
-npm run db:verify        # 85 migrácií a 49 testovacích súborov na dočasnej databáze
+npm run db:verify        # 88 migrácií a 50 testovacích súborov na dočasnej databáze
 npm run check:dns        # SPF, DKIM, DMARC a návratová cesta nedoručeniek
 npm run check:speed      # rýchlosť stránky na priemernom telefóne, s rozpočtom
 npm run check:webevents  # DOM udalosti, ktoré na webe ticho nerobia nič

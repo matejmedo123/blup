@@ -25,7 +25,7 @@ import { pickImage, uploadVenuePlan } from '@/storage/uploads';
 import { messageFor } from '@/lib/errors';
 import { formatEventDateLong } from '@/lib/format';
 import { useDialog } from '@/components/Dialog';
-import { SectorShape } from '@/components/SectorShape';
+import { SectorShape, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
 import {
   Body, Button, Caption, Chip, Input, LoadingState, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
@@ -1107,6 +1107,7 @@ export default function PlanEditorScreen() {
                 // rectangle nobody drew.
                 borderColor: section.shape ? 'transparent' : section.colour,
                 backgroundColor: section.shape ? 'transparent' : `${section.colour}2E`,
+                borderRadius: sectorRadius(width, height),
                 // Drawn at the angle it is stored at, otherwise the editor and
                 // the buyer's plan disagree about the same hall.
                 // A drawn shape carries its own angle; rotating it again would move the
@@ -1127,7 +1128,31 @@ export default function PlanEditorScreen() {
                   colour={section.colour}
                 />
               ) : null}
-              <Text style={styles.sectorName} numberOfLines={1}>{section.name}</Text>
+              {(() => {
+                // Same reason as on the buyer's plan: the centre of a wedge's
+                // box is out on the pitch, so the name goes at the centroid
+                // and is sized from the area rather than the box.
+                const m = section.shape
+                  ? shapeMetrics(section.shape, section)
+                  : { cx: section.x + section.width / 2, cy: section.y + section.height / 2,
+                      roomW: section.width, roomH: section.height };
+                return (
+                  <View
+                    pointerEvents="none"
+                    style={[styles.sectorLabel, {
+                      left: (m.cx - section.x) * planWidth,
+                      top: (m.cy - section.y) * planHeight,
+                    }]}
+                  >
+                    <Text
+                      style={[styles.sectorName, sectorLabelStyle(m.roomW * planWidth, m.roomH * planHeight)]}
+                      numberOfLines={1}
+                    >
+                      {section.name}
+                    </Text>
+                  </View>
+                );
+              })()}
             </View>
           );
         })}
@@ -1796,7 +1821,10 @@ const styles = StyleSheet.create({
   },
   angleText: { ...typography.monoStrong, color: '#FFFFFF' },
   sectorEditing: { borderStyle: 'dashed', borderWidth: 3 },
-  sectorName: { color: colors.text, fontWeight: '700', fontSize: 12 },
+  /* Anchored at the sector's centroid and shifted by half its own size, so the
+     name is centred on that point instead of starting at it. */
+  sectorLabel: { position: 'absolute', alignItems: 'center', width: 120, transform: [{ translateX: -60 }, { translateY: -8 }] },
+  sectorName: { color: colors.text, fontWeight: '700', fontSize: 12, textAlign: 'center' },
   draft: { position: 'absolute', borderWidth: 2, borderStyle: 'dashed', borderRadius: radius.sm },
 
   palette: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },

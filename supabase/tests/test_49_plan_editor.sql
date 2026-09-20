@@ -441,8 +441,10 @@ begin
        jsonb_array_elements(p -> 'sections') s
   where jsonb_typeof(s -> 'shape') = 'array';
 
-  assert shaped >= 6,
-    format('štadión aj balkón sa zatáčajú, tvarovaných sektorov je %s', shaped);
+  -- Divadelný balkón a oblúk v hale. Štadión sa medzitým prekreslil na
+  -- očíslované sektory okolo ihriska, tak už oblúk nepotrebuje.
+  assert shaped >= 2,
+    format('balkón aj oblúk sa zatáčajú, tvarovaných sektorov je %s', shaped);
   raise notice 'PASS predlohy kreslia tribúny tak, ako naozaj stoja';
 end $$;
 

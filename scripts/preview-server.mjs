@@ -26,6 +26,10 @@ import { dirname, join } from 'node:path';
 
 const PORT = Number(process.env.BLUP_PREVIEW_PORT ?? 4310);
 const SOCKET = process.env.BLUP_PG_SOCKET ?? '/tmp/blup-preview/socket';
+// Some sandboxes sweep unix socket files out from under a running postgres,
+// and psql then reports the server as simply not there. BLUP_PG_PORT switches
+// the whole thing to TCP, which nothing cleans up.
+const PG_PORT = process.env.BLUP_PG_PORT ? ['-p', process.env.BLUP_PG_PORT] : [];
 const DB = process.env.BLUP_PREVIEW_DB ?? 'blup_preview';
 const PG_USER = process.env.BLUP_PG_USER ?? 'postgres';
 
@@ -48,7 +52,7 @@ function sql(query, asUser) {
   const args = ['-h', SOCKET, '-U', 'postgres', '-d', DB, '-At', '-f', file];
   const run = () => (process.getuid?.() === 0
     ? execFileSync('su', [PG_USER, '-s', '/bin/bash', '-c',
-      `psql -h ${SOCKET} -U postgres -d ${DB} -At -f ${file}`], { encoding: 'utf8' })
+      `psql -h ${SOCKET} ${PG_PORT.join(" ")} -U postgres -d ${DB} -At -f ${file}`], { encoding: 'utf8' })
     : execFileSync('psql', args, { encoding: 'utf8' }));
 
   return JSON.parse(run().trim() || '[]');

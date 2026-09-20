@@ -17,7 +17,7 @@ import {
   Badge, Body, Button, Caption, EmptyState, ErrorState, LoadingState, Notice, Screen,
   SectionHeader,
 } from '@/components/ui';
-import { SectorShape } from '@/components/SectorShape';
+import { SectorShape, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
 import { ZoomPan, type ZoomPanHandle } from '@/components/ZoomPan';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -86,6 +86,16 @@ export default function SeatPickerScreen() {
    * between renders — React then tears the tree down with #310.
    */
   const [planScale, setPlanScale] = useState(1);
+  /**
+   * Which seat the pointer is over.
+   *
+   * A dot on a plan says "there is a seat here" and nothing else — not which
+   * row, not what it costs, not whether it is the one by the aisle with the
+   * pillar in front of it. All of that is already in the data; it just had
+   * nowhere to be shown. On a mouse it follows the pointer, on a finger it
+   * appears on touch-down, before the tap does anything.
+   */
+  const [peek, setPeek] = useState<Seat | null>(null);
   /** Ticks once a second so the hold clock counts down rather than sitting still. */
   const [now, setNow] = useState(() => Date.now());
 
@@ -497,7 +507,20 @@ export default function SeatPickerScreen() {
           onScaleChange={setPlanScale}
           style={[styles.plan, { width: planWidth, height: zoomHeight }]}
         >
-          <View style={[styles.zoomFill, { backgroundColor: `${open.colour}1F`, borderColor: open.colour }]} />
+          {/* A sector drawn as a shape keeps it when you zoom into it. Filling
+              the whole rectangle instead would tell the buyer the stand runs
+              into the corners, and the seats deliberately do not. */}
+          {open.shape ? (
+            <SectorShape
+              shape={open.shape}
+              bounds={{ x: open.x, y: open.y, width: open.width, height: open.height }}
+              planWidth={planWidth / Math.max(open.width, 0.0001)}
+              planHeight={zoomHeight / Math.max(open.height, 0.0001)}
+              colour={open.colour}
+            />
+          ) : (
+            <View style={[styles.zoomFill, { backgroundColor: `${open.colour}1F`, borderColor: open.colour }]} />
+          )}
 
           {/* Zoomed out: the rows as bands, so the stand has a shape and it is
               obvious which way it runs. No dots — at this size they would be
@@ -522,14 +545,28 @@ export default function SeatPickerScreen() {
             const cellW = planWidth / across;
             const cellH = zoomHeight / down;
             const size = Math.max(12, Math.min(30, Math.min(cellW, cellH) - 4));
+            /*
+             * Where the seat sits across the row.
+             *
+             * In a plain rectangle a short row is centred — a back row of nine
+             * in a stand fourteen wide belongs in the middle, not squashed
+             * left. In a sector that was drawn as a shape the seat number IS
+             * the column of the grid the shape was cut out of, so centring it
+             * would slide the row off the part of the stand it belongs to.
+             */
             const inRow = seatsPerRow.get(seat.row_index) ?? across;
-            const indent = ((across - inRow) / 2) * cellW;
+            const indent = open.shape ? 0 : ((across - inRow) / 2) * cellW;
 
             return (
               <Pressable
                 key={seat.id}
                 disabled={busy || (!seat.free && !seat.mine)}
                 onPress={() => tapSeat(seat)}
+                // A seat you cannot buy is still a seat you may want to read,
+                // so the card is wired outside the disabled press.
+                onHoverIn={() => setPeek(seat)}
+                onHoverOut={() => setPeek((current) => (current?.id === seat.id ? null : current))}
+                onPressIn={() => setPeek(seat)}
                 accessibilityRole="button"
                 accessibilityLabel={seatLabel(seat)}
                 hitSlop={4}
@@ -552,6 +589,46 @@ export default function SeatPickerScreen() {
               />
             );
           }) : null}
+
+          {/* What that dot actually is.
+              Anchored to the seat inside the zoom, so it follows the plan when
+              you pan — but counter-scaled, so the text stays the size text
+              should be however far in you are. */}
+          {peek && seatsVisible ? (() => {
+            const across = Math.max(open.row_width, 1);
+            const down = Math.max(open.rows, 1);
+            const cellW = planWidth / across;
+            const cellH = zoomHeight / down;
+            const inRow = seatsPerRow.get(peek.row_index) ?? across;
+            const indent = open.shape ? 0 : ((across - inRow) / 2) * cellW;
+            const state = peek.mine_claim === 'held' ? 'držíš v košíku'
+              : peek.mine ? 'máš kúpené'
+                : peek.taken ? 'obsadené'
+                  : !peek.sellable ? 'nepredáva sa'
+                    : 'voľné';
+            return (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.peek,
+                  {
+                    left: indent + (peek.number - 0.5) * cellW,
+                    top: (peek.row_index + 0.5) * cellH,
+                    transform: [{ scale: 1 / Math.max(planScale, 0.2) }],
+                  },
+                ]}
+              >
+                <Text style={styles.peekSeat}>{`${open.name} · rad ${peek.row} · miesto ${peek.number}`}</Text>
+                <Text style={styles.peekState}>
+                  {open.price_cents !== null ? `${formatMoney(open.price_cents, 'EUR')} · ${state}` : state}
+                </Text>
+                {peek.kind !== 'standard' ? (
+                  <Text style={styles.peekNote}>{SEAT_KIND_LABEL[peek.kind]}</Text>
+                ) : null}
+                {peek.note ? <Text style={styles.peekNote}>{peek.note}</Text> : null}
+              </View>
+            );
+          })() : null}
 
           {openSeats.isLoading ? (
             <View style={styles.planEmpty}><Caption>Načítavam miesta…</Caption></View>
@@ -608,6 +685,7 @@ export default function SeatPickerScreen() {
                   // hall and sits square on the plan is a plan of somewhere
                   // else.
                   transform: [{ rotate: section.shape ? '0deg' : `${section.rotation ?? 0}deg` }],
+                  borderRadius: sectorRadius(section.width * planWidth, section.height * planHeight),
                 },
                 // A stage is not a thing to pick. Drawn flat and dashed so it
                 // reads as part of the room rather than as something on sale.
@@ -624,12 +702,43 @@ export default function SeatPickerScreen() {
                   dimmed={soldOut}
                 />
               ) : null}
-              <Text style={styles.sectorName} numberOfLines={1}>{section.name}</Text>
-              {section.landmark ? null : (
-                <Text style={[styles.sectorFree, soldOut && styles.sectorGone]}>
-                  {soldOut ? 'vypredané' : `${section.available} voľných`}
-                </Text>
-              )}
+              {(() => {
+                /*
+                 * The name goes where the sector actually is.
+                 *
+                 * Centred in the box, a corner stand's label lands out on the
+                 * pitch, and on a bowl of sixty wedges they pile on top of one
+                 * another. The centroid is inside the shape by construction,
+                 * and the size comes from the shape's area — a thin curved
+                 * stand has a big box and almost no room to write in.
+                 */
+                const m = section.shape
+                  ? shapeMetrics(section.shape, section)
+                  : { cx: section.x + section.width / 2, cy: section.y + section.height / 2,
+                      roomW: section.width, roomH: section.height };
+                const roomW = m.roomW * planWidth;
+                const roomH = m.roomH * planHeight;
+                return (
+                  <View
+                    pointerEvents="none"
+                    style={[styles.sectorLabel, {
+                      left: (m.cx - section.x) * planWidth,
+                      top: (m.cy - section.y) * planHeight,
+                    }]}
+                  >
+                    {/* Only the name. The count used to sit under it, and on a
+                        bowl of sixty stands it was sixty small numbers nobody
+                        reads, overlapping each other. What is left of it is
+                        where it belongs: the key above the plan says how many
+                        are free at each price, the colour says sold out, and
+                        opening a sector says the number for that sector
+                        exactly. */}
+                    <Text style={[styles.sectorName, sectorLabelStyle(roomW, roomH)]} numberOfLines={1}>
+                      {section.name}
+                    </Text>
+                  </View>
+                );
+              })()}
             </Pressable>
           );
         })}
@@ -857,10 +966,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 2,
   },
-  sectorName: { color: colors.text, fontWeight: '700', fontSize: 12 },
+  /* Anchored at the sector's centroid: translated by half its own size so the
+     text is centred on that point rather than starting at it. */
+  sectorLabel: { position: 'absolute', alignItems: 'center', transform: [{ translateX: -60 }, { translateY: -8 }], width: 120 },
+  sectorName: { color: colors.text, fontWeight: '700', fontSize: 12, textAlign: 'center' },
   sectorLandmark: { borderStyle: 'dashed', backgroundColor: 'rgba(255,255,255,0.03)' },
-  sectorFree: { color: colors.text, fontSize: 10, opacity: 0.85 },
-  sectorGone: { textDecorationLine: 'line-through' },
 
   sectionCard: { marginBottom: spacing.sm },
   row: {
@@ -937,6 +1047,26 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 6, alignSelf: 'center',
     ...typography.caption, color: colors.textSecondary,
   },
+
+  /* The card that says what a dot is. Lifted clear of the seat and pinned by
+     its bottom-left so it never sits under the pointer, and never under the
+     finger that just touched the seat. */
+  peek: {
+    position: 'absolute',
+    marginLeft: 14,
+    marginTop: -14,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    minWidth: 170,
+    zIndex: 40,
+  },
+  peekSeat: { ...typography.bodyStrong, color: colors.text },
+  peekState: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  peekNote: { ...typography.caption, color: colors.accent, marginTop: 2 },
 
   rowStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
   seatLine: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.md },
