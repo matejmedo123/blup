@@ -680,7 +680,7 @@ miesta tam, kde v skutočnosti stojí stĺp. **Predané miesto sa vymazať nedá
 to je naschvál.
 
 Na pláne pre kupujúceho sa jednotlivé sedadlá objavia až pri poriadnom
-priblížení; nad tým sa rady kreslia ako pásy, aby sa plán veľkej haly dal
+priblížení; dovtedy sa rady kreslia ako pásy, aby sa plán veľkej haly dal
 vôbec prečítať. V košíku potom vidí presne to, čo si vybral — sektor, rad
 a číslo sedadla.
 
