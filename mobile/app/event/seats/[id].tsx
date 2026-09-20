@@ -782,6 +782,7 @@ export default function SeatPickerScreen() {
                     : soldOut ? 'rgba(255,255,255,0.04)' : `${section.colour}33`,
                   transform: [{ rotate: section.shape ? '0deg' : `${section.rotation ?? 0}deg` }],
                   borderRadius: sectorRadius(width, height),
+                  borderWidth: section.shape ? 0 : Math.min(2, 2 / Math.max(scale, 0.2)),
                 },
                 section.landmark && styles.sectorLandmark,
               ]}
@@ -794,6 +795,7 @@ export default function SeatPickerScreen() {
                   planHeight={planHeight}
                   colour={section.colour}
                   dimmed={soldOut}
+                  strokeWidth={Math.min(2, 2 / Math.max(scale, 0.2))}
                 />
               ) : null}
 
@@ -844,6 +846,10 @@ export default function SeatPickerScreen() {
                         borderRadius: at.size / 2,
                         left: at.left - at.size / 2,
                         top: at.top - at.size / 2,
+                        // Drawn thin enough that the zoom brings it back to
+                        // about a pixel, and never thicker than a third of
+                        // the dot.
+                        borderWidth: Math.min(at.size / 3, 1.4 / Math.max(scale, 0.2)),
                       },
                       seat.mine_claim === 'held' ? styles.dotMine
                         : seat.mine ? styles.dotBought
@@ -874,6 +880,7 @@ export default function SeatPickerScreen() {
           return (
             <View
               pointerEvents="none"
+              testID="seat-peek"
               style={[
                 styles.peek,
                 {
@@ -1282,7 +1289,11 @@ const styles = StyleSheet.create({
   seatChipSpecial: { borderColor: colors.warning },
   seatChipLabel: { ...typography.caption, color: colors.text },
 
-  dot: { position: 'absolute', borderWidth: 1.5 },
+  /* No borderWidth here: it is set per dot from the zoom. Everything inside
+     the plan is drawn in the plan's own units and then scaled, so a 1.5pt
+     outline becomes a 12pt ring at eight times in — the seats turn into
+     touching doughnuts. */
+  dot: { position: 'absolute' },
   dotFree: { backgroundColor: 'rgba(255,255,255,0.10)', borderColor: colors.textSecondary },
   dotMine: { backgroundColor: colors.accent, borderColor: '#FFFFFF' },
   dotBought: { backgroundColor: colors.success, borderColor: '#FFFFFF' },

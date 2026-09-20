@@ -18,7 +18,7 @@ import { radius } from '@/theme';
 export interface ShapePoint { x: number; y: number }
 
 export function SectorShape({
-  shape, bounds, planWidth, planHeight, colour, dimmed,
+  shape, bounds, planWidth, planHeight, colour, dimmed, strokeWidth = 2,
 }: {
   shape: ShapePoint[];
   /** Where the sector sits on the plan, in fractions. */
@@ -27,6 +27,12 @@ export function SectorShape({
   planHeight: number;
   colour: string;
   dimmed?: boolean;
+  /**
+   * In the plan's own units, so it scales with the zoom. Pass 2 / scale to
+   * keep it a hairline however far in the plan is — at eight times in, a
+   * 2-unit outline is 16 points thick and the stand is mostly outline.
+   */
+  strokeWidth?: number;
 }) {
   const width = Math.max(bounds.width * planWidth, 1);
   const height = Math.max(bounds.height * planHeight, 1);
@@ -48,7 +54,7 @@ export function SectorShape({
           points={points}
           fill={dimmed ? 'rgba(255,255,255,0.04)' : `${colour}33`}
           stroke={dimmed ? 'rgba(255,255,255,0.18)' : colour}
-          strokeWidth={2}
+          strokeWidth={strokeWidth}
           strokeLinejoin="round"
         />
       </Svg>
