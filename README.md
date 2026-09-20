@@ -157,7 +157,7 @@ because onboarding cannot work without it.
 
 ```bash
 npm run db:verify              # spins up a throwaway PostgreSQL 16 cluster,
-                               # applies all migrations, runs 135 assertions
+                               # applies all migrations, runs 454 assertions
 npm run typecheck              # tsc --noEmit over the whole app
 cd mobile && npx expo export --platform android   # proves the bundle builds
 ```
