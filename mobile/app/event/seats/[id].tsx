@@ -759,10 +759,17 @@ export default function SeatPickerScreen() {
           return (
             <Pressable
               key={section.id}
-              // While its seats are drawn the sector must not swallow the taps
-              // meant for them. Below that it is the thing you aim at.
-              disabled={section.landmark || showing}
-              onPress={() => zoomToSection(section)}
+              /*
+               * While its seats are drawn, the sector is not the thing you aim
+               * at — the seats are. `disabled` looked like the way to say that
+               * and is not: on web it takes pointer events away from the whole
+               * subtree, so the seats inside stopped receiving hover and the
+               * card that says what a seat is never appeared. `box-none` is
+               * the right word: not a target itself, children still are.
+               */
+              pointerEvents={showing ? 'box-none' : 'auto'}
+              disabled={section.landmark}
+              onPress={() => { if (!showing) zoomToSection(section); }}
               accessibilityRole="button"
               accessibilityLabel={
                 section.landmark
