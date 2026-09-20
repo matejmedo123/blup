@@ -18,6 +18,7 @@ import {
 } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
 import { SectorShape, bandOf, seatSize, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
+import { SeatField } from '@/components/SeatField';
 import { ZoomPan, type ZoomPanHandle, type ZoomPanView } from '@/components/ZoomPan';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -435,6 +436,20 @@ export default function SeatPickerScreen() {
     return focused ?? picked;
   }, [chosenId, sections, onScreen, focused]);
 
+  /**
+   * Which sector stays lit while the rest go quiet.
+   *
+   * Close enough to draw chairs, five stands are on screen and they look
+   * alike — the dropdown says D205 and nothing on the plan does. So at that
+   * point the sector the card is about keeps its colour and the others fade:
+   * still there, still one drag away, no longer pretending to be the one you
+   * picked. Further out there is nothing to confuse, so nothing fades.
+   */
+  const spotlight = useMemo(
+    () => (sections.some((section) => showsSeats(section)) ? shown?.id ?? null : null),
+    [sections, showsSeats, shown],
+  );
+
 
   /**
    * Go to a sector: put it in the middle, zoomed until a seat is a fingertip.
@@ -457,7 +472,22 @@ export default function SeatPickerScreen() {
     const fillH = frame.height > 0
       ? (frame.height * 0.86) / Math.max(section.height * planHeight, 1)
       : 1 / Math.max(section.height, 0.001);
-    const target = Math.min(18, Math.max(1, Math.min(fillW, fillH)));
+    /*
+     * ...but a seat is a dot, not a button.
+     *
+     * A sector of sixteen rows by fourteen fills the frame at fifteen times
+     * in, and then one seat is twenty-eight points across — a wall of
+     * circles with no plan around it, and every spacing in it magnified
+     * until it looks like a mistake. So the zoom stops at whatever makes a
+     * seat about the size of a seat on a printed plan, which for a small
+     * sector is well short of filling the frame and leaves its neighbours
+     * on screen where you can see what you picked.
+     */
+    const dot = section.rows > 0 && section.row_width > 0
+      ? seatSize(section.shape, section, section.rows, section.row_width, planWidth, planHeight)
+      : 0;
+    const readable = dot > 0 ? 13 / dot : Infinity;
+    const target = Math.max(1, Math.min(18, readable, Math.min(fillW, fillH)));
     planRef.current?.focus(
       { x: (section.x + section.width / 2) * planWidth, y: (section.y + section.height / 2) * planHeight },
       target,
@@ -798,6 +828,10 @@ export default function SeatPickerScreen() {
           const soldOut = !section.landmark && section.available === 0;
           const seats = seatsBySection.get(section.id) ?? [];
           const showing = showsSeats(section);
+          // Not the sector the card is about, while some sector's chairs are
+          // drawn: on the plan but out of the way.
+          const quiet = spotlight !== null && section.id !== spotlight;
+          const line = Math.min(2, (quiet ? 2 : 3.2) / Math.max(scale, 0.2));
           const left = section.x * planWidth;
           const top = section.y * planHeight;
           const width = section.width * planWidth;
@@ -853,8 +887,8 @@ export default function SeatPickerScreen() {
                   planWidth={planWidth}
                   planHeight={planHeight}
                   colour={section.colour}
-                  dimmed={soldOut}
-                  strokeWidth={Math.min(2, 2 / Math.max(scale, 0.2))}
+                  dimmed={soldOut || quiet}
+                  strokeWidth={line}
                 />
               ) : null}
 
@@ -880,60 +914,25 @@ export default function SeatPickerScreen() {
                 </View>
               )}
 
-              {/* The seats, drawn in the plan's own coordinates so the zoom
-                  carries them. No sizing maths per dot: a seat is a fraction
-                  of its sector, the sector is a fraction of the plan, and the
-                  plan is what is being scaled. */}
-              {showing ? seats.map((seat) => {
-                const at = seatSpot(section, seat);
-                if (!at) return null;
-                return (
-                  <Pressable
-                    key={seat.id}
-                    // The id is how the plan's own pointer handler works out
-                    // which seat is under the cursor. See peekAt below.
-                    nativeID={`seat-${seat.id}`}
-                    disabled={busy || (!seat.free && !seat.mine)}
-                    onPress={() => tapSeat(seat, section)}
-                    onPressIn={() => setPeek({ seat, section })}
-                    accessibilityRole="button"
-                    accessibilityLabel={seatLabel(seat)}
-                    style={[
-                      styles.dot,
-                      {
-                        /*
-                         * A seat is a 24pt box, shrunk by a transform — never
-                         * a 1.6pt box blown up by one.
-                         *
-                         * Laid out at its true size in the plan's units, a
-                         * seat's box is under two CSS pixels, and the browser
-                         * rounds that to whole device pixels SEPARATELY in
-                         * width and height depending on the sub-pixel it
-                         * lands on: 1x2 here, 2x1 there, 2x2 next door. The
-                         * zoom then multiplies those by fifteen, which is why
-                         * the same stand came out as a mixture of capsules,
-                         * specks and circles. A box that is 24 points before
-                         * the transform has nothing left to round.
-                         */
-                        width: DOT_BOX,
-                        height: DOT_BOX,
-                        borderRadius: DOT_BOX / 2,
-                        left: at.left - DOT_BOX / 2,
-                        top: at.top - DOT_BOX / 2,
-                        // Scales about the centre, so the seat stays where it
-                        // was put.
-                        transform: [{ scale: at.size / DOT_BOX }],
-                      },
-                      seat.mine_claim === 'held' ? styles.dotMine
-                        : seat.mine ? styles.dotBought
-                          : seat.taken ? styles.dotTaken
-                            : !seat.sellable ? styles.dotBlocked
-                              : seat.kind !== 'standard' ? styles.dotSpecial
-                                : styles.dotFree,
-                    ]}
-                  />
-                );
-              }) : null}
+              {/* The seats, as one drawing, in the plan's own coordinates so
+                  the zoom carries them. See SeatField: hundreds of separate
+                  views each get their size and position rounded to whole
+                  device pixels, and at this scale that rounding is the
+                  difference between a tidy row and a row of clumps. */}
+              {showing ? (
+                <SeatField
+                  width={width}
+                  height={height}
+                  radius={seatSize(section.shape, section, section.rows, section.row_width, planWidth, planHeight) / 2}
+                  seats={seats.map((seat) => {
+                    const at = seatSpot(section, seat);
+                    return at ? { seat, x: at.left, y: at.top } : null;
+                  }).filter((one): one is { seat: Seat; x: number; y: number } => one !== null)}
+                  onPressSeat={(seat) => { if (!busy && (seat.free || seat.mine)) void tapSeat(seat, section); }}
+                  labelFor={seatLabel}
+                  dim={quiet}
+                />
+              ) : null}
             </Pressable>
           );
         })}

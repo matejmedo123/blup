@@ -294,12 +294,19 @@ export function seatSize(
   const deep = Math.hypot((far.x - mid.x) * planWidth, (far.y - mid.y) * planHeight) / down;
 
   /*
-   * Seats nearly touch along a row, and rows are set apart.
+   * One fill factor, not one per direction.
    *
-   * That is what a seating plan looks like: a row is a solid run of seats, and
-   * the space is BETWEEN rows, where the aisle actually is. At 0.62 of the gap
-   * each way there was a full seat's worth of space in every direction and the
-   * stand read as scattered dots rather than as a block of seating.
+   * Filling 88% of the gap along a row and 74% of the gap across left the
+   * seats in a row all but touching while the rows stood well apart —
+   * measured in D205, 0.27 units between neighbours against 0.76 between
+   * rows. The eye does not read that as "rows": it reads as solid columns
+   * with a regular channel cut between them, which is the one thing a
+   * seating plan must not look like.
+   *
+   * With a single factor the two gaps differ only by however much the two
+   * spacings themselves differ — here 2.21 along against 2.70 across, so
+   * rows sit a little further apart than neighbours do, which is exactly
+   * what a seating plan looks like and no longer reads as a gap.
    */
-  return Math.max(1, Math.min(along * 0.88, deep * 0.74));
+  return Math.max(1, Math.min(along, deep) * 0.72);
 }
