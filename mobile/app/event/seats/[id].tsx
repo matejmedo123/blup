@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
+  Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
@@ -273,6 +273,50 @@ export default function SeatPickerScreen() {
     (sectionId: string) => seatOrders.get(sectionId) ?? new Map<string, { index: number; of: number }>(),
     [seatOrders],
   );
+
+  /**
+   * What the pointer is over, worked out once for the whole plan.
+   *
+   * Not Pressable's own onHoverIn: inside the zoomed plan the browser does not
+   * deliver pointerenter to the seats at all — dispatching one by hand shows
+   * the card appearing, so the handler is fine and the event never arrives.
+   * Rather than fight that, the plan asks the document what is under the
+   * cursor and reads the seat's id off it. One listener instead of several
+   * hundred, and it does not care how the library models hover.
+   */
+  const planHost = React.useRef<View>(null);
+  const seatIndex = useMemo(() => {
+    const out = new Map<string, { seat: Seat; section: Section }>();
+    for (const [sectionId, rows] of seatsBySection) {
+      const section = sections.find((one) => one.id === sectionId);
+      if (!section) continue;
+      for (const seat of rows) out.set(seat.id, { seat, section });
+    }
+    return out;
+  }, [seatsBySection, sections]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+    const node = planHost.current as unknown as HTMLElement | null;
+    if (!node) return undefined;
+
+    const onMove = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
+      const under = document.elementFromPoint(event.clientX, event.clientY);
+      const dot = under?.closest?.('[id^="seat-"]') as HTMLElement | null;
+      const id = dot?.id?.slice(5);
+      const hit = id ? seatIndex.get(id) ?? null : null;
+      setPeek((current) => (current?.seat.id === hit?.seat.id ? current : hit));
+    };
+    const onLeave = () => setPeek(null);
+
+    node.addEventListener('pointermove', onMove);
+    node.addEventListener('pointerleave', onLeave);
+    return () => {
+      node.removeEventListener('pointermove', onMove);
+      node.removeEventListener('pointerleave', onLeave);
+    };
+  }, [seatIndex]);
 
   /**
    * Where one seat sits inside its sector, in the plan's own coordinates.
@@ -720,6 +764,7 @@ export default function SeatPickerScreen() {
         <Text style={styles.pickerChevron}>⌄</Text>
       </Pressable>
 
+      <View ref={planHost} style={styles.planHost}>
       <ZoomPan
         ref={planRef}
         contentWidth={planWidth}
@@ -838,10 +883,11 @@ export default function SeatPickerScreen() {
                 return (
                   <Pressable
                     key={seat.id}
+                    // The id is how the plan's own pointer handler works out
+                    // which seat is under the cursor. See peekAt below.
+                    nativeID={`seat-${seat.id}`}
                     disabled={busy || (!seat.free && !seat.mine)}
                     onPress={() => tapSeat(seat, section)}
-                    onHoverIn={() => setPeek({ seat, section })}
-                    onHoverOut={() => setPeek((current) => (current?.seat.id === seat.id ? null : current))}
                     onPressIn={() => setPeek({ seat, section })}
                     accessibilityRole="button"
                     accessibilityLabel={seatLabel(seat)}
@@ -913,6 +959,7 @@ export default function SeatPickerScreen() {
           );
         })() : null}
       </ZoomPan>
+      </View>
 
       {/* No "back to the whole plan" button any more: you never left it.
           Zooming out is the way back, and it is the same gesture that got you
@@ -1154,6 +1201,7 @@ const styles = StyleSheet.create({
   clock: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
   clockLow: { color: colors.danger },
 
+  planHost: { alignSelf: 'center' },
   plan: {
     alignSelf: 'center',
     borderRadius: radius.lg,
