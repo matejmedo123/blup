@@ -438,10 +438,24 @@ begin
        ) d
   where p ->> 'code' = 'stadium' and s ->> 'name' = 'A106';
 
-  assert v_gap < 1.35,
+  assert v_gap < 1.15,
     format('rozostupy na obryse sa líšia %sx — obrys sa vzorkuje po uhle, nie po dĺžke', round(v_gap, 2));
 
-  raise notice 'PASS tribúny sa zatáčajú a body obrysu sú rozložené rovnomerne';
+  -- A obrys musí byť dosť hustý na to, aby bol krivkou. Na šiestich bodoch sa
+  -- pod každým druhým sedadlom mení smer a rad vyzerá ako cikcak z rovných
+  -- kúskov — presne to bolo na pláne vidieť.
+  -- Len tribúny: ihrisko je obdĺžnik a štyri body sú presne toľko, koľko má
+  -- mať. Nikto na ňom nesedí.
+  select min(jsonb_array_length(s -> 'shape')) into v_flat
+  from jsonb_array_elements(public.venue_presets()) p,
+       jsonb_array_elements(p -> 'sections') s
+  where p ->> 'code' = 'stadium'
+    and jsonb_typeof(s -> 'shape') = 'array'
+    and (s ? 'rows');
+  assert v_flat >= 24,
+    format('najredší obrys má %s bodov — na to sa rad nedá položiť ako krivka', v_flat);
+
+  raise notice 'PASS tribúny sa zatáčajú a body obrysu sú husté a rovnomerné';
 end $$;
 
 rollback;

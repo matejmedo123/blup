@@ -172,22 +172,105 @@ export function bandOf(shape: ShapePoint[]) {
   const front = shape.slice(0, half);
   const back = shape.slice(half).reverse();
 
-  const walk = (chain: ShapePoint[], u: number): ShapePoint => {
-    if (chain.length === 0) return { x: 0.5, y: 0.5 };
-    if (chain.length === 1) return chain[0];
-    const t = Math.min(0.999999, Math.max(0, u)) * (chain.length - 1);
-    const i = Math.floor(t);
-    const f = t - i;
+  /**
+   * An edge of the band, resampled so that equal steps are equal DISTANCE.
+   *
+   * Walking a polyline by vertex index is not the same as walking it by
+   * length: where two points sit close together the walk crawls, where they
+   * sit far apart it leaps. Seats laid out that way bunch up and spread out
+   * along the row, and because each seat is sized from its own local step,
+   * they come out different sizes too — a run of circles with a fat one in
+   * the middle. Measuring the edge first and stepping along it by distance
+   * fixes both at once.
+   */
+  const byLength = (chain: ShapePoint[], samples: number): ShapePoint[] => {
+    if (chain.length === 0) return [{ x: 0.5, y: 0.5 }];
+    if (chain.length === 1) return [chain[0]];
+
+    const run: number[] = [0];
+    for (let i = 1; i < chain.length; i += 1) {
+      run.push(run[i - 1] + Math.hypot(chain[i].x - chain[i - 1].x, chain[i].y - chain[i - 1].y));
+    }
+    const total = run[run.length - 1];
+    if (total <= 0) return [chain[0]];
+
+    const out: ShapePoint[] = [];
+    let at = 1;
+    for (let k = 0; k < samples; k += 1) {
+      const want = (k / (samples - 1)) * total;
+      while (at < run.length - 1 && run[at] < want) at += 1;
+      const span = run[at] - run[at - 1];
+      const f = span <= 0 ? 0 : (want - run[at - 1]) / span;
+      const a = chain[at - 1];
+      const b = chain[at];
+      out.push({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f });
+    }
+    return out;
+  };
+
+  const SAMPLES = 256;
+  const f = byLength(front, SAMPLES);
+  const b = byLength(back, SAMPLES);
+
+  // Between samples, not snapped to the nearest one: snapping leaves every
+  // gap up to half a sample out, which is a 5% wobble in the spacing and shows
+  // up as seats that do not quite line up.
+  const pick = (chain: ShapePoint[], u: number): ShapePoint => {
+    const t = Math.min(1, Math.max(0, u)) * (chain.length - 1);
+    const i = Math.min(chain.length - 2, Math.floor(t));
+    const g = t - i;
     const a = chain[i];
-    const b = chain[Math.min(chain.length - 1, i + 1)];
-    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    const c = chain[i + 1] ?? a;
+    return { x: a.x + (c.x - a.x) * g, y: a.y + (c.y - a.y) * g };
   };
 
   return {
     at(u: number, v: number): ShapePoint {
-      const a = walk(front, u);
-      const b = walk(back, u);
-      return { x: a.x + (b.x - a.x) * v, y: a.y + (b.y - a.y) * v };
+      const a = pick(f, u);
+      const c = pick(b, u);
+      return { x: a.x + (c.x - a.x) * v, y: a.y + (c.y - a.y) * v };
     },
   };
+}
+
+/**
+ * How big to draw every seat in a sector — one size for all of them.
+ *
+ * Sized per seat from its own neighbour gap, a stand that narrows comes out as
+ * a mix of dots, circles and blobs, which reads as a mistake rather than as a
+ * narrowing stand. One size, taken from the tightest row (the front one on a
+ * wedge, where the seats are closest together), keeps every seat the same and
+ * keeps none of them touching.
+ */
+export function seatSize(
+  shape: ShapePoint[] | null,
+  bounds: { x: number; y: number; width: number; height: number },
+  rows: number,
+  perRow: number,
+  planWidth: number,
+  planHeight: number,
+) {
+  const across = Math.max(perRow, 1);
+  const down = Math.max(rows, 1);
+
+  if (!shape) {
+    const cellW = (bounds.width * planWidth) / across;
+    const cellH = (bounds.height * planHeight) / down;
+    return Math.max(1, Math.min(cellW * 0.82, cellH * 0.78));
+  }
+
+  const band = bandOf(shape);
+  const span = (v: number) => {
+    const a = band.at(0, v);
+    const b = band.at(1, v);
+    return Math.hypot((b.x - a.x) * planWidth, (b.y - a.y) * planHeight);
+  };
+  // Both edges, because either can be the short one.
+  const along = Math.min(span(0), span(1)) / across;
+
+  const mid = band.at(0.5, 0);
+  const far = band.at(0.5, 1);
+  const deep = Math.hypot((far.x - mid.x) * planWidth, (far.y - mid.y) * planHeight) / down;
+
+  return Math.max(1, Math.min(along * 0.8, deep * 0.78));
 }

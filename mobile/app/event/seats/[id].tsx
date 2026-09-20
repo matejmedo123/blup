@@ -17,7 +17,7 @@ import {
   Badge, Body, Button, Caption, EmptyState, ErrorState, Input, LoadingState, Notice, Screen,
 } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
-import { SectorShape, bandOf, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
+import { SectorShape, bandOf, seatSize, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
 import { ZoomPan, type ZoomPanHandle, type ZoomPanView } from '@/components/ZoomPan';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -318,17 +318,17 @@ export default function SeatPickerScreen() {
     const down = Math.max(section.rows, 1);
     const width = section.width * planWidth;
     const height = section.height * planHeight;
+    // One size for every seat in the sector, worked out once. Sized from its
+    // own neighbour gap instead, a narrowing stand came out as a mixture of
+    // dots, circles and blobs.
+    const size = seatSize(section.shape, section, section.rows, section.row_width, planWidth, planHeight);
 
     if (!section.shape) {
       const cellW = width / across;
       const cellH = height / down;
       const inRow = seatsPerRow(section.id).get(seat.row_index) ?? across;
       const indent = ((across - inRow) / 2) * cellW;
-      return {
-        left: indent + (seat.number - 0.5) * cellW,
-        top: (seat.row_index + 0.5) * cellH,
-        size: Math.min(cellW * 0.82, cellH * 0.78),
-      };
+      return { left: indent + (seat.number - 0.5) * cellW, top: (seat.row_index + 0.5) * cellH, size };
     }
 
     /*
@@ -336,28 +336,17 @@ export default function SeatPickerScreen() {
      * bounding box.
      *
      * Rows run ALONG the stand and the row number counts ACROSS it, which is
-     * what makes a side stand's rows run vertically, a corner stand's rows
-     * curve with it, and the front row of a wedge come out shorter than the
-     * back one. Across the box instead, a side stand's rows ran horizontally
-     * — straight across the stand rather than along it — and a wedge's
-     * collapsed into a bar.
+     * what makes a side stand's rows run vertically and a corner stand's curve
+     * with it. The outline is measured and stepped along by distance, so the
+     * seats in a row are evenly spaced instead of bunching wherever the
+     * outline happened to have its points.
      */
     const band = bandOf(section.shape);
-    const u = (seat.number - 0.5) / across;
-    const v = (seat.row_index + 0.5) / down;
-    const here = band.at(u, v);
-
-    // The neighbouring seat and the next row, to size the dot against the room
-    // it actually has — which on a wedge is different in every row.
-    const alongStep = band.at(Math.min(1, u + 1 / across), v);
-    const acrossStep = band.at(u, Math.min(1, v + 1 / down));
-    const along = Math.hypot((alongStep.x - here.x) * planWidth, (alongStep.y - here.y) * planHeight);
-    const deep = Math.hypot((acrossStep.x - here.x) * planWidth, (acrossStep.y - here.y) * planHeight);
-
+    const here = band.at((seat.number - 0.5) / across, (seat.row_index + 0.5) / down);
     return {
       left: (here.x - section.x) * planWidth,
       top: (here.y - section.y) * planHeight,
-      size: Math.max(1, Math.min(along * 0.8, deep * 0.78)),
+      size,
     };
   }, [planWidth, planHeight, seatsPerRow]);
 
