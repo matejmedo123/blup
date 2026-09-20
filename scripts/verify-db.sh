@@ -25,14 +25,27 @@ DB="blup_verify"
 
 export PATH="$PGBIN:$PATH"
 
+# Stop by data directory rather than through pg_ctl alone. The server runs as
+# the postgres user, and pg_ctl refuses to run as root — so as root the stop
+# quietly did nothing and the cluster outlived the script. That went unnoticed
+# while the socket was the only way in (the next run wiped the directory and
+# started its own); with a TCP port it is the next run that fails, holding the
+# port, and it reads as "pg_ctl: could not start server".
 cleanup() {
   if [ -d "$PGDATA" ]; then
     pg_ctl -D "$PGDATA" -s -m immediate stop >/dev/null 2>&1 || true
   fi
+  pkill -f "postgres -D $PGDATA" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 echo "==> Preparing throwaway cluster in $WORKDIR"
+cleanup
+# pkill signals; the port is only free once the process has actually gone.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  pgrep -f "postgres -D $PGDATA" >/dev/null 2>&1 || break
+  sleep 1
+done
 rm -rf "$WORKDIR"
 mkdir -p "$PGDATA" "$SOCKET"
 

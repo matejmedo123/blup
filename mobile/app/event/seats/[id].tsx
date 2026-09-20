@@ -14,9 +14,9 @@ import { addToCart } from '@/api/cart';
 import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
 import {
-  Badge, Body, Button, Caption, EmptyState, ErrorState, LoadingState, Notice, Screen,
-  SectionHeader,
+  Badge, Body, Button, Caption, EmptyState, ErrorState, Input, LoadingState, Notice, Screen,
 } from '@/components/ui';
+import { BottomSheet } from '@/components/BottomSheet';
 import { SectorShape, rowExtent, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
 import { ZoomPan, type ZoomPanHandle, type ZoomPanView } from '@/components/ZoomPan';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -94,6 +94,18 @@ export default function SeatPickerScreen() {
    * appears on touch-down, before the tap does anything.
    */
   const [peek, setPeek] = useState<{ seat: Seat; section: Section } | null>(null);
+
+  /**
+   * The sector picked from the list, and whether that list is open.
+   *
+   * A stadium has sixty-one of them and scrolling to "D205" past sixty cards
+   * is not finding it. So the list is a dropdown you open, filter by name —
+   * the name printed on the ticket — and pick from; picking takes the plan to
+   * that sector, and the card under the plan is that sector alone.
+   */
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerFilter, setPickerFilter] = useState('');
+  const [chosenId, setChosenId] = useState<string | null>(null);
   /** Ticks once a second so the hold clock counts down rather than sitting still. */
   const [now, setNow] = useState(() => Date.now());
 
@@ -287,7 +299,7 @@ export default function SeatPickerScreen() {
       return {
         left: indent + (seat.number - 0.5) * cellW,
         top,
-        size: Math.min(cellW, cellH) * 0.78,
+        size: Math.min(cellW * 0.82, cellH * 0.78),
       };
     }
 
@@ -303,7 +315,7 @@ export default function SeatPickerScreen() {
     return {
       left: (span.x0 - section.x) * planWidth + (order.index + 0.5) * cellW,
       top,
-      size: Math.min(cellW, cellH) * 0.78,
+      size: Math.min(cellW * 0.82, cellH * 0.78),
     };
   }, [planWidth, planHeight, seatsPerRow, seatOrder]);
 
@@ -334,6 +346,35 @@ export default function SeatPickerScreen() {
   }, [sections, onScreen, pitchOf, frame, view, planWidth, planHeight, scale]);
 
   /**
+   * The sectors the dropdown shows.
+   *
+   * Filtered by what you typed, landmarks left out — you cannot buy the pitch
+   * — and sold-out ones kept, because "is B204 gone?" is a question the list
+   * should answer rather than dodge.
+   */
+  const pickerList = useMemo(() => {
+    const needle = pickerFilter.trim().toLowerCase();
+    return sections.filter((section) => (
+      !section.landmark && (needle === '' || section.name.toLowerCase().includes(needle))
+    ));
+  }, [sections, pickerFilter]);
+
+  /**
+   * The sector the card under the plan is about.
+   *
+   * What you picked from the list, for as long as you are still looking at it;
+   * otherwise whatever is in the middle of the frame. Dragging away from your
+   * choice should change the card, not leave it lying about a stand that is no
+   * longer on screen.
+   */
+  const shown = useMemo(() => {
+    const picked = chosenId ? sections.find((section) => section.id === chosenId) ?? null : null;
+    if (picked && onScreen(picked)) return picked;
+    return focused;
+  }, [chosenId, sections, onScreen, focused]);
+
+
+  /**
    * Go to a sector: put it in the middle, zoomed until a seat is a fingertip.
    *
    * Not "open" it — everything else stays drawn where it is, one drag away.
@@ -348,15 +389,19 @@ export default function SeatPickerScreen() {
      * the plan, and 20 points a seat means zooming until nothing but half of
      * it is on screen.
      */
-    const fill = Math.max(1, Math.min(
-      0.8 / Math.max(section.width, 0.001),
-      0.8 / Math.max(section.height, 0.001),
-    ));
     const acrossPx = (section.width * planWidth) / Math.max(section.row_width, 1);
     const downPx = (section.height * planHeight) / Math.max(section.rows, 1);
     const natural = section.numbered ? Math.min(acrossPx, downPx) : 0;
-    const readable = natural > 0 ? 15 / natural : 0;
-    const target = Math.min(18, Math.max(fill, readable));
+
+    // Just far enough that a seat is comfortably tappable — NOT far enough to
+    // fill the frame with the stand. A stand in a stadium is a thirtieth of
+    // the plan wide; filling the frame with it means scale 22, and then the
+    // screen is one sector and you are back to where this started. At a
+    // readable seat you get the stand and three or four of its neighbours,
+    // which is what a plan is for.
+    const target = natural > 0
+      ? Math.min(18, Math.max(1, 16 / natural))
+      : Math.min(6, Math.max(1, 0.7 / Math.max(section.width, section.height)));
     planRef.current?.focus(
       { x: (section.x + section.width / 2) * planWidth, y: (section.y + section.height / 2) * planHeight },
       target,
@@ -656,26 +701,19 @@ export default function SeatPickerScreen() {
           Nothing here is about football: it is the same rule for a theatre,
           a cinema or a club, because it is a rule about how much room a seat
           has on screen, not about what the hall is for. */}
-      {focused ? (
-        <View style={styles.zoomHead}>
-          <View style={styles.flex}>
-            <View style={styles.rowTitle}>
-              <Text style={styles.rowName}>{focused.name}</Text>
-              {focused.kind !== 'standard' ? (
-                <Badge label={(SECTION_KIND_LABEL[focused.kind] ?? focused.kind).toUpperCase()}
-                       tone={focused.kind === 'vip' || focused.kind === 'box' ? 'accent' : 'neutral'} />
-              ) : null}
-            </View>
-            <Caption>
-              {focused.available > 0 ? `${focused.available} voľných z ${focused.seat_count}` : 'vypredané'}
-            </Caption>
-            {focused.note ? <Caption>{focused.note}</Caption> : null}
-          </View>
-          {focused.price_cents !== null ? (
-            <Text style={styles.price}>{formatMoney(focused.price_cents, 'EUR')}</Text>
-          ) : null}
+      {/* Pick a sector by its name — the one on the ticket.
+          A list of sixty-one cards is not a way to find D205; a list you open,
+          type into and pick from is. Picking takes the plan to that sector and
+          the card below the plan becomes that sector alone. */}
+      <Pressable style={styles.picker} onPress={() => setPickerOpen(true)}>
+        <View style={styles.flex}>
+          <Caption>Sektor</Caption>
+          <Text style={styles.pickerValue}>
+            {shown ? shown.name : 'Vyber si sektor alebo klepni do plánu'}
+          </Text>
         </View>
-      ) : null}
+        <Text style={styles.pickerChevron}>⌄</Text>
+      </Pressable>
 
       <ZoomPan
         ref={planRef}
@@ -861,10 +899,99 @@ export default function SeatPickerScreen() {
           Zooming out is the way back, and it is the same gesture that got you
           in. */}
 
-      <SectionHeader title="Sektory" />
-      {sections.filter((section) => !section.landmark).map((section) => (
-        <View key={section.id} style={styles.sectionCard}>
-          <Pressable style={styles.row} onPress={() => pick(section)} disabled={busy}>
+      {/* One sector under the plan: the one you picked, or the one you have
+          dragged to the middle. Sixty-one cards under a plan is a wall, and
+          sixty of them are about stands nobody is looking at. */}
+      {shown ? (
+        <View style={styles.zoomHead}>
+          <View style={styles.flex}>
+            <View style={styles.rowTitle}>
+              <Text style={styles.rowName}>{shown.name}</Text>
+              {shown.kind !== 'standard' ? (
+                <Badge label={(SECTION_KIND_LABEL[shown.kind] ?? shown.kind).toUpperCase()}
+                       tone={shown.kind === 'vip' || shown.kind === 'box' ? 'accent' : 'neutral'} />
+              ) : null}
+            </View>
+            <Caption>
+              {shown.available > 0
+                ? `${shown.available} voľných${shown.numbered ? ` z ${shown.seat_count}` : ''}`
+                : 'vypredané'}
+            </Caption>
+            {shown.note ? <Caption>{shown.note}</Caption> : null}
+          </View>
+          {shown.price_cents !== null ? (
+            <View style={styles.priceCell}>
+              <Text style={styles.price}>{formatMoney(shown.price_cents, 'EUR')}</Text>
+              <Caption>{shown.numbered ? 'za miesto' : 'za vstupenku'}</Caption>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* "Find us seats next to each other", once, for that sector. */}
+      {shown && shown.numbered && shown.available > 0 ? (
+        <View style={styles.together}>
+          <Caption style={styles.togetherLabel}>{`Koľkí idete do ${shown.name}?`}</Caption>
+          <View style={styles.togetherControls}>
+            <Stepper
+              value={partyFor(shown.id)}
+              onChange={(next) => setPartyFor(shown.id, next)}
+              min={1}
+              max={10}
+              disabled={busy}
+            />
+            <Button
+              title="Nájdi nám miesta vedľa seba"
+              variant="secondary"
+              style={styles.togetherButton}
+              compact
+              onPress={() => findTogether(shown)}
+              disabled={busy}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      {/* A sector sold by the count rather than by seat: it has no dots to
+          tap, so it needs a button. */}
+      {shown && !shown.numbered && shown.available > 0 && shown.ticket_type_id ? (
+        <Button
+          title={`Pridať ${shown.name} do košíka`}
+          variant="secondary"
+          onPress={() => pick(shown)}
+          disabled={busy}
+        />
+      ) : null}
+
+      {/* The sector list, in the dropdown rather than down the page. */}
+      <BottomSheet
+        visible={pickerOpen}
+        onClose={() => { setPickerOpen(false); setPickerFilter(''); }}
+        title="Vyber sektor"
+        subtitle="Píš názov tak, ako ho máš na vstupenke — A106, B204, V03."
+      >
+        <Input
+          placeholder="Hľadaj sektor"
+          value={pickerFilter}
+          onChangeText={setPickerFilter}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
+        {pickerList.length === 0 ? (
+          <Caption>Žiadny sektor sa tomu nepodobá.</Caption>
+        ) : null}
+        {pickerList.map((section) => (
+          <Pressable
+            key={section.id}
+            style={styles.row}
+            disabled={busy}
+            onPress={() => {
+              setChosenId(section.id);
+              setPickerOpen(false);
+              setPickerFilter('');
+              zoomToSection(section);
+            }}
+          >
             <View style={[styles.swatch, { backgroundColor: section.colour }]} />
             <View style={styles.flex}>
               <View style={styles.rowTitle}>
@@ -879,45 +1006,15 @@ export default function SeatPickerScreen() {
                   ? 'vypredané'
                   : `${section.available} voľných${section.numbered ? ' · číslované' : ''}`}
               </Caption>
-              {section.note ? <Caption>{section.note}</Caption> : null}
             </View>
-            {/* "44,00 €" beside a stepper showing 2 reads as a line total. It
-                is the price of one seat, so it says so. */}
             {section.price_cents !== null ? (
               <View style={styles.priceCell}>
                 <Text style={styles.price}>{formatMoney(section.price_cents, 'EUR')}</Text>
-                <Caption>za miesto</Caption>
               </View>
             ) : null}
           </Pressable>
-
-          {section.numbered && section.available > 0 ? (
-            <View style={styles.together}>
-              {/* On its own line. As a flex child beside the stepper and a
-                  long button it shrank until it wrapped one letter per line —
-                  which is exactly what the phone screenshot showed. */}
-              <Caption style={styles.togetherLabel}>Koľkí idete?</Caption>
-              <View style={styles.togetherControls}>
-                <Stepper
-                  value={partyFor(section.id)}
-                  onChange={(next) => setPartyFor(section.id, next)}
-                  min={1}
-                  max={10}
-                  disabled={busy}
-                />
-                <Button
-                  title="Nájdi nám miesta vedľa seba"
-                  variant="secondary"
-                  style={styles.togetherButton}
-                  compact
-                  onPress={() => findTogether(section)}
-                  disabled={busy}
-                />
-              </View>
-            </View>
-          ) : null}
-        </View>
-      ))}
+        ))}
+      </BottomSheet>
 
       {/* The stage, the bar, the entrance used to be listed here by name. On a
           stadium that is a line reading "Hracia plocha, Skybox, Brána A, Brána
@@ -965,69 +1062,6 @@ export default function SeatPickerScreen() {
         </View>
       ) : null}
 
-      <SectionHeader title="Sektory" />
-      {sections.filter((section) => !section.landmark).map((section) => (
-        <View key={section.id} style={styles.sectionCard}>
-          <Pressable style={styles.row} onPress={() => pick(section)} disabled={busy}>
-            <View style={[styles.swatch, { backgroundColor: section.colour }]} />
-            <View style={styles.flex}>
-              <View style={styles.rowTitle}>
-                <Text style={styles.rowName}>{section.name}</Text>
-                {section.kind !== 'standard' ? (
-                  <Badge label={(SECTION_KIND_LABEL[section.kind] ?? section.kind).toUpperCase()}
-                         tone={section.kind === 'vip' || section.kind === 'box' ? 'accent' : 'neutral'} />
-                ) : null}
-              </View>
-              <Caption>
-                {section.available === 0
-                  ? 'vypredané'
-                  : `${section.available} voľných${section.numbered ? ' · číslované' : ''}`}
-              </Caption>
-              {section.note ? <Caption>{section.note}</Caption> : null}
-            </View>
-            {/* "44,00 €" beside a stepper showing 2 reads as a line total. It
-                is the price of one seat, so it says so. */}
-            {section.price_cents !== null ? (
-              <View style={styles.priceCell}>
-                <Text style={styles.price}>{formatMoney(section.price_cents, 'EUR')}</Text>
-                <Caption>za miesto</Caption>
-              </View>
-            ) : null}
-          </Pressable>
-
-          {section.numbered && section.available > 0 ? (
-            <View style={styles.together}>
-              {/* On its own line. As a flex child beside the stepper and a
-                  long button it shrank until it wrapped one letter per line —
-                  which is exactly what the phone screenshot showed. */}
-              <Caption style={styles.togetherLabel}>Koľkí idete?</Caption>
-              <View style={styles.togetherControls}>
-                <Stepper
-                  value={partyFor(section.id)}
-                  onChange={(next) => setPartyFor(section.id, next)}
-                  min={1}
-                  max={10}
-                  disabled={busy}
-                />
-                <Button
-                  title="Nájdi nám miesta vedľa seba"
-                  variant="secondary"
-                  style={styles.togetherButton}
-                  compact
-                  onPress={() => findTogether(section)}
-                  disabled={busy}
-                />
-              </View>
-            </View>
-          ) : null}
-        </View>
-      ))}
-
-      {/* The stage, the bar, the entrance used to be listed here by name. On a
-          stadium that is a line reading "Hracia plocha, Skybox, Brána A, Brána
-          B, Brána C, Brána D" under the sectors, which tells a buyer nothing
-          they cannot see on the plan itself — where those things are drawn,
-          labelled, and in the right place. */}
 
       {heldEverywhere.length > 0 ? (
         <Button title="Pustiť všetky držané miesta" variant="ghost" onPress={releaseAll} disabled={busy} />
@@ -1125,7 +1159,23 @@ const styles = StyleSheet.create({
   sectorName: { color: colors.text, fontWeight: '700', fontSize: 12, textAlign: 'center' },
   sectorLandmark: { borderStyle: 'dashed', backgroundColor: 'rgba(255,255,255,0.03)' },
 
-  sectionCard: { marginBottom: spacing.sm },
+  /* The sector dropdown. Reads as a field because it behaves like one: it has
+     a label, a value and something to press. */
+  picker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceInput,
+    marginBottom: spacing.sm,
+  },
+  pickerValue: { ...typography.bodyStrong, color: colors.text },
+  pickerChevron: { ...typography.body, color: colors.textSecondary, fontSize: 18 },
+
   row: {
     flexDirection: 'row',
     alignItems: 'center',
