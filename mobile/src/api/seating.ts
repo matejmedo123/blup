@@ -13,6 +13,17 @@ export interface Seat {
   number: number;
   /** Which row it is in, counted from 0 — the dots are laid out from this. */
   row_index: number;
+  /**
+   * Which point of the sector's grid it stands on: twice its distance from the
+   * middle of its row, in spacings. Always a whole number, and neighbours
+   * differ by two.
+   *
+   * Stored rather than worked out from the seat's number and how many the row
+   * holds, because that stops being true the moment somebody adds a seat to a
+   * row by hand — every other seat in it would move. Null on plans made
+   * before seats remembered this; then it is worked out the old way.
+   */
+  slot: number | null;
   sellable: boolean;
   /** Yours by any route — in your basket, on your order, or already paid for. */
   mine: boolean;
@@ -96,6 +107,14 @@ export interface Section {
    * x/y/width/height stay the bounding box of these points.
    */
   shape: { x: number; y: number }[] | null;
+  /**
+   * The distance between two seats along a row, in fractions of the plan.
+   *
+   * A property of the sector, not of its first row: worked out from the first
+   * row instead, adding one seat to that row would shift every seat in the
+   * sector. Null on plans made before this was stored.
+   */
+  seat_pitch: number | null;
   ticket_type_id: string | null;
   price_cents: number | null;
   numbered: boolean;

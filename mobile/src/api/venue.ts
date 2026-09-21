@@ -103,6 +103,8 @@ export async function getVenueSections(venueMapId: string): Promise<Section[]> {
       height: Number(row.height),
       rotation: Number(row.rotation ?? 0),
       shape: (row.shape as { x: number; y: number }[]) ?? null,
+      seat_pitch: row.seat_pitch === null || row.seat_pitch === undefined
+        ? null : Number(row.seat_pitch),
       ticket_type_id: (row.ticket_type_id as string) ?? null,
       // The editor reads the sectors as stored; price and availability are the
       // buyer's view and come from seat_map_for_event().
@@ -289,6 +291,35 @@ export async function setSeatState(
 
   if (error) throw error;
   return (data as number) ?? 0;
+}
+
+/**
+ * One more seat in a row, or one fewer — by hand.
+ *
+ * Stands are not regular. A row runs a seat longer on one side, one is missing
+ * by the stairway, a wheelchair space takes the width of two. A generated grid
+ * has no way of knowing any of that, so the organizer has to be able to say
+ * it.
+ *
+ * The seat goes on the next point of the sector's grid past the end of the
+ * row, left or right, so every other seat in the row stays exactly where it
+ * was. The row is then renumbered in order, which is why it cannot be done in
+ * a row that has anything sold or held in it — somebody's seat number would
+ * change under them.
+ */
+export async function addSectionSeat(
+  sectionId: string,
+  rowLabel: string,
+  side: 'left' | 'right' = 'right',
+): Promise<{ seat_id: string; row: string; number: number; slot: number; total: number }> {
+  const { data, error } = await supabase.rpc('add_section_seat', {
+    p_section_id: sectionId,
+    p_row_label: rowLabel,
+    p_side: side,
+  });
+
+  if (error) throw error;
+  return data as { seat_id: string; row: string; number: number; slot: number; total: number };
 }
 
 /**

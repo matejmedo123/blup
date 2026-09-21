@@ -145,3 +145,76 @@ begin
 end $$;
 
 rollback;
+
+-- --- ručne pridané miesto --------------------------------------------------
+--
+-- Tribúny nie sú pravidelné a mriežka to nemá ako vedieť. Organizátor musí
+-- vedieť do radu miesto pridať — a hlavne tým nesmie pohnúť tými, ktoré tam
+-- už sú. Preto si miesto pamätá bod mriežky, na ktorom stojí, a nedopočítava
+-- sa z toho, koľké je.
+begin;
+set search_path = public, extensions;
+
+do $$
+declare
+  v_admin uuid := 'a5151515-0000-0000-0000-000000000003';
+  v_org   uuid := 'b5151515-0000-0000-0000-000000000003';
+  v_map   uuid;
+  v_sec   uuid;
+  v_before integer[];
+  v_after  integer[];
+  v_added  jsonb;
+begin
+  insert into auth.users (id, email, email_confirmed_at)
+  values (v_admin, 'ruka@blup.test', now());
+  -- Plán sály kreslí BLUP, tak to musí byť admin.
+  update public.profiles set app_role = 'admin' where id = v_admin;
+  insert into public.organizations (id, name, slug, created_by, verification_status)
+  values (v_org, 'Test ruky', 'test-ruky-51', v_admin, 'verified');
+  insert into public.organization_members (organization_id, user_id, role)
+  values (v_org, v_admin, 'owner') on conflict do nothing;
+  insert into public.venue_maps (organization_id, name) values (v_org, 'Ruka')
+  returning id into v_map;
+  insert into public.venue_sections (venue_map_id, name, colour, x, y, width, height, kind, shape)
+  values (v_map, 'Blok', '#38bdf8', 0.2, 0.2, 0.6, 0.4, 'standard',
+          '[{"x":0.2,"y":0.2},{"x":0.5,"y":0.2},{"x":0.8,"y":0.2},
+            {"x":0.8,"y":0.6},{"x":0.5,"y":0.6},{"x":0.2,"y":0.6}]'::jsonb)
+  returning id into v_sec;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', v_admin::text, true);
+  perform public.generate_section_seats(v_sec, 6, 10);
+
+  select array_agg(slot order by seat_number) into v_before
+  from public.venue_seats where venue_section_id = v_sec and row_label = 'C';
+
+  assert v_before is not null and array_length(v_before, 1) = 10,
+    'rad C má mať desať miest, kým sa doň nesiahne';
+
+  v_added := public.add_section_seat(v_sec, 'C', 'right');
+
+  select array_agg(slot order by seat_number) into v_after
+  from public.venue_seats where venue_section_id = v_sec and row_label = 'C';
+
+  assert array_length(v_after, 1) = 11,
+    format('po pridaní má mať rad C jedenásť miest, má %s', array_length(v_after, 1));
+
+  -- Toto je celá pointa: pôvodné miesta zostali na svojich bodoch.
+  assert v_after[1:10] = v_before,
+    format('pridaním sa pohli pôvodné miesta: %s → %s', v_before, v_after);
+
+  assert (v_added ->> 'slot')::integer = v_before[10] + 2,
+    'nové miesto sadlo na ďalší bod mriežky za posledným';
+
+  -- Vľavo sa čísla posunú, lebo v rade sa sedí po poradí.
+  perform public.add_section_seat(v_sec, 'C', 'left');
+  assert (select min(slot) from public.venue_seats
+          where venue_section_id = v_sec and row_label = 'C' and seat_number = 1)
+       = v_before[1] - 2,
+    'miesto pridané vľavo je prvé v rade';
+
+  reset role;
+  raise notice 'PASS ručne pridané miesto nepohne tými, ktoré v rade už sú';
+end $$;
+
+rollback;

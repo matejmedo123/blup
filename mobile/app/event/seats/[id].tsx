@@ -433,9 +433,13 @@ export default function SeatPickerScreen() {
     const first = Math.max(seatsPerRow(section.id).get(0) ?? across, 1);
     const from = rowFirsts.get(section.id)?.get(seat.row_index) ?? 1;
     const wide = Math.max(band.lengthAt(v), 1e-9);
-    const step = band.lengthAt(0.5 / down) / first;
-    const place = seat.number - from + 1;
-    const here = band.at(0.5 + (place - (inRow + 1) / 2) * step / wide, v);
+    // The sector's own spacing when it has one. Worked out from the first row
+    // instead, one seat added to that row would move the whole sector.
+    const step = section.seat_pitch ?? band.lengthAt(0.5 / down) / first;
+    // The point the seat stands on. Plans made before seats remembered it fall
+    // back to where its number and the row's size would have put it.
+    const slot = seat.slot ?? 2 * (seat.number - from + 1) - inRow - 1;
+    const here = band.at(0.5 + (slot / 2) * step / wide, v);
     return {
       left: (here.x - section.x) * planWidth,
       top: (here.y - section.y) * planHeight,

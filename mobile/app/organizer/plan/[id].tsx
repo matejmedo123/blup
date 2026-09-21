@@ -12,6 +12,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import {
   applyVenuePreset, clearVenueMapImage, cloneVenueMap, createSection, createVenueMap,
   deleteSeats, deleteSection,
+  addSectionSeat,
   duplicateSection, generateSeats, getReusablePlans, getSectionSeats, getVenueMap,
   getVenuePresets, getVenueSections, removeVenuePlan, renameRow, setBackdropOnly,
   setSeatState, setSectionShape,
@@ -711,6 +712,32 @@ export default function PlanEditorScreen() {
   };
 
   /** Renames one row in place, so tickets already sold keep their seat. */
+  /**
+   * One more seat on the end of a row.
+   *
+   * Stands are not regular: a row runs a seat longer on one side, one is
+   * missing by the stairway, a wheelchair space takes the width of two. The
+   * generated grid cannot know that, so this is where the organizer says it.
+   * The seat goes on the next point of the sector's own grid, so nothing else
+   * in the row moves.
+   */
+  const addSeatToRow = async (label: string, side: 'left' | 'right') => {
+    if (!editing) return;
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      const made = await addSectionSeat(editing.id, label, side);
+      setNote(`Rad ${label} má ${made.total} miest.`);
+      await seats.refetch();
+      await refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const renameOneRow = async (label: string) => {
     const next = await dialog.prompt({
       title: `Premenovať rad ${label}`,
@@ -1483,7 +1510,8 @@ export default function PlanEditorScreen() {
           <SectionHeader title={`${editing.name} · miesta`} />
           <Caption style={styles.hint}>
             Klepni na miesta a potom povedz, čo s nimi. Predané miesto sa nedá stiahnuť z predaja —
-            plán by potom klamal.
+            plán by potom klamal. Plusom na konci radu pridáš miesto tam, kde mriežka nevyšla;
+            ostatné miesta v rade zostanú, kde sú.
           </Caption>
 
           {seats.isLoading ? <LoadingState label="Načítavam miesta…" /> : null}
@@ -1495,6 +1523,19 @@ export default function PlanEditorScreen() {
                   {/* The row's own name is the button that renames it. */}
                   <Pressable onPress={() => renameOneRow(label)} disabled={busy} hitSlop={6}>
                     <Text style={[styles.seatRowLabel, styles.seatRowLabelTap]}>{label}</Text>
+                  </Pressable>
+                  {/* One at each end, because which end matters: the seat lands
+                      on the next point of the grid on that side and nothing
+                      else in the row moves. */}
+                  <Pressable
+                    onPress={() => void addSeatToRow(label, 'left')}
+                    disabled={busy}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Pridať miesto na začiatok radu ${label}`}
+                    style={styles.seatAdd}
+                  >
+                    <Text style={styles.seatAddLabel}>+</Text>
                   </Pressable>
                   {inRow.map((seat) => {
                     const on = picked.includes(seat.id);
@@ -1522,6 +1563,16 @@ export default function PlanEditorScreen() {
                       </Pressable>
                     );
                   })}
+                  <Pressable
+                    onPress={() => void addSeatToRow(label, 'right')}
+                    disabled={busy}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Pridať miesto na koniec radu ${label}`}
+                    style={styles.seatAdd}
+                  >
+                    <Text style={styles.seatAddLabel}>+</Text>
+                  </Pressable>
                 </View>
               ))}
             </View>
@@ -1849,6 +1900,14 @@ const styles = StyleSheet.create({
   seatChipOff: { opacity: 0.4, borderStyle: 'dashed' },
   seatChipKind: { borderColor: colors.warning },
   seatChipLabel: { ...typography.caption, color: colors.text },
+  // Rovnaká veľkosť ako miesto, ale prázdne políčko: je to miesto, ktoré tam
+  // ešte nie je.
+  seatAdd: {
+    minWidth: 30, height: 30, borderRadius: radius.sm,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderStyle: 'dashed', borderColor: colors.accent,
+  },
+  seatAddLabel: { ...typography.bodyStrong, color: colors.accent, lineHeight: 18 },
 
   row: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

@@ -62,12 +62,17 @@ as $fn$
              -- dobiehajúci do špica a vtlačiť doň miesto by znamenalo predať
              -- vstupenku na sedadlo, ktoré tam nie je.
              when lens.len < pitch.step then 0
+             -- Miesto potrebuje celý rozostup, nie polovicu. Zaokrúhlene nahor
+             -- vyšlo posledné miesto stredom presne na okraj sektora, čiže
+             -- polovicou von — a na pláne to vyzerá ako sedadlo mimo tribúny.
+             -- Nadol sa jeho stred zastaví aspoň pol rozostupu pred okrajom a
+             -- celé sedadlo zostane vnútri.
              when p_per_row % 2 = 0 then
                least(p_per_row * 4,
-                 2 * floor(lens.len / (2 * pitch.step) + 0.5 + 0.000000001)::integer)
+                 2 * floor(lens.len / (2 * pitch.step) + 0.000000001)::integer)
              else
                least(p_per_row * 4,
-                 2 * floor(lens.len / (2 * pitch.step) + 0.000000001)::integer + 1)
+                 2 * floor((lens.len / pitch.step - 1) / 2 + 0.000000001)::integer + 1)
            end as per
     from lens, pitch
   ),

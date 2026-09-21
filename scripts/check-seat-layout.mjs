@@ -87,9 +87,11 @@ function fits(wide, step, perRow) {
   if (!(step > 0)) return perRow;
   // Rad užší než jedno sedadlo nedostane žiadne.
   if (wide < step) return 0;
+  // Miesto potrebuje celý rozostup, nie polovicu — inak posledné sedadlo
+  // prečnieva stredom cez okraj sektora.
   return perRow % 2 === 0
-    ? 2 * Math.floor(wide / (2 * step) + 0.5 + 1e-9)
-    : 2 * Math.floor(wide / (2 * step) + 1e-9) + 1;
+    ? 2 * Math.floor(wide / (2 * step) + 1e-9)
+    : 2 * Math.floor((wide / step - 1) / 2 + 1e-9) + 1;
 }
 
 function place(shape, rows, perRow) {
@@ -258,9 +260,12 @@ for (const one of [...DRAWN, ...PREDLOHY]) {
         lattice.add(Math.round((n - (row.length + 1) / 2) * 2));
       }
       okraj = Math.max(okraj, (wide - (row.length - 1) * step) / 2 / Math.max(step, 1e-9));
-      if ((row.length - 1) * step > wide + 1e-9) {
+      // Celé sedadlo musí zostať vnútri: jeho stred aspoň pol rozostupu od
+      // okraja radu. Predtým stačilo, aby tam bol stred — a sedadlo potom
+      // polovicou prečnievalo cez hranicu sektora.
+      if (row.length > 1 && row.length * step > wide + 1e-9) {
         throw new Error(`rad ${r} má ${row.length} miest po ${step.toFixed(4)}, `
-          + `ale je len ${wide.toFixed(4)} dlhý`);
+          + `ale je len ${wide.toFixed(4)} dlhý — posledné prečnieva`);
       }
     });
     // Body mriežky idú po celých rozostupoch od seba; keby sa niektorý rad
@@ -274,8 +279,16 @@ for (const one of [...DRAWN, ...PREDLOHY]) {
     if (krok !== 2) {
       throw new Error(`stĺpce sa nekryjú — medzi bodmi mriežky je ${krok / 2} rozostupu`);
     }
-    if (okraj > 1.000001) {
-      throw new Error(`na kraji radu zvýšilo ${okraj.toFixed(2)} rozostupu — zmestilo sa tam ešte miesto`);
+    /*
+     * Zvyšok na kraji radu.
+     *
+     * Miesta pribúdajú po dvoch, aby stĺpce sedeli, takže na jednej strane
+     * môže zostať až rozostup a pol — o jedno miesto sa už nepokúšame, lebo
+     * by muselo pribudnúť aj na druhej strane a tam sa nezmestí. Viac než to
+     * ale znamená, že sa tam ešte jeden pár zmestil.
+     */
+    if (okraj > 1.5000001) {
+      throw new Error(`na kraji radu zvýšilo ${okraj.toFixed(2)} rozostupu — zmestil sa tam ešte pár miest`);
     }
     console.log(`  ✓ ${one.name.padEnd(30)} ${note}`);
     /*
