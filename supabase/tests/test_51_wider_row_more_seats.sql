@@ -213,6 +213,28 @@ begin
        = v_before[1] - 2,
     'miesto pridané vľavo je prvé v rade';
 
+  -- A perom sa dá ukázať dovnútra radu: miesto sadne na bod medzi dvoma
+  -- existujúcimi a dostane číslo podľa toho, kde v rade sedí.
+  v_added := public.add_section_seat(v_sec, 'C', 'right', v_before[3] + 1);
+  assert (v_added ->> 'renumbered')::boolean,
+    'miesto vnútri radu prečísluje tie za ním';
+  assert (select slot from public.venue_seats
+          where venue_section_id = v_sec and row_label = 'C'
+            and seat_number = (v_added ->> 'number')::integer) = v_before[3] + 1,
+    'miesto sadlo presne na bod, na ktorý sa ukázalo';
+  assert (select count(*) from public.venue_seats
+          where venue_section_id = v_sec and row_label = 'C'
+          group by row_label) = array_length(v_before, 1) + 3,
+    'v rade sú tri pridané miesta';
+
+  -- A na obsadený bod druhé miesto nejde.
+  begin
+    perform public.add_section_seat(v_sec, 'C', 'right', v_before[3] + 1);
+    assert false, 'na obsadený bod mriežky sa dalo pridať druhé miesto';
+  exception when others then
+    assert sqlerrm = 'SLOT_TAKEN', format('čakal som SLOT_TAKEN, prišlo %s', sqlerrm);
+  end;
+
   reset role;
   raise notice 'PASS ručne pridané miesto nepohne tými, ktoré v rade už sú';
 end $$;

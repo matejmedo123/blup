@@ -27,6 +27,7 @@ import { messageFor } from '@/lib/errors';
 import { formatEventDateLong } from '@/lib/format';
 import { useDialog } from '@/components/Dialog';
 import { SectorShape, sectorLabelStyle, sectorRadius, shapeMetrics } from '@/components/SectorShape';
+import { bandOf, bandSpotAt, seatSize } from '@/components/seatBand';
 import {
   Body, Button, Caption, Chip, Input, LoadingState, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
@@ -131,6 +132,15 @@ export default function PlanEditorScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   /** Seats of the sector open in the seat list, so a row can be blocked. */
   const [seatsOpen, setSeatsOpen] = useState(false);
+  /**
+   * The seat pen: tap the plan to put a seat there, tap a seat to take it away.
+   *
+   * A stand that does not work out does not fail at the end of a row — it
+   * fails somewhere inside it: a seat missing by the stairway, a wheelchair
+   * space two wide, a row set back. That is something to point at, so this
+   * mode exists and the sector's seats are drawn while it is on.
+   */
+  const [seatPen, setSeatPen] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
 
   // The rectangle being dragged, in plan pixels. Null when not dragging.
@@ -198,7 +208,7 @@ export default function PlanEditorScreen() {
   const seats = useQuery({
     queryKey: ['venue', 'section', editingId, 'seats'],
     queryFn: () => getSectionSeats(editingId!),
-    enabled: Boolean(editingId) && seatsOpen,
+    enabled: Boolean(editingId) && (seatsOpen || seatPen),
   });
 
   // Other nights in the same hall. An arena runs fifty a year on one plan, and
@@ -721,6 +731,105 @@ export default function PlanEditorScreen() {
    * The seat goes on the next point of the sector's own grid, so nothing else
    * in the row moves.
    */
+  /**
+   * The sector's seats, where they are drawn, so the pen has something to aim
+   * at — and so it can tell a tap on a seat from a tap beside one.
+   *
+   * The same arithmetic the buyer's plan uses: the seat's own point on the
+   * sector's grid, the sector's own spacing. Worked out any other way the
+   * editor would be pointing at seats that are somewhere else.
+   */
+  /**
+   * The pen's own close-up of the sector being edited.
+   *
+   * On the plan itself a seat is about two pixels across — that is the right
+   * size for a stadium and impossible to aim at. So the pen gets the sector
+   * alone, blown up to the width of the screen, where a seat is a seat.
+   * Nothing is zoomed: it is the same outline drawn at a different scale, so
+   * a tap in here is the same arithmetic as a tap out there.
+   */
+  const pen = (() => {
+    if (!editing || !seatPen || !editing.shape) return null;
+    const rows = groupRows(seats.data ?? []);
+    if (rows.length === 0) return null;
+
+    // "Plan width" chosen so the sector spans the canvas.
+    const scaleX = planWidth / Math.max(editing.width, 0.0001);
+    const tall = Math.min(460, Math.max(160, editing.height * scaleX));
+    const scaleY = tall / Math.max(editing.height, 0.0001);
+
+    const band = bandOf(editing.shape);
+    const first = rows[0][1].length;
+    const step = editing.seat_pitch ?? band.lengthAt(0.5 / rows.length) / Math.max(first, 1);
+    const size = seatSize(
+      editing.shape, editing, rows.length, first, scaleX, scaleY,
+      (row) => rows[row]?.[1].length ?? first,
+    );
+
+    const dots: { id: string; left: number; top: number; off: boolean }[] = [];
+    rows.forEach(([, inRow], r) => {
+      const v = (r + 0.5) / rows.length;
+      const wide = Math.max(band.lengthAt(v), 1e-9);
+      inRow.forEach((seat, i) => {
+        const slot = seat.slot ?? 2 * (i + 1) - inRow.length - 1;
+        const at = band.at(0.5 + (slot / 2) * step / wide, v);
+        dots.push({
+          id: seat.id,
+          left: (at.x - editing.x) * scaleX,
+          top: (at.y - editing.y) * scaleY,
+          off: !seat.is_sellable,
+        });
+      });
+    });
+
+    return { width: planWidth, height: tall, scaleX, scaleY, size, dots, rows, step };
+  })();
+
+  /**
+   * A tap with the pen: a seat where there is none, no seat where there is one.
+   *
+   * The point is turned back into a row and a point of the sector's grid —
+   * which has no closed form, so it is found by walking the rows. Rounded to
+   * the points this sector's rows already sit on, so a placed seat lands in
+   * the same columns as the rest.
+   */
+  const penTap = async (px: number, py: number) => {
+    if (!editing || !pen || !editing.shape) return;
+
+    const spot = bandSpotAt(
+      editing.shape, pen.rows.length, pen.step,
+      { x: editing.x + px / pen.scaleX, y: editing.y + py / pen.scaleY },
+      pen.scaleX, pen.scaleY,
+    );
+    if (!spot) return;
+
+    const [label, inRow] = pen.rows[spot.row];
+    // The points this row sits on: even or odd, never both, or the columns
+    // would go out of line.
+    const parity = ((inRow[0]?.slot ?? 2 - inRow.length - 1) % 2 + 2) % 2;
+    const slot = Math.round((spot.slot - parity) / 2) * 2 + parity;
+    const sitting = inRow.find((seat, i) => (seat.slot ?? 2 * (i + 1) - inRow.length - 1) === slot);
+
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    try {
+      if (sitting) {
+        await deleteSeats([sitting.id]);
+        setNote(`Rad ${label}: miesto preč.`);
+      } else {
+        const made = await addSectionSeat(editing.id, label, 'right', slot);
+        setNote(`Rad ${label}, miesto ${made.number}.`);
+      }
+      await seats.refetch();
+      await refresh();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const addSeatToRow = async (label: string, side: 'left' | 'right') => {
     if (!editing) return;
     setError(null);
@@ -1495,6 +1604,60 @@ export default function PlanEditorScreen() {
             onPress={regenerate}
             loading={busy}
           />
+          {/* Pointing at the plan, rather than counting rows in a list. A
+              stand that does not work out fails somewhere inside a row, and
+              that is something to point at. */}
+          <Button
+            title={seatPen ? 'Skončiť s pridávaním miest' : 'Pridať miesto klepnutím do plánu'}
+            variant={seatPen ? 'primary' : 'secondary'}
+            onPress={() => { setSeatPen(!seatPen); setNote(null); setError(null); }}
+            disabled={!editing.numbered || !editing.shape}
+          />
+          {seatPen ? (
+            <Caption style={styles.hint}>
+              Klepni do sektora a miesto tam pribudne; klepni na miesto a zmizne. Pridá sa na
+              najbližší bod mriežky, takže ostatné miesta v rade zostanú, kde sú. Miesto vnútri
+              radu posunie čísla za ním — v rade, kde už niekto má vstupenku, to plán odmietne.
+            </Caption>
+          ) : null}
+          {/* The sector alone, big enough to point at. On the plan a seat is
+              two pixels; here it is a seat. */}
+          {pen ? (
+            <Pressable
+              onPress={(e) => {
+                if (busy) return;
+                void penTap(e.nativeEvent.locationX, e.nativeEvent.locationY);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Plátno sektora ${editing.name} — klepnutím pridáš alebo ubereš miesto`}
+              style={[styles.penCanvas, { width: pen.width, height: pen.height }]}
+            >
+              {/* The same outline, drawn at the canvas's scale: `scaleX` is
+                  already "how wide the whole plan would be for this sector to
+                  span the canvas", which is exactly what SectorShape means by
+                  planWidth. */}
+              <SectorShape
+                shape={editing.shape!}
+                bounds={editing}
+                planWidth={pen.scaleX}
+                planHeight={pen.scaleY}
+                colour={editing.colour}
+              />
+              {pen.dots.map((dot) => (
+                <View
+                  key={dot.id}
+                  pointerEvents="none"
+                  style={[styles.penSeat, {
+                    left: dot.left - pen.size / 2,
+                    top: dot.top - pen.size / 2,
+                    width: pen.size,
+                    height: pen.size,
+                    borderRadius: pen.size / 2,
+                  }, dot.off && styles.penSeatOff]}
+                />
+              ))}
+            </Pressable>
+          ) : null}
           <Button
             title={seatsOpen ? 'Skryť miesta' : 'Upraviť jednotlivé miesta'}
             variant="ghost"
@@ -1908,6 +2071,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderStyle: 'dashed', borderColor: colors.accent,
   },
   seatAddLabel: { ...typography.bodyStrong, color: colors.accent, lineHeight: 18 },
+  // Miesto tak, ako ho uvidí kupujúci — aby sa dalo mieriť na to, čo tam je.
+  penCanvas: {
+    alignSelf: 'center', borderRadius: radius.md, overflow: 'hidden',
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+  },
+  penSeat: { position: 'absolute', backgroundColor: 'rgba(226,232,240,0.92)' },
+  penSeatOff: { backgroundColor: 'rgba(120,132,150,0.45)' },
 
   row: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

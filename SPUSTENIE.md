@@ -73,7 +73,7 @@ npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-Aplikuje sa 92 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+Aplikuje sa 93 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
 účtovníctvo. Trvá to pol minúty.
 
 4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
@@ -96,7 +96,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje všetkých 92 migrácií od nuly a prejde
+Postaví dočasnú databázu, aplikuje všetkých 93 migrácií od nuly a prejde
 **465 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
@@ -776,7 +776,7 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 ### A päť, ktoré netreba nasadenie
 
 ```bash
-npm run db:verify        # 92 migrácií a 51 testovacích súborov na dočasnej databáze
+npm run db:verify        # 93 migrácií a 51 testovacích súborov na dočasnej databáze
 npm run check:dns        # SPF, DKIM, DMARC a návratová cesta nedoručeniek
 npm run check:speed      # rýchlosť stránky na priemernom telefóne, s rozpočtom
 npm run check:webevents  # DOM udalosti, ktoré na webe ticho nerobia nič
@@ -798,8 +798,12 @@ pevné body vzdialené o rozostup, súmerné okolo stredu. Rad dostane tie body,
 ktoré sa doň zmestia — takže širší rad má viac miest, nie tie isté ďalej od
 seba, a stĺpce idú rovno naprieč sektorom. Rozostup udáva rad A a sektor si ho
 pamätá. Keď mriežka nevyjde — tribúna je na jednej strane o sedadlo dlhšia,
-pri schodisku jedno chýba — v editore je na oboch koncoch radu plus, ktorým
-miesto pridáš ručne; ostatné miesta v rade zostanú, kde sú.
+pri schodisku jedno chýba — dá sa to doladiť ručne, dvoma spôsobmi. V zozname
+miest je na oboch koncoch každého radu plus. A „Pridať miesto klepnutím do
+plánu" otvorí sektor samotný, zväčšený na šírku obrazovky: klepnutím doň
+miesto pribudne, klepnutím na miesto zmizne. Sadne vždy na najbližší bod
+mriežky, takže ostatné miesta v rade zostanú, kde sú. Miesto vnútri radu
+posunie čísla za ním, a to sa v rade, kde už niekto má vstupenku, odmietne.
 
 `check:seats` rozloží sedadlá do sektorov, aké vzniknú klepaním po obryse v
 editore — tri rohy, päť, zalomená tribúna, tvar L — a porovná, kam sadli, s

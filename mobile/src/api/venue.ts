@@ -311,15 +311,28 @@ export async function addSectionSeat(
   sectionId: string,
   rowLabel: string,
   side: 'left' | 'right' = 'right',
-): Promise<{ seat_id: string; row: string; number: number; slot: number; total: number }> {
+  /**
+   * An exact point of the sector's grid, for placing a seat by pointing at the
+   * plan rather than extending a row. Twice its distance from the middle of
+   * the row, in spacings — the same number a seat stores.
+   */
+  slot?: number,
+): Promise<{
+  seat_id: string; row: string; number: number; slot: number;
+  renumbered: boolean; total: number;
+}> {
   const { data, error } = await supabase.rpc('add_section_seat', {
     p_section_id: sectionId,
     p_row_label: rowLabel,
     p_side: side,
+    p_slot: slot ?? null,
   });
 
   if (error) throw error;
-  return data as { seat_id: string; row: string; number: number; slot: number; total: number };
+  return data as {
+    seat_id: string; row: string; number: number; slot: number;
+    renumbered: boolean; total: number;
+  };
 }
 
 /**
@@ -398,20 +411,27 @@ export async function setBackdropOnly(mapId: string, backdropOnly: boolean): Pro
 }
 
 /** Every seat of a sector, for the editor's own list. */
-export async function getSectionSeats(sectionId: string): Promise<{
-  id: string; row_label: string; seat_number: number; is_sellable: boolean; kind: string; note: string | null;
-}[]> {
+export interface EditableSeat {
+  id: string;
+  row_label: string;
+  seat_number: number;
+  is_sellable: boolean;
+  kind: string;
+  note: string | null;
+  /** Which point of the sector's grid it stands on. Null on older plans. */
+  slot: number | null;
+}
+
+export async function getSectionSeats(sectionId: string): Promise<EditableSeat[]> {
   const { data, error } = await supabase
     .from('venue_seats')
-    .select('id, row_label, seat_number, is_sellable, kind, note')
+    .select('id, row_label, seat_number, is_sellable, kind, note, slot')
     .eq('venue_section_id', sectionId)
     .order('row_label')
     .order('seat_number');
 
   if (error) throw error;
-  return (data ?? []) as {
-    id: string; row_label: string; seat_number: number; is_sellable: boolean; kind: string; note: string | null;
-  }[];
+  return (data ?? []) as EditableSeat[];
 }
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));

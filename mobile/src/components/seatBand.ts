@@ -358,3 +358,45 @@ export function seatSize(
    */
   return Math.max(1, Math.min(along, deep) * 0.72);
 }
+
+/**
+ * Which seat of a sector a point on the plan is nearest — its row and its
+ * point on the grid.
+ *
+ * The inverse of the layout, for placing a seat by pointing at the plan. There
+ * is no closed form for it: the band is a blend of two drawn edges walked by
+ * distance, so the answer is found by walking every row and keeping the
+ * nearest. A hundred and twenty-eight steps per row is a fraction of a
+ * millisecond for a stand and far finer than a fingertip.
+ *
+ * `slot` comes back as a real number — the caller rounds it to whichever
+ * points its own rows sit on, so a placed seat lands in the same columns as
+ * the rest.
+ */
+export function bandSpotAt(
+  shape: ShapePoint[],
+  rows: number,
+  pitch: number,
+  at: ShapePoint,
+  /** To measure "nearest" on screen rather than in the plan's own units. */
+  planWidth = 1,
+  planHeight = 1,
+): { row: number; slot: number; away: number } | null {
+  if (rows < 1 || !(pitch > 0)) return null;
+  const band = bandOf(shape);
+
+  let bestRow = 0;
+  let bestU = 0.5;
+  let bestAway = Infinity;
+  for (let r = 0; r < rows; r += 1) {
+    const v = (r + 0.5) / rows;
+    for (let i = 0; i <= 128; i += 1) {
+      const here = band.at(i / 128, v);
+      const away = Math.hypot((here.x - at.x) * planWidth, (here.y - at.y) * planHeight);
+      if (away < bestAway) { bestAway = away; bestRow = r; bestU = i / 128; }
+    }
+  }
+
+  const wide = band.lengthAt((bestRow + 0.5) / rows);
+  return { row: bestRow, slot: (2 * (bestU * wide - wide / 2)) / pitch, away: bestAway };
+}

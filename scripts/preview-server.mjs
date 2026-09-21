@@ -19,6 +19,36 @@
  * NEDÁ testovať bezpečnosť; na to je probe-security.sh proti skutočnému
  * projektu. Tu ide o to, ako obrazovka vyzerá.
  */
+
+/**
+ * A JSON argument as something Postgres will take.
+ *
+ * Everything used to go through String(v) and a pair of quotes. That is right
+ * for a uuid and wrong for everything else: an array of seat ids arrived as
+ * one comma-joined string, so `delete_seats` and `set_seat_state` did nothing
+ * and said nothing, and an outline arrived as "[object Object]". Both look
+ * like app bugs from the browser and are not.
+ *
+ * An array of plain values becomes an array literal left untyped, so Postgres
+ * reads it as whatever the parameter is — uuid[], text[], int[]. Anything with
+ * shape in it becomes jsonb, which is what such a parameter always is here.
+ */
+function literal(v) {
+  if (v === null || v === undefined) return 'null';
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  const quoted = (text) => `'${String(text).replace(/'/g, "''")}'`;
+  if (Array.isArray(v)) {
+    const plain = v.every((one) => one === null
+      || typeof one === 'string' || typeof one === 'number' || typeof one === 'boolean');
+    if (!plain) return `${quoted(JSON.stringify(v))}::jsonb`;
+    const parts = v.map((one) => (one === null ? 'NULL'
+      : `"${String(one).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`));
+    return quoted(`{${parts.join(',')}}`);
+  }
+  if (typeof v === 'object') return `${quoted(JSON.stringify(v))}::jsonb`;
+  return quoted(v);
+}
+
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -212,7 +242,7 @@ createServer(async (req, res) => {
     if (url.pathname.startsWith('/rest/v1/rpc/')) {
       const fn = url.pathname.split('/').pop();
       const args = Object.entries(body)
-        .map(([k, v]) => `${k} => ${v === null ? 'null' : `'${String(v).replace(/'/g, "''")}'`}`)
+        .map(([k, v]) => `${k} => ${literal(v)}`)
         .join(', ');
       const rows = sql(`select public.${fn}(${args}) as value`, asUser());
       const value = rows[0]?.value;
