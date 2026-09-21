@@ -64,10 +64,9 @@ begin
   --
   -- Bez tohto by test prešiel aj vtedy, keby do zadného radu pribudlo jedno
   -- jediné miesto. Rozostup je to, čo vidno.
-  -- Rozostup nie je dĺžka radu delená jeho počtom miest — tak by sa rad
-  -- roztiahol a v každom rade by vyšiel o kúsok iný. Je to vzdialenosť medzi
-  -- dvoma susedmi, a tá musí byť v celom sektore rovnaká. Meria sa medzi
-  -- prvým a druhým miestom každého radu, na mieste, kam ich mriežka kladie.
+  -- Rozostup je pevný a miesta sadajú na mriežku, ktorú zdieľa celý sektor.
+  -- Meria sa medzi prvým a druhým miestom každého radu, na mieste, kam ich
+  -- mriežka kladie: od stredu radu (k - (počet+1)/2) rozostupov.
   select min(d), max(d) into v_min, v_max
   from (
     select r,
@@ -80,13 +79,12 @@ begin
     group by r
   ) row_of
   cross join lateral (
-    select (row_of.wide - row_of.held * row_of.step) / 2 as edge
-  ) m
-  cross join lateral (
-    select public.band_point(v_shape, (m.edge + 0.5 * row_of.step) / row_of.wide,
-                             (row_of.r + 0.5)::numeric / v_rows) as a,
-           public.band_point(v_shape, (m.edge + 1.5 * row_of.step) / row_of.wide,
-                             (row_of.r + 0.5)::numeric / v_rows) as b
+    select public.band_point(v_shape,
+             0.5 + (1 - (row_of.held + 1) / 2) * row_of.step / row_of.wide,
+             (row_of.r + 0.5)::numeric / v_rows) as a,
+           public.band_point(v_shape,
+             0.5 + (2 - (row_of.held + 1) / 2) * row_of.step / row_of.wide,
+             (row_of.r + 0.5)::numeric / v_rows) as b
   ) pts
   cross join lateral (
     select sqrt((pts.b[0] - pts.a[0]) ^ 2 + (pts.b[1] - pts.a[1]) ^ 2) as d
@@ -95,6 +93,20 @@ begin
   assert v_max / v_min < 1.02,
     format('rozostup medzi susedmi sa naprieč sektorom líši %sx (%s až %s)',
            round(v_max / v_min, 3), round(v_min, 5), round(v_max, 5));
+
+  -- A stĺpce musia sedieť v jednej línii. Keby sa každý rad centroval sám za
+  -- seba, rad so štrnástimi a rad s trinástimi miestami by mali miesta
+  -- posunuté o pol rozostupu — to je práve tá medzera, ktorú vidno. Preto
+  -- pribúdajú po dvoch a počet zostane rovnakej parity.
+  assert not exists (
+    select 1
+    from (
+      select count(*) % 2 as zvysok
+      from public.section_seat_grid(v_sec, v_rows, v_per)
+      group by row_label
+    ) parity
+    where parity.zvysok <> v_per % 2
+  ), 'rad zmenil paritu počtu miest — stĺpce by sa posunuli o pol rozostupu';
 
   raise notice 'PASS do širšieho radu pribudnú miesta a rozostup zostane rovnaký';
 end $$;

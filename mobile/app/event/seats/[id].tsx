@@ -254,13 +254,32 @@ export default function SeatPickerScreen() {
     return out;
   }, [wanted, seatQueries]);
 
-  /** How many seats each row actually holds, for centring the short ones. */
+  /**
+   * How many seats each row holds, and which number it starts at.
+   *
+   * A wider row holds more seats, so the count is per row and not per sector.
+   * The first number matters too: a stand may be numbered from 101, and where
+   * a seat sits in its row is what the layout needs, not what is printed on
+   * it.
+   */
   const rowWidths = useMemo(() => {
     const out = new Map<string, Map<number, number>>();
     for (const [sectionId, rows] of seatsBySection) {
       const counts = new Map<number, number>();
       for (const seat of rows) counts.set(seat.row_index, (counts.get(seat.row_index) ?? 0) + 1);
       out.set(sectionId, counts);
+    }
+    return out;
+  }, [seatsBySection]);
+  const rowFirsts = useMemo(() => {
+    const out = new Map<string, Map<number, number>>();
+    for (const [sectionId, rows] of seatsBySection) {
+      const firsts = new Map<number, number>();
+      for (const seat of rows) {
+        const known = firsts.get(seat.row_index);
+        if (known === undefined || seat.number < known) firsts.set(seat.row_index, seat.number);
+      }
+      out.set(sectionId, firsts);
     }
     return out;
   }, [seatsBySection]);
@@ -394,30 +413,35 @@ export default function SeatPickerScreen() {
      * number to spread a row over is the number of seats that row HAS.
      */
     /*
-     * The spacing is the same in every row; what does not fit stays as a
-     * margin at both ends.
+     * Seats sit on a grid the whole sector shares, so the columns line up.
      *
-     * Dividing a row by its own seat count fills it exactly, and gets the
-     * spacing a little wrong in every row — thirteen seats in a row that has
-     * room for 13.4 come out further apart than fourteen in the row below.
-     * The columns drift and the difference reads as gaps. A row is built the
-     * way a stand is: seats a fixed distance apart, as many as fit, and the
-     * remainder is the aisle at either end.
+     * Two rules came before this one. Dividing a row by its own seat count
+     * filled it exactly and got the spacing a little wrong in every row, so
+     * the columns drifted. Then a fixed spacing centred on each row: right
+     * about the spacing, and still half a seat out — a row of fourteen and
+     * the row of thirteen above it have the same middle, so their seats sit
+     * between one another. Both read as gaps, because that is what they are.
+     *
+     * A seat lands on a fixed point instead: so many spacings from the middle
+     * of the sector, the same points in every row. A wider row reaches one
+     * point further out on each side. That is what the columns are — and a
+     * stand widens on both sides at once, so its rows gain seats in twos.
      *
      * The spacing comes from row A, the same row the database counted from.
      */
     const inRow = Math.max(seatsPerRow(section.id).get(seat.row_index) ?? across, 1);
     const first = Math.max(seatsPerRow(section.id).get(0) ?? across, 1);
+    const from = rowFirsts.get(section.id)?.get(seat.row_index) ?? 1;
     const wide = Math.max(band.lengthAt(v), 1e-9);
     const step = band.lengthAt(0.5 / down) / first;
-    const edge = Math.max(0, (wide - inRow * step) / 2);
-    const here = band.at((edge + (seat.number - 0.5) * step) / wide, v);
+    const place = seat.number - from + 1;
+    const here = band.at(0.5 + (place - (inRow + 1) / 2) * step / wide, v);
     return {
       left: (here.x - section.x) * planWidth,
       top: (here.y - section.y) * planHeight,
       size,
     };
-  }, [planWidth, planHeight, seatsPerRow, seatSizes]);
+  }, [planWidth, planHeight, seatsPerRow, rowFirsts, seatSizes]);
 
   /**
    * The sector named in the card above the plan.

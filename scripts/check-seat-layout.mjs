@@ -76,6 +76,22 @@ const PREDLOHY = [
 const ROZPTYL_LIMIT = 2;
 
 /** Kde sedadlo leží, tak ako to počíta obrazovka s plánom. */
+/**
+ * Koľko miest sa do radu zmestí na mriežku, ktorú zdieľa celý sektor.
+ *
+ * Mriežka je súmerná okolo stredu radu: pri párnom vypýtanom počte sú body po
+ * oboch stranách stredu, pri nepárnom je jeden presne v strede. Počet tak
+ * zostane rovnakej parity vo všetkých radoch a rady pribúdajú po dvoch.
+ */
+function fits(wide, step, perRow) {
+  if (!(step > 0)) return perRow;
+  // Rad užší než jedno sedadlo nedostane žiadne.
+  if (wide < step) return 0;
+  return perRow % 2 === 0
+    ? 2 * Math.floor(wide / (2 * step) + 0.5 + 1e-9)
+    : 2 * Math.floor(wide / (2 * step) + 1e-9) + 1;
+}
+
 function place(shape, rows, perRow) {
   const band = bandOf(shape);
   const step = band.lengthAt(0.5 / rows) / perRow;
@@ -83,12 +99,11 @@ function place(shape, rows, perRow) {
   for (let r = 0; r < rows; r += 1) {
     const v = (r + 0.5) / rows;
     const wide = Math.max(band.lengthAt(v), 1e-9);
-    // Sektor bez plochy (všetky rohy na jednom mieste) nemá rozostup, z ktorého
-    // by sa dalo počítať. Dostane, čo si vypýtal, a všetko sadne na ten bod.
-    const held = step > 0 ? Math.max(1, Math.floor(wide / step + 1e-9)) : perRow;
-    const edge = Math.max(0, (wide - held * step) / 2);
+    const held = fits(wide, step, perRow);
     const row = [];
-    for (let n = 1; n <= held; n += 1) row.push(band.at((edge + (n - 0.5) * step) / wide, v));
+    for (let n = 1; n <= held; n += 1) {
+      row.push(band.at(0.5 + (n - (held + 1) / 2) * step / wide, v));
+    }
     out.push(row);
   }
   return { rows: out, band, step };
@@ -169,10 +184,9 @@ function wanted(shape, v, u) {
 /** O koľko percent rozostupu sa sedadlá minú s tým, kam patria. */
 function drift(shape, v, held, step, wide) {
   const band = bandOf(shape);
-  const edge = Math.max(0, (wide - held * step) / 2);
   let worst = 0;
   for (let n = 1; n <= held; n += 1) {
-    const u = (edge + (n - 0.5) * step) / wide;
+    const u = 0.5 + (n - (held + 1) / 2) * step / wide;
     const got = band.at(u, v);
     const should = wanted(shape, v, u);
     if (step > 0) worst = Math.max(worst, Math.hypot(got.x - should.x, got.y - should.y) / step);
@@ -222,31 +236,46 @@ for (const one of [...DRAWN, ...PREDLOHY]) {
      * nesiahalo by.
      */
     /*
-     * Rozostup je pevný a zvyšok je okraj.
+     * Stĺpce sedia v jednej línii — to je celá pointa mriežky.
      *
-     * Nedá sa to zmerať vzdušnou čiarou medzi susedmi: rad, ktorý sa zakrivuje,
-     * má dvoch susedov vzdušnou čiarou bližšie, hoci po rade sú rovnako ďaleko
-     * ako všetci ostatní. Dá sa to ale povedať o celom rade naraz — koľko miest
-     * v ňom je krát rozostup sa musí zmestiť do jeho dĺžky, a to, čo zvýši,
-     * musí byť menej než jedno miesto. To je presne pravidlo „pevný rozostup,
-     * zvyšok ako okraj" a presne to, čo predošlé delenie radu jeho vlastným
-     * počtom nesplnilo.
+     * Meria sa to tak, že sa vezme, kde v rade miesto leží (koľko rozostupov
+     * od stredu), a pozrie sa, či sú tie hodnoty vo všetkých radoch tie isté.
+     * Keby sa rad centroval sám za seba, rad so štrnástimi a rad s trinástimi
+     * miestami by mali tie body posunuté o pol rozostupu a toto by to
+     * ukázalo. Meria sa v rozostupoch, nie v bodoch plánu, lebo rad sa zatáča
+     * a jeho body sa v pláne nekryjú — kryť sa má ich poradie.
+     *
+     * A zvyšok: čo sa do radu nezmestí, musí byť menej než jeden rozostup na
+     * každej strane, inak by obrys hovoril, že sedenie siaha k okraju, a
+     * nesiahalo by.
      */
+    const lattice = new Set();
     let okraj = 0;
     rows.forEach((row, r) => {
+      if (row.length === 0) return;
       const wide = Math.max(band.lengthAt((r + 0.5) / one.rows), 1e-9);
-      okraj = Math.max(okraj, (wide - row.length * step) / Math.max(step, 1e-9));
-      // Rad užší než jedno miesto dostane jedno — inak by rad zmizol. Je to
-      // klin dobiehajúci do špica a na tom kúsku lavice sa naozaj dá sedieť.
-      if (row.length > 1 && row.length * step > wide + 1e-9) {
+      for (let n = 1; n <= row.length; n += 1) {
+        lattice.add(Math.round((n - (row.length + 1) / 2) * 2));
+      }
+      okraj = Math.max(okraj, (wide - (row.length - 1) * step) / 2 / Math.max(step, 1e-9));
+      if ((row.length - 1) * step > wide + 1e-9) {
         throw new Error(`rad ${r} má ${row.length} miest po ${step.toFixed(4)}, `
           + `ale je len ${wide.toFixed(4)} dlhý`);
       }
     });
-    note = `odchýlka ${worst.toFixed(1)} %, zvyšok ${okraj.toFixed(2)} miesta, `
-      + `mimo obrysu ${out}/${total}`;
+    // Body mriežky idú po celých rozostupoch od seba; keby sa niektorý rad
+    // centroval sám, pribudol by bod medzi nimi a tento rozdiel by nesedel.
+    const body = [...lattice].sort((a, b) => a - b);
+    const krok = body.length > 1
+      ? Math.min(...body.slice(1).map((x, i) => x - body[i]))
+      : 2;
+    note = `odchýlka ${worst.toFixed(1)} %, mriežka po ${krok / 2} rozostupu, `
+      + `okraj ${okraj.toFixed(2)}, mimo obrysu ${out}/${total}`;
+    if (krok !== 2) {
+      throw new Error(`stĺpce sa nekryjú — medzi bodmi mriežky je ${krok / 2} rozostupu`);
+    }
     if (okraj > 1.000001) {
-      throw new Error(`v rade zvýšilo ${okraj.toFixed(2)} miesta — zmestilo sa tam ešte jedno`);
+      throw new Error(`na kraji radu zvýšilo ${okraj.toFixed(2)} rozostupu — zmestilo sa tam ešte miesto`);
     }
     console.log(`  ✓ ${one.name.padEnd(30)} ${note}`);
     /*
