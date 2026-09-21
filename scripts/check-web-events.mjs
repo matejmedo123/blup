@@ -39,6 +39,36 @@ const DROPPED = [
 const HTML_TAG = /^[a-z]/;
 
 const problems = [];
+const spots = [];
+
+/**
+ * Druhá zrada: `onPress` na webe nenesie súradnice klepnutia.
+ *
+ * `e.nativeEvent.locationX` v Pressable.onPress je v prehliadači undefined.
+ * Nič nespadne — výpočet dostane NaN, každé porovnanie s NaN je nepravda a
+ * hľadanie najbližšieho miesta skončí na svojom počiatočnom tipe. Pero na
+ * miesta tak vyzeralo, že funguje, a pritom kládlo každé miesto do stredu
+ * radu A.
+ *
+ * Súradnice dáva responder — `onStartShouldSetResponder` na View — tak ako ich
+ * odjakživa dáva plocha plánu v editore.
+ */
+function pressCoords(lines, index, full) {
+  const line = lines[index];
+  // Aj `e.nativeEvent.locationX`, aj `const { locationX } = e.nativeEvent`.
+  // Prvá verzia tejto kontroly hľadala len bodkový zápis a rozbalenie jej
+  // ušlo — čiže presne ten tvar, ktorý chybu spôsobil.
+  if (!/\blocation[XY]\b/.test(line)) return;
+  if (/^\s*(\*|\/\/)/.test(line)) return;
+  // Patrí to k onPress, alebo k responderu? Hľadá sa dozadu najbližší z nich.
+  for (let back = index; back >= Math.max(0, index - 25); back--) {
+    if (/onStartShouldSetResponder|onResponder(Move|Release|Grant)/.test(lines[back])) return;
+    if (/onPress\s*=\s*\{/.test(lines[back])) {
+      spots.push({ file: full.replace(`${ROOT}/`, ''), line: index + 1 });
+      return;
+    }
+  }
+}
 
 function walk(dir) {
   for (const entry of readdirSync(dir)) {
@@ -51,6 +81,7 @@ function walk(dir) {
     const lines = source.split('\n');
 
     lines.forEach((line, index) => {
+      pressCoords(lines, index, full);
       for (const handler of DROPPED) {
         // `onWheel={` ako JSX prop. Nie v komentári a nie v reťazci s DOM API.
         const match = new RegExp(`(^|\\s)${handler}\\s*=\\s*\\{`).exec(line);
@@ -81,6 +112,19 @@ function walk(dir) {
 
 walk(join(ROOT, 'mobile/app'));
 walk(join(ROOT, 'mobile/src'));
+
+if (spots.length > 0) {
+  console.log('');
+  for (const one of spots) {
+    console.log(`✗ ${one.file}:${one.line}  onPress + nativeEvent.locationX`);
+  }
+  console.log(
+    `\n${spots.length} ${spots.length === 1 ? 'miesto číta' : 'miest číta'} súradnice `
+    + 'klepnutia z onPress — na webe tam nie sú.\n'
+    + 'Použi onStartShouldSetResponder na View, ten ich dáva.',
+  );
+  process.exit(1);
+}
 
 if (problems.length > 0) {
   console.log('');

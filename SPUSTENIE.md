@@ -73,7 +73,7 @@ npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-Aplikuje sa 94 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+Aplikuje sa 95 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
 účtovníctvo. Trvá to pol minúty.
 
 4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
@@ -96,7 +96,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje všetkých 94 migrácií od nuly a prejde
+Postaví dočasnú databázu, aplikuje všetkých 95 migrácií od nuly a prejde
 **466 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
@@ -776,7 +776,7 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 ### A päť, ktoré netreba nasadenie
 
 ```bash
-npm run db:verify        # 94 migrácií a 51 testovacích súborov na dočasnej databáze
+npm run db:verify        # 95 migrácií a 51 testovacích súborov na dočasnej databáze
 npm run check:dns        # SPF, DKIM, DMARC a návratová cesta nedoručeniek
 npm run check:speed      # rýchlosť stránky na priemernom telefóne, s rozpočtom
 npm run check:webevents  # DOM udalosti, ktoré na webe ticho nerobia nič

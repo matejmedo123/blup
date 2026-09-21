@@ -219,7 +219,7 @@ export default function PlanEditorScreen() {
   const seats = useQuery({
     queryKey: ['venue', 'section', editingId, 'seats'],
     queryFn: () => getSectionSeats(editingId!),
-    enabled: Boolean(editingId) && (seatsOpen || seatPen),
+    enabled: Boolean(editingId) && (seatsOpen || seatPen || drawingHole),
   });
 
   // Other nights in the same hall. An arena runs fifty a year on one plan, and
@@ -780,16 +780,23 @@ export default function PlanEditorScreen() {
   /**
    * The pen's own close-up of the sector being edited.
    *
-   * On the plan itself a seat is about two pixels across — that is the right
-   * size for a stadium and impossible to aim at. So the pen gets the sector
-   * alone, blown up to the width of the screen, where a seat is a seat.
+   * On the plan itself a stadium sector is about forty pixels across and a
+   * seat two — the right size for a plan of sixty-seven stands, and hopeless
+   * to aim at. Cutting a stairway out of one by tapping its corners on that
+   * was the same problem as placing a seat: the tool was right and the target
+   * was too small.
+   *
+   * So both get the sector alone, blown up to the width of the screen.
    * Nothing is zoomed: it is the same outline drawn at a different scale, so
    * a tap in here is the same arithmetic as a tap out there.
    */
   const pen = (() => {
-    if (!editing || !seatPen || !editing.shape) return null;
+    if (!editing || !editing.shape) return null;
+    if (!seatPen && !drawingHole) return null;
     const rows = groupRows(seats.data ?? []);
-    if (rows.length === 0) return null;
+    // Cutting a hole works in a sector that has no seats yet; placing one does
+    // not, because there is no grid to place it on.
+    if (rows.length === 0 && !drawingHole) return null;
 
     // "Plan width" chosen so the sector spans the canvas.
     const scaleX = planWidth / Math.max(editing.width, 0.0001);
@@ -797,16 +804,17 @@ export default function PlanEditorScreen() {
     const scaleY = tall / Math.max(editing.height, 0.0001);
 
     const band = bandOf(editing.shape);
-    const first = rows[0][1].length;
-    const step = editing.seat_pitch ?? band.lengthAt(0.5 / rows.length) / Math.max(first, 1);
+    const first = rows[0]?.[1].length ?? 1;
+    const down = Math.max(rows.length, 1);
+    const step = editing.seat_pitch ?? band.lengthAt(0.5 / down) / Math.max(first, 1);
     const size = seatSize(
-      editing.shape, editing, rows.length, first, scaleX, scaleY,
+      editing.shape, editing, down, first, scaleX, scaleY,
       (row) => rows[row]?.[1].length ?? first,
     );
 
     const dots: { id: string; left: number; top: number; off: boolean }[] = [];
     rows.forEach(([, inRow], r) => {
-      const v = (r + 0.5) / rows.length;
+      const v = (r + 0.5) / down;
       const wide = Math.max(band.lengthAt(v), 1e-9);
       inRow.forEach((seat, i) => {
         const slot = seat.slot ?? 2 * (i + 1) - inRow.length - 1;
@@ -1685,16 +1693,41 @@ export default function PlanEditorScreen() {
               radu posunie čísla za ním — v rade, kde už niekto má vstupenku, to plán odmietne.
             </Caption>
           ) : null}
-          {/* The sector alone, big enough to point at. On the plan a seat is
-              two pixels; here it is a seat. */}
+          {/* The sector alone, big enough to point at — for placing seats and
+              for cutting holes alike. On the plan a seat is two pixels. */}
+          {/*
+            * A View with the responder props, not a Pressable.
+            *
+            * Pressable's onPress arrives on web without locationX — the
+            * press happens, the coordinates do not. Nothing errors: the
+            * arithmetic gets NaN, every comparison against it is false, and
+            * the search for the nearest seat falls out at its starting
+            * guess. The pen looked like it worked and was quietly putting
+            * every seat in the middle of row A.
+            *
+            * The plan surface above has always used the responder props and
+            * has always had real coordinates. Same here.
+            */}
           {pen ? (
-            <Pressable
-              onPress={(e) => {
-                if (busy) return;
-                void penTap(e.nativeEvent.locationX, e.nativeEvent.locationY);
+            <View
+              onStartShouldSetResponder={(e) => {
+                if (busy) return true;
+                const { locationX, locationY } = e.nativeEvent;
+                if (!Number.isFinite(locationX) || !Number.isFinite(locationY)) return true;
+                if (drawingHole) {
+                  setShapePoints([...(shapePoints ?? []), {
+                    x: Math.min(1, Math.max(0, editing.x + locationX / pen.scaleX)),
+                    y: Math.min(1, Math.max(0, editing.y + locationY / pen.scaleY)),
+                  }]);
+                  return true;
+                }
+                void penTap(locationX, locationY);
+                return true;
               }}
               accessibilityRole="button"
-              accessibilityLabel={`Plátno sektora ${editing.name} — klepnutím pridáš alebo ubereš miesto`}
+              accessibilityLabel={drawingHole
+                ? `Plátno sektora ${editing.name} — klepaj po rohoch diery`
+                : `Plátno sektora ${editing.name} — klepnutím pridáš alebo ubereš miesto`}
               style={[styles.penCanvas, { width: pen.width, height: pen.height }]}
             >
               {/* The same outline, drawn at the canvas's scale: `scaleX` is
@@ -1722,7 +1755,63 @@ export default function PlanEditorScreen() {
                   }, dot.off && styles.penSeatOff]}
                 />
               ))}
-            </Pressable>
+
+              {/* The hole being tapped out, over the seats it is about to
+                  swallow — which is the whole reason for doing it here and
+                  not on a plan where the sector is forty pixels wide. */}
+              {drawingHole && shapePoints ? (
+                <>
+                  {shapePoints.length >= 3 ? (
+                    <SectorShape
+                      shape={shapePoints}
+                      bounds={editing}
+                      planWidth={pen.scaleX}
+                      planHeight={pen.scaleY}
+                      colour={colors.warning}
+                    />
+                  ) : null}
+                  {shapePoints.map((point, index) => (
+                    <View
+                      key={`${point.x}-${point.y}-${index}`}
+                      pointerEvents="none"
+                      style={[styles.shapeDot, {
+                        left: (point.x - editing.x) * pen.scaleX - 7,
+                        top: (point.y - editing.y) * pen.scaleY - 7,
+                        borderColor: colors.warning,
+                      }]}
+                    />
+                  ))}
+                </>
+              ) : null}
+            </View>
+          ) : null}
+          {/* The same three buttons as up in the outline section. Having tapped
+              the corners down here, scrolling back up to say "done" is a
+              pointless trip. */}
+          {pen && drawingHole && shapePoints ? (
+            <>
+              <Caption style={styles.hint}>
+                Klepaj po rohoch diery — {shapePoints.length}{' '}
+                {shapePoints.length === 1 ? 'bod' : shapePoints.length < 5 ? 'body' : 'bodov'}.
+                Treba aspoň tri. Rohy môžu byť aj kúsok za hranou sektora — rez tým vyjde čisto.
+              </Caption>
+              <View style={styles.actions}>
+                <Button title="Hotovo" compact onPress={saveShape} loading={busy} />
+                <Button
+                  title="Späť o bod"
+                  variant="secondary"
+                  compact
+                  disabled={shapePoints.length === 0}
+                  onPress={() => setShapePoints(shapePoints.slice(0, -1))}
+                />
+                <Button
+                  title="Zrušiť"
+                  variant="ghost"
+                  compact
+                  onPress={() => { setShapePoints(null); setDrawingHole(false); }}
+                />
+              </View>
+            </>
           ) : null}
           <Button
             title={seatsOpen ? 'Skryť miesta' : 'Upraviť jednotlivé miesta'}

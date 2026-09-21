@@ -51,13 +51,20 @@ export function SectorShape({
 
   // Relative to the sector's own top-left, so the SVG only has to be as big as
   // the sector rather than as big as the plan.
-  const ring = (points: ShapePoint[]) => points
-    .map((point, i) => {
-      const x = ((point.x - bounds.x) / Math.max(bounds.width, 0.0001)) * width;
-      const y = ((point.y - bounds.y) / Math.max(bounds.height, 0.0001)) * height;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ') + ' Z';
+  const ring = (points: ShapePoint[]) => {
+    // A corner that is not a number produces "MNaN,NaN", which the browser
+    // rejects with a console error and draws nothing — so the shape silently
+    // disappears while the log fills up. A half-tapped outline is an ordinary
+    // state here, so it is skipped rather than drawn wrong.
+    const steps = points
+      .filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y))
+      .map((point, i) => {
+        const x = ((point.x - bounds.x) / Math.max(bounds.width, 0.0001)) * width;
+        const y = ((point.y - bounds.y) / Math.max(bounds.height, 0.0001)) * height;
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+    return steps.length >= 2 ? `${steps.join(' ')} Z` : '';
+  };
 
   /*
    * The fill is the outline and its holes together, by the even-odd rule.
