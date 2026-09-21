@@ -108,6 +108,22 @@ export interface Section {
    */
   shape: { x: number; y: number }[] | null;
   /**
+   * Where there is no seating inside the sector: a stairway cut into the
+   * block, a pillar, the mouth of a tunnel.
+   *
+   * Not part of the outline, and it cannot be. A sector is a band — two long
+   * edges with rows between them — and a notch in the middle of one leaves a
+   * shape that has no two long edges, at which point the rows stop being
+   * rows. Measured on a block 0.30 wide with a notch cut in: rows came out
+   * between 0.883 and 0.540 long instead of all 0.300, and their ends drifted
+   * by a third of the width.
+   *
+   * So the outline says where the stand is and a hole says where, inside it,
+   * nobody sits. The grid is worked out from the outline, so the rows stay
+   * rows; the hole only removes the seats that fall in it.
+   */
+  holes: { x: number; y: number }[][] | null;
+  /**
    * The distance between two seats along a row, in fractions of the plan.
    *
    * A property of the sector, not of its first row: worked out from the first

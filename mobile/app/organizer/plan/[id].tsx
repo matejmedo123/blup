@@ -11,6 +11,7 @@ import { getEvent, updateEvent } from '@/api/events';
 import { useAuth } from '@/auth/AuthProvider';
 import {
   applyVenuePreset, clearVenueMapImage, cloneVenueMap, createSection, createVenueMap,
+  setSectionHoles,
   deleteSeats, deleteSection,
   addSectionSeat,
   duplicateSection, generateSeats, getReusablePlans, getSectionSeats, getVenueMap,
@@ -164,6 +165,16 @@ export default function PlanEditorScreen() {
    * phone produces forty points and a shape nobody meant.
    */
   const [shapePoints, setShapePoints] = useState<{ x: number; y: number }[] | null>(null);
+  /**
+   * The corners being tapped out are a hole, not the sector's outline.
+   *
+   * The same gesture, a different thing to save: a stairway cut into a block,
+   * a pillar, the mouth of a tunnel. It has to be its own thing rather than
+   * part of the outline, because a sector is a band and a notch in one of its
+   * long edges leaves a shape that has no two long edges — and then its rows
+   * stop being rows.
+   */
+  const [drawingHole, setDrawingHole] = useState(false);
 
   const [drag, setDrag] = useState<
     {
@@ -688,16 +699,43 @@ export default function PlanEditorScreen() {
   const saveShape = async () => {
     if (!editing || !shapePoints) return;
     if (shapePoints.length < 3) {
-      setError('Tvar potrebuje aspoň tri body — klepni po obryse sektora.');
+      setError(drawingHole
+        ? 'Diera potrebuje aspoň tri body — klepni po jej obryse.'
+        : 'Tvar potrebuje aspoň tri body — klepni po obryse sektora.');
       return;
     }
     setError(null);
     setBusy(true);
     try {
-      await setSectionShape(editing.id, shapePoints);
+      if (drawingHole) {
+        const kept = [...(editing.holes ?? []), shapePoints];
+        await setSectionHoles(editing.id, kept);
+        setNote(kept.length === 1 ? 'Diera vyrezaná.' : `Dier v sektore: ${kept.length}.`);
+      } else {
+        await setSectionShape(editing.id, shapePoints);
+        setNote('Tvar uložený.');
+      }
       setShapePoints(null);
-      setNote('Tvar uložený.');
+      setDrawingHole(false);
       await refresh();
+      await seats.refetch();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Filling every hole back in. */
+  const clearHoles = async () => {
+    if (!editing) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await setSectionHoles(editing.id, null);
+      setNote('Diery zrušené. Miesta v nich sa neobnovia samy — prekresli miesta.');
+      await refresh();
+      await seats.refetch();
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -1555,7 +1593,8 @@ export default function PlanEditorScreen() {
           {shapePoints ? (
             <>
               <Caption style={styles.hint}>
-                Klepaj po obryse sektora — {shapePoints.length}{' '}
+                {drawingHole ? 'Klepaj po obryse diery — ' : 'Klepaj po obryse sektora — '}
+                {shapePoints.length}{' '}
                 {shapePoints.length === 1 ? 'bod' : shapePoints.length < 5 ? 'body' : 'bodov'}.
                 Treba aspoň tri.
               </Caption>
@@ -1568,7 +1607,12 @@ export default function PlanEditorScreen() {
                   disabled={shapePoints.length === 0}
                   onPress={() => setShapePoints(shapePoints.slice(0, -1))}
                 />
-                <Button title="Zrušiť" variant="ghost" compact onPress={() => setShapePoints(null)} />
+                <Button
+                  title="Zrušiť"
+                  variant="ghost"
+                  compact
+                  onPress={() => { setShapePoints(null); setDrawingHole(false); }}
+                />
               </View>
             </>
           ) : (
@@ -1582,6 +1626,27 @@ export default function PlanEditorScreen() {
               />
               {editing.shape ? (
                 <Button title="Späť na obdĺžnik" variant="ghost" compact onPress={clearShape} disabled={busy} />
+              ) : null}
+              {/* Schodisko, stĺp, ústie tunela. Nie je to súčasť obrysu a ani
+                  nemôže byť: zárez uprostred dlhej hrany spraví zo sektora
+                  tvar, ktorý nemá dve dlhé hrany, a rady sa rozpadnú. */}
+              {editing.shape ? (
+                <Button
+                  title="Vyrezať dieru"
+                  variant="secondary"
+                  compact
+                  onPress={() => { setDrawingHole(true); setShapePoints([]); }}
+                  disabled={busy}
+                />
+              ) : null}
+              {editing.holes && editing.holes.length > 0 ? (
+                <Button
+                  title={`Zrušiť diery (${editing.holes.length})`}
+                  variant="ghost"
+                  compact
+                  onPress={clearHoles}
+                  disabled={busy}
+                />
               ) : null}
             </View>
           )}
@@ -1638,6 +1703,7 @@ export default function PlanEditorScreen() {
                   planWidth. */}
               <SectorShape
                 shape={editing.shape!}
+                holes={editing.holes}
                 bounds={editing}
                 planWidth={pen.scaleX}
                 planHeight={pen.scaleY}

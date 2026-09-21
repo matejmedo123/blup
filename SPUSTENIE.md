@@ -73,7 +73,7 @@ npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-Aplikuje sa 93 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+Aplikuje sa 94 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
 účtovníctvo. Trvá to pol minúty.
 
 4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
@@ -96,8 +96,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje všetkých 93 migrácií od nuly a prejde
-**465 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
+Postaví dočasnú databázu, aplikuje všetkých 94 migrácií od nuly a prejde
+**466 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
 Ak toto prejde, schéma je v poriadku a každý neskorší problém je v konfigurácii.
@@ -776,7 +776,7 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 ### A päť, ktoré netreba nasadenie
 
 ```bash
-npm run db:verify        # 93 migrácií a 51 testovacích súborov na dočasnej databáze
+npm run db:verify        # 94 migrácií a 51 testovacích súborov na dočasnej databáze
 npm run check:dns        # SPF, DKIM, DMARC a návratová cesta nedoručeniek
 npm run check:speed      # rýchlosť stránky na priemernom telefóne, s rozpočtom
 npm run check:webevents  # DOM udalosti, ktoré na webe ticho nerobia nič
@@ -804,6 +804,15 @@ plánu" otvorí sektor samotný, zväčšený na šírku obrazovky: klepnutím d
 miesto pribudne, klepnutím na miesto zmizne. Sadne vždy na najbližší bod
 mriežky, takže ostatné miesta v rade zostanú, kde sú. Miesto vnútri radu
 posunie čísla za ním, a to sa v rade, kde už niekto má vstupenku, odmietne.
+
+A keď je doprostred bloku zarezané schodisko, stojí tam stĺp alebo ústi tunel:
+**„Vyrezať dieru"**. Nie je to súčasť obrysu a ani nemôže byť — sektor je pás,
+dve dlhé hrany a medzi nimi rady, a zárez uprostred jednej z nich spraví tvar,
+ktorý dve dlhé hrany nemá. Zmerané na bloku 0,30 širokom: so zárezom priamo v
+obryse vyšli rady od 0,883 po 0,540 dlhé namiesto rovnakých 0,300 a začiatky
+radov sa rozišli o tretinu šírky. Preto obrys hovorí, kde tribúna je, a diera
+hovorí, kde v nej nikto nesedí: mriežka sa počíta z obrysu, rady zostanú rady,
+a z mriežky vypadnú len miesta, ktoré v diere ležia.
 
 `check:seats` rozloží sedadlá do sektorov, aké vzniknú klepaním po obryse v
 editore — tri rohy, päť, zalomená tribúna, tvar L — a porovná, kam sadli, s

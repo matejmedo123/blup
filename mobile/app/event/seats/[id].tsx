@@ -953,6 +953,7 @@ export default function SeatPickerScreen() {
               {section.shape ? (
                 <SectorShape
                   shape={section.shape}
+                  holes={section.holes}
                   bounds={section}
                   planWidth={planWidth}
                   planHeight={planHeight}

@@ -39,6 +39,12 @@ const DRAWN = [
     shape: [{ x: 0.1, y: 0.5 }, { x: 0.3, y: 0.3 }, { x: 0.5, y: 0.25 }, { x: 0.7, y: 0.3 },
       { x: 0.9, y: 0.5 }, { x: 0.85, y: 0.6 }, { x: 0.5, y: 0.38 }, { x: 0.2, y: 0.58 },
       { x: 0.12, y: 0.6 }] },
+  { name: 'blok so schodiskom (obrys)', rows: 16, perRow: 10,
+    shape: [{ x: 0.35, y: 0.20 }, { x: 0.65, y: 0.20 }, { x: 0.65, y: 0.80 }, { x: 0.35, y: 0.80 }],
+    // Schodisko nie je súčasťou obrysu — kreslí sa ako diera a mriežku
+    // neovplyvní. Tu je len preto, aby bolo vidieť, že rady zostanú rady.
+    holes: [[{ x: 0.35, y: 0.44 }, { x: 0.44, y: 0.44 },
+      { x: 0.44, y: 0.56 }, { x: 0.35, y: 0.56 }]] },
   { name: 'dve klepnutia (nedokreslené)', rows: 4, perRow: 6,
     shape: [{ x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }] },
   { name: 'všetky rohy na jednom mieste', rows: 4, perRow: 6,
@@ -229,6 +235,19 @@ for (const one of [...DRAWN, ...PREDLOHY]) {
     const out = rows.flat().filter((p) => !inside(one.shape, p)).length;
     const total = one.rows * one.perRow;
     /*
+     * Diera sektor len obere, neprekreslí ho.
+     *
+     * Práve preto je diera niečo iné než obrys: rady sa počítajú z obrysu,
+     * takže zostanú rovnako dlhé a stĺpce držia, a z mriežky vypadnú len
+     * miesta, ktoré v diere ležia. Zmerané na tom istom bloku so zárezom
+     * priamo v obryse: rady vyšli od 0.883 po 0.540 namiesto rovnakých 0.300.
+     */
+    const swallowed = (one.holes ?? []).length === 0 ? 0
+      : rows.flat().filter((p) => (one.holes ?? []).some((hole) => inside(hole, p))).length;
+    if ((one.holes ?? []).length > 0 && swallowed === 0) {
+      throw new Error('diera v sektore nepohltila ani jedno miesto — asi je vedľa');
+    }
+    /*
      * Dve veci, ktoré musia platiť naraz.
      *
      * Rozostup medzi susedmi je v celom sektore ten istý — inak sa rady
@@ -275,7 +294,8 @@ for (const one of [...DRAWN, ...PREDLOHY]) {
       ? Math.min(...body.slice(1).map((x, i) => x - body[i]))
       : 2;
     note = `odchýlka ${worst.toFixed(1)} %, mriežka po ${krok / 2} rozostupu, `
-      + `okraj ${okraj.toFixed(2)}, mimo obrysu ${out}/${total}`;
+      + `okraj ${okraj.toFixed(2)}, mimo obrysu ${out}/${total}`
+      + (swallowed > 0 ? `, v diere ${swallowed}` : '');
     if (krok !== 2) {
       throw new Error(`stĺpce sa nekryjú — medzi bodmi mriežky je ${krok / 2} rozostupu`);
     }

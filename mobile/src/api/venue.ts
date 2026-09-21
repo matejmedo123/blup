@@ -103,6 +103,7 @@ export async function getVenueSections(venueMapId: string): Promise<Section[]> {
       height: Number(row.height),
       rotation: Number(row.rotation ?? 0),
       shape: (row.shape as { x: number; y: number }[]) ?? null,
+      holes: (row.holes as { x: number; y: number }[][]) ?? null,
       seat_pitch: row.seat_pitch === null || row.seat_pitch === undefined
         ? null : Number(row.seat_pitch),
       ticket_type_id: (row.ticket_type_id as string) ?? null,
@@ -289,6 +290,30 @@ export async function setSeatState(
     p_note: patch.note ?? null,
   });
 
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/**
+ * Cutting a hole in a sector, or filling it back in.
+ *
+ * A stairway into the middle of a block, a pillar, the mouth of a tunnel. It
+ * is deliberately not part of the outline: a sector is a band, and a notch in
+ * the middle of one of its long edges leaves a shape with no two long edges,
+ * at which point its rows stop lining up at all. The outline says where the
+ * stand is; a hole says where inside it nobody sits.
+ *
+ * Seats already standing in a hole are not removed here — reflowSeats does
+ * that, because it is the one that knows what has been sold.
+ */
+export async function setSectionHoles(
+  sectionId: string,
+  holes: { x: number; y: number }[][] | null,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('set_section_holes', {
+    p_section_id: sectionId,
+    p_holes: holes && holes.length > 0 ? holes : null,
+  });
   if (error) throw error;
   return (data as number) ?? 0;
 }

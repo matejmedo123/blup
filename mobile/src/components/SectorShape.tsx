@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Polygon } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { radius } from '@/theme';
 import type { ShapePoint } from './seatBand';
 
@@ -23,9 +23,16 @@ export { bandOf, rowExtent, seatSize, shapeMetrics } from './seatBand';
  * here, because that is what both plans lay out with.
  */
 export function SectorShape({
-  shape, bounds, planWidth, planHeight, colour, dimmed, strokeWidth = 2,
+  shape, holes, bounds, planWidth, planHeight, colour, dimmed, strokeWidth = 2,
 }: {
   shape: ShapePoint[];
+  /**
+   * Where there is no seating inside the sector — a stairway, a pillar, the
+   * mouth of a tunnel. Drawn as a hole rather than as part of the outline,
+   * because a sector is a band and a notch in one of its long edges leaves a
+   * shape that has no two long edges.
+   */
+  holes?: ShapePoint[][] | null;
   /** Where the sector sits on the plan, in fractions. */
   bounds: { x: number; y: number; width: number; height: number };
   planWidth: number;
@@ -44,19 +51,32 @@ export function SectorShape({
 
   // Relative to the sector's own top-left, so the SVG only has to be as big as
   // the sector rather than as big as the plan.
-  const points = shape
-    .map((point) => {
+  const ring = (points: ShapePoint[]) => points
+    .map((point, i) => {
       const x = ((point.x - bounds.x) / Math.max(bounds.width, 0.0001)) * width;
       const y = ((point.y - bounds.y) / Math.max(bounds.height, 0.0001)) * height;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
     })
+    .join(' ') + ' Z';
+
+  /*
+   * One path, outline and holes together, filled by the even-odd rule.
+   *
+   * Drawing a hole on top in the background colour looks the same until
+   * something is behind the sector — a photograph of the hall, the pitch, the
+   * stand next to it — and then the patch is a grey rectangle over it. A hole
+   * has to actually be a hole.
+   */
+  const d = [shape, ...(holes ?? []).filter((hole) => hole.length >= 3)]
+    .map(ring)
     .join(' ');
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width={width} height={height}>
-        <Polygon
-          points={points}
+        <Path
+          d={d}
+          fillRule="evenodd"
           fill={dimmed ? 'rgba(255,255,255,0.04)' : `${colour}33`}
           stroke={dimmed ? 'rgba(255,255,255,0.18)' : colour}
           strokeWidth={strokeWidth}

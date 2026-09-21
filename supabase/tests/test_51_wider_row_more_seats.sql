@@ -240,3 +240,68 @@ begin
 end $$;
 
 rollback;
+
+-- --- schodisko zarezané do bloku --------------------------------------------
+--
+-- Tribúna často nie je súvislá: doprostred bloku je zarezané schodisko a rady
+-- okolo neho pokračujú ďalej. Nakresliť to do obrysu nejde — sektor je pás a
+-- zárez uprostred dlhej hrany z neho spraví tvar, ktorý dve dlhé hrany nemá.
+-- Diera je preto niečo iné než obrys: mriežka sa počíta z obrysu, takže rady
+-- zostanú rovnaké, a z mriežky vypadnú len miesta, ktoré v diere ležia.
+begin;
+set search_path = public, extensions;
+
+do $$
+declare
+  v_admin uuid := 'a5151515-0000-0000-0000-000000000004';
+  v_org   uuid := 'b5151515-0000-0000-0000-000000000004';
+  v_map   uuid;
+  v_sec   uuid;
+  v_plny  integer;
+  v_diera integer;
+  v_rovne integer;
+begin
+  insert into auth.users (id, email, email_confirmed_at)
+  values (v_admin, 'schody@blup.test', now());
+  update public.profiles set app_role = 'admin' where id = v_admin;
+  insert into public.organizations (id, name, slug, created_by, verification_status)
+  values (v_org, 'Test schodiska', 'test-schody-51', v_admin, 'verified');
+  insert into public.organization_members (organization_id, user_id, role)
+  values (v_org, v_admin, 'owner') on conflict do nothing;
+  insert into public.venue_maps (organization_id, name) values (v_org, 'Blok')
+  returning id into v_map;
+  insert into public.venue_sections (venue_map_id, name, colour, x, y, width, height, kind, shape)
+  values (v_map, 'D204', '#f43f5e', 0.35, 0.20, 0.30, 0.60, 'standard',
+          '[{"x":0.35,"y":0.20},{"x":0.65,"y":0.20},{"x":0.65,"y":0.80},{"x":0.35,"y":0.80}]'::jsonb)
+  returning id into v_sec;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', v_admin::text, true);
+
+  select count(*) into v_plny from public.section_seat_grid(v_sec, 16, 10);
+  assert v_plny = 160, format('blok bez diery má mať 160 miest, má %s', v_plny);
+
+  -- Schodisko zľava, do tretiny šírky, v strede výšky.
+  perform public.set_section_holes(v_sec,
+    '[[{"x":0.35,"y":0.44},{"x":0.44,"y":0.44},{"x":0.44,"y":0.56},{"x":0.35,"y":0.56}]]'::jsonb);
+
+  select count(*) into v_diera from public.section_seat_grid(v_sec, 16, 10);
+  assert v_diera < v_plny,
+    'schodisko nepohltilo ani jedno miesto — asi je vedľa bloku';
+
+  -- A toto je celá pointa: rady, ktorých sa schodisko netýka, sú nedotknuté.
+  select count(*) into v_rovne
+  from (
+    select g.row_label, count(*) as n
+    from public.section_seat_grid(v_sec, 16, 10) g
+    group by g.row_label
+  ) po
+  where po.n = 10;
+  assert v_rovne = 12,
+    format('nedotknutých radov má byť dvanásť, je %s — mriežka sa hýbe s dierou', v_rovne);
+
+  reset role;
+  raise notice 'PASS schodisko ubralo miesta a rady okolo neho zostali celé';
+end $$;
+
+rollback;
