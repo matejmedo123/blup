@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { ClipPath, Defs, G, Path } from 'react-native-svg';
 import { radius } from '@/theme';
 import type { ShapePoint } from './seatBand';
 
@@ -60,28 +60,57 @@ export function SectorShape({
     .join(' ') + ' Z';
 
   /*
-   * One path, outline and holes together, filled by the even-odd rule.
+   * The fill is the outline and its holes together, by the even-odd rule.
    *
    * Drawing a hole on top in the background colour looks the same until
    * something is behind the sector — a photograph of the hall, the pitch, the
    * stand next to it — and then the patch is a grey rectangle over it. A hole
    * has to actually be a hole.
    */
-  const d = [shape, ...(holes ?? []).filter((hole) => hole.length >= 3)]
+  const solid = [shape, ...(holes ?? []).filter((hole) => hole.length >= 3)]
     .map(ring)
     .join(' ');
+
+  /*
+   * The line follows the edge of the seating, which is not the same as the
+   * edge of the rectangle somebody drew.
+   *
+   * A stairway cut into a stand has a line down each of its sides — that is
+   * where the seating ends — and no line across its mouth, because there the
+   * rectangle is not the edge of anything. Stroking the outline alone gives
+   * the mouth a line and the stairway none; stroking outline and holes
+   * together gives it both.
+   *
+   * So the line is stroked at twice its width and clipped to the filled
+   * region. Half of every stroke lands on seating and shows, half lands off
+   * it and goes — and across the mouth of a stairway there is no seating on
+   * either side, so nothing shows at all. It costs one clip path and needs no
+   * polygon arithmetic.
+   */
+  const clip = `sector-${React.useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width={width} height={height}>
+        <Defs>
+          <ClipPath id={clip}>
+            <Path d={solid} clipRule="evenodd" />
+          </ClipPath>
+        </Defs>
         <Path
-          d={d}
+          d={solid}
           fillRule="evenodd"
           fill={dimmed ? 'rgba(255,255,255,0.04)' : `${colour}33`}
-          stroke={dimmed ? 'rgba(255,255,255,0.18)' : colour}
-          strokeWidth={strokeWidth}
-          strokeLinejoin="round"
         />
+        <G clipPath={`url(#${clip})`}>
+          <Path
+            d={solid}
+            fill="none"
+            stroke={dimmed ? 'rgba(255,255,255,0.18)' : colour}
+            strokeWidth={strokeWidth * 2}
+            strokeLinejoin="round"
+          />
+        </G>
       </Svg>
     </View>
   );

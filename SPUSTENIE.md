@@ -814,6 +814,11 @@ radov sa rozišli o tretinu šírky. Preto obrys hovorí, kde tribúna je, a die
 hovorí, kde v nej nikto nesedí: mriežka sa počíta z obrysu, rady zostanú rady,
 a z mriežky vypadnú len miesta, ktoré v diere ležia.
 
+Čiara sektora obkresľuje okraj sedenia, nie obdĺžnik, ktorý si nakreslil:
+okolo výrezu vedie, cez jeho ústie nie. Nerobí sa to počítaním prieniku
+mnohouholníkov — čiara sa kreslí dvojnásobne hrubá a oreže sa výplňou, takže
+z nej vidno vždy len tú polovicu, ktorá leží na sedení.
+
 `check:seats` rozloží sedadlá do sektorov, aké vzniknú klepaním po obryse v
 editore — tri rohy, päť, zalomená tribúna, tvar L — a porovná, kam sadli, s
 tým, kam podľa definície patria. Predlohy kreslia obrys samy (18 alebo 32
