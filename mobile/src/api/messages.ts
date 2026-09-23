@@ -164,6 +164,51 @@ export async function leaveConversation(conversationId: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Clears a conversation out of your inbox.
+ *
+ * Not a delete on the other side — nobody can reach into somebody else's phone
+ * and unsay something, and a button that claimed to would be lying. What it
+ * does is empty *your* copy: the history goes, the thread leaves the list, and
+ * if they write again it comes back holding only what was said after this.
+ */
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_conversation', {
+    p_conversation: conversationId,
+  });
+  if (error) throw error;
+}
+
+export interface ChatSearchHit {
+  /** null when there is no thread with this person yet. */
+  conversation_id: string | null;
+  kind: 'direct' | 'event' | null;
+  title: string | null;
+  user_id: string | null;
+  display_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  unread_count: number;
+  participant_count: number;
+}
+
+/**
+ * Searching inside Správy looks for people, not events.
+ *
+ * The magnifier there used to open the event search, which answered a question
+ * nobody standing in their inbox was asking.
+ */
+export async function searchMyChats(query: string, limit = 30): Promise<ChatSearchHit[]> {
+  const { data, error } = await supabase.rpc('search_my_chats', {
+    p_query: query,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as ChatSearchHit[];
+}
+
 export async function deleteMessage(messageId: string): Promise<void> {
   const { error } = await supabase.rpc('delete_message', { p_message: messageId });
   if (error) throw error;

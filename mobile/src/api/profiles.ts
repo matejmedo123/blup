@@ -259,6 +259,29 @@ export async function getFollowing(userId: string): Promise<Profile[]> {
     .filter((profile): profile is Profile => Boolean(profile));
 }
 
+/**
+ * The people you follow who are actually going somewhere today.
+ *
+ * Not the same question as getFollowing(), which the home screen used to ask
+ * while printing „Tvoje kruhy dnes niekam idú" over the answer. Follow one
+ * person and that line was true of nobody and shown to everybody.
+ */
+export interface CircleOutToday {
+  id: string;
+  display_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  event_id: string;
+  event_title: string;
+  event_start_at: string;
+}
+
+export async function getCirclesOutToday(limit = 12): Promise<CircleOutToday[]> {
+  const { data, error } = await supabase.rpc('circles_out_today', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CircleOutToday[];
+}
+
 /** Public events created by a user, for their profile screen. */
 export async function getEventsByCreator(userId: string): Promise<EventFeedItem[]> {
   const { data, error } = await supabase

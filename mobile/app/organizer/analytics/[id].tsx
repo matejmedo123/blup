@@ -101,6 +101,32 @@ export default function EventAnalyticsScreen() {
         {sells ? <Tile label="Odbavení" value={String(data.checked_in)} /> : null}
       </View>
 
+      {/* --- the door ------------------------------------------------------- */}
+      {/* "Predané" minus "odbavení" is the number somebody at the door actually
+          wants, and doing that subtraction in your head at 23:00 with a queue
+          in front of you is not a feature. The denominator is live tickets, not
+          tickets_sold: that one counts refunds, so it would leave an organizer
+          waiting all night for people whose money has already gone back. */}
+      {data.tickets_live > 0 ? (
+        <>
+          <SectionHeader title="Pri dverách" />
+          <View style={[styles.grid, layout.isWide && styles.gridWide]}>
+            <Tile label="Vnútri" value={String(data.inside)} />
+            <Tile label="Ešte treba odbaviť" value={String(data.to_admit)} />
+            <Tile label="Platné vstupenky" value={String(data.tickets_live)} />
+            <Tile label="Odbavených" value={`${data.admitted_pct} %`} />
+          </View>
+          <Caption style={styles.doorNote}>
+            {data.to_admit === 0
+              ? 'Všetci s platnou vstupenkou sú vnútri.'
+              : `Vnútri je ${data.inside} ${data.inside === 1 ? 'človek' : data.inside < 5 ? 'ľudia' : 'ľudí'}, ešte môže prísť ${data.to_admit}.`}
+            {data.tickets_void > 0
+              ? ` ${data.tickets_void} ${data.tickets_void === 1 ? 'vstupenka je zrušená alebo vrátená' : 'vstupeniek je zrušených alebo vrátených'} — tie pri dverách neplatia.`
+              : ''}
+          </Caption>
+        </>
+      ) : null}
+
       {/* The numbers above say how many; this says who — with the address each
           ticket went to and the code on it, and the switch that turns one off. */}
       <Pressable
@@ -301,6 +327,7 @@ const styles = StyleSheet.create({
   },
   linkTitle: { ...typography.bodyStrong, color: colors.text },
   linkChevron: { ...typography.heading, color: colors.textTertiary },
+  doorNote: { marginTop: spacing.sm },
   funnelNote: { marginTop: spacing.sm, marginBottom: spacing.lg, lineHeight: 18 },
   cityList: {
     backgroundColor: colors.surface,

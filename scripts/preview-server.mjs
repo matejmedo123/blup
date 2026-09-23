@@ -97,6 +97,24 @@ function sql(query, asUser) {
  */
 let COLUMNS = new Map();
 
+/**
+ * Which functions return a list rather than one value.
+ *
+ * Read from the catalogue rather than guessed from the name: `proretset` is
+ * exactly the flag PostgREST itself looks at when it decides between an array
+ * and a bare value.
+ */
+let SET_RETURNING = new Set();
+
+function loadFunctions() {
+  const rows = sql(
+    `select p.proname from pg_proc p `
+    + `join pg_namespace n on n.oid = p.pronamespace `
+    + `where n.nspname = 'public' and p.proretset`,
+  );
+  SET_RETURNING = new Set(rows.map((row) => row.proname));
+}
+
 function loadSchema() {
   const rows = sql(
     `select table_name, column_name from information_schema.columns `
@@ -244,9 +262,18 @@ createServer(async (req, res) => {
       const args = Object.entries(body)
         .map(([k, v]) => `${k} => ${literal(v)}`)
         .join(', ');
-      const rows = sql(`select public.${fn}(${args}) as value`, asUser());
-      const value = rows[0]?.value;
-      return json(res, value ?? null);
+
+      // A function that RETURNS TABLE / SETOF is a list, and PostgREST always
+      // answers one with an array — even when it holds a single row. Calling it
+      // as `select fn(...) as value` and handing back rows[0].value gave the app
+      // a bare object instead, and every caller that did `.filter`/`.find` on
+      // the answer threw. It looked like an app bug and was a preview bug.
+      const rows = SET_RETURNING.has(fn)
+        ? sql(`select * from public.${fn}(${args}) t`, asUser())
+        : sql(`select public.${fn}(${args}) as value`, asUser());
+
+      if (SET_RETURNING.has(fn)) return json(res, rows);
+      return json(res, rows[0]?.value ?? null);
     }
 
     // --- tables -------------------------------------------------------------
@@ -284,5 +311,6 @@ createServer(async (req, res) => {
   }
 }).listen(PORT, () => {
   loadSchema();
+  loadFunctions();
   console.log(`preview backend on http://localhost:${PORT} (db ${DB}, user ${asUser() ?? 'anon'})`);
 });

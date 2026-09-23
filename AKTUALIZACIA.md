@@ -15,7 +15,82 @@ Počítaj s **20 minútami**, z toho väčšina je čakanie na build.
 
 ## Čo je nové v tomto balíku
 
-Deväť vecí z tvojho posledného zoznamu. Pri každej je aj to, čo presne bolo zle
+Desať vecí z tvojho posledného zoznamu — štyri chyby a šesť nových vecí.
+Pri každej je aj to, čo presne bolo zle.
+
+**Chat**
+
+- **Zmazanie chatu.** Dlhé podržanie konverzácie v Správach, alebo kôš v hlavičke
+  otvoreného chatu. Zmaže sa **tebe**: história zmizne, chat vypadne zo zoznamu.
+  Druhej strane nezmizne nič — to sa nedá a appka to ani netvrdí. Keď ti dotyčný
+  napíše, chat sa vráti, ale už len s novými správami. Schválne to **nie je**
+  odchod z konverzácie: to by znamenalo, že ti ten človek už nikdy nenapíše,
+  čiže blok vydávaný za mazanie.
+- **GIFy.** Tlačidlo `GIF` v lište pri písaní. Dve cesty: vyhľadávanie (ide cez
+  našu serverovú funkciu, kľúč k poskytovateľovi zostáva na serveri a nikdy sa
+  nedostane do appky) a **vlastný GIF z fotiek**, ktorý funguje vždy. Keď kľúč
+  nie je nastavený, picker to **povie** namiesto prázdnej mriežky. GIF sa
+  nahráva bez prekódovania — všetko ostatné sa u nás prevádza na JPEG, a JPEG má
+  jeden snímok, takže by z animácie ostala fotka.
+- **Lupa v Správach konečne hľadá ľudí.** Predtým otvárala hľadanie eventov —
+  sebavedivá odpoveď na otázku, ktorú v schránke nikto nekladie. Teraz hľadá
+  v tvojich chatoch podľa mena aj @prezývky a pod nimi ponúkne ľudí, ktorých
+  sleduješ a ešte si im nepísal. Cudzích neponúka.
+
+**Feed a príbehy**
+
+- **Príbehy na 24 hodín** — pre bežného používateľa aj pre organizátora (ten
+  môže pridávať pod menom organizácie). Krúžok nad feedom **svieti len vtedy,
+  keď je v ňom niečo nepozreté**; predtým to bol zoznam ľudí, ktorých sleduješ,
+  s farebným krúžkom okolo každého, a ten krúžok neznamenal nič. Autor vidí,
+  kto mu príbeh pozrel; nikto iný ten počet nevidí. Po 24 hodinách sa riadky aj
+  obrázky naozaj mažú, nielen skryjú (nový cron `blup-stories`).
+- **Nový event od niekoho, koho sleduješ, je vo feede.** Nezapisuje sa žiadny
+  falošný príspevok — feed sa pýta na dve veci naraz (čo ľudia napísali a čo
+  vypísali) a premieša ich podľa času. Karta má odznak `NOVÝ EVENT`.
+- **Platená reklama vo feede.** Po treťom príspevku, označená `SPONZOROVANÉ`,
+  z toho istého systému boostov, ktorý už funguje — čiže sa ukáže **len keď
+  niekto naozaj zaplatil**. Keď taký nikto nie je, nie je tam ani slot.
+
+**Pri dverách**
+
+- **Koľko ešte treba odbaviť.** V štatistikách eventu pribudla sekcia
+  *Pri dverách*: **vnútri**, **ešte treba odbaviť**, platné vstupenky a percento.
+  To isté vidí skener po každom načítaní. Menovateľ sú **platné** vstupenky, nie
+  predané — predané rátajú aj vrátené, takže by si pri dverách do rána čakal na
+  ľudí, ktorým sa už vrátili peniaze.
+
+**Opravené chyby**
+
+- **„Tvoje kruhy dnes niekam idú" klamalo.** Riadok sa bral z „koho sleduješ",
+  bez akejkoľvek zmienky o dnešku — stačilo sledovať jedného človeka a appka
+  každý večer tvrdila, že tvoje kruhy niekam idú. Teraz to je presne tá otázka,
+  ktorú ten riadok celý čas predstieral, a keď je jediný, povie aj **na aký
+  event** ten človek ide.
+- **Odznak pri mene pohlcovalo pozadie.** Emotikon visel priamo na tmavom
+  podklade, a dobrá polovica katalógu je tmavý znak (✍️ 🎲 🧭 🎒) — na `#0A0D12`
+  z toho bola diera v riadku. Každý odznak má teraz svetlý kruh pod sebou.
+- **Ťahanie eventu v „Blupni si program" ťahalo titulnú fotku.** Prehliadač
+  začne vlastné drag-and-drop v momente, keď stlačenie pristane na obrázku — a
+  karta v Objave je prevažne plagát, takže gesto kradol plagát. Rovnaká vec,
+  aká sa už riešila na pláne haly; teraz je to zakázané globálne.
+- **Preview backend vracal iný tvar než ostrá databáza.** Funkcia, ktorá vracia
+  zoznam, prichádzala ako jeden objekt namiesto poľa, takže obrazovky padali
+  len v náhľade. Vyzeralo to ako chyba appky a bola to chyba náhľadu.
+
+### Čo si k tomu musíš nastaviť
+
+Nič, okrem dvoch nepovinných vecí:
+
+- **Cron na príbehy** — riadok `blup-stories` v SPUSTENIE.md, kapitola o cron
+  jobs. Bez neho príbehy **nikto neuvidí** po 24 hodinách (to zariaďuje každé
+  čítanie), len sa riadky nebudú mazať.
+- **`TENOR_API_KEY`** — ak chceš vyhľadávanie GIFov. Bez neho funguje posielanie
+  vlastných GIFov a picker to povie nahlas.
+
+---
+
+Deväť vecí z predchádzajúceho zoznamu. Pri každej je aj to, čo presne bolo zle
 — nie preto, aby to znelo dôkladne, ale aby si vedel, čo presne overiť.
 
 **Objav a odporúčanie**

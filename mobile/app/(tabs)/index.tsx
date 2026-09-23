@@ -16,7 +16,7 @@ import { useLocation } from '@/hooks/useLocation';
 import {
   getFeedEvents, getWorthTheTrip, saveEvent, unsaveEvent,
 } from '@/api/events';
-import { getFollowing } from '@/api/profiles';
+import { getCirclesOutToday } from '@/api/profiles';
 import { getAIRecommendations } from '@/api/ai';
 import { getUnreadCount } from '@/api/notifications';
 import { touchActivity } from '@/api/gamification';
@@ -152,10 +152,14 @@ export default function HomeScreen() {
     staleTime: 5 * 60_000,
   });
 
+  // Everybody you follow is not the same set as everybody you follow who is
+  // going out tonight, and the line above this strip claims the second one.
   const circles = useQuery({
-    queryKey: ['profile', 'following', profile?.id],
-    queryFn: () => getFollowing(profile!.id),
+    queryKey: ['circles', 'today', profile?.id],
+    queryFn: () => getCirclesOutToday(12),
     enabled: Boolean(profile?.id),
+    // It is a statement about today; it should not survive midnight in a cache.
+    staleTime: 10 * 60_000,
   });
 
   const recommendations = useQuery({
@@ -580,7 +584,17 @@ export default function HomeScreen() {
                     size={30}
                     max={5}
                   />
-                  <Text style={styles.circlesLabel}>Tvoje kruhy dnes niekam idú</Text>
+                  {/* Says which event when it is one, and how many when it is
+                      several — the old line said "niekam", which was the only
+                      word it could honestly use for a list it had not looked
+                      at. */}
+                  <Text style={styles.circlesLabel} numberOfLines={2}>
+                    {circles.data!.length === 1
+                      ? `${circles.data![0].display_name ?? circles.data![0].username} dnes ide na ${circles.data![0].event_title}`
+                      // „2 … ide" je po slovensky zle. 2–4 berie množné číslo,
+                      // 5 a viac jednotné — rovnaké pravidlo ako pri eventoch.
+                      : `${circles.data!.length} z tvojich kruhov dnes niekam ${circles.data!.length < 5 ? 'idú' : 'ide'}`}
+                  </Text>
                 </Pressable>
               ) : null}
 

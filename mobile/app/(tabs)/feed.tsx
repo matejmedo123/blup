@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { EventListSkeleton, DetailSkeleton } from '@/components/Skeleton';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -9,13 +9,18 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useRequireAuth } from '@/auth/useRequireAuth';
-import { getFeed, getFeedCounts, type FeedScope, togglePostLike, type CommunityPost } from '@/api/communities';
-import { getFollowing } from '@/api/profiles';
-import { pickImage, uploadCommunityImage } from '@/storage/uploads';
+import {
+  getFeed, getFeedCounts, getFeedNewEvents, type FeedScope, togglePostLike,
+  type CommunityPost, type FeedNewEvent,
+} from '@/api/communities';
+import { createStory } from '@/api/stories';
+import { pickImage, uploadCommunityImage, uploadStoryImage } from '@/storage/uploads';
 import { createPost } from '@/api/communities';
+import { StoryRow } from '@/components/Stories';
+import { SponsoredCard } from '@/components/SponsoredCard';
 import { getMyOrganizations } from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
-import { eventHref, formatCount, formatRelative } from '@/lib/format';
+import { eventHref, formatCount, formatEventDate, formatPrice, formatRelative } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import { BottomSheet } from '@/components/BottomSheet';
 import {
@@ -24,6 +29,7 @@ import {
 } from '@/components/ui';
 import { SiteFooter } from '@/components/SiteFooter';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { GradientCover } from '@/components/GradientCover';
 import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -33,6 +39,18 @@ import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
  * post belongs to, the photo, the text, and the actions — like, "Idem tiež",
  * and the event's rating on the right.
  */
+/**
+ * One row of the feed.
+ *
+ * A discriminated union rather than a post with a flag on it: an announcement
+ * has no body, no likes and no author who typed anything, and giving it those
+ * fields as nulls is how a card ends up rendering an empty comment count under
+ * an event nobody has commented on.
+ */
+type FeedRow =
+  | { kind: 'post'; at: string; id: string; post: CommunityPost }
+  | { kind: 'event'; at: string; id: string; event: FeedNewEvent };
+
 const SCOPES: { key: FeedScope; label: string }[] = [
   { key: 'following', label: 'Sledujem' },
   { key: 'for_you', label: 'Pre teba' },
@@ -53,6 +71,7 @@ export default function FeedScreen() {
   const [postAs, setPostAs] = useState<string | null>(null);
 
   const [scope, setScope] = useState<FeedScope | null>(null);
+  const [storyBusy, setStoryBusy] = useState(false);
 
   // How full each view is, so the first one shown has something in it. Opening
   // on an empty "Sledujem" and making somebody find the tab that works is a
@@ -83,11 +102,59 @@ export default function FeedScreen() {
   // gesture from here.
   const pull = usePullToRefresh(() => posts.refetch(), posts.isRefetching);
 
-  const circles = useQuery({
-    queryKey: ['profile', 'following', profile?.id],
-    queryFn: () => getFollowing(profile!.id),
-    enabled: Boolean(profile?.id),
+  /**
+   * The other half of the feed: events the people you follow have just put on.
+   *
+   * Kept as its own query rather than folded into feed_posts, because it is not
+   * a post. Writing a post row when somebody publishes an event would put words
+   * in their mouth and leave a second copy to drift out of date the moment they
+   * edited the real one.
+   */
+  const announcements = useQuery({
+    queryKey: ['feed', 'new-events', activeScope],
+    queryFn: () => getFeedNewEvents(activeScope, 20),
+    enabled: !counts.isLoading,
   });
+
+  /**
+   * One list, in time order.
+   *
+   * Interleaved by `created_at` rather than shown as a separate band at the
+   * top: a band would put a four-day-old announcement above a post from ten
+   * minutes ago, which is the thing that teaches people to scroll past the top
+   * of a feed.
+   */
+  const timeline = useMemo<FeedRow[]>(() => {
+    const rows: FeedRow[] = [
+      ...(posts.data ?? []).map((post) => ({
+        kind: 'post' as const, at: post.created_at, id: `post-${post.id}`, post,
+      })),
+      ...(announcements.data ?? []).map((event) => ({
+        kind: 'event' as const, at: event.created_at, id: `event-${event.id}`, event,
+      })),
+    ];
+    rows.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    return rows;
+  }, [posts.data, announcements.data]);
+
+  /** Opening the story composer: pick a picture, then post it. */
+  const addStory = async () => {
+    if (!requireAuth('Príbeh sa pripína k tvojmu účtu.', () => {})) return;
+    setError(null);
+    try {
+      const picked = await pickImage({ source: 'library', aspect: [9, 16] });
+      if (!picked) return;
+      setStoryBusy(true);
+      const url = await uploadStoryImage(picked.uri, picked.width);
+      await createStory({ imageUrl: url, organizationId: postAs });
+      await queryClient.invalidateQueries({ queryKey: ['stories'] });
+      toast.show('Príbeh je vonku — zmizne o 24 hodín');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setStoryBusy(false);
+    }
+  };
 
   const like = async (post: CommunityPost) => {
     if (!requireAuth('Páči sa mi to je pripnuté k účtu.', () => {})) return;
@@ -178,7 +245,7 @@ export default function FeedScreen() {
 
       <FlatList
         {...pull.handlers}
-        data={posts.data ?? []}
+        data={timeline}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
@@ -192,39 +259,12 @@ export default function FeedScreen() {
         ListFooterComponent={<SiteFooter />}
         ListHeaderComponent={
           <View>
-            {(circles.data ?? []).length > 0 ? (
-              <FlatList
-                horizontal
-                data={circles.data ?? []}
-                keyExtractor={(item) => item.id}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.stories}
-                renderItem={({ item }) => (
-                  <Pressable
-                    style={styles.story}
-                    onPress={() => router.push(`/user/${item.id}`)}
-                  >
-                    <LinearGradient
-                      colors={[colors.accent, colors.pink]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.storyRing}
-                    >
-                      <View style={styles.storyInner}>
-                        <Avatar
-                          url={item.avatar_url}
-                          name={item.display_name ?? item.username}
-                          size={50}
-                        />
-                      </View>
-                    </LinearGradient>
-                    <Text style={styles.storyName} numberOfLines={1}>
-                      {item.display_name?.split(' ')[0] ?? item.username}
-                    </Text>
-                  </Pressable>
-                )}
-              />
-            ) : null}
+            {/* Real stories. This row used to be every person you follow with a
+                gradient ring drawn round them — a ring that always said "there
+                is something new here" and never led anywhere but a profile. */}
+            <StoryRow onAdd={() => void addStory()} />
+
+            {storyBusy ? <Caption style={styles.storyBusy}>Nahrávam príbeh…</Caption> : null}
 
             <Pressable
               style={styles.composerRow}
@@ -238,8 +278,19 @@ export default function FeedScreen() {
             </Pressable>
           </View>
         }
-        renderItem={({ item }) => (
-          <PostCard post={item} onLike={() => like(item)} />
+        renderItem={({ item, index }) => (
+          <>
+            {item.kind === 'post'
+              ? <PostCard post={item.post} onLike={() => like(item.post)} />
+              : <NewEventCard event={item.event} />}
+
+            {/* One paid placement, after the third organic row. Third rather
+                than first: the feed has to be worth opening before it is worth
+                selling. Renders nothing when no advertiser qualifies, which is
+                most of the time — so an empty platform shows no slot at all
+                rather than a house ad. */}
+            {index === 2 ? <SponsoredCard style={styles.sponsored} /> : null}
+          </>
         )}
         ListEmptyComponent={
           <EmptyState
@@ -307,6 +358,83 @@ export default function FeedScreen() {
         />
       </BottomSheet>
     </SafeAreaView>
+  );
+}
+
+/**
+ * An event somebody you follow has just put on.
+ *
+ * Deliberately not an EventCard: in a feed of things people wrote, an event has
+ * to carry the byline of whoever put it on, or it reads as an advert that got
+ * in. The line above the cover is the whole point of the card.
+ */
+function NewEventCard({ event }: { event: FeedNewEvent }) {
+  const who = event.organization_name ?? event.creator_name ?? event.creator_username;
+
+  return (
+    <View style={styles.post}>
+      <Pressable
+        style={styles.postHeader}
+        onPress={() =>
+          event.organization_id
+            ? router.push(`/org/${event.organization_slug || event.organization_id}`)
+            : router.push(`/user/${event.creator_id}`)
+        }
+      >
+        {event.organization_logo_url ? (
+          <Image source={{ uri: event.organization_logo_url }} style={styles.postOrgLogo} />
+        ) : (
+          <Avatar
+            url={event.organization_id ? null : event.creator_avatar_url}
+            name={who}
+            size={38}
+          />
+        )}
+        <View style={styles.flex}>
+          <Text style={styles.postAuthor} numberOfLines={1}>{who}</Text>
+          {/* „vytvoril" je v slovenčine rodové sloveso a rod človeka nevieme
+              — z mena sa hádať nedá. Prítomné „má" rod nemá, takže sedí na
+              človeka aj na organizáciu bez toho, aby sa niekto tipoval. */}
+          <Caption>má nový event · {formatRelative(event.created_at)}</Caption>
+        </View>
+        <View style={styles.newTag}>
+          <Text style={styles.newTagLabel}>NOVÝ EVENT</Text>
+        </View>
+      </Pressable>
+
+      <Pressable
+        onPress={() => router.push(`/event/${event.slug || event.id}`)}
+        accessibilityRole="button"
+      >
+        <GradientCover
+          uri={event.cover_image_url}
+          category={event.category}
+          height={190}
+          style={styles.postImage}
+        />
+
+        <View style={styles.newBody}>
+          <Text style={styles.newTitle} numberOfLines={2}>{event.title}</Text>
+          <Caption>
+            {formatEventDate(event.start_at)}
+            {event.venue_name ? ` · ${event.venue_name}` : event.city ? ` · ${event.city}` : ''}
+          </Caption>
+
+          <View style={styles.newFooter}>
+            <Text style={styles.newGoing}>
+              {event.attendee_count > 0
+                ? `${formatCount(event.attendee_count)} ide`
+                : 'Zatiaľ nikto — buď prvý'}
+            </Text>
+            <View style={styles.newPrice}>
+              <Text style={styles.newPriceLabel}>
+                {event.is_free ? 'ZDARMA' : formatPrice(event.price_cents, event.currency)}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    </View>
   );
 }
 
@@ -511,5 +639,32 @@ const styles = StyleSheet.create({
   postAsLabel: { marginBottom: spacing.sm },
   postAsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   postOrgLogo: { width: 38, height: 38, borderRadius: radius.md },
+
+  storyBusy: { paddingHorizontal: spacing.xs, paddingBottom: spacing.sm },
+  sponsored: { marginBottom: spacing.lg },
+
+  newTag: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.chip,
+    backgroundColor: colors.accentSoft,
+  },
+  newTagLabel: { ...typography.monoSm, fontSize: 9, color: colors.accentText },
+  newBody: { padding: spacing.md, gap: 4 },
+  newTitle: { ...typography.rowTitle, color: colors.text },
+  newFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  newGoing: { ...typography.metaSm, color: colors.accent, flex: 1 },
+  newPrice: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.chip,
+    backgroundColor: colors.surfaceElevated2,
+  },
+  newPriceLabel: { ...typography.monoSm, color: colors.text },
   sheetActions: { flexDirection: 'row', gap: spacing.md },
 });

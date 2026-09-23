@@ -92,3 +92,98 @@ begin
     p_row_style => 'numbers', p_row_prefix => 'V', p_seat_start => 101);
   perform set_config('request.jwt.claim.sub', '', true);
 end $$;
+
+-- ============================================================================
+-- Ľudia okolo admina — aby sa dali pozrieť správy, príbehy a feed
+-- ============================================================================
+-- Sám so sebou si nenapíšeš, nikoho nesleduješ a feed je prázdny, takže tri
+-- obrazovky z desiatich sa dali otvoriť len prázdne. Toto je najmenšie
+-- množstvo ľudí, pri ktorom je na nich čo vidieť.
+insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
+  ('77777777-0000-0000-0000-000000000001', 'eva@blup.demo', now(),
+   '{"display_name":"Eva Horváthová","username":"eva"}'),
+  ('77777777-0000-0000-0000-000000000002', 'miro@blup.demo', now(),
+   '{"display_name":"Miro Baláž","username":"miro"}')
+on conflict (id) do nothing;
+
+update public.profiles
+set display_name = 'Eva Horváthová', username = 'eva', city = 'Nitra',
+    onboarding_completed = true
+where id = '77777777-0000-0000-0000-000000000001';
+
+update public.profiles
+set display_name = 'Miro Baláž', username = 'miro', city = 'Nitra',
+    onboarding_completed = true
+where id = '77777777-0000-0000-0000-000000000002';
+
+-- Admin sleduje oboch. Bez toho je ring nad feedom aj riadok s kruhmi prázdny
+-- — správne, ale nedá sa na tom nič overiť.
+insert into public.follows (follower_id, following_id) values
+  ('11111111-1111-1111-1111-111111111111', '77777777-0000-0000-0000-000000000001'),
+  ('11111111-1111-1111-1111-111111111111', '77777777-0000-0000-0000-000000000002'),
+  ('77777777-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111')
+on conflict do nothing;
+
+-- Event, ktorý je naozaj dnes — inak sa „Tvoje kruhy dnes" nedá vidieť, lebo
+-- teraz už hlási len to, čo je pravda.
+insert into public.events (id, creator_id, title, description, category,
+                           start_at, end_at, latitude, longitude, city, venue_name,
+                           is_free, status, visibility)
+values ('33333333-0000-0000-0000-0000000d0e51',
+        '77777777-0000-0000-0000-000000000001',
+        'Večer v Hidepark', 'Koncert na dvore, vstup zdarma.', 'music',
+        date_trunc('day', now()) + interval '20 hours',
+        date_trunc('day', now()) + interval '23 hours',
+        48.3069, 18.0864, 'Nitra', 'Hidepark',
+        true, 'published', 'public')
+on conflict (id) do nothing;
+
+insert into public.event_attendees (event_id, user_id, status) values
+  ('33333333-0000-0000-0000-0000000d0e51', '77777777-0000-0000-0000-000000000001', 'going'),
+  ('33333333-0000-0000-0000-0000000d0e51', '77777777-0000-0000-0000-000000000002', 'going')
+on conflict do nothing;
+
+-- Jeden príbeh, jeden chat a jeden príspevok, aby na každej z tých obrazoviek
+-- bolo vidieť riadok naozajstných dát namiesto prázdneho stavu.
+do $$
+declare
+  v_admin uuid := '11111111-1111-1111-1111-111111111111';
+  v_eva   uuid := '77777777-0000-0000-0000-000000000001';
+  v_conv  uuid;
+begin
+  perform set_config('request.jwt.claim.sub', v_eva::text, true);
+
+  perform public.create_story(
+    'https://tchvgzbxddqdneylkqvi.supabase.co/storage/v1/object/public/stories/demo/vecer.jpg',
+    'Dnes o ôsmej v Hideparku 🎸',
+    '33333333-0000-0000-0000-0000000d0e51',
+    null
+  );
+
+  v_conv := public.start_direct_conversation(v_admin);
+  perform public.send_message(v_conv, 'Ideš dnes na ten koncert?', null, null);
+
+  perform set_config('request.jwt.claim.sub', v_admin::text, true);
+  perform public.send_message(v_conv, 'Jasné, vidíme sa tam.', null, null);
+
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+
+-- Pár vstupeniek, aby bolo na čo pozerať pri dverách: dve odbavené, tri čakajú
+-- a jedna vrátená — presne tá zmes, v ktorej je vidieť, že vrátená sa medzi
+-- čakajúcich neráta.
+insert into public.tickets (event_id, buyer_id, code, qr_secret, status, price_cents, checked_in_at)
+values
+  ('33333333-3333-3333-3333-333333333333', '77777777-0000-0000-0000-000000000001',
+   'PRV-0001', 'preview-1', 'used',     1900, now() - interval '20 minutes'),
+  ('33333333-3333-3333-3333-333333333333', '77777777-0000-0000-0000-000000000002',
+   'PRV-0002', 'preview-2', 'used',     1900, now() - interval '12 minutes'),
+  ('33333333-3333-3333-3333-333333333333', '77777777-0000-0000-0000-000000000001',
+   'PRV-0003', 'preview-3', 'valid',    1900, null),
+  ('33333333-3333-3333-3333-333333333333', '77777777-0000-0000-0000-000000000002',
+   'PRV-0004', 'preview-4', 'valid',    1900, null),
+  ('33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111',
+   'PRV-0005', 'preview-5', 'valid',    1900, null),
+  ('33333333-3333-3333-3333-333333333333', '77777777-0000-0000-0000-000000000001',
+   'PRV-0006', 'preview-6', 'refunded', 1900, null)
+on conflict (code) do nothing;

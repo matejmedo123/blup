@@ -73,7 +73,7 @@ npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-Aplikuje sa 95 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+Aplikuje sa 102 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
 účtovníctvo. Trvá to pol minúty.
 
 4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
@@ -96,8 +96,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje všetkých 95 migrácií od nuly a prejde
-**466 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
+Postaví dočasnú databázu, aplikuje všetkých 102 migrácií od nuly a prejde
+**474 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
 Ak toto prejde, schéma je v poriadku a každý neskorší problém je v konfigurácii.
@@ -556,6 +556,13 @@ $$);
 select cron.schedule('blup-invites', '17 * * * *', $$
   select public.qualify_invites(200);
 $$);
+
+-- príbehy: po 24 hodinách zmiznú. Každé čítanie ich už filtruje podľa
+-- `expires_at`, takže vypršaný príbeh nikto nevidí ani bez tohto jobu — toto je
+-- druhá polovica: riadky sa naozaj zmažú, nie len skryjú.
+select cron.schedule('blup-stories', '23 * * * *', $$
+  select public.purge_expired_stories();
+$$);
 ```
 
 `cart-sweep` robí dve veci naraz a ani jedna nie je kritická. Označí eventy,
@@ -564,7 +571,7 @@ správá ako nadchádzajúci (presne tak sa dal boostnúť koncert spred mesiaca
 A je to upratovanie — vypršaná rezervácia prestáva držať vstupenky
 v tej sekunde, keď vyprší, nech beží čokoľvek.
 
-**✓ Kontrola:** `select jobname, schedule from cron.job;` — šesť riadkov.
+**✓ Kontrola:** `select jobname, schedule from cron.job;` — sedem riadkov.
 
 > **E-mailov bude výrazne viac než doteraz.** Okrem vstupeniek teraz chodia aj
 > upozornenia z čakačky a rozposielania od organizátorov. Koľko ich smie odísť
@@ -776,7 +783,7 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 ### A päť, ktoré netreba nasadenie
 
 ```bash
-npm run db:verify        # 95 migrácií a 51 testovacích súborov na dočasnej databáze
+npm run db:verify        # 102 migrácií a 52 testovacích súborov na dočasnej databáze
 npm run check:dns        # SPF, DKIM, DMARC a návratová cesta nedoručeniek
 npm run check:speed      # rýchlosť stránky na priemernom telefóne, s rozpočtom
 npm run check:webevents  # DOM udalosti, ktoré na webe ticho nerobia nič

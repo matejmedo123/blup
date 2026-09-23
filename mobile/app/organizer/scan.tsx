@@ -1,8 +1,10 @@
 import React, { useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 import { checkInTicket, parseTicketQr, type CheckInResult } from '@/api/tickets';
+import { getDoorState } from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
 import { Body, Button, Caption, Notice, Screen } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -29,6 +31,20 @@ export default function ScanScreen() {
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(true);
   const lastScan = useRef<{ code: string; at: number } | null>(null);
+
+  /**
+   * How the room is filling up.
+   *
+   * The scanner knew whether one ticket was good and nothing about the other
+   * six hundred. Standing at the door, the number you want between scans is how
+   * many are inside and how many can still turn up — so it is read after each
+   * scan, from the event the scan just named.
+   */
+  const door = useQuery({
+    queryKey: ['door', result?.event_id],
+    queryFn: () => getDoorState(result!.event_id!),
+    enabled: Boolean(result?.ok && result?.event_id),
+  });
 
   const onScanned = async ({ data }: { data: string }) => {
     if (!scanning) return;
@@ -103,6 +119,11 @@ export default function ScanScreen() {
               <Text style={styles.resultEmoji}>✅</Text>
               <Text style={[styles.resultTitle, { color: colors.success }]}>Vstup potvrdený</Text>
               <Body muted style={styles.resultBody}>{result.event_title}</Body>
+              {door.data ? (
+                <Caption style={styles.doorLine}>
+                  Vnútri {door.data.inside} · ešte treba odbaviť {door.data.to_admit}
+                </Caption>
+              ) : null}
             </>
           ) : (
             <>
@@ -153,5 +174,6 @@ const styles = StyleSheet.create({
   resultEmoji: { fontSize: 44 },
   resultTitle: { ...typography.heading, color: colors.text },
   resultBody: { textAlign: 'center' },
+  doorLine: { marginTop: spacing.xs },
   nextButton: { marginTop: spacing.lg, alignSelf: 'stretch' },
 });

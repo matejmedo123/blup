@@ -8,11 +8,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
 import {
-  deleteMessage, getConversation, getMessages, getParticipants, leaveConversation,
-  markConversationRead, sendMessage, setConversationMuted,
+  deleteConversation, deleteMessage, getConversation, getMessages, getParticipants,
+  leaveConversation, markConversationRead, sendMessage, setConversationMuted,
 } from '@/api/messages';
-import { pickImage, signChatImage, uploadChatImage } from '@/storage/uploads';
+import { pickImage, signChatImage, uploadChatGif, uploadChatImage } from '@/storage/uploads';
 import { BottomSheet } from '@/components/BottomSheet';
+import { GifPicker } from '@/components/GifPicker';
 import { useDialog } from '@/components/Dialog';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { subscribeToTable } from '@/lib/realtime';
@@ -55,6 +56,15 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
   const [sending, setSending] = useState(false);
   /** A picked photo waiting to go with the next message. */
   const [pending, setPending] = useState<string | null>(null);
+  /**
+   * A picked GIF, waiting the same way.
+   *
+   * Kept apart from `pending` rather than sharing it with a flag: the two take
+   * different upload paths, and one of them must not be re-encoded. Merging
+   * them is exactly how a GIF ends up sent as a single still frame.
+   */
+  const [pendingGif, setPendingGif] = useState<string | null>(null);
+  const [gifOpen, setGifOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // The message being answered. Held here rather than on the bubble, because
@@ -143,18 +153,27 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
    */
   const submit = async () => {
     const body = draft.trim();
-    if ((!body && !pending) || !id) return;
+    if ((!body && !pending && !pendingGif) || !id) return;
 
     const photo = pending;
+    const gif = pendingGif;
     const answering = replyTo;
     setError(null);
     setSending(true);
     setDraft('');
     setPending(null);
+    setPendingGif(null);
     setReplyTo(null);
 
     try {
-      const attachmentUrl = photo ? await uploadChatImage(photo, id) : undefined;
+      // A GIF takes the path that does not re-encode; a photo takes the one
+      // that does. Sending both at once is not a thing, so this is an either/or.
+      const attachmentUrl = gif
+        ? await uploadChatGif(gif, id)
+        : photo
+          ? await uploadChatImage(photo, id)
+          : undefined;
+
       await sendMessage({
         conversationId: id,
         body: body || undefined,
@@ -164,9 +183,10 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
       await queryClient.invalidateQueries({ queryKey: ['messages', id] });
       await queryClient.invalidateQueries({ queryKey: ['conversations'] });
     } catch (caught) {
-      // Give all three back rather than losing them.
+      // Give all of it back rather than losing it.
       setDraft(body);
       setPending(photo);
+      setPendingGif(gif);
       setReplyTo(answering);
       setError(messageFor(caught));
     } finally {
@@ -205,6 +225,35 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
     try {
       await deleteMessage(messageId);
       await queryClient.invalidateQueries({ queryKey: ['messages', id] });
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  };
+
+  /**
+   * Clearing the whole thread.
+   *
+   * The wording has to match what actually happens: the other person's copy is
+   * beyond anybody's reach, so this empties your side and nothing more.
+   */
+  const removeChat = async () => {
+    if (!id) return;
+    setError(null);
+    const sure = await dialog.confirm({
+      title: 'Zmazať tento chat?',
+      body: record?.kind === 'event'
+        ? 'Zmizne ti z prehľadu aj s celou históriou. Ostatným v skupine nezmizne nič — a ak tam niekto napíše, chat sa ti vráti s novými správami.'
+        : 'Zmizne ti z prehľadu aj s celou históriou. Druhej strane nezmizne nič — a ak ti napíše, chat sa ti vráti, ale už len s novými správami.',
+      confirmLabel: 'Zmazať',
+      destructive: true,
+    });
+    if (!sure) return;
+
+    try {
+      await deleteConversation(id);
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      await queryClient.invalidateQueries({ queryKey: ['messages', 'unread'] });
+      router.back();
     } catch (caught) {
       setError(messageFor(caught));
     }
@@ -309,6 +358,14 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
               <Text style={styles.barGlyph}>⤶</Text>
             </Pressable>
           ) : null}
+          <Pressable
+            onPress={removeChat}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Zmazať chat"
+          >
+            <Text style={styles.barGlyph}>🗑</Text>
+          </Pressable>
         </View>
 
         {error ? <Notice tone="danger" title="Správa neodišla" body={error} /> : null}
@@ -368,13 +425,31 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
                   : `Odpovedáš ${replyTo.sender?.display_name ?? replyTo.sender?.username ?? 'na správu'}`}
               </Mono>
               <Text numberOfLines={1} style={styles.replyText}>
-                {replyTo.body ?? '📷 Fotka'}
+                {replyTo.body ?? attachmentLabel(replyTo.attachment_url) ?? '📷 Fotka'}
               </Text>
             </View>
             <Pressable
               onPress={() => setReplyTo(null)}
               accessibilityRole="button"
               accessibilityLabel="Zrušiť odpoveď"
+              disabled={sending}
+              style={({ pressed }) => [styles.pendingRemove, pressed && styles.pressed]}
+            >
+              <Text style={styles.pendingRemoveGlyph}>✕</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {pendingGif ? (
+          <View style={styles.pendingRow}>
+            <Image source={{ uri: pendingGif }} style={styles.pendingThumb} contentFit="cover" />
+            <View style={styles.flex}>
+              <Caption>GIF je priložený. Pošle sa so správou.</Caption>
+            </View>
+            <Pressable
+              onPress={() => setPendingGif(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Odobrať GIF"
               disabled={sending}
               style={({ pressed }) => [styles.pendingRemove, pressed && styles.pressed]}
             >
@@ -412,10 +487,20 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
             <Text style={styles.attachGlyph}>＋</Text>
           </Pressable>
 
+          <Pressable
+            onPress={() => setGifOpen(true)}
+            disabled={sending}
+            accessibilityRole="button"
+            accessibilityLabel="Poslať GIF"
+            style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.gifGlyph}>GIF</Text>
+          </Pressable>
+
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder={pending ? "Pridaj popis (nepovinné)…" : "Napíš správu…"}
+            placeholder={pending || pendingGif ? "Pridaj popis (nepovinné)…" : "Napíš správu…"}
             placeholderTextColor={colors.textTertiary}
             style={styles.input}
             multiline
@@ -427,12 +512,13 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
 
           <Pressable
             onPress={submit}
-            disabled={sending || (draft.trim().length === 0 && !pending)}
+            disabled={sending || (draft.trim().length === 0 && !pending && !pendingGif)}
             accessibilityRole="button"
             accessibilityLabel="Odoslať"
             style={({ pressed }) => [
               styles.sendButton,
-              (sending || (draft.trim().length === 0 && !pending)) && styles.sendDisabled,
+              (sending || (draft.trim().length === 0 && !pending && !pendingGif))
+                && styles.sendDisabled,
               pressed && styles.pressed,
             ]}
           >
@@ -441,6 +527,20 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
         </View>
       </KeyboardAvoidingView>
 
+      <GifPicker
+        visible={gifOpen}
+        onClose={() => setGifOpen(false)}
+        onPick={(source) => {
+          // Attached, not sent — same rule as a photo. Nothing leaves the app
+          // until the send button is pressed.
+          setPendingGif(source);
+          // A GIF and a photo in one message is not a thing the sender can see
+          // before they send it, so picking one drops the other.
+          setPending(null);
+          setGifOpen(false);
+        }}
+      />
+
       {/* What a long press opens. Reply is here rather than printed into every
           bubble, and deleting is a separate, confirmed step rather than the
           thing a long press did by itself. */}
@@ -448,7 +548,7 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
         visible={Boolean(menuFor)}
         onClose={() => setMenuFor(null)}
         title="Správa"
-        subtitle={menuFor?.body ?? (menuFor?.attachment_url ? '📷 Fotka' : undefined)}
+        subtitle={menuFor?.body ?? attachmentLabel(menuFor?.attachment_url)}
       >
         <Pressable
           style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
@@ -561,6 +661,12 @@ function MessageBubble({
   );
 }
 
+/** What to call an attachment when there is no text to quote instead. */
+function attachmentLabel(path?: string | null): string | undefined {
+  if (!path) return undefined;
+  return /\.gif($|\?)/i.test(path) ? 'GIF' : '📷 Fotka';
+}
+
 /**
  * A chat photo. The message stores an object path in the private bucket, so the
  * URL has to be signed before it can be shown; react-query keeps the signature
@@ -568,6 +674,10 @@ function MessageBubble({
  */
 function ChatImage({ path }: { path: string }) {
   const [open, setOpen] = useState(false);
+  // A GIF is not a photo and should not be treated as one on screen: `cover`
+  // crops, and most GIFs are wider than they are tall, so cropping one to a
+  // square throws away the half with the joke in it.
+  const isGif = /\.gif($|\?)/i.test(path);
   const signed = useQuery({
     queryKey: ['chat-image', path],
     queryFn: () => signChatImage(path),
@@ -578,7 +688,9 @@ function ChatImage({ path }: { path: string }) {
     return (
       <View style={[styles.attachment, styles.attachmentPending]}>
         <Mono style={styles.attachmentLabel}>
-          {signed.isLoading ? '[ načítavam fotku ]' : '[ fotka nedostupná ]'}
+          {signed.isLoading
+            ? (isGif ? '[ načítavam GIF ]' : '[ načítavam fotku ]')
+            : (isGif ? '[ GIF nedostupný ]' : '[ fotka nedostupná ]')}
         </Mono>
       </View>
     );
@@ -589,12 +701,12 @@ function ChatImage({ path }: { path: string }) {
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="imagebutton"
-        accessibilityLabel="Otvoriť fotku"
+        accessibilityLabel={isGif ? 'Otvoriť GIF' : 'Otvoriť fotku'}
       >
         <Image
           source={{ uri: signed.data }}
           style={styles.attachment}
-          contentFit="cover"
+          contentFit={isGif ? 'contain' : 'cover'}
           transition={160}
         />
       </Pressable>
@@ -772,6 +884,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  gifGlyph: { ...typography.monoSm, fontSize: 11, color: colors.textSecondary },
   attachGlyph: { fontSize: 20, color: colors.textSecondary },
   input: {
     flex: 1,

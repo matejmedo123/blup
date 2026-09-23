@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { checkInTicket, parseTicketQr, type CheckInResult } from '@/api/tickets';
+import { getDoorState } from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
 import { Body, Button, Caption, Input, Notice, Screen } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -47,6 +49,19 @@ export default function ScanWebScreen() {
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState('');
   const [busy, setBusy] = useState(false);
+
+  /**
+   * How the room is filling up.
+   *
+   * The scanner knew whether one ticket was good and nothing about the other
+   * six hundred. Between scans the useful number is how many are inside and how
+   * many can still turn up, so it is read from the event the last scan named.
+   */
+  const door = useQuery({
+    queryKey: ['door', result?.event_id],
+    queryFn: () => getDoorState(result!.event_id!),
+    enabled: Boolean(result?.ok && result?.event_id),
+  });
 
   const submit = async (payload: string) => {
     const parsed = parseTicketQr(payload.trim());
@@ -198,6 +213,23 @@ export default function ScanWebScreen() {
         />
       ) : null}
 
+      {door.data ? (
+        <View style={styles.door}>
+          <View style={styles.doorCell}>
+            <Text style={styles.doorValue}>{door.data.inside}</Text>
+            <Caption>vnútri</Caption>
+          </View>
+          <View style={styles.doorCell}>
+            <Text style={styles.doorValue}>{door.data.to_admit}</Text>
+            <Caption>ešte treba odbaviť</Caption>
+          </View>
+          <View style={styles.doorCell}>
+            <Text style={styles.doorValue}>{door.data.admitted_pct} %</Text>
+            <Caption>odbavených</Caption>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.manual}>
         <Caption>Ručné zadanie</Caption>
         <Input
@@ -237,5 +269,18 @@ const styles = StyleSheet.create({
   },
   placeholderGlyph: { fontSize: 44, color: colors.textTertiary },
   center: { textAlign: 'center' },
+  door: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  doorCell: { flex: 1, alignItems: 'center', gap: 2 },
+  doorValue: { ...typography.subheading, color: colors.text },
+
   manual: { gap: spacing.sm, marginTop: spacing.xl },
 });

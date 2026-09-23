@@ -264,6 +264,50 @@ export async function getPosts(params: {
  */
 export type FeedScope = 'following' | 'for_you' | 'all';
 
+/**
+ * An event somebody you follow has just put on.
+ *
+ * Not a post. No row is written when an organizer publishes — fabricating a
+ * post they never typed would put words in their mouth, and it would be a
+ * second copy of the event that drifts the moment they edit the real one. The
+ * feed asks two questions and interleaves the answers by time.
+ */
+export interface FeedNewEvent {
+  id: string;
+  slug: string | null;
+  title: string;
+  category: string;
+  cover_image_url: string | null;
+  city: string | null;
+  venue_name: string | null;
+  start_at: string;
+  is_free: boolean;
+  price_cents: number;
+  currency: string;
+  attendee_count: number;
+  created_at: string;
+  creator_id: string;
+  creator_name: string | null;
+  creator_username: string | null;
+  creator_avatar_url: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+  organization_slug: string | null;
+  organization_logo_url: string | null;
+}
+
+export async function getFeedNewEvents(
+  scope: FeedScope = 'following',
+  limit = 20,
+): Promise<FeedNewEvent[]> {
+  const { data, error } = await supabase.rpc('feed_new_events', {
+    p_scope: scope,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as FeedNewEvent[];
+}
+
 /** How many posts each view would hold, so the app can open on a full one. */
 export async function getFeedCounts(): Promise<Record<FeedScope, number>> {
   const { data, error } = await supabase.rpc('feed_counts');

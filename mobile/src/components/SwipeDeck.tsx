@@ -165,7 +165,10 @@ export function SwipeDeck({
 
   return (
     <View style={styles.container}>
-      <View style={styles.deck}>
+      {/* The id is what the web shell's touch-action rule hangs off. A browser
+          scrolls the page on a touch drag before React Native's responder
+          system ever sees it, and there is no RN style that says otherwise. */}
+      <View style={styles.deck} nativeID="blup-swipe-deck">
         {upcoming.map((event, offset) => (
           <View
             key={event.id}

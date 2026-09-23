@@ -459,6 +459,15 @@ export interface EventAnalytics {
   rsvp_going: number;
   rsvp_interested: number;
   checked_in: number;
+  /** Scanned in: how many people are in the room. Same number as checked_in. */
+  inside: number;
+  /** Still valid and never scanned — how many can still walk up to the door. */
+  to_admit: number;
+  /** Refunded or deactivated: sold once, worth nothing at the door. */
+  tickets_void: number;
+  /** inside + to_admit. Deliberately not tickets_sold, which counts refunds. */
+  tickets_live: number;
+  admitted_pct: number;
   tickets_sold: number;
   conversion_rate: number;
   /** List price of everything sold, before promo discounts. */

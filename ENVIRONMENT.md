@@ -56,6 +56,8 @@ Load with `supabase secrets set --env-file supabase/.env`.
 | `APPLE_STRICT_CHAIN_VALIDATION` | premium | keep `true`; `false` only in sandbox |
 | `AI_PROVIDER` / `AI_API_KEY` / `AI_MODEL` | LLM explanations | ranking works without them |
 | `EXPO_ACCESS_TOKEN` | push (optional) | only if your Expo project enforces push security |
+| `TENOR_API_KEY` | GIF search (optional) | Google Cloud → Tenor API. Without it the picker says so and sending your own GIF still works. |
+| `TENOR_CLIENT_KEY` | GIF search (optional) | identifies the integration to Tenor; defaults to `blup` |
 
 **The service-role key bypasses RLS.** It exists only inside Edge Functions and
 the seed script. It must never reach the app, a client-side build, or a log.

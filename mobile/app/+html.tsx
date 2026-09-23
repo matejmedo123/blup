@@ -184,6 +184,20 @@ const SHELL_CSS = `
     user-select: none;
   }
 
+  /* The same habit broke the swipe deck, and there it was worse: every card in
+     Objav is mostly a poster, so the press that should start a swipe landed on
+     an <img> and the browser began dragging the picture instead — a ghost of
+     the cover photo following the cursor while the card itself stood still.
+     Nothing in this app ever wants a picture dragged out of it, so the rule is
+     global rather than another id. -webkit-user-drag is the one Safari honours;
+     the draggable attribute is what everything else reads. */
+  img { -webkit-user-drag: none; user-drag: none; }
+
+  /* And on a touch screen the deck has to own its gestures, or the browser
+     scrolls the page out from under a swipe that React Native has already
+     claimed. */
+  #blup-swipe-deck { touch-action: none; }
+
   /* A pointer gets a real scrollbar; a touch screen never sees one. */
   @media (hover: hover) {
     ::-webkit-scrollbar { width: 10px; height: 10px; }

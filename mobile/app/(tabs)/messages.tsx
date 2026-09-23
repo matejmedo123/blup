@@ -1,9 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList, Pressable, RefreshControl, StyleSheet, Text, View,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { getConversations } from '@/api/messages';
+import {
+  deleteConversation, getConversations, searchMyChats, startDirectConversation,
+  type ChatSearchHit,
+} from '@/api/messages';
+import { BottomSheet } from '@/components/BottomSheet';
+import { useDialog } from '@/components/Dialog';
+import { useToast } from '@/components/Toast';
 import { ChatThread } from '../chat/[id]';
 import { useLayout } from '@/hooks/useLayout';
 import { SignInInvite } from '@/components/SignInInvite';
@@ -12,7 +20,8 @@ import { subscribeToTable } from '@/lib/realtime';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 import {
-  Avatar, Body, EmptyState, ErrorState, IconButton, LoadingState, Mono, Screen,
+  Avatar, Body, Caption, EmptyState, ErrorState, IconButton, Input, LoadingState, Mono,
+  Notice, Screen,
 } from '@/components/ui';
 import { SiteFooter } from '@/components/SiteFooter';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
@@ -24,6 +33,26 @@ export default function MessagesScreen() {
   const queryClient = useQueryClient();
   const { profile, isGuest } = useAuth();
   const layout = useLayout();
+  const dialog = useDialog();
+  const toast = useToast();
+
+  /**
+   * Searching happens here, not on /search.
+   *
+   * The magnifier used to open the event search — which answers a question
+   * nobody standing in their own inbox is asking. What people look for in
+   * Správy is a person.
+   */
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  /** The row a long press opened the menu for. */
+  const [menuFor, setMenuFor] = useState<ConversationSummary | null>(null);
+  /** Not `error`: the conversations query already owns that name here. */
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Needed above the early returns too, so the search handler can decide
+  // whether opening a thread means navigating or filling the right-hand panel.
+  const splitViewNow = layout.isDesktop;
 
   // On a wide window the thread opens beside the list instead of replacing it:
   // navigating away from the inbox to read one message and back again is a step
@@ -37,6 +66,58 @@ export default function MessagesScreen() {
 
   // RefreshControl is inert on react-native-web; this is the browser's version.
   const pull = usePullToRefresh(() => refetch(), isRefetching);
+
+  const hits = useQuery({
+    queryKey: ['chat-search', query],
+    queryFn: () => searchMyChats(query, 30),
+    enabled: searching && query.trim().length > 0,
+  });
+
+  /**
+   * Clearing a chat.
+   *
+   * Worded carefully, because it cannot do what "zmazať" sounds like it does:
+   * the other person keeps their copy, and no app can take that away. What the
+   * confirmation promises is exactly what happens.
+   */
+  const removeConversation = async (conversation: ConversationSummary) => {
+    setActionError(null);
+    const sure = await dialog.confirm({
+      title: 'Zmazať tento chat?',
+      body: conversation.kind === 'event'
+        ? 'Zmizne ti z prehľadu aj s celou históriou. Ostatným v skupine nezmizne nič — a ak tam niekto napíše, chat sa ti vráti s novými správami.'
+        : 'Zmizne ti z prehľadu aj s celou históriou. Druhej strane nezmizne nič — a ak ti napíše, chat sa ti vráti, ale už len s novými správami.',
+      confirmLabel: 'Zmazať',
+      destructive: true,
+    });
+    if (!sure) return;
+
+    try {
+      await deleteConversation(conversation.id);
+      if (openId === conversation.id) setOpenId(null);
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      await queryClient.invalidateQueries({ queryKey: ['messages', 'unread'] });
+      await queryClient.invalidateQueries({ queryKey: ['chat-search'] });
+      toast.show('Chat zmazaný');
+    } catch (caught) {
+      setActionError(messageFor(caught));
+    }
+  };
+
+  /** A hit with no thread yet needs one opening before it can be shown. */
+  const openHit = async (hit: ChatSearchHit) => {
+    setActionError(null);
+    try {
+      const id = hit.conversation_id ?? await startDirectConversation(hit.user_id!);
+      setSearching(false);
+      setQuery('');
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      if (splitViewNow) setOpenId(id);
+      else router.push(`/chat/${id}`);
+    } catch (caught) {
+      setActionError(messageFor(caught));
+    }
+  };
 
   // A new message lands in the list without pulling to refresh.
   useEffect(() => subscribeToTable({
@@ -76,53 +157,138 @@ export default function MessagesScreen() {
   }
 
   const conversations = data ?? [];
-  const splitView = layout.isDesktop;
+  const splitView = splitViewNow;
   const selected = splitView ? (openId ?? conversations[0]?.id ?? null) : null;
+  const results = hits.data ?? [];
 
   const inbox = (
     <>
       <View style={styles.header}>
-        <View style={styles.flex}>
-          <Mono accent>✉ správy</Mono>
-          <Text style={styles.title}>Tvoje konverzácie</Text>
-        </View>
-        <IconButton glyph="⌕" onPress={() => router.push('/search')} />
+        {searching ? (
+          <>
+            <Input
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Nájdi človeka alebo chat…"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              returnKeyType="search"
+              style={styles.flex}
+            />
+            <IconButton
+              glyph="✕"
+              onPress={() => { setSearching(false); setQuery(''); }}
+            />
+          </>
+        ) : (
+          <>
+            <View style={styles.flex}>
+              <Mono accent>✉ správy</Mono>
+              <Text style={styles.title}>Tvoje konverzácie</Text>
+            </View>
+            {/* Searches your chats. It used to open /search, which searches
+                events — the wrong question, answered confidently. */}
+            <IconButton glyph="⌕" onPress={() => setSearching(true)} />
+          </>
+        )}
       </View>
+
+      {actionError ? (
+        <Notice tone="danger" title="Toto sa nepodarilo" body={actionError} />
+      ) : null}
 
       {pull.indicator}
 
-      <FlatList
-        {...pull.handlers}
-        ListFooterComponent={<SiteFooter />}
-        data={conversations}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={() => void refetch()}
-            tintColor={colors.accent}
-          />
-        }
-        renderItem={({ item }) => (
-          <ConversationRow
-            conversation={item}
-            isMine={item.last_sender_id === profile?.id}
-            selected={splitView && item.id === selected}
-            onPress={() => (splitView ? setOpenId(item.id) : router.push(`/chat/${item.id}`))}
-          />
-        )}
-        ListEmptyComponent={
-          <EmptyState
-            emoji="💬"
-            title="Zatiaľ žiadne správy"
-            body="Napíš niekomu z profilu, alebo si otvor skupinový chat eventu, na ktorý ideš."
-            actionLabel="Nájdi si ľudí"
-            onAction={() => router.push('/search')}
-          />
-        }
-      />
+      {searching ? (
+        <FlatList
+          data={results}
+          keyExtractor={(item) => item.conversation_id ?? `person-${item.user_id}`}
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <SearchRow hit={item} onPress={() => void openHit(item)} />
+          )}
+          ListEmptyComponent={
+            query.trim().length === 0 ? (
+              <View style={styles.searchHint}>
+                <Caption>
+                  Píš meno alebo @prezývku. Hľadá v tvojich chatoch a medzi ľuďmi,
+                  ktorých sleduješ.
+                </Caption>
+              </View>
+            ) : hits.isLoading ? (
+              <LoadingState label="Hľadám…" />
+            ) : (
+              <EmptyState
+                emoji="🔍"
+                title="Nikoho takého tu nemáš"
+                body="V tvojich chatoch ani medzi ľuďmi, ktorých sleduješ, nikto taký nie je."
+              />
+            )
+          }
+        />
+      ) : (
+        <FlatList
+          {...pull.handlers}
+          ListFooterComponent={<SiteFooter />}
+          data={conversations}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+              tintColor={colors.accent}
+            />
+          }
+          renderItem={({ item }) => (
+            <ConversationRow
+              conversation={item}
+              isMine={item.last_sender_id === profile?.id}
+              selected={splitView && item.id === selected}
+              onPress={() => (splitView ? setOpenId(item.id) : router.push(`/chat/${item.id}`))}
+              onLongPress={() => setMenuFor(item)}
+            />
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              emoji="💬"
+              title="Zatiaľ žiadne správy"
+              body="Napíš niekomu z profilu, alebo si otvor skupinový chat eventu, na ktorý ideš."
+              actionLabel="Nájdi si ľudí"
+              onAction={() => router.push('/people')}
+            />
+          }
+        />
+      )}
+
+      {/* Long press, not a swipe: a swipe-to-delete on a list you also scroll
+          horizontally nothing else in this app does, and a hidden gesture is a
+          bad way to reach something irreversible. */}
+      <BottomSheet
+        visible={Boolean(menuFor)}
+        onClose={() => setMenuFor(null)}
+        title={menuFor?.title ?? menuFor?.other_name ?? 'Konverzácia'}
+        subtitle={menuFor?.kind === 'event' ? 'Skupinový chat eventu' : undefined}
+      >
+        <Pressable
+          style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+          onPress={() => {
+            const target = menuFor;
+            setMenuFor(null);
+            if (target) void removeConversation(target);
+          }}
+        >
+          <Text style={styles.menuGlyph}>🗑</Text>
+          <View style={styles.flex}>
+            <Text style={styles.menuLabelDanger}>Zmazať chat</Text>
+            <Caption>Zmizne len tebe. Druhej strane zostane jej kópia.</Caption>
+          </View>
+        </Pressable>
+      </BottomSheet>
     </>
   );
 
@@ -150,12 +316,61 @@ export default function MessagesScreen() {
   return <Screen contentStyle={styles.container}>{inbox}</Screen>;
 }
 
+/** One search hit: a thread you have, or a person you could write to. */
+function SearchRow({ hit, onPress }: { hit: ChatSearchHit; onPress: () => void }) {
+  const isEvent = hit.kind === 'event';
+  const name = hit.title ?? hit.display_name ?? hit.username ?? 'Konverzácia';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+    >
+      {isEvent ? (
+        <View style={styles.eventAvatar}>
+          <Text style={styles.eventGlyph}>◉</Text>
+        </View>
+      ) : (
+        <Avatar url={hit.avatar_url} name={hit.display_name ?? hit.username} size={52} />
+      )}
+
+      <View style={styles.flex}>
+        <View style={styles.rowTop}>
+          <Text style={styles.name} numberOfLines={1}>{name}</Text>
+          {hit.last_message_at ? (
+            <Mono style={styles.time}>{formatRelative(hit.last_message_at)}</Mono>
+          ) : null}
+        </View>
+
+        <Body muted numberOfLines={1}>
+          {hit.last_message
+            ?? (hit.conversation_id
+              // A thread with nothing in it and a person with no thread are two
+              // different states, and both used to read as the same blank line.
+              ? 'Zatiaľ tu nikto nič nenapísal'
+              : `@${hit.username ?? '—'} · napísať prvú správu`)}
+        </Body>
+      </View>
+
+      {hit.unread_count > 0 ? (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>
+            {hit.unread_count > 99 ? '99+' : hit.unread_count}
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 function ConversationRow({
-  conversation, isMine, onPress, selected = false,
+  conversation, isMine, onPress, onLongPress, selected = false,
 }: {
   conversation: ConversationSummary;
   isMine: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
   selected?: boolean;
 }) {
   const isEvent = conversation.kind === 'event';
@@ -168,6 +383,7 @@ function ConversationRow({
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.row,
@@ -292,4 +508,16 @@ const styles = StyleSheet.create({
   },
   badgeText: { ...typography.mono, color: '#FFFFFF' },
   groupHint: { color: colors.textTertiary, marginTop: 2 },
+
+  searchHint: { paddingHorizontal: spacing.xs, paddingTop: spacing.sm },
+
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  menuRowPressed: { opacity: 0.6 },
+  menuGlyph: { fontSize: 18 },
+  menuLabelDanger: { ...typography.bodyStrong, color: colors.danger },
 });

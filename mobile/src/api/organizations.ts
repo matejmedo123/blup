@@ -397,6 +397,33 @@ export async function refreshPayoutStatus(organizationId: string): Promise<Conne
 
 // --- analytics --------------------------------------------------------------
 
+/**
+ * The door, in the three numbers it is made of.
+ *
+ * Separate from getEventAnalytics() because the scanner needs it after every
+ * scan and has no use for the money block — fetching the whole report to read
+ * two counters would be a round trip per person through the door.
+ */
+export interface DoorState {
+  event_id: string;
+  title: string;
+  capacity: number | null;
+  /** Scanned in: who is in the room. */
+  inside: number;
+  /** Still valid and never scanned: who can still walk up. */
+  to_admit: number;
+  tickets_void: number;
+  tickets_live: number;
+  admitted_pct: number;
+  last_scan_at: string | null;
+}
+
+export async function getDoorState(eventId: string): Promise<DoorState> {
+  const { data, error } = await supabase.rpc('event_door_state', { p_event_id: eventId });
+  if (error) throw error;
+  return data as DoorState;
+}
+
 export async function getEventAnalytics(eventId: string): Promise<EventAnalytics> {
   const { data, error } = await supabase.rpc('event_analytics', { p_event_id: eventId });
   if (error) throw error;

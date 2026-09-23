@@ -167,8 +167,16 @@ export default function UserProfileScreen() {
                 <Text style={styles.levelPillText}>LVL {game.data.level}</Text>
               </View>
               <Caption>{levelTitle(game.data.level)}</Caption>
+              {/* Each badge gets its own light disc to sit on. Bare emoji on
+                  this background disappeared — half the catalogue is a dark
+                  glyph (✍️ 🎲 🧭 🎒) and on #0A0D12 those read as a gap in the
+                  row rather than as an award. The disc is the same shape and
+                  tone as the level pill beside it, so the line stays one
+                  object instead of becoming a row of stickers. */}
               {(game.data.badges ?? []).slice(0, 4).map((badge) => (
-                <Text key={badge.slug} style={styles.badgeEmoji}>{badge.emoji}</Text>
+                <View key={badge.slug} style={styles.badgeChip}>
+                  <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
+                </View>
               ))}
             </View>
           ) : null}
@@ -264,7 +272,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
   },
   levelPillText: { ...typography.mono, color: colors.accentText },
-  badgeEmoji: { fontSize: 14 },
+  badgeChip: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Light on purpose, not another dark tone. The emoji that vanished are the
+    // dark ones, and #1B2130 behind ✍️ hides it exactly as well as #0A0D12
+    // does — a chip only fixes this if it puts a pale ground under the glyph.
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  badgeEmoji: { fontSize: 13, lineHeight: 17 },
 
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },

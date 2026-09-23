@@ -14,6 +14,8 @@ import { supabase } from '@/lib/supabase';
  */
 
 const MAX_BYTES = 5 * 1024 * 1024;
+/** A GIF cannot be compressed on the way up, so it gets its own, larger cap. */
+const GIF_MAX_BYTES = 8 * 1024 * 1024;
 
 export type PickSource = 'library' | 'camera';
 
@@ -66,6 +68,63 @@ export async function pickImage(options: {
     height: asset.height ?? 0,
     mimeType: asset.mimeType ?? 'image/jpeg',
   };
+}
+
+/**
+ * Picks a GIF out of the library.
+ *
+ * Separate from pickImage() because of `allowsEditing`. The crop UI hands back
+ * a cropped *still*, which is the one thing a GIF must not become — so this
+ * path never offers to edit, and it keeps whatever the picker returns.
+ */
+export async function pickGif(): Promise<PickedImage | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error('Prístup k fotkám je vypnutý. Zapni ho v Nastaveniach, ak chceš poslať GIF.');
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: false,
+    quality: 1,
+  });
+
+  if (result.canceled || !result.assets?.[0]) return null;
+
+  const asset = result.assets[0];
+  const looksGif = (asset.mimeType ?? '').includes('gif')
+    || (asset.fileName ?? '').toLowerCase().endsWith('.gif')
+    || asset.uri.toLowerCase().includes('.gif');
+
+  if (!looksGif) {
+    throw new Error('Vyber GIF — toto je obyčajná fotka. Tá sa posiela cez ＋.');
+  }
+
+  return {
+    uri: asset.uri,
+    width: asset.width ?? 0,
+    height: asset.height ?? 0,
+    mimeType: 'image/gif',
+  };
+}
+
+/**
+ * A story picture. Public bucket, path `<owner>/<id>.jpg` — a story is shown to
+ * everybody who follows you, and signing one URL per viewer per story would be
+ * a round trip each without making the picture any less reachable.
+ */
+export async function uploadStoryImage(uri: string, sourceWidth?: number): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) throw new Error('UNAUTHENTICATED');
+
+  const compressed = await compress(uri, 1440, sourceWidth);
+  return uploadToBucket({
+    bucket: 'stories',
+    // Never overwritten: two stories posted in the same second are two stories.
+    path: `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`,
+    uri: compressed.uri,
+  });
 }
 
 /**
@@ -283,6 +342,56 @@ export async function uploadChatImage(uri: string, conversationId: string): Prom
   const { error } = await supabase.storage
     .from('chat-media')
     .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: false });
+
+  if (error) throw error;
+  return path;
+}
+
+/**
+ * A GIF sent in a chat.
+ *
+ * Deliberately not uploadChatImage(). Every other picture in this app goes
+ * through compress(), which re-encodes to JPEG — right for a 12 MP photo and
+ * fatal here: a JPEG has one frame, so the animation arrives as a still and the
+ * sender has no way of knowing. The bytes go up exactly as they came in.
+ *
+ * `source` is either a file the person picked from their library or an https
+ * URL from the GIF picker. In both cases the bytes are fetched and stored in
+ * this conversation's own private bucket: a message that points at somebody
+ * else's CDN stops being a message the day that CDN changes its mind.
+ */
+export async function uploadChatGif(source: string, conversationId: string): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) throw new Error('UNAUTHENTICATED');
+
+  const response = await fetch(source);
+  if (!response.ok) throw new Error('GIF sa nepodarilo načítať.');
+  const arrayBuffer = await response.arrayBuffer();
+
+  // A GIF is heavier per pixel than a photo and nothing here can shrink one, so
+  // the limit is checked before the upload rather than left to storage to
+  // reject with a message nobody can read.
+  if (arrayBuffer.byteLength > GIF_MAX_BYTES) {
+    throw new Error('Tento GIF je príliš veľký (max 8 MB).');
+  }
+  if (arrayBuffer.byteLength === 0) {
+    throw new Error('GIF je prázdny.');
+  }
+
+  // GIF87a / GIF89a. Checked because the extension and the content-type are
+  // both things a caller can get wrong, and the bucket will refuse anything
+  // that is not really a GIF anyway — better to say so here.
+  const header = new TextDecoder().decode(new Uint8Array(arrayBuffer.slice(0, 6)));
+  if (!header.startsWith('GIF8')) {
+    throw new Error('Tento súbor nie je GIF.');
+  }
+
+  const path = `${conversationId}/${userId}/${Date.now()}.gif`;
+
+  const { error } = await supabase.storage
+    .from('chat-media')
+    .upload(path, arrayBuffer, { contentType: 'image/gif', upsert: false });
 
   if (error) throw error;
   return path;
