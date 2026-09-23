@@ -119,7 +119,8 @@ export default function EventAnalyticsScreen() {
           <Caption style={styles.doorNote}>
             {data.to_admit === 0
               ? 'Všetci s platnou vstupenkou sú vnútri.'
-              : `Vnútri je ${data.inside} ${data.inside === 1 ? 'človek' : data.inside < 5 ? 'ľudia' : 'ľudí'}, ešte môže prísť ${data.to_admit}.`}
+              // „je 2 ľudia" je zle: 2–4 berie množné sloveso, 1 a 5+ jednotné.
+              : `Vnútri ${data.inside > 1 && data.inside < 5 ? 'sú' : 'je'} ${data.inside} ${data.inside === 1 ? 'človek' : data.inside < 5 ? 'ľudia' : 'ľudí'}, ešte môže prísť ${data.to_admit}.`}
             {data.tickets_void > 0
               ? ` ${data.tickets_void} ${data.tickets_void === 1 ? 'vstupenka je zrušená alebo vrátená' : 'vstupeniek je zrušených alebo vrátených'} — tie pri dverách neplatia.`
               : ''}
