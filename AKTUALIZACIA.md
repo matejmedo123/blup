@@ -443,9 +443,9 @@ musí sa objaviť lišta s dvoma rovnocennými tlačidlami.
 npx supabase db push
 ```
 
-Aplikuje sa **26 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
-chyby) — 17 z predošlých dvoch balíkov a 9 z tohto. Existujúce tabuľky sa
-nemažú ani neprepisujú; pridávajú sa stĺpce a funkcie.
+Aplikuje sa **33 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
+chyby) — 26 z predošlých balíkov a 7 z tohto. Existujúce tabuľky sa nemažú ani
+neprepisujú; pridávajú sa stĺpce, tabuľky (`stories`, `story_views`) a funkcie.
 
 Nemusíš mi to veriť — `db push` sám vypíše, ktoré aplikuje, a čo je už v
 databáze preskočí. Zoznam toho, čo tam už je, si pozrieš takto:
@@ -494,10 +494,15 @@ select count(*) from public.events where slug is null;
 npx supabase functions deploy
 ```
 
-Nasadí sa **17 funkcií**, z toho dve nové:
+Nasadí sa **19 funkcií**, z toho tri nové:
 
 - **`og`** — náhľad odkazu na Instagrame a vo WhatsApp. Bez nej sa zdieľané
   eventy budú ďalej zobrazovať s generickou kartou.
+- **`gif-search`** — vyhľadávanie GIFov v chate. **Nepovinná.** Bez nej (alebo
+  bez `TENOR_API_KEY`) picker povie, že vyhľadávanie nie je nastavené, a
+  posielanie vlastných GIFov z fotiek funguje aj tak. Kľúč sa nastavuje cez
+  `npx supabase secrets set TENOR_API_KEY=…` a **nikdy nesmie ísť do appky** —
+  kľúč v nahratom JavaScripte si vie ktokoľvek vybrať a míňať.
 - **`unsubscribe`** — odkaz na konci každého newslettera. **Nasadzuje sa bez
   overovania tokenu** (skript to robí sám, `--no-verify-jwt`), pretože naň
   kliká človek v poštovom klientovi, ktorý účet často ani nemá. Bez nej každé
@@ -579,7 +584,8 @@ Tieto sa nedajú nasadiť z kódu — sú v Supabase.
 | **Authentication → URL Configuration** | `Site URL` = `https://blup.sk` | Inak potvrdzovací odkaz v e-maile vedie na `localhost` |
 | **Authentication → Emails → SMTP** | Resend, podľa Fázy 5c v `SPUSTENIE.md` | Bez toho chodia 2 e-maily za hodinu a len členom tímu |
 | **Authentication → Rate Limits** | *Emails per hour* z `2` na `100` | Tretia registrácia v hodine inak ticho odpadne |
-| **SQL Editor** | Dva nové cron joby (`blup-waitlist`, `blup-invites`) | Fáza 8 v `SPUSTENIE.md`. Bez nich sa nikdy nikomu neozveme, že sa uvoľnila vstupenka, a body za pozvánky nikto nedostane |
+| **SQL Editor** | Tri nové cron joby (`blup-waitlist`, `blup-invites`, `blup-stories`) | Fáza 8 v `SPUSTENIE.md`. Bez prvých dvoch sa nikdy nikomu neozveme, že sa uvoľnila vstupenka, a body za pozvánky nikto nedostane. Bez `blup-stories` sa vypršané príbehy nikomu nezobrazujú (to rieši každé čítanie), len sa riadky a obrázky nemažú |
+| **Edge Functions → Secrets** | `TENOR_API_KEY` — **nepovinné** | Len na vyhľadávanie GIFov v chate. Bez neho picker povie, že nie je nastavené, a vlastné GIFy z fotiek fungujú |
 | **Admin → Poplatky a sadzby** | `email_per_hour` (predvolene 500) | Strop na hodinu. Vstupenky idú vždy prvé, takže rozposielanie nikdy nezdrží vstupenku |
 | **Authentication → Providers → Google** | Client ID a Secret | Tlačidlo sa objaví samo, keď je zapnuté |
 
@@ -622,7 +628,7 @@ Nič sa im nestratí — účty, vstupenky ani uložené eventy. Zmení sa toto:
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje **všetkých 72 migrácií od nuly** a prejde
-**403 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
+Postaví dočasnú databázu, aplikuje **všetkých 102 migrácií od nuly** a prejde
+**474 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
 potom zlyhá, chyba je v tvojich dátach, nie v schéme — a to je pri hľadaní
 veľmi cenné vedieť.

@@ -94,6 +94,24 @@ export default function Root({ children }: PropsWithChildren) {
 
         <style dangerouslySetInnerHTML={{ __html: FONT_CSS }} />
         <style dangerouslySetInnerHTML={{ __html: SHELL_CSS }} />
+
+        {/*
+          The name in the browser tab.
+
+          Static rendering writes TWO <title> elements into every page: the one
+          above, and an empty one react-helmet emits for the screen
+          (`<title data-rh="true"></title>`). A browser uses the first title in
+          the document and helmet's comes first — so every page loaded as an
+          untitled tab while the correct name sat a few lines below it, never
+          used. Nothing writes to document.title afterwards, so it stayed blank
+          for the whole visit.
+
+          This runs while the head is still being parsed and drops any title
+          that has no text in it. What is left is the one that says something.
+          It has to be the last thing in the head: an element that has not been
+          parsed yet cannot be removed.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: TITLE_FIX }} />
       </head>
       <body>{children}</body>
     </html>
@@ -131,6 +149,26 @@ const FONT_CSS = FONT_FACES.map((name) => `
     font-style: normal;
     font-display: swap;
   }`).join('\n');
+
+/**
+ * Removes an empty <title> so the real one takes effect. See the head.
+ *
+ * Deliberately not "remove the react-helmet one": the rule is about emptiness,
+ * not about which library wrote it, so a screen that sets a real title of its
+ * own still wins and nothing here has to know how it got there.
+ */
+const TITLE_FIX = `
+  (function () {
+    try {
+      var titles = document.head.querySelectorAll('title');
+      for (var i = 0; i < titles.length; i += 1) {
+        if (!titles[i].textContent || !titles[i].textContent.trim()) {
+          titles[i].parentNode.removeChild(titles[i]);
+        }
+      }
+    } catch (e) { /* a missing title is not worth breaking the page over */ }
+  })();
+`;
 
 /**
  * The ground the app is painted on. Set here as well as in the app so the page

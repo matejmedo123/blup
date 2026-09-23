@@ -12,15 +12,16 @@ Nepotrebuješ Mac, Apple developer účet ani server. Web je celá aplikácia.
 
 > Príkazy spúšťaj z koreňa rozbaleného projektu, ak nie je napísané inak.
 
-> **Už si raz nasadzoval?** Potom ťa zaujíma päť vecí, ktoré odvtedy pribudli:
-> nová serverová funkcia `email-events` (**Fáza 5b·2**), dva nové cron joby
-> `blup-waitlist` a `blup-invites` (**Fáza 8**), adminské obrazovky *Stav
+> **Už si raz nasadzoval?** Potom ťa zaujíma šesť vecí, ktoré odvtedy pribudli:
+> serverové funkcie `email-events` (**Fáza 5b·2**) a `gif-search` (nepovinná,
+> **Fáza 5b·3**), tri nové cron joby `blup-waitlist`, `blup-invites`
+> (**Fáza 8**) a `blup-stories` (**Fáza 8**), adminské obrazovky *Stav
 > nasadenia* a *E-maily* (**Fáza 9b**), editor plánu haly s piatimi hotovými
 > predlohami (**Fáza 10b**) a kontroly, ktoré nepotrebujú nasadenie —
 > `npm run db:verify`, `check:dns`, `check:speed`, `check:webevents`, `check:seats`
 > a `./scripts/preview.sh` (**Fáza 12**). Zvyšok návodu sa nezmenil.
 >
-> Migrácií je teraz **89**; `npx supabase db push` dobehne len tie, ktoré ti
+> Migrácií je teraz **102**; `npx supabase db push` dobehne len tie, ktoré ti
 > chýbajú, a **Admin → Stav nasadenia** povie, či si niektorú nepreskočil.
 
 ---
