@@ -20,7 +20,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($action === 'delete' && $pid > 0) {
         $name = (string) (Db::value('SELECT name FROM products WHERE id = ?', [$pid]) ?? '');
         Db::run('DELETE FROM products WHERE id = ?', [$pid]);
-        flash_redirect('menu.php', 'ok', "Položka „$name“ bola zmazaná.");
+        flash_redirect('menu.php', 'ok', "Položka „{$name}“ bola zmazaná.");
     }
 
     if ($action === 'move' && $pid > 0) {

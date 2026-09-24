@@ -294,29 +294,29 @@ foreach ([['t-mala', 'Malá', 0], ['t-stredna', 'Stredná', 150], ['t-velka', 'V
         'is_active' => 1, 'position' => 0, 'group_id' => $gid,
     ]);
 }
-$pid = (int) Db::value('SELECT id FROM products WHERE slug = ?', ['pizza-margherita']);
+$pid = (int) Db::value('SELECT id FROM products WHERE slug = ?', ['junior']);
 Db::insert('product_modifier_groups', ['product_id' => $pid, 'group_id' => $gid, 'position' => 0]);
 
 throws(
     ErrorCode::INVALID_MODIFIER,
-    fn () => OrderService::priceCart([['productId' => 'pizza-margherita', 'quantity' => 1, 'extras' => []]], 'pickup'),
+    fn () => OrderService::priceCart([['productId' => 'junior', 'quantity' => 1, 'extras' => []]], 'pickup'),
     'bez povinnej veľkosti sa objednať nedá'
 );
 
 throws(
     ErrorCode::INVALID_MODIFIER,
     fn () => OrderService::priceCart(
-        [['productId' => 'pizza-margherita', 'quantity' => 1, 'extras' => [['id' => 't-mala'], ['id' => 't-velka']]]],
+        [['productId' => 'junior', 'quantity' => 1, 'extras' => [['id' => 't-mala'], ['id' => 't-velka']]]],
         'pickup'
     ),
     'dve veľkosti naraz sa odmietnu'
 );
 
 $sized = OrderService::priceCart(
-    [['productId' => 'pizza-margherita', 'quantity' => 1, 'extras' => [['id' => 't-velka']]]],
+    [['productId' => 'junior', 'quantity' => 1, 'extras' => [['id' => 't-velka']]]],
     'pickup'
 );
-is($sized['subtotal'], 1100, 'pizza za 8 € s veľkou veľkosťou (+3 €) stojí 11 €');
+is($sized['subtotal'], 890, 'Junior za 5,90 € s veľkou porciou (+3 €) stojí 8,90 €');
 
 /* ══════════════════════════════════════════════════════════════════ */
 describe('Idempotencia');

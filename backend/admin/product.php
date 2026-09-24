@@ -61,10 +61,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
     }
 
+    // Fotka z počítača má prednosť pred ručne zadanou cestou.
+    $uploaded = null;
+    if (($_FILES['image_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        $res = ImageUpload::store($_FILES['image_file'], $slug !== '' ? $slug : $name);
+        if ($res['ok']) {
+            $uploaded = (string) $res['path'];
+            $image = $uploaded;
+        } else {
+            $errors['image'] = (string) $res['error'];
+        }
+    }
+
     if ($errors === []) {
         // Pôvodný stav si zapamätáme kvôli auditu — pri spätnom
         // dohľadávaní sa najčastejšie hľadá práve zmena ceny.
-        $before = $isNew ? null : Db::one('SELECT name, price_cents, is_available FROM products WHERE id = ?', [$id]);
+        $before = $isNew ? null : Db::one('SELECT name, price_cents, is_available, image FROM products WHERE id = ?', [$id]);
 
         $now  = date('Y-m-d H:i:s');
         $data = [
@@ -82,6 +94,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'updated_at'   => $now,
         ];
 
+        $oldImage = $before['image'] ?? null;
+
         Db::transaction(static function () use ($isNew, $data, $now, $categoryId, $extraIds, &$id): void {
             if ($isNew) {
                 $maxPos = (int) (Db::value('SELECT MAX(position) FROM products WHERE category_id = ?', [$categoryId]) ?? 0);
@@ -97,21 +111,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         });
 
         if ($isNew) {
-            AuditLog::record($user, 'create', 'product', $slug, "Položka „$name“ pridaná za " . Money::format((int) $data['price_cents']));
+            AuditLog::record($user, 'create', 'product', $slug, "Položka „{$name}“ pridaná za " . Money::format((int) $data['price_cents']));
         } else {
             AuditLog::change(
-                $user, 'product', $slug, "cena položky „$name“",
+                $user, 'product', $slug, "cena položky „{$name}“",
                 Money::format((int) ($before['price_cents'] ?? 0)),
                 Money::format((int) $data['price_cents'])
             );
             AuditLog::change(
-                $user, 'product', $slug, "dostupnosť „$name“",
+                $user, 'product', $slug, "dostupnosť „{$name}“",
                 (int) ($before['is_available'] ?? 1) === 1 ? 'dostupné' : 'vypredané',
                 $available === 1 ? 'dostupné' : 'vypredané'
             );
         }
 
-        flash_redirect('menu.php', 'ok', $isNew ? "Položka „$name“ bola pridaná." : "Položka „$name“ bola uložená.");
+        // Starú fotku zmažeme až keď je nová bezpečne v databáze.
+        if ($uploaded !== null && $oldImage !== null && $oldImage !== $uploaded) {
+            ImageUpload::discard((string) $oldImage, $id);
+        }
+        if ($uploaded !== null) {
+            AuditLog::record($user, 'update', 'product', $slug, "Fotka položky „{$name}“ vymenená");
+        }
+
+        flash_redirect('menu.php', 'ok', $isNew ? "Položka „{$name}“ bola pridaná." : "Položka „{$name}“ bola uložená.");
     }
 
     // pri chybe zobrazíme, čo používateľ vyplnil
@@ -141,7 +163,7 @@ layout_start($isNew ? 'Nová položka' : 'Upraviť položku', 'menu', $user);
   <div class="alert alert-err">Skontroluj prosím zvýraznené polia.</div>
 <?php endif; ?>
 
-<form method="post">
+<form method="post" enctype="multipart/form-data">
   <?= Csrf::field() ?>
   <div class="grid grid-2">
     <div class="card">
@@ -208,13 +230,20 @@ layout_start($isNew ? 'Nová položka' : 'Upraviť položku', 'menu', $user);
             <img src="../<?= e(ltrim((string) $val('image'), '/')) ?>" alt=""
                  style="width:100%;max-width:320px;border-radius:10px;margin-bottom:12px">
           <?php endif; ?>
-          <label class="field"><span>Cesta k obrázku</span>
+          <label class="field"><span>Nahrať fotku z počítača</span>
+            <input type="file" name="image_file" accept="image/jpeg,image/png,image/webp">
+            <?php if (isset($errors['image'])): ?>
+              <div class="hint" style="color:var(--red)"><?= e($errors['image']) ?></div>
+            <?php endif; ?>
+            <div class="hint">
+              JPG, PNG alebo WebP, najviac 8&nbsp;MB. Systém ju sám zmenší
+              a prevedie — netreba nič pripravovať. Stará fotka sa nahradí.
+            </div>
+          </label>
+          <label class="field"><span>Alebo cesta k už nahratej fotke</span>
             <input type="text" name="image" value="<?= e($val('image')) ?>"
                    placeholder="/images/products/nazov.webp">
-            <div class="hint">
-              Fotku nahraj cez správcu súborov do <code>images/products/</code>
-              a sem napíš cestu. Ideálne 1200 px široká, formát WebP alebo JPG.
-            </div>
+            <div class="hint">Vyplň len vtedy, keď fotku nahrávaš cez FTP.</div>
           </label>
           <label class="field"><span>Popis fotky (pre čítačky a SEO)</span>
             <input type="text" name="image_alt" value="<?= e($val('image_alt')) ?>">

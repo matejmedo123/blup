@@ -184,7 +184,7 @@ flash_render();
 <div class="print-only receipt">
   <div class="center">
     <div style="font-size:26px;font-weight:700;letter-spacing:3px">ENZO</div>
-    <div style="font-size:9px;letter-spacing:2px">SMASH BURGERS &amp; PIZZA</div>
+    <div style="font-size:9px;letter-spacing:2px">SMASH BURGERS</div>
     <div style="font-size:9px;margin-top:5px">
       <?= e(Settings::get('shop_street')) ?>, <?= e(Settings::get('shop_postal_code')) ?> <?= e(Settings::get('shop_city')) ?><br>
       <?= e(Settings::get('shop_phone')) ?><br>

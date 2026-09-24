@@ -12,12 +12,6 @@ export const CATEGORIES: Category[] = [
     caption: "Smashujeme čerstvo na platni. Žiadne kompromisy.",
   },
   {
-    id: "pizza",
-    label: "Pizza",
-    title: "PIZZA",
-    caption: "Ručne vyťahané cesto, pomodoro a mozzarella.",
-  },
-  {
     id: "chicken",
     label: "Chicken",
     title: "CHICKEN",
@@ -73,14 +67,6 @@ export const CHICKEN_EXTRAS: ExtraOption[] = [
   { id: "jalapenos", name: "Jalapeños", price: 0.8 },
   { id: "cesnakovy-dresing", name: "Cesnakový dresing", price: 1.0 },
   { id: "factory-mayo", name: "Factory mayo", price: 1.0 },
-];
-
-export const PIZZA_EXTRAS: ExtraOption[] = [
-  { id: "extra-mozzarella", name: "Extra mozzarella", price: 1.5 },
-  { id: "jalapenos", name: "Jalapeños", price: 0.8 },
-  { id: "feferony", name: "Feferóny", price: 0.8 },
-  { id: "rukola", name: "Rukola", price: 1.0 },
-  { id: "parmezan", name: "Parmezán", price: 1.5 },
 ];
 
 export const FRIES_EXTRAS: ExtraOption[] = [
@@ -172,137 +158,6 @@ export const PRODUCTS: Product[] = [
     category: "burgers",
     image: "/images/products/extra-porcia.webp",
     imageAlt: "Smashed hovädzia porcia na platni",
-  },
-
-  /* ------------------------------ PIZZA --------------------------- */
-  {
-    id: "pizza-margherita",
-    name: "MARGHERITA",
-    description: "Pomodoro, mozzarella, bazalka",
-    price: 8.0,
-    category: "pizza",
-    image: "/images/products/pizza-margherita.webp",
-    imageAlt: "Pizza Margherita s bazalkou",
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-corny",
-    name: "CORNY",
-    description: "Pomodoro, mozzarella, šunka, kukurica",
-    price: 8.5,
-    category: "pizza",
-    image: "/images/products/pizza-corny.webp",
-    imageAlt: "Pizza Corny so šunkou a kukuricou",
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-hawaii",
-    name: "HAWAII",
-    description: "Pomodoro, mozzarella, ananás",
-    price: 8.5,
-    category: "pizza",
-    image: "/images/products/pizza-hawaii.webp",
-    imageAlt: "Pizza Hawaii s ananásom",
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-quattro-formaggi",
-    name: "QUATTRO FORMAGGI",
-    description: "Pomodoro, mozzarella, encián, niva, parmezán",
-    price: 8.9,
-    category: "pizza",
-    image: "/images/products/pizza-quattro.webp",
-    imageAlt: "Syrová pizza Quattro Formaggi",
-    tags: ["4 syry"],
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-salami",
-    name: "SALAMI",
-    description: "Pomodoro, mozzarella, suchá saláma",
-    price: 8.5,
-    category: "pizza",
-    image: "/images/products/pizza-salami.webp",
-    imageAlt: "Pizza Salami so suchou salámou",
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-sedliacka",
-    name: "SEDLIACKA",
-    description:
-      "Pomodoro, mozzarella, šunka, suchá saláma, klobása, cibuľa, kukurica, feferóny",
-    price: 9.5,
-    category: "pizza",
-    image: "/images/products/pizza-sedliacka.webp",
-    imageAlt: "Sedliacka pizza s klobásou a feferónmi",
-    badge: "VÝDATNÁ",
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-funghi",
-    name: "FUNGHI",
-    description: "Pomodoro, mozzarella, šampiňóny",
-    price: 8.9,
-    category: "pizza",
-    image: "/images/products/pizza-funghi.webp",
-    imageAlt: "Pizza Funghi so šampiňónmi",
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-vegetariana",
-    name: "VEGETARIANA",
-    description:
-      "Pomodoro, mozzarella, šampiňóny, brokolica, kukurica, paradajky, rukola",
-    price: 9.2,
-    category: "pizza",
-    image: "/images/products/pizza-vegetariana.webp",
-    imageAlt: "Zeleninová pizza Vegetariana",
-    tags: ["Vegetariánska"],
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-enzo",
-    name: "ENZO",
-    description: "Smotanový základ, mozzarella, kuracie mäso, kukurica, jalapeños",
-    price: 9.5,
-    category: "pizza",
-    image: "/images/products/pizza-enzo.webp",
-    imageAlt: "Pizza ENZO s kuracím mäsom a jalapeños",
-    badge: "SIGNATURE",
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-tuniakova",
-    name: "TUNIAKOVÁ",
-    description: "Pomodoro, mozzarella, tuniak, čierne olivy, cibuľa",
-    price: 9.5,
-    category: "pizza",
-    image: "/images/products/pizza-tuniakova.webp",
-    imageAlt: "Tuniaková pizza s olivami",
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-diabol",
-    name: "DIABOL",
-    description: "Pomodoro, mozzarella, pikantná saláma, jalapeños, cibuľa, chilli",
-    price: 9.2,
-    category: "pizza",
-    image: "/images/products/pizza-diabol.webp",
-    imageAlt: "Pálivá pizza Diabol s chilli",
-    badge: "PÁLIVÉ",
-    tags: ["Hot 🌶"],
-    extras: PIZZA_EXTRAS,
-  },
-  {
-    id: "pizza-skaja",
-    name: "SKAJA",
-    description:
-      "Pomodoro, mozzarella, prosciutto crudo, rukola, cherry paradajky, parmezán",
-    price: 10.8,
-    category: "pizza",
-    image: "/images/products/pizza-skaja.webp",
-    imageAlt: "Pizza Skaja s prosciutto crudo a rukolou",
-    extras: PIZZA_EXTRAS,
   },
 
   /* ----------------------------- CHICKEN -------------------------- */
@@ -543,6 +398,5 @@ export function getMenu(): { category: Category; products: Product[] }[] {
 /** Výber pre "Najobľúbenejšie" bloky na homepage. */
 export const FEATURED_IDS = [
   "the-enzo-smash",
-  "pizza-sedliacka",
   "kombo-factory-menu",
 ] as const;

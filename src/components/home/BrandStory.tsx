@@ -6,11 +6,11 @@ import { CheckerRule } from "@/components/ui/Checkerboard";
 const VALUES = [
   {
     title: "Čerstvosť",
-    text: "Každý burger smažíme a každú pizzu pečieme až na objednávku. Nič nestojí pod lampou.",
+    text: "Každý burger smažíme až na objednávku. Nič nestojí pod lampou.",
   },
   {
     title: "Kvalita",
-    text: "Kvalitné suroviny bez kompromisov. 100 % hovädzie, brioška a cesto každý deň.",
+    text: "Kvalitné suroviny bez kompromisov. 100 % hovädzie a čerstvá brioška každý deň.",
   },
   {
     title: "Poctivosť",
@@ -40,10 +40,10 @@ export function BrandStory() {
               <br />
               čerstvo.
               <br />
-              <span className="text-gold">Pečieme horúce.</span>
+              <span className="text-gold">Servírujeme horúce.</span>
             </h2>
             <p className="mt-7 max-w-md text-[1rem] leading-relaxed text-cream/75 sm:text-[1.05rem]">
-              ENZO je miesto pre poctivý smash burger, pizzu z vlastného cesta a dobrú
+              ENZO je miesto pre poctivý smash burger a dobrú
               atmosféru. Mäso prilepíme na rozpálenú platňu a stlačíme — vznikne kôrka,
               ktorá robí smash burger smash burgerom.
             </p>
@@ -72,8 +72,8 @@ export function BrandStory() {
               </div>
               <div className="relative aspect-4/5 w-full overflow-hidden rounded-2xl bg-ink">
                 <Image
-                  src="/images/editorial/promo-pizza.webp"
-                  alt="Horúca pizza s ťahajúcou sa mozzarellou"
+                  src="/images/products/bacon-boy.webp"
+                  alt="Bacon Boy — smash burger so slaninou a chedarom"
                   fill
                   loading="lazy"
                   sizes="(max-width: 640px) 100vw, 28vw"
@@ -83,7 +83,7 @@ export function BrandStory() {
             </div>
             <div className="mt-5 inline-flex rounded-xl bg-gold px-5 py-4">
               <p className="font-display text-[1.15rem] leading-none text-ink">
-                Burger aj pizza. Jedna objednávka.
+                Smashed, nie grilované.
               </p>
             </div>
           </Reveal>

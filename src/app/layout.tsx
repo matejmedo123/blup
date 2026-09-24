@@ -4,6 +4,7 @@ import { CartProvider } from "@/context/CartContext";
 import { MenuProvider } from "@/context/MenuContext";
 import { Header } from "@/components/layout/Header";
 import { ClosedBanner } from "@/components/ui/ClosedBanner";
+import { NoticeDialog } from "@/components/ui/NoticeDialog";
 import { Footer } from "@/components/layout/Footer";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { MobileOrderBar } from "@/components/cart/MobileOrderBar";
@@ -36,12 +37,12 @@ const archivo = Archivo({
 
 const SITE_URL = "https://enzo.sk";
 const DESCRIPTION =
-  "ENZO Smash Burgers & Pizza v Koniarovciach — smash burgery, pizza z vlastného cesta, domáce hranolky a stripsy. Objednaj online na osobný odber alebo rozvoz.";
+  "ENZO Smash Burgers v Koniarovciach — smash burgery smashované čerstvo na platni, domáce hranolky a stripsy. Objednaj online na osobný odber alebo rozvoz.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "ENZO — Smash Burgers & Pizza | Koniarovce",
+    default: "ENZO — Smash Burgers | Koniarovce",
     template: "%s | ENZO Koniarovce",
   },
   description: DESCRIPTION,
@@ -49,8 +50,8 @@ export const metadata: Metadata = {
   keywords: [
     "smash burger",
     "burger Koniarovce",
-    "pizza Koniarovce",
-    "rozvoz pizze Topoľčany",
+    "smash burger Topoľčany",
+    "rozvoz jedla Topoľčany",
     "hranolky",
     "rozvoz jedla",
     "ENZO burgers",
@@ -62,20 +63,20 @@ export const metadata: Metadata = {
     locale: "sk_SK",
     url: SITE_URL,
     siteName: RESTAURANT.legalName,
-    title: "ENZO — Smash Burgers & Pizza",
+    title: "ENZO — Smash Burgers",
     description: DESCRIPTION,
     images: [
       {
         url: "/og.jpg",
         width: 1200,
         height: 630,
-        alt: "ENZO Smash Burgers & Pizza — Koniarovce",
+        alt: "ENZO Smash Burgers — Koniarovce",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ENZO — Smash Burgers & Pizza",
+    title: "ENZO — Smash Burgers",
     description: "Smashed fresh. Served hot.",
     images: ["/og.jpg"],
   },
@@ -101,7 +102,7 @@ const JSON_LD = {
   "@context": "https://schema.org",
   "@type": "Restaurant",
   name: RESTAURANT.legalName,
-  servesCuisine: ["Burgers", "Pizza", "American", "Fast food"],
+  servesCuisine: ["Burgers", "American", "Fast food"],
   priceRange: "€€",
   telephone: RESTAURANT.phone,
   email: RESTAURANT.email,
@@ -152,6 +153,8 @@ export default function RootLayout({
           <CartDrawer />
           <MobileOrderBar />
           <CartToast />
+          {/* Oznam prevádzky — ukáže sa raz, kým ho návštevník nezavrie. */}
+          <NoticeDialog />
         </CartProvider>
         </MenuProvider>
       </body>

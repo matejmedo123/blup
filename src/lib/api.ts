@@ -132,6 +132,8 @@ export interface ShopSettings {
   hours: { days: string; time: string }[];
   /** Obce, kam sa rozváža — každá s vlastným poplatkom a minimom. */
   zones: DeliveryZone[];
+  /** Oznam, ktorý sa po otvorení webu ukáže v okne. */
+  notice: { enabled: boolean; title: string; text: string; cta: string };
   /** Ako je vyťažená kuchyňa. Server podľa toho sám predlžuje časy. */
   load: {
     busy: boolean;

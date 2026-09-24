@@ -18,10 +18,10 @@ const TILES = [
     tone: "cream" as const,
   },
   {
-    src: "/images/editorial/promo-pizza.webp",
-    alt: "Pizza s ťahajúcou sa mozzarellou",
-    title: "Burger aj pizza.",
-    text: "Dvanásť druhov pizze z vlastného cesta — v tej istej objednávke.",
+    src: "/images/products/trippple-king.webp",
+    alt: "Tripple King Smash — tri smashed porcie hovädzieho",
+    title: "Tripple King.",
+    text: "Tri smashed porcie, trojitý chedar. Keď jedna proste nestačí.",
     tone: "burgundy" as const,
   },
 ];

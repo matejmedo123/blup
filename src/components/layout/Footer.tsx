@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { RESTAURANT } from "@/lib/config";
+import { useMenu } from "@/context/MenuContext";
 import { Logo } from "@/components/ui/Logo";
 import { ClockIcon, FacebookIcon, InstagramIcon, MailIcon, PhoneIcon, PinIcon } from "@/components/ui/Icons";
 
@@ -13,6 +16,10 @@ const LINKS = [
 ];
 
 export function Footer() {
+  // Kontakt a siete si ťahá zo servera — čo sa zmení v admine,
+  // je na webe hneď vidieť bez nasadzovania.
+  const { shop, hours, company } = useMenu();
+
   return (
     <footer className="no-print bg-burgundy text-cream">
       <div
@@ -56,36 +63,36 @@ export function Footer() {
             <li className="flex gap-3">
               <PinIcon className="mt-0.5 h-4.5 w-4.5 shrink-0 text-gold" />
               <span className="text-cream/85">
-                {RESTAURANT.address.street}
+                {shop.street}
                 <br />
-                {RESTAURANT.address.postalCode} {RESTAURANT.address.city}
+                {shop.postalCode} {shop.city}
               </span>
             </li>
             <li>
               <a
-                href={`tel:${RESTAURANT.phoneHref}`}
+                href={`tel:${shop.phoneHref}`}
                 className="flex gap-3 text-cream/85 transition-colors hover:text-cream"
               >
                 <PhoneIcon className="mt-0.5 h-4.5 w-4.5 shrink-0 text-gold" />
-                {RESTAURANT.phone}
+                {shop.phone}
               </a>
             </li>
             <li>
               <a
-                href={`mailto:${RESTAURANT.email}`}
+                href={`mailto:${shop.email}`}
                 className="flex gap-3 break-all text-cream/85 transition-colors hover:text-cream"
               >
                 <MailIcon className="mt-0.5 h-4.5 w-4.5 shrink-0 text-gold" />
-                {RESTAURANT.email}
+                {shop.email}
               </a>
             </li>
           </ul>
 
           <div className="mt-6 flex gap-3">
-            <SocialLink href={RESTAURANT.instagram} label="ENZO na Instagrame">
+            <SocialLink href={shop.instagram} label="ENZO na Instagrame">
               <InstagramIcon className="h-5 w-5" />
             </SocialLink>
-            <SocialLink href={RESTAURANT.facebook} label="ENZO na Facebooku">
+            <SocialLink href={shop.facebook} label="ENZO na Facebooku">
               <FacebookIcon className="h-5 w-5" />
             </SocialLink>
           </div>
@@ -95,7 +102,7 @@ export function Footer() {
         <div>
           <h2 className="eyebrow text-cream/50">Otváracie hodiny</h2>
           <ul className="mt-5 flex flex-col gap-3 text-[0.95rem]">
-            {RESTAURANT.hours.map((h) => (
+            {hours.map((h) => (
               <li key={h.days} className="flex flex-col gap-0.5">
                 <span className="flex items-center gap-2 text-cream/60">
                   <ClockIcon className="h-4 w-4 text-gold" />
@@ -113,13 +120,13 @@ export function Footer() {
         <div className="container-enzo grid gap-x-10 gap-y-4 py-7 text-xs text-cream/60 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <p className="eyebrow text-cream/40">Prevádzkovateľ</p>
-            <p className="mt-2 font-semibold text-cream/85">{RESTAURANT.company.name}</p>
-            <p>IČO {RESTAURANT.company.ico}</p>
-            <p>DIČ {RESTAURANT.company.dic}</p>
+            <p className="mt-2 font-semibold text-cream/85">{company.name}</p>
+            <p>IČO {company.ico}</p>
+            <p>DIČ {company.dic}</p>
           </div>
           <div>
             <p className="eyebrow text-cream/40">Sídlo firmy</p>
-            <p className="mt-2">{RESTAURANT.company.seat}</p>
+            <p className="mt-2">{company.seat}</p>
           </div>
           <div>
             <p className="eyebrow text-cream/40">Prevádzka</p>
@@ -127,9 +134,9 @@ export function Footer() {
           </div>
           <div>
             <p className="eyebrow text-cream/40">Zodpovedný vedúci</p>
-            <p className="mt-2">{RESTAURANT.company.manager}</p>
-            <a href={`tel:${RESTAURANT.phoneHref}`} className="font-semibold text-gold">
-              {RESTAURANT.phone}
+            <p className="mt-2">{company.manager}</p>
+            <a href={`tel:${shop.phoneHref}`} className="font-semibold text-gold">
+              {shop.phone}
             </a>
           </div>
         </div>
@@ -138,7 +145,7 @@ export function Footer() {
       <div className="border-t border-cream/15">
         <div className="container-enzo flex flex-col gap-3 py-6 text-xs text-cream/55 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            © {new Date().getFullYear()} {RESTAURANT.company.name} — {RESTAURANT.since},{" "}
+            © {new Date().getFullYear()} {company.name} — {RESTAURANT.since},{" "}
             {RESTAURANT.place}
           </p>
           <p className="font-sans font-bold tracking-[0.2em] text-cream/70 uppercase">

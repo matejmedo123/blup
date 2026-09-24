@@ -92,6 +92,19 @@ async function main() {
    * Pridá položku z karty do košíka. Keď má položka povinný variant
    * (napr. veľkosť), vyberie prvú možnosť — inak sa pridať nedá.
    */
+  /**
+   * Oznam prevádzky prekrýva stránku, kým ho návštevník nezavrie —
+   * zákazník to spraví hneď, tak to spraví aj test.
+   */
+  const dismissNotice = async (target) => {
+    const close = target.getByRole("button", { name: "Zavrieť oznam" });
+    await target.waitForTimeout(1200);
+    if (await close.count()) {
+      await close.click();
+      await target.waitForTimeout(300);
+    }
+  };
+
   const addToCart = async (index) => {
     const button = page.locator("#menu article").nth(index)
       .getByRole("button", { name: /pridať|prispôsobiť/i });
@@ -126,6 +139,7 @@ async function main() {
     step("1. Zákazník si prezerá menu na mobile");
 
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await dismissNotice(page);
     await wait(1200);
 
     const overflow = await page.evaluate(() => ({

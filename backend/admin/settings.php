@@ -33,6 +33,12 @@ $FIELDS = [
         'default_prep_minutes' => ['Predvolená minutáž v admine', 'number'],
         'closed_message'       => ['Hláška pri zastavenom príjme', 'textarea'],
     ],
+    'Oznam na webe' => [
+        'notice_enabled' => ['Ukazovať oznam návštevníkom', 'toggle'],
+        'notice_title'   => ['Nadpis', 'text'],
+        'notice_text'    => ['Text', 'textarea'],
+        'notice_cta'     => ['Text tlačidla (prázdne = bez tlačidla)', 'text'],
+    ],
 ];
 
 $mailTest = null;
@@ -65,7 +71,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') !=
                 continue;
             }
             $value = (string) $_POST[$key];
-            if ($type === 'money') {
+            if ($type === 'toggle') {
+                $value = $value === '1' ? '1' : '0';
+            } elseif ($type === 'money') {
                 $value = number_format((float) str_replace(',', '.', $value), 2, '.', '');
             } elseif ($type === 'number') {
                 $value = (string) max(1, (int) $value);
@@ -130,7 +138,13 @@ flash_render();
             <label class="field">
               <span><?= e($label) ?></span>
               <?php $v = (string) Settings::get($key); ?>
-              <?php if ($type === 'textarea'): ?>
+              <?php if ($type === 'toggle'): ?>
+                <input type="hidden" name="<?= e($key) ?>" value="0">
+                <span class="checkline" style="margin:6px 0 0">
+                  <input type="checkbox" name="<?= e($key) ?>" value="1"<?= $v === '1' ? ' checked' : '' ?>>
+                  <span>zapnuté</span>
+                </span>
+              <?php elseif ($type === 'textarea'): ?>
                 <textarea name="<?= e($key) ?>" rows="4"><?= e($v) ?></textarea>
               <?php elseif ($type === 'money'): ?>
                 <input type="text" name="<?= e($key) ?>" inputmode="decimal"

@@ -7,7 +7,6 @@ export type CategoryId =
   | "burgers"
   | "chicken"
   | "pork"
-  | "pizza"
   | "kombo"
   | "sides"
   | "sweets"

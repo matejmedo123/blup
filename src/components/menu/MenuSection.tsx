@@ -64,7 +64,7 @@ export function MenuSection() {
             </h2>
             <p className="mt-5 max-w-lg text-[1rem] leading-relaxed text-ink/60 sm:text-[1.05rem]">
               Vyber si, prispôsob a objednaj. Pripravujeme až po objednávke —
-              burgery smashujeme na platni, pizzu pečieme na kameni.
+              každý burger smashujeme čerstvo na platni.
             </p>
           </div>
 

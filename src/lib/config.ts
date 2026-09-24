@@ -2,8 +2,8 @@
 
 export const RESTAURANT = {
   name: "ENZO",
-  legalName: "ENZO Smash Burgers & Pizza",
-  descriptor: "SMASH BURGERS & PIZZA",
+  legalName: "ENZO Smash Burgers",
+  descriptor: "SMASH BURGERS",
   tagline: "SMASHED FRESH. SERVED HOT.",
   claim: "GOOD BURGERS. NO BULLSHIT.",
   since: "EST. 2026",

@@ -56,6 +56,13 @@ try {
             },
             DeliveryZones::publicList(),
         ),
+        // Oznam sa posiela vždy; či sa zobrazí, rozhodne prepínač.
+        'notice' => [
+            'enabled' => Settings::bool('notice_enabled'),
+            'title'   => (string) Settings::get('notice_title'),
+            'text'    => (string) Settings::get('notice_text'),
+            'cta'     => (string) Settings::get('notice_cta'),
+        ],
         'load'  => [
             'busy'         => $extra > 0,
             'extraMinutes' => $extra,

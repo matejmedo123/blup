@@ -82,9 +82,12 @@ export function CartDrawer() {
         aria-modal={isCartOpen}
         aria-label="Košík"
         className={cn(
-          "absolute inset-y-0 right-0 flex w-full flex-col bg-cream transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] sm:max-w-md lg:max-w-lg",
-          isCartOpen ? "translate-x-0" : "translate-x-full",
+          "absolute inset-y-0 right-0 flex w-full flex-col bg-cream sm:max-w-md lg:max-w-lg",
+          "transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
         )}
+        // Ten istý dôvod ako pri mobilnej navigácii: posun cez Tailwind
+        // premennú sa nedá plynulo dopočítať, tak ho píšeme rovno sem.
+        style={{ transform: isCartOpen ? "translateX(0)" : "translateX(100%)" }}
       >
         {/* Hlavička */}
         <div className="shrink-0 bg-burgundy px-5 pt-5 pb-4 text-cream sm:px-6">

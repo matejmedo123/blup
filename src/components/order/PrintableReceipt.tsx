@@ -29,7 +29,7 @@ export function PrintableReceipt({ order }: { order: Order }) {
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "3px" }}>ENZO</div>
         <div style={{ fontSize: "9px", letterSpacing: "2px", marginTop: "2px" }}>
-          SMASH BURGERS &amp; PIZZA
+          SMASH BURGERS
         </div>
         <div style={{ fontSize: "9px", marginTop: "6px" }}>
           {RESTAURANT.address.street}, {RESTAURANT.address.postalCode}{" "}

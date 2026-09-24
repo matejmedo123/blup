@@ -28,7 +28,7 @@ export function Hero() {
               className="mt-5 font-slab text-[4.2rem] leading-[0.92] text-burgundy opacity-0 [animation:reveal_0.75s_cubic-bezier(0.16,1,0.3,1)_0.12s_both] sm:text-[6rem] lg:text-[6.8rem] xl:text-[7.6rem]"
             >
               Enzo
-              <span className="sr-only"> — Smash Burgers &amp; Pizza</span>
+              <span className="sr-only"> — Smash Burgers</span>
             </h1>
 
             <p
@@ -39,7 +39,7 @@ export function Hero() {
                 className="checkerboard h-3 w-9 shrink-0 text-burgundy"
                 style={{ ["--checker-size" as string]: "0.75rem" }}
               />
-              Smash Burgers &amp; Pizza
+              Smash Burgers
               <span
                 className="checkerboard h-3 w-9 shrink-0 text-burgundy"
                 style={{ ["--checker-size" as string]: "0.75rem" }}
@@ -47,7 +47,7 @@ export function Hero() {
             </p>
 
             <p className="mt-8 max-w-md text-[1.05rem] leading-relaxed text-ink/65 opacity-0 [animation:reveal_0.7s_cubic-bezier(0.16,1,0.3,1)_0.28s_both] sm:text-[1.15rem]">
-              Poctivý smash burger, pizza z vlastného cesta a domáce hranolky.
+              Poctivý smash burger a domáce hranolky.
               Smashujeme čerstvo. Servírujeme horúce.{" "}
               <strong className="font-bold text-burgundy">Žiadne kompromisy.</strong>
             </p>
@@ -120,7 +120,7 @@ export function Hero() {
 const MARQUEE_ITEMS = [
   "SMASHED FRESH. SERVED HOT.",
   "DOUBLE IS BETTER.",
-  "BURGER AJ PIZZA.",
+  "SMASHED, NOT GRILLED.",
   "GET SMASHED.",
   "MEET THE ENZO.",
   "SMASHED IN KONIAROVCE.",

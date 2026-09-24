@@ -39,7 +39,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         if ($gid > 0) {
             Db::update('modifier_groups', $data, 'id = :id', ['id' => $gid]);
-            AuditLog::record($user, 'update', 'modifier_group', (string) $gid, "Skupina „$name“ upravená");
+            AuditLog::record($user, 'update', 'modifier_group', (string) $gid, "Skupina „{$name}“ upravená");
             flash_redirect('modifiers.php', 'ok', 'Skupina bola uložená.');
         }
 
@@ -49,7 +49,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
         $max = (int) (Db::value('SELECT MAX(position) FROM modifier_groups') ?? 0);
         $newId = Db::insert('modifier_groups', $data + ['slug' => $slug, 'position' => $max + 1]);
-        AuditLog::record($user, 'create', 'modifier_group', (string) $newId, "Skupina „$name“ vytvorená");
+        AuditLog::record($user, 'create', 'modifier_group', (string) $newId, "Skupina „{$name}“ vytvorená");
         flash_redirect('modifiers.php', 'ok', 'Skupina bola pridaná.');
     }
 
@@ -73,7 +73,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'position'    => $max + 1,
             'group_id'    => $gid,
         ]);
-        AuditLog::record($user, 'create', 'modifier', $slug, "Možnosť „$name“ pridaná do skupiny");
+        AuditLog::record($user, 'create', 'modifier', $slug, "Možnosť „{$name}“ pridaná do skupiny");
         flash_redirect('modifiers.php', 'ok', 'Možnosť bola pridaná.');
     }
 

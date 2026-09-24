@@ -19,6 +19,7 @@ final class Migrations
         '001' => 'schema',
         '002' => 'migrate-002',
         '003' => 'migrate-003',
+        '004' => 'migrate-004',
     ];
 
     /**

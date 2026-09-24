@@ -31,6 +31,10 @@ z čistej inštalácie.
 - [x] Mobilná verzia adminu, doladenie webu na telefóne
 - [x] Nástenka pípa, kým je objednávka nepotvrdená (zvuk, vibrácie, blikajúci titulok)
 - [x] Automatické predlžovanie sľúbených časov podľa vyťaženia kuchyne
+- [x] Pizza odstránená — prevádzka robí len smash burgery (migrácia 004)
+- [x] Nahrávanie fotiek položiek z počítača priamo v admine
+- [x] Kontakt, siete a fakturačné údaje z adminu sa prejavia na webe
+- [x] Oznam po otvorení stránky, nastaviteľný z adminu
 - [x] Testy: 122 backendových + 32 E2E kontrol cez celý cyklus objednávky
 - [x] Finálny audit, build, zabalenie
 

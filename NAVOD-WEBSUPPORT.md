@@ -297,6 +297,15 @@ v **Nastavenia**). Hodí sa cez obedný nápor alebo keď dôjde mäso.
 
 Všetko je v admine, žiadne súbory sa už neupravujú.
 
+### Fotky položiek
+Pri každej položke je pole **Nahrať fotku z počítača** — vyberieš súbor
+a uložíš. JPG, PNG alebo WebP do 8 MB; systém fotku sám zmenší a prevedie,
+takže netreba nič pripravovať. Stará fotka sa nahradí a zmaže sa, ak ju
+nepoužíva iná položka.
+
+Fotky sa ukladajú do `images/products/` na serveri — ten priečinok musí byť
+zapisovateľný (rovnako ako `storage`).
+
 ### Menu → jednotlivé položky
 - cena, názov, popis, štítok (`NOVINKA`, `NAJPREDÁVANEJŠIE`)
 - **Dostupné** — keď odškrtneš, položka na webe ostane vidieť, ale je
@@ -328,6 +337,15 @@ s prehliadačom.
 - **poplatok za doručenie**, **doručenie zdarma od**, **minimálna objednávka**
 - predpokladané časy prípravy (základ, ku ktorému sa pripočítava vyťaženie)
 - text, ktorý sa ukáže, keď neprijímaš objednávky
+
+### Oznam na webe
+V **Nastaveniach** je skupina **Oznam na webe**: nadpis, text a tlačidlo.
+Keď je zapnutý, návštevníkovi po otvorení stránky vyskočí okno. Kto ho
+zavrie, druhý raz ho nevidí — kým oznam nezmeníš. Vtedy sa ukáže znova
+aj tomu, kto predošlý zavrel.
+
+Oznam je len informácia. Ak chceš objednávky naozaj zastaviť, slúži na to
+prepínač **Zastaviť príjem objednávok** na nástenke.
 
 ### Otváracie hodiny
 Systém sám odmieta objednávky mimo otváracích hodín a zákazníkovi povie,

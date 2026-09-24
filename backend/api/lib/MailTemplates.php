@@ -268,7 +268,7 @@ final class MailTemplates
             . '<div style="font-family:Rockwell,Georgia,\'Times New Roman\',serif;font-weight:700;font-size:42px;'
             . 'letter-spacing:1px;color:' . self::CREAM . ';line-height:1">ENZO</div>'
             . '<div style="font-size:11px;letter-spacing:3px;font-weight:700;color:' . self::CREAM . ';opacity:.75;margin-top:6px">'
-            . 'SMASH BURGERS &amp; PIZZA</div>'
+            . 'SMASH BURGERS</div>'
             . '</td></tr>'
             . '<tr><td style="height:8px;background:' . self::BURGUNDY . ';background-image:'
             . 'repeating-linear-gradient(90deg,' . self::CREAM . ' 0 8px,transparent 8px 16px)"></td></tr>'
@@ -424,7 +424,7 @@ final class MailTemplates
     private function textReceipt(array $o, string $intro): string
     {
         $lines   = [];
-        $lines[] = 'ENZO — SMASH BURGERS & PIZZA';
+        $lines[] = 'ENZO — SMASH BURGERS';
         $lines[] = str_repeat('=', 44);
         $lines[] = $intro;
         $lines[] = '';

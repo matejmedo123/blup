@@ -48,7 +48,7 @@ return [
         'password'   => '',
 
         'from_email' => 'objednavky@enzo.sk',
-        'from_name'  => 'ENZO Smash Burgers & Pizza',
+        'from_name'  => 'ENZO Smash Burgers',
 
         // Kam chodia upozornenia na nové objednávky (viac adries oddeľ čiarkou)
         'shop_notify' => 'objednavky@enzo.sk',

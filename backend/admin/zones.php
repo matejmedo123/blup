@@ -41,13 +41,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         if ($id > 0) {
             Db::update('delivery_zones', $data, 'id = :id', ['id' => $id]);
-            AuditLog::record($user, 'update', 'delivery_zone', (string) $id, "Zóna „$name“ upravená");
+            AuditLog::record($user, 'update', 'delivery_zone', (string) $id, "Zóna „{$name}“ upravená");
             flash_redirect('zones.php', 'ok', 'Zóna bola uložená.');
         }
 
         $max = (int) (Db::value('SELECT MAX(position) FROM delivery_zones') ?? 0);
         $new = Db::insert('delivery_zones', $data + ['position' => $max + 1]);
-        AuditLog::record($user, 'create', 'delivery_zone', (string) $new, "Zóna „$name“ pridaná");
+        AuditLog::record($user, 'create', 'delivery_zone', (string) $new, "Zóna „{$name}“ pridaná");
         flash_redirect('zones.php', 'ok', 'Zóna bola pridaná.');
     }
 
@@ -55,7 +55,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $id   = (int) ($_POST['id'] ?? 0);
         $name = (string) Db::value('SELECT name FROM delivery_zones WHERE id = ?', [$id]);
         Db::run('DELETE FROM delivery_zones WHERE id = ?', [$id]);
-        AuditLog::record($user, 'delete', 'delivery_zone', (string) $id, "Zóna „$name“ zmazaná");
+        AuditLog::record($user, 'delete', 'delivery_zone', (string) $id, "Zóna „{$name}“ zmazaná");
         flash_redirect('zones.php', 'ok', 'Zóna bola zmazaná.');
     }
 }

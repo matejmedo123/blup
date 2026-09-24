@@ -57,9 +57,13 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
         aria-modal={open}
         aria-label="Navigácia"
         className={cn(
-          "absolute inset-y-0 right-0 flex w-full max-w-sm flex-col bg-burgundy transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          open ? "translate-x-0" : "translate-x-full",
+          "absolute inset-y-0 right-0 flex w-full max-w-sm flex-col bg-burgundy",
+          "transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
         )}
+          // Posun píšeme priamo do transformu: Tailwind ho skladá cez
+          // premennú, ktorú prehliadač nevie plynulo dopočítať, a panel
+          // potom namiesto skĺznutia poskočí.
+        style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-4">
           <Logo tone="cream" className="text-[2rem]" />

@@ -11,7 +11,7 @@ final class Settings
     private static ?array $cache = null;
 
     public const DEFAULTS = [
-        'shop_name'            => 'ENZO Smash Burgers & Pizza',
+        'shop_name'            => 'ENZO Smash Burgers',
         'shop_street'          => 'Koniarovce 290',
         'shop_city'            => 'Koniarovce',
         'shop_postal_code'     => '956 13',
@@ -38,6 +38,12 @@ final class Settings
         'auto_prep_capacity'   => '5',
         'auto_prep_step'       => '5',
         'auto_prep_max'        => '30',
+
+        // Oznam, ktorý vyskočí po otvorení webu. Vypína sa prepínačom.
+        'notice_enabled'       => '1',
+        'notice_title'         => 'DNES OFICIÁLNA OTVÁRAČKA',
+        'notice_text'          => 'Tešíme sa na teba v Koniarovciach. Objednávať cez web sa bude dať od 28. 9. 2026.',
+        'notice_cta'           => 'Pozrieť menu',
 
         'delivery_zones'       => "Koniarovce\nPreseľany\nLudanice\nChrabrany\nTopoľčany\nNitrianska Streda",
         'opening_hours'        => "Pondelok — Štvrtok|11:00 — 21:00\nPiatok — Sobota|11:00 — 22:00\nNedeľa|12:00 — 21:00",

@@ -3,7 +3,7 @@ import { OrderConfirmation } from "@/components/order/OrderConfirmation";
 
 export const metadata: Metadata = {
   title: "Objednávka prijatá",
-  description: "Potvrdenie objednávky ENZO Smash Burgers & Pizza.",
+  description: "Potvrdenie objednávky ENZO Smash Burgers.",
   robots: { index: false, follow: false },
 };
 

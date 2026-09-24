@@ -12,7 +12,7 @@ interface LogoProps {
   tone?: LogoTone;
   /** Veľkosť wordmarku v CSS jednotkách (font-size) */
   className?: string;
-  /** Zobraziť riadok SMASH BURGERS & PIZZA so šachovnicou */
+  /** Zobraziť riadok SMASH BURGERS so šachovnicou */
   withDescriptor?: boolean;
   /** Zobraziť ® */
   withMark?: boolean;
@@ -59,7 +59,7 @@ export function Logo({
             style={{ ["--checker-size" as string]: "0.55em" }}
           />
           <span className={cn("font-sans font-bold tracking-[0.2em] whitespace-nowrap", t.sub)}>
-            SMASH BURGERS &amp; PIZZA
+            SMASH BURGERS
           </span>
           <span aria-hidden className={cn("checkerboard h-[1.05em] w-[2.4em] shrink-0", t.checker)}
             style={{ ["--checker-size" as string]: "0.55em" }}
@@ -90,7 +90,6 @@ export function LogoBadge({ className }: { className?: string }) {
         SMASH
         <br />
         BURGERS
-        <br />&amp; PIZZA
       </span>
     </span>
   );
