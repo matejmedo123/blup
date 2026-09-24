@@ -63,7 +63,7 @@ export function BrandStory() {
               <div className="relative aspect-4/5 w-full overflow-hidden rounded-2xl bg-ink sm:mt-8">
                 <Image
                   src="/images/editorial/story-duo.webp"
-                  alt="Dva ENZO smash burgery servírované na tmavom stole"
+                  alt="Štyri ENZO burgery v košíkoch na drevenom stole"
                   fill
                   loading="lazy"
                   sizes="(max-width: 640px) 100vw, 28vw"
@@ -72,8 +72,8 @@ export function BrandStory() {
               </div>
               <div className="relative aspect-4/5 w-full overflow-hidden rounded-2xl bg-ink">
                 <Image
-                  src="/images/products/bacon-boy.webp"
-                  alt="Bacon Boy — smash burger so slaninou a chedarom"
+                  src="/images/products/crispy-chicken-burger.webp"
+                  alt="Crispy Chicken Burger s coleslawom"
                   fill
                   loading="lazy"
                   sizes="(max-width: 640px) 100vw, 28vw"

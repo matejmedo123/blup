@@ -5,7 +5,7 @@ import { Reveal } from "@/components/ui/Reveal";
 const TILES = [
   {
     src: "/images/editorial/promo-combo.webp",
-    alt: "ENZO burger s hranolkami a nápojom",
+    alt: "Ponuka ENZO burgerov v košíkoch s objednávkovou podložkou",
     title: "Double is better.",
     text: "Pridaj extra porciu mäsa a rozdiel pocítiš hneď pri prvom hryzení.",
     tone: "gold" as const,

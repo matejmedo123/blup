@@ -86,7 +86,7 @@ export function Hero() {
             <div className="relative h-full min-h-[22rem] w-full overflow-hidden bg-ink lg:min-h-[42rem]">
               <Image
                 src="/images/editorial/hero-burger.webp"
-                alt="Smash burger ENZO s dvojitým cheddarom, slaninou a nakladanými uhorkami"
+                alt="Košíky s ENZO smash burgermi a objednávkovou podložkou"
                 fill
                 priority
                 sizes="(max-width: 1024px) 100vw, 50vw"
