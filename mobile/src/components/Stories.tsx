@@ -141,14 +141,18 @@ function Ring({ ring, onPress }: { ring: StoryRing; onPress: () => void }) {
           </View>
         </LinearGradient>
       ) : (
+        // Watched: no ring at all, just the face. A grey ring was still a ring
+        // — from the corner of your eye it reads as "something here" exactly
+        // like the coloured one, so the row looked equally busy whether there
+        // was anything new in it or not. Everybody in this row has a live
+        // story and is tappable, so nothing is lost by taking it off: the ring
+        // now means one thing only, and it means it loudly.
         <View style={styles.seenRing}>
-          <View style={styles.inner}>
-            <Avatar
-              url={ring.avatar_url}
-              name={ring.display_name ?? ring.username}
-              size={50}
-            />
-          </View>
+          <Avatar
+            url={ring.avatar_url}
+            name={ring.display_name ?? ring.username}
+            size={RING - 6}
+          />
         </View>
       )}
       <Text style={[styles.name, !unseen && styles.nameSeen]} numberOfLines={1}>
@@ -352,6 +356,21 @@ export function StoryViewer({
                 </Text>
                 <Mono style={styles.headTime}>{formatRelative(current.created_at)}</Mono>
               </View>
+              {/* Adding another and deleting this one are both things you do
+                  to your own story, so they sit together and they are on
+                  screen from the first frame — rather than at the bottom,
+                  under the caption and the viewer list, where it moved about
+                  and competed with the part you came to read. */}
+              {isMine && onAdd ? (
+                <Pressable
+                  onPress={() => { onClose(); onAdd(); }}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Pridať ďalší príbeh"
+                >
+                  <Text style={styles.headGlyph}>＋</Text>
+                </Pressable>
+              ) : null}
               {isMine ? (
                 <Pressable onPress={() => void remove()} hitSlop={10} accessibilityRole="button">
                   <Text style={styles.headGlyph}>🗑</Text>
@@ -444,19 +463,6 @@ export function StoryViewer({
             ) : null}
 
             {isMine && showViewers ? <Viewers storyId={current.id} /> : null}
-
-            {/* Where posting a second one lives now that the plus has gone off
-                the ring. It is your own story, so this is where you already
-                are when you think of it. */}
-            {isMine && onAdd ? (
-              <Pressable
-                style={styles.addMore}
-                onPress={() => { onClose(); onAdd(); }}
-                accessibilityRole="button"
-              >
-                <Text style={styles.addMoreLabel}>＋ Pridať ďalší príbeh</Text>
-              </Pressable>
-            ) : null}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </>
@@ -566,7 +572,6 @@ const styles = StyleSheet.create({
   seenRing: {
     width: RING, height: RING, borderRadius: RING / 2,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: colors.border,
   },
   plainRing: {
     width: RING, height: RING, borderRadius: RING / 2,
@@ -630,14 +635,6 @@ const styles = StyleSheet.create({
   },
   eventLinkLabel: { ...typography.metaSm, color: '#FFFFFF' },
 
-  addMore: {
-    alignSelf: 'flex-start',
-    margin: spacing.lg, marginTop: spacing.sm,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
-  },
-  addMoreLabel: { ...typography.metaSm, color: '#FFFFFF' },
   viewers: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   viewersLabel: { ...typography.metaSm, color: 'rgba(255,255,255,0.78)' },
   viewerList: { maxHeight: 180, paddingHorizontal: spacing.lg },

@@ -54,11 +54,19 @@ export interface StoryDraft {
 }
 
 export function StoryCamera({
-  visible, onClose, onDone,
+  visible, onClose, onDone, onLibrary,
 }: {
   visible: boolean;
   onClose: () => void;
   onDone: (draft: StoryDraft) => void;
+  /**
+   * Taking something that is already on the phone.
+   *
+   * It lives here, beside the shutter, rather than as a second entry point
+   * somewhere else — this is where you are when you decide you would rather
+   * use yesterday's picture, and it is where every camera puts it.
+   */
+  onLibrary?: () => void;
 }) {
   const camera = useRef<CameraView | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -304,7 +312,18 @@ export function StoryCamera({
             />
           </View>
 
-          <View style={styles.flip} />
+          {onLibrary ? (
+            <Pressable
+              onPress={() => { onClose(); onLibrary(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Vybrať z galérie"
+              style={styles.flip}
+            >
+              <Text style={styles.libraryGlyph}>⧉</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.flip} />
+          )}
         </View>
 
         <Caption style={styles.hint}>
@@ -371,6 +390,7 @@ const styles = StyleSheet.create({
   },
   flip: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   flipGlyph: { color: '#FFFFFF', fontSize: 24 },
+  libraryGlyph: { color: '#FFFFFF', fontSize: 22 },
 
   shutterWrap: { width: SHUTTER + 24, height: SHUTTER + 24, alignItems: 'center', justifyContent: 'center' },
   ring: {

@@ -89,6 +89,17 @@ Pri každej je aj to, čo presne bolo zle.
   veľkosti. Neukladá sa vypálený do obrázka — vypálený text sa nedá opraviť,
   neprečíta ho čítačka pre nevidiacich a pri videu by ho bolo treba zakódovať
   do každého snímku. Ukladá sa ako údaj a kreslí sa nad médiom.
+- **Krúžok okolo profilovky zmizne, keď si príbeh pozrieš.** Predtým zošedivel
+  — lenže sivý krúžok je kútikom oka stále krúžok, takže riadok vyzeral rovnako
+  plný, či v ňom niečo nové bolo alebo nie. Teraz krúžok znamená jedinú vec:
+  **toto si ešte nevidel**. Nič sa tým nestráca — v tom riadku sú aj tak len
+  ľudia, ktorí príbeh majú, a dá sa na nich ťuknúť rovnako.
+- **Druhý príbeh sa pridáva z hlavičky toho tvojho** — `＋` vedľa koša. Obe sú
+  veci, ktoré robíš so svojím príbehom, tak sú vedľa seba a sú na obrazovke od
+  prvej snímky. Predtým to bolo dole pod popisom a zoznamom divákov, kde sa to
+  posúvalo a zavadzalo tomu, kvôli čomu si tam prišiel.
+- **Galéria je v kamere**, vedľa spúšte — tam, kde si, keď si to rozmyslíš a
+  chceš radšej včerajšiu fotku. Dlhé podržanie kruhu „Pridať" ju otvorí tiež.
 - **Veľkosť videa sa rieši pri nahrávaní, nie odmietaním.** Mal si pravdu, že
   25 MB je zlá páka: pätnásť sekúnd z telefónu má bežne 20–30 MB, lebo kamera
   natáča 1080p60 pri vysokom toku. Appka teraz natáča **720p** a sám záznamník

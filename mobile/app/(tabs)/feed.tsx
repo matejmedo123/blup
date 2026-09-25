@@ -348,6 +348,7 @@ export default function FeedScreen() {
         visible={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onDone={(draft) => { setCameraOpen(false); void postStory(draft); }}
+        onLibrary={() => void addStoryFromLibrary()}
       />
 
       <BottomSheet
