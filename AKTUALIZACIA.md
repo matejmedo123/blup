@@ -15,6 +15,96 @@ Počítaj s **20 minútami**, z toho väčšina je čakanie na build.
 
 ## Čo je nové v tomto balíku
 
+Štyri veci, z ktorých jedna je únik dát. Tá je dôvod, prečo sa oplatí nasadiť
+to skôr než neskôr.
+
+### Súkromné komunity boli vo feede verejné
+
+**Toto nasaď.** `feed_posts` je `security definer` — beží s právami vlastníka,
+takže sa naň politika `posts_select` nevzťahuje a viditeľnosť si musí ustrážiť
+sám. Nerobil to: pýtal sa len na `not is_deleted`. Príspevok v súkromnej
+komunite teda videl **ktokoľvek, kto otvoril feed** — aj neprihlásený návštevník.
+Jediné, čo tie príspevky chránilo, bolo, že sa nikto nepozrel.
+
+Oprava nie je skopírovať podmienku z politiky do funkcie: dve kópie toho istého
+pravidla sa rozídu pri prvej zmene a jedna z nich stráži dáta. Pravidlo dostalo
+meno — `can_see_post` — a pýta sa ho aj politika, aj funkcia.
+
+Overiť sa to dá priamo v SQL editore. Toto musí vrátiť `0`:
+
+```sql
+-- za neprihláseného návštevníka
+set role anon;
+select count(*)
+from public.feed_posts('all', 100) p
+join public.communities c on c.id = p.community_id
+where c.is_private;
+reset role;
+```
+
+Neprihlásenému sa zároveň prestali ponúkať záložky **Pre teba** a **Sledujem**.
+Bez účtu nemajú z čoho vzniknúť — a „Pre teba" mu pritom vracalo úplne všetko,
+lebo podmienka „nemá zaznamenané žiadne záujmy" platí aj na niekoho, kto nemá
+ani účet. Celý web pod nadpisom, ktorý tvrdil, že je vybraný osobne preňho.
+
+### Príbeh má jeden jediný rozmer: 1080 × 1920
+
+Tvar sa nerieši pri prehrávaní, ale **pri vytváraní**. Každá fotka sa oreže na
+1080 × 1920 ešte predtým, než sa nahrá, takže prehrávač nemá čo dorovnávať a
+nikto nikdy neuvidí čierny pás.
+
+- **Fotka z galérie ide cez editor.** Ťaháš ju a približuješ v rámčeku, ktorý má
+  presne tvar príbehu, a môžeš cez ňu napísať text. Najmenšie priblíženie je
+  presne to, pri ktorom fotka rámček ešte celý vyplní — prázdny roh teda nemôže
+  vzniknúť, nech s fotkou robíš čokoľvek.
+- **Hľadáčik kamery ukazuje ten istý výrez, aký sa uloží.** Dovtedy ukazoval
+  celé pole snímača (4:3), takže človek zarámoval jedno a ostatným sa ukázalo
+  niečo iné — hore a dole pribudlo, čo nevidel.
+- **Video sa neoreže.** Prekódovanie v JavaScripte by trvalo minúty, zohrialo
+  telefón a výsledok by bol horší. Prehráva sa v rámčeku, ktorý má vždy rovnaký
+  tvar, takže všetci vidia to isté — ale samotný súbor zostáva v pomere, v akom
+  prišiel. Príbehy natočené priamo v appke to netrápi: hľadáčik je už 9:16.
+
+Popri tom sa opravilo nahrávanie, ktoré fotku **zväčšovalo** na 1440 pixelov.
+`resize({ width })` šírku nastavuje, neobmedzuje — takže brala bajty navyše,
+pridávala rozmazanie a rušila presne ten jeden rozmer, kvôli ktorému sa oreziava.
+
+### Mapa sa dá zase oddialiť
+
+Minulá oprava precitlivenosti to prehnala na druhú stranu. Počítadlo sa po
+každom kroku vynulovalo a krok bol nanajvýš jedna úroveň, takže zo švihu za päť
+zárezov zostala jedna a mapa pôsobila zaseknuto.
+
+Skutočný dôvod je hlbšie: **myš a trackpad hlásia to isté `deltaMode 0` a
+posielajú celkom iné čísla.** Myš pošle jednu udalosť s deltaY 100 — to je jeden
+zárez a má to byť presne jedna úroveň. Trackpad pošle tridsať udalostí po osem
+až dvadsať pixelov. Jeden deliteľ nemôže sedieť obom: pri tom, kde sedí myš, je
+jemné potiahnutie po trackpade nula. Rozlišujú sa teraz podľa veľkosti kroku,
+zvyšok sa prenáša do ďalšej udalosti a švih má strop na celé gesto, aby
+zotrvačné rolovanie na Macu mapu neodnieslo.
+
+### Označenie záložky obopína aj text
+
+Pilulka pod spodnou lištou obopínala len ikonu — popisok kreslil navigátor pod
+ňou. Na telefóne, kde je lišta dosť vysoká na to, aby sa od seba oddelili, tak
+„Objav" viditeľne sedel **mimo** svojho označenia. Ikona aj text sú teraz v
+jednej krabici.
+
+### Dve nové kontroly
+
+Obe bez prehliadača a obe sa pýtajú toho istého kódu, ktorý používa appka —
+takže nemôžu prejsť nad pokazenou appkou:
+
+```bash
+npm run check:mapzoom   # prehrá skutočnú myš aj trackpad
+npm run check:story     # 84 výrezov zo 7 rôzne tvarovaných fotiek
+```
+
+---
+
+## Čo bolo nové v balíku predtým
+
+
 Desať vecí z tvojho posledného zoznamu — štyri chyby a šesť nových vecí.
 Pri každej je aj to, čo presne bolo zle.
 
