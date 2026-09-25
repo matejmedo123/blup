@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { Photo } from "@/components/ui/Photo";
 import Link from "next/link";
 import { ORDER_CONFIG, RESTAURANT } from "@/lib/config";
 import { LogoBadge } from "@/components/ui/Logo";
@@ -93,10 +93,9 @@ export function Hero() {
           {/* Fotka */}
           <div className="relative -mx-5 min-h-[22rem] sm:-mx-8 lg:mx-0 lg:min-h-[42rem]">
             <div className="relative h-full min-h-[22rem] w-full overflow-hidden bg-ink lg:min-h-[42rem]">
-              <Image
+              <Photo
                 src={heroImage}
                 alt={heroAlt}
-                fill
                 priority
                 sizes="(max-width: 1024px) 100vw, 50vw"
                 className="scale-105 object-cover object-center opacity-0 [animation:fade-in_0.9s_ease-out_0.1s_both]"

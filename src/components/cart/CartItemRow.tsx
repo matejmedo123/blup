@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { Photo } from "@/components/ui/Photo";
 import type { CartItem } from "@/lib/types";
 import { itemLineTotal, itemUnitPrice } from "@/lib/cart";
 import { formatPrice } from "@/lib/format";
@@ -29,17 +29,11 @@ export function CartItemRow({
     <li className="flex gap-3 py-4 sm:gap-4">
       {/* Náhľad */}
       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-cream-200 sm:h-22 sm:w-22">
-        {item.image ? (
-          <Image
-            src={item.image}
-            alt=""
-            fill
-            sizes="88px"
-            className="object-cover"
-          />
-        ) : product?.lid ? (
+        {!item.image && product?.lid ? (
           <SauceLid lines={product.lid.lines} accent={product.lid.accent} className="absolute inset-0" />
-        ) : null}
+        ) : (
+          <Photo src={item.image} alt="" sizes="88px" className="object-cover" compact />
+        )}
         {readOnly && (
           <span className="absolute right-0 bottom-0 rounded-tl-lg bg-burgundy px-2 py-0.5 font-display text-xs text-cream tabular-nums">
             ×{item.quantity}

@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { Photo } from "@/components/ui/Photo";
 import Link from "next/link";
 import { Reveal } from "@/components/ui/Reveal";
 import { useMenu } from "@/context/MenuContext";
@@ -69,10 +69,9 @@ export function PromoSection() {
           {tiles.map((t, i) => (
             <Reveal as="li" key={t.title} delay={i * 100} className="h-full">
               <article className="group relative flex h-full min-h-[22rem] flex-col justify-end overflow-hidden rounded-2xl">
-                <Image
+                <Photo
                   src={t.src}
                   alt={t.alt}
-                  fill
                   loading="lazy"
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                   className="object-cover transition-transform duration-700 ease-out group-hover:scale-105 motion-reduce:group-hover:scale-100"

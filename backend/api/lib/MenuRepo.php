@@ -7,16 +7,6 @@ final class MenuRepo
     /** @return array{categories:list<array<string,mixed>>, products:list<array<string,mixed>>, version:string} */
     public static function publicMenu(): array
     {
-        $categories = [];
-        foreach (Db::all('SELECT * FROM categories WHERE is_active = 1 ORDER BY position, id') as $c) {
-            $categories[] = [
-                'id'      => $c['slug'],
-                'label'   => $c['label'],
-                'title'   => $c['title'],
-                'caption' => $c['caption'] ?? '',
-            ];
-        }
-
         // doplnky pre všetky produkty naraz — bez N+1 dotazov
         $extrasByProduct = [];
         foreach (Db::all(
@@ -45,13 +35,7 @@ final class MenuRepo
         );
 
         $products = [];
-        foreach (Db::all(
-            'SELECT p.*, c.slug AS category_slug
-             FROM products p
-             JOIN categories c ON c.id = p.category_id
-             WHERE c.is_active = 1
-             ORDER BY p.position, p.id'
-        ) as $p) {
+        foreach ($rawProducts as $p) {
             $item = [
                 'id'          => $p['slug'],
                 'name'        => $p['name'],
@@ -86,6 +70,27 @@ final class MenuRepo
                 $item['extras'] = $extras;
             }
             $products[] = $item;
+        }
+
+        // Kategóriu bez položiek web neukáže. Prázdna záložka v menu je
+        // pre zákazníka slepá ulička a stane sa vždy, keď prevádzka
+        // vyprázdni celú sekciu, ale kategóriu zmazať zabudne.
+        $used = [];
+        foreach ($products as $item) {
+            $used[(string) $item['category']] = true;
+        }
+
+        $categories = [];
+        foreach (Db::all('SELECT * FROM categories WHERE is_active = 1 ORDER BY position, id') as $c) {
+            if (!isset($used[(string) $c['slug']])) {
+                continue;
+            }
+            $categories[] = [
+                'id'      => $c['slug'],
+                'label'   => $c['label'],
+                'title'   => $c['title'],
+                'caption' => $c['caption'] ?? '',
+            ];
         }
 
         return [

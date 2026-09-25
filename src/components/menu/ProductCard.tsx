@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { memo } from "react";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Photo } from "@/components/ui/Photo";
 import { SauceLid } from "./SauceLid";
 
 interface ProductCardProps {
@@ -47,17 +47,7 @@ export const ProductCard = memo(function ProductCard({
           soldOut && "grayscale",
         )}
       >
-        {product.image ? (
-          <Image
-            src={product.image}
-            alt={product.imageAlt ?? product.name}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            priority={priority}
-            loading={priority ? undefined : "lazy"}
-            className="object-cover transition-transform duration-500 ease-out group-hover:scale-105 motion-reduce:group-hover:scale-100"
-          />
-        ) : product.lid ? (
+        {!product.image && product.lid ? (
           <div className="absolute inset-0 bg-gradient-to-b from-cream-200 to-cream-300">
             <div
               aria-hidden
@@ -70,7 +60,16 @@ export const ProductCard = memo(function ProductCard({
               className="absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-105 motion-reduce:group-hover:scale-100"
             />
           </div>
-        ) : null}
+        ) : (
+          <Photo
+            src={product.image}
+            alt={product.imageAlt ?? product.name}
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            priority={priority}
+            loading={priority ? undefined : "lazy"}
+            className="object-cover transition-transform duration-500 ease-out group-hover:scale-105 motion-reduce:group-hover:scale-100"
+          />
+        )}
 
         {soldOut ? (
           <span className="absolute top-3 left-3 rounded-full bg-ink px-3 py-1.5 font-sans text-[0.6rem] font-extrabold tracking-[0.14em] text-cream uppercase">

@@ -52,6 +52,14 @@ foreach (Db::all(
     $byCategory[(int) $p['category_id']][] = $p;
 }
 
+// Fotku môže z databázy sľubovať cesta, ktorej súbor na serveri nie je.
+// Prevádzka to inak zistí až od zákazníka, tak to hlásime tu.
+$brokenPhotos = AssetAudit::brokenCount();
+// A rovnako ticho zlyhá neúplný prenos súborov na hosting alebo databáza,
+// ktorá za nimi zaostala.
+$deployCheck  = Deployment::check();
+$pendingDb    = Migrations::pending();
+
 layout_start('Menu', 'menu', $user);
 flash_render();
 ?>
@@ -62,9 +70,34 @@ flash_render();
     <a class="btn btn-ghost" href="categories.php">Kategórie</a>
     <a class="btn btn-ghost" href="extras.php">Doplnky</a>
     <a class="btn btn-ghost" href="modifiers.php">Varianty</a>
+    <a class="btn btn-ghost" href="kontrola.php">Kontrola</a>
     <a class="btn" href="product.php">+ Nová položka</a>
   </div>
 </div>
+
+<?php if ($brokenPhotos > 0): ?>
+  <div class="alert alert-err">
+    <strong><?= e(sk_count($brokenPhotos, 'fotka nesedí', 'fotky nesedia', 'fotiek nesedí')) ?></strong>
+    — súbor na serveri chýba. Web namiesto rozbitého obrázka ukáže pokojnú plochu so značkou.
+    <a href="kontrola.php">Pozrieť, ktoré to sú</a>.
+  </div>
+<?php endif; ?>
+
+<?php if ($deployCheck['available'] && !$deployCheck['ok']): ?>
+  <div class="alert alert-err">
+    <strong>Prenos súborov na hosting neprešiel celý.</strong>
+    Na serveri chýba alebo je staršie
+    <?= e(sk_count(count($deployCheck['missing']) + count($deployCheck['stale']), 'súbor', 'súbory', 'súborov')) ?>.
+    <a href="kontrola.php">Pozrieť zoznam</a>.
+  </div>
+<?php endif; ?>
+
+<?php if ($pendingDb !== []): ?>
+  <div class="alert alert-err">
+    <strong>Databáza zaostáva za súbormi systému.</strong>
+    <a href="kontrola.php">Dobehnúť ju</a> — inak časť úprav nemá kde platiť.
+  </div>
+<?php endif; ?>
 
 <div class="alert alert-info">
   Zmena sa na webe prejaví do pol minúty — zákazníci nemusia nič obnovovať.

@@ -125,6 +125,12 @@ flash_render();
       aj s nadpismi. Fotky položiek sa menia priamo v menu.</p>
     <span class="linkcard-go">Nastaviť →</span>
   </a>
+  <a class="card linkcard" href="kontrola.php">
+    <h2>Kontrola</h2>
+    <p class="hint">Či sú na serveri všetky fotky a či prenos súborov na
+      hosting prešiel celý. Chýbajúce cesty vie opraviť jedným klikom.</p>
+    <span class="linkcard-go">Pozrieť →</span>
+  </a>
   <a class="card linkcard" href="load.php">
     <h2>Automatické časy</h2>
     <p class="hint">Keď je kuchyňa zavalená, web sám predĺži sľúbené časy.

@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { Photo } from "@/components/ui/Photo";
 import { RESTAURANT } from "@/lib/config";
 import { Reveal } from "@/components/ui/Reveal";
 import { CheckerRule } from "@/components/ui/Checkerboard";
@@ -71,20 +71,18 @@ export function BrandStory() {
           <Reveal delay={120} className="relative">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="relative aspect-4/5 w-full overflow-hidden rounded-2xl bg-ink sm:mt-8">
-                <Image
+                <Photo
                   src={storyLeft}
                   alt="Ilustračná fotka ENZO"
-                  fill
                   loading="lazy"
                   sizes="(max-width: 640px) 100vw, 28vw"
                   className="object-cover"
                 />
               </div>
               <div className="relative aspect-4/5 w-full overflow-hidden rounded-2xl bg-ink">
-                <Image
+                <Photo
                   src={storyRight}
                   alt="Ilustračná fotka ENZO"
-                  fill
                   loading="lazy"
                   sizes="(max-width: 640px) 100vw, 28vw"
                   className="object-cover"

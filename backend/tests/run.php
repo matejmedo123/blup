@@ -540,6 +540,109 @@ Settings::set('auto_prep_capacity', '5');
 Settings::flush();
 Workload::forget();
 
+/* ══════════════════════════════════════════════════════════════════ */
+describe('Cesta na fotku sa overuje, mŕtvu cestu web nedostane');
+/* ══════════════════════════════════════════════════════════════════ */
+
+Assets::forget();
+
+// Existujúca fotka nesie čas svojej poslednej zmeny, aby odložená kópia
+// v telefóne po výmene fotky prestala platiť.
+$real = Assets::versioned('/images/products/the-enzo-smash-2.webp');
+ok(
+    str_starts_with($real, '/images/products/the-enzo-smash-2.webp?v='),
+    'existujúca fotka dostane podpis verzie',
+    $real
+);
+
+// Fotky sme raz premenovali na `-2`. Stará cesta v databáze sa nemá
+// prejaviť otáznikom v karte — vieme, čo tam patrí.
+is(
+    explode('?', Assets::versioned('/images/products/the-enzo-smash.webp'))[0],
+    '/images/products/the-enzo-smash-2.webp',
+    'premenovaná fotka sa nájde pod novým názvom'
+);
+
+// Fotka nahraná z adminu má na konci šesť znakov naviac. Keď sa súbor
+// pri prenose stratí, kmeň názvu nám povie, čo tam bolo.
+is(
+    explode('?', Assets::versioned('/images/products/junior-184624.webp'))[0],
+    '/images/products/junior-2.webp',
+    'nahratá fotka sa nahradí fotkou toho istého produktu'
+);
+
+is(
+    Assets::versioned('/images/products/toto-naozaj-neexistuje.webp'),
+    '',
+    'keď náhrada nie je, API nepošle mŕtvu cestu — web ukáže vlastnú náhradu'
+);
+
+// Keď `images/` nevidíme, nevieme o ceste rozhodnúť. Tvrdiť, že fotka
+// chýba, by bola horšia chyba než nechať cestu tak.
+is(
+    Assets::versioned('/images/tento-priecinok-neexistuje/x.webp'),
+    '/images/tento-priecinok-neexistuje/x.webp',
+    'neposúditeľnú cestu necháme nedotknutú'
+);
+
+is(Assets::versioned('https://inde.sk/x.webp'), 'https://inde.sk/x.webp', 'cudzie adresy neriešime');
+
+/* ══════════════════════════════════════════════════════════════════ */
+describe('Kontrola fotiek nájde a opraví mŕtve cesty');
+/* ══════════════════════════════════════════════════════════════════ */
+
+$pid = (int) Db::value('SELECT id FROM products WHERE slug = ?', ['the-enzo-smash']);
+$originalImage = (string) Db::value('SELECT image FROM products WHERE id = ?', [$pid]);
+
+Db::run('UPDATE products SET image = ? WHERE id = ?', ['/images/products/the-enzo-smash.webp', $pid]);
+Assets::forget();
+
+$found = null;
+foreach (AssetAudit::report() as $row) {
+    if ($row['path'] === '/images/products/the-enzo-smash.webp') {
+        $found = $row;
+    }
+}
+ok($found !== null, 'kontrola mŕtvu cestu nájde');
+is($found['state'] ?? '', 'alternative', 'a vie, že náhrada existuje');
+is($found['suggestion'] ?? '', '/images/products/the-enzo-smash-2.webp', 'aj ktorá to je');
+
+ok(AssetAudit::repair() > 0, 'oprava cesty prepíše');
+is(
+    (string) Db::value('SELECT image FROM products WHERE id = ?', [$pid]),
+    '/images/products/the-enzo-smash-2.webp',
+    'v databáze po oprave stojí cesta, ktorá naozaj existuje'
+);
+
+Db::run('UPDATE products SET image = ? WHERE id = ?', [$originalImage, $pid]);
+Assets::forget();
+
+
+/* ══════════════════════════════════════════════════════════════════ */
+describe('Prázdna kategória sa na webe neukáže');
+/* ══════════════════════════════════════════════════════════════════ */
+
+$emptyId = Db::insert('categories', [
+    'slug' => 'test-prazdna', 'label' => 'Prázdna',
+    'title' => 'PRÁZDNA', 'caption' => '', 'position' => 99, 'is_active' => 1,
+]);
+
+$slugs = array_column(MenuRepo::publicMenu()['categories'], 'id');
+ok(!in_array('test-prazdna', $slugs, true), 'kategória bez položiek sa nepublikuje');
+
+// S položkou sa objaví — filtrujeme prázdne, nie hocičo.
+$now = date('Y-m-d H:i:s');
+Db::insert('products', [
+    'slug' => 'test-polozka', 'category_id' => $emptyId, 'name' => 'Testovacia',
+    'description' => '', 'price_cents' => 500, 'position' => 1,
+    'created_at' => $now, 'updated_at' => $now,
+]);
+$slugs = array_column(MenuRepo::publicMenu()['categories'], 'id');
+ok(in_array('test-prazdna', $slugs, true), 's položkou sa kategória objaví');
+
+Db::run('DELETE FROM products WHERE slug = ?', ['test-polozka']);
+Db::run('DELETE FROM categories WHERE id = ?', [$emptyId]);
+
 
 test_open_shop();
 

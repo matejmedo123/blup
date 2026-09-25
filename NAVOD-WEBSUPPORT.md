@@ -526,12 +526,25 @@ Pravidlá projektu sú v `CLAUDE.md`, stav prác v `progress.md`.
 Keď dostaneš novú verziu balíka:
 
 1. Zazálohuj si databázu.
-2. Nahraj nové súbory a **prepíš** staré.
+2. Nahraj nové súbory a **prepíš** staré. Nahrávaj **celé priečinky**
+   `api/`, `admin/`, `images/`, `_next/` a súbory v koreni — nie len tie,
+   o ktorých si myslíš, že sa zmenili.
 3. **`api/config.php` nechaj tak, ako je** — nový balík ho neobsahuje,
    takže sa neprepíše.
-4. Ak je v balíku `install.php`, po prípadnej aktualizácii databázy ho zmaž.
+4. Otvor **Menu → Kontrola** v admine. Stránka porovná, čo na serveri
+   naozaj leží, s tým, čo bolo v balíku, a povie:
+   - či prenos prešiel celý (chýbajúce a staré súbory vypíše po jednom),
+   - či databáza nezaostala za súbormi — vtedy je tam tlačidlo
+     **Dobehnúť databázu**,
+   - či sedia všetky fotky; pre tie, ktorým sa stratil súbor, ponúkne
+     **Opraviť cesty**.
+5. Ak je v balíku `install.php`, po prípadnej aktualizácii databázy ho zmaž.
 
 Menu a nastavenia sú v databáze, aktualizácia ich neprepíše.
+
+> **Prenos cez FTP zlyháva potichu.** Keď sa nedonesie jeden PHP súbor,
+> stránka beží ďalej — len sa časť systému správa po starom. Preto po
+> každom nasadení otvor **Menu → Kontrola**; je to otázka piatich sekúnd.
 
 ---
 
@@ -541,6 +554,12 @@ Menu a nastavenia sú v databáze, aktualizácia ich neprepíše.
 Web má v sebe záložnú kópiu menu pre prípad, že server neodpovie. Ak vidíš
 staré ceny, otvor `https://tvojadomena.sk/api/menu.php` — musí sa zobraziť text
 začínajúci `{"ok":true`. Ak je tam chyba, pozri `storage/logs/php-error.log`.
+
+**Namiesto fotky je otáznik alebo plocha s nápisom ENZO**
+Znamená to, že súbor s fotkou na serveri nie je — prenos priečinka
+`images/` neprešiel celý. Otvor **Menu → Kontrola**: vypíše presne, ktorým
+fotkám súbor chýba. Kde sa dá, opraví cestu tlačidlom **Opraviť cesty**;
+zvyšné fotky nahraj z počítača priamo pri položke.
 
 **„Objednávku sa nepodarilo odoslať“**
 Skoro vždy je to zle vyplnený `config.php`. Skontroluj údaje k databáze.

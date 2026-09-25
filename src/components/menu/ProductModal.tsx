@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { Photo } from "@/components/ui/Photo";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExtraOption, Product } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
@@ -150,15 +150,7 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
             <div className="sm:grid sm:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)]">
               {/* Obrázok */}
               <div className="relative aspect-16/10 w-full shrink-0 bg-cream-200 sm:sticky sm:top-0 sm:aspect-auto sm:h-full sm:min-h-[26rem]">
-                {product.image ? (
-                  <Image
-                    src={product.image}
-                    alt={product.imageAlt ?? product.name}
-                    fill
-                    sizes="(max-width: 640px) 100vw, 45vw"
-                    className="object-cover"
-                  />
-                ) : product.lid ? (
+                {!product.image && product.lid ? (
                   <div className="absolute inset-0 bg-gradient-to-b from-cream-200 to-cream-300">
                     <SauceLid
                       lines={product.lid.lines}
@@ -166,7 +158,14 @@ function ProductModalPanel({ product, onClose, onAdd }: ProductModalPanelProps) 
                       className="absolute inset-0"
                     />
                   </div>
-                ) : null}
+                ) : (
+                  <Photo
+                    src={product.image}
+                    alt={product.imageAlt ?? product.name}
+                    sizes="(max-width: 640px) 100vw, 45vw"
+                    className="object-cover"
+                  />
+                )}
                 {product.badge && (
                   <span className="absolute top-4 left-4 rounded-full bg-gold px-3.5 py-2 font-sans text-[0.65rem] font-extrabold tracking-[0.14em] text-ink uppercase">
                     {product.badge}

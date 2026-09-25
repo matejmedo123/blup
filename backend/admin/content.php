@@ -84,7 +84,10 @@ flash_render();
 ?>
 <div class="page-head">
   <div><p class="eyebrow">Web</p><h1>Fotky a texty na webe</h1></div>
-  <a class="btn btn-ghost" href="settings.php">Späť na nastavenia</a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a class="btn btn-ghost" href="kontrola.php">Kontrola</a>
+    <a class="btn btn-ghost" href="settings.php">Späť na nastavenia</a>
+  </div>
 </div>
 
 <div class="alert alert-info">

@@ -86,6 +86,21 @@ function e(mixed $v): string
     return htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * Počítateľný tvar slova po slovensky: 1 fotka, 2 fotky, 5 fotiek.
+ * Hlášky v admine sa inak čítajú ako strojový preklad.
+ */
+function sk_count(int $n, string $one, string $few, string $many): string
+{
+    $word = match (true) {
+        $n === 1            => $one,
+        $n >= 2 && $n <= 4  => $few,
+        default             => $many,
+    };
+
+    return $n . ' ' . $word;
+}
+
 /** Presmerovanie s jednorazovou hláškou. */
 function flash_redirect(string $url, string $type, string $message): never
 {
