@@ -339,7 +339,7 @@ export function Checkout() {
                     type="tel"
                     inputMode="tel"
                     autoComplete="tel"
-                    placeholder="0948 238 346"
+                    placeholder="0918 637 602"
                     value={customer.phone}
                     onChange={(e) => update("phone", e.target.value)}
                     error={errors.phone}
@@ -530,8 +530,7 @@ export function Checkout() {
               </button>
 
               <p className="mt-3 text-center text-[0.72rem] text-ink/45">
-                Odoslaním potvrdzuješ objednávku. Ide o demo prototyp — reálna platba
-                sa nespracuje.
+                Odoslaním potvrdzuješ objednávku a súhlasíš s obchodnými podmienkami.
               </p>
             </div>
           </form>

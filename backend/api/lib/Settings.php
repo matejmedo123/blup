@@ -15,7 +15,7 @@ final class Settings
         'shop_street'          => 'Koniarovce 290',
         'shop_city'            => 'Koniarovce',
         'shop_postal_code'     => '956 13',
-        'shop_phone'           => '0948 238 346',
+        'shop_phone'           => '0918 637 602',
         'shop_email'           => 'objednavky@enzo.sk',
         'company_name'         => 'ENZIK s.r.o.',
         'company_ico'          => '57579661',
@@ -44,6 +44,27 @@ final class Settings
         'notice_title'         => 'DNES OFICIÁLNA OTVÁRAČKA',
         'notice_text'          => 'Tešíme sa na teba v Koniarovciach. Objednávať cez web sa bude dať od 28. 9. 2026.',
         'notice_cta'           => 'Pozrieť menu',
+
+        // Ilustračné fotky a texty na webe. Prázdna hodnota = ostane to,
+        // čo je v kóde, aby sa stránka nikdy nerozpadla na prázdne miesta.
+        'content_hero_image'   => '/images/editorial/hero-burger.webp',
+        'content_hero_alt'     => 'Košíky s ENZO smash burgermi a objednávkovou podložkou',
+
+        'content_promo1_image' => '/images/editorial/promo-combo.webp',
+        'content_promo1_title' => 'Double is better.',
+        'content_promo1_text'  => 'Pridaj extra porciu mäsa a rozdiel pocítiš hneď pri prvom hryzení.',
+
+        'content_promo2_image' => '/images/editorial/dark-burger.webp',
+        'content_promo2_title' => 'Meet the Enzo.',
+        'content_promo2_text'  => 'Náš signature smash burger. Chedar, ENZO omáčka, žiadne kompromisy.',
+
+        'content_promo3_image' => '/images/products/trippple-king.webp',
+        'content_promo3_title' => 'Tripple King.',
+        'content_promo3_text'  => 'Tri smashed porcie, trojitý chedar. Keď jedna proste nestačí.',
+
+        'content_story1_image' => '/images/editorial/story-duo.webp',
+        'content_story2_image' => '/images/products/crispy-chicken-burger.webp',
+        'content_story_badge'  => 'Smashed, nie grilované.',
 
         'delivery_zones'       => "Koniarovce\nPreseľany\nLudanice\nChrabrany\nTopoľčany\nNitrianska Streda",
         'opening_hours'        => "Pondelok — Štvrtok|11:00 — 21:00\nPiatok — Sobota|11:00 — 22:00\nNedeľa|12:00 — 21:00",

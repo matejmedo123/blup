@@ -1,13 +1,22 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { ORDER_CONFIG, RESTAURANT } from "@/lib/config";
 import { LogoBadge } from "@/components/ui/Logo";
+import { useMenu } from "@/context/MenuContext";
 
 /**
  * Editoriálne hero: krémový typografický blok vľavo, veľká fotka vpravo,
  * bordový pás s claimom a šachovnicové detaily — priamy preklad brand boardu.
  */
 export function Hero() {
+  // Fotku si prevádzka mení v admine; kým nič nenastaví, platí táto.
+  const { content } = useMenu();
+  const heroImage = content.heroImage || "/images/editorial/hero-burger.webp";
+  const heroAlt =
+    content.heroAlt || "Košíky s ENZO smash burgermi a objednávkovou podložkou";
+
   return (
     <section aria-labelledby="hero-heading" className="relative overflow-hidden bg-cream">
       <div className="container-enzo">
@@ -85,8 +94,8 @@ export function Hero() {
           <div className="relative -mx-5 min-h-[22rem] sm:-mx-8 lg:mx-0 lg:min-h-[42rem]">
             <div className="relative h-full min-h-[22rem] w-full overflow-hidden bg-ink lg:min-h-[42rem]">
               <Image
-                src="/images/editorial/hero-burger.webp"
-                alt="Košíky s ENZO smash burgermi a objednávkovou podložkou"
+                src={heroImage}
+                alt={heroAlt}
                 fill
                 priority
                 sizes="(max-width: 1024px) 100vw, 50vw"

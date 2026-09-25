@@ -32,7 +32,7 @@ final class Validate
         if ($get('phone') === '') {
             $e['phone'] = 'Zadajte telefónne číslo.';
         } elseif (!preg_match(self::PHONE_RE, $get('phone'))) {
-            $e['phone'] = 'Zadajte platné číslo, napr. 0948 238 346.';
+            $e['phone'] = 'Zadajte platné číslo, napr. 0918 637 602.';
         }
 
         if ($get('email') === '') {

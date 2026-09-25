@@ -132,6 +132,14 @@ export interface ShopSettings {
   hours: { days: string; time: string }[];
   /** Obce, kam sa rozváža — každá s vlastným poplatkom a minimom. */
   zones: DeliveryZone[];
+  /** Ilustračné fotky a texty, ktoré si prevádzka mení v admine. */
+  content: {
+    heroImage: string;
+    heroAlt: string;
+    promo: { image: string; title: string; text: string }[];
+    storyImages: string[];
+    storyBadge: string;
+  };
   /** Oznam, ktorý sa po otvorení webu ukáže v okne. */
   notice: { enabled: boolean; title: string; text: string; cta: string };
   /** Ako je vyťažená kuchyňa. Server podľa toho sám predlžuje časy. */

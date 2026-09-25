@@ -16,8 +16,8 @@ export const RESTAURANT = {
     postalCode: "956 13",
     country: "Slovensko",
   },
-  phone: "0948 238 346",
-  phoneHref: "+421948238346",
+  phone: "0918 637 602",
+  phoneHref: "+421918637602",
   email: "objednavky@enzo.sk",
   instagram: "https://instagram.com",
   facebook: "https://facebook.com",
@@ -56,6 +56,6 @@ export const ORDER_CONFIG = {
   minOrder: 12,
   estimatedTimePickup: "15 — 25 min",
   estimatedTimeDelivery: "35 — 50 min",
-  /** Počiatočné číslo objednávky pre demo */
+  /** Počiatočné číslo objednávky */
   firstOrderNumber: 1041,
 } as const;

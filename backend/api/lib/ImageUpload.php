@@ -25,10 +25,14 @@ final class ImageUpload
         IMAGETYPE_WEBP => 'webp',
     ];
 
+    /** Kam sa smie nahrávať. Voľný priečinok by bol diera. */
+    private const FOLDERS = ['products', 'editorial'];
+
     /** Priečinok s fotkami vo webovom koreni (vedľa `admin/` a `api/`). */
-    public static function dir(): string
+    public static function dir(string $folder = 'products'): string
     {
-        return dirname(__DIR__, 2) . '/images/products';
+        $folder = in_array($folder, self::FOLDERS, true) ? $folder : 'products';
+        return dirname(__DIR__, 2) . '/images/' . $folder;
     }
 
     /**
@@ -37,7 +41,7 @@ final class ImageUpload
      * @param array{name?:string,type?:string,tmp_name?:string,error?:int,size?:int} $file
      * @return array{ok:bool,path:?string,error:?string}
      */
-    public static function store(array $file, string $slug): array
+    public static function store(array $file, string $slug, string $folder = 'products'): array
     {
         $err = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
         if ($err === UPLOAD_ERR_NO_FILE) {
@@ -63,12 +67,12 @@ final class ImageUpload
             return self::fail('Toto nie je obrázok. Podporujeme JPG, PNG a WebP.');
         }
 
-        $dir = self::dir();
+        $dir = self::dir($folder);
         if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
-            return self::fail('Priečinok images/products sa nedá vytvoriť.');
+            return self::fail('Priečinok images/' . basename($dir) . ' sa nedá vytvoriť.');
         }
         if (!is_writable($dir)) {
-            return self::fail('Do priečinka images/products sa nedá zapisovať — skontroluj práva.');
+            return self::fail('Do priečinka images/' . basename($dir) . ' sa nedá zapisovať — skontroluj práva.');
         }
 
         $base = preg_replace('/[^a-z0-9-]+/', '-', mb_strtolower($slug !== '' ? $slug : 'fotka')) ?: 'fotka';
@@ -80,7 +84,7 @@ final class ImageUpload
         }
 
         self::protectDir($dir);
-        return ['ok' => true, 'path' => '/images/products/' . $saved, 'error' => null];
+        return ['ok' => true, 'path' => '/images/' . basename($dir) . '/' . $saved, 'error' => null];
     }
 
     /**
@@ -90,21 +94,38 @@ final class ImageUpload
     public static function discard(?string $path, int $keepProductId = 0): void
     {
         $path = trim((string) $path);
-        if ($path === '' || !str_starts_with($path, '/images/products/')) {
-            return;
-        }
         $name = basename($path);
         if ($name === '' || str_contains($name, '..')) {
             return;
         }
+
+        $folder = null;
+        foreach (self::FOLDERS as $f) {
+            if (str_starts_with($path, '/images/' . $f . '/')) {
+                $folder = $f;
+            }
+        }
+        if ($folder === null) {
+            return; // cudziu cestu (napr. ručne zadanú) nechávame na pokoji
+        }
+
+        // Mažeme len to, čo sme sami nahrali — poznáme to podľa náhodnej
+        // prípony v názve. Fotky, ktoré prišli v balíku, ostávajú: keby
+        // sa niekto vrátil k pôvodnej ceste, súbor tam ešte je.
+        if (preg_match('/-[0-9a-f]{6}\.(webp|jpg)$/', $name) !== 1) {
+            return;
+        }
+
+        // Fotku nikdy nemažeme, kým na ňu ešte niečo ukazuje.
         $used = (int) Db::value(
             'SELECT COUNT(*) FROM products WHERE image = ? AND id <> ?',
             [$path, $keepProductId]
         );
+        $used += (int) Db::value('SELECT COUNT(*) FROM settings WHERE value = ?', [$path]);
         if ($used > 0) {
             return;
         }
-        @unlink(self::dir() . '/' . $name);
+        @unlink(self::dir($folder) . '/' . $name);
     }
 
     /** Načíta obrázok, zmenší ho a uloží ako WebP (alebo JPEG, keď WebP nie je). */

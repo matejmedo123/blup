@@ -338,6 +338,13 @@ s prehliadačom.
 - predpokladané časy prípravy (základ, ku ktorému sa pripočítava vyťaženie)
 - text, ktorý sa ukáže, keď neprijímaš objednávky
 
+### Ilustračné fotky a texty na webe
+V **Nastavenia → Fotky a texty na webe** sa mení veľká fotka navrchu
+stránky, tri dlaždice (fotka, nadpis, text) a dve fotky pri sekcii
+o značke. Fotku nahráš z počítača rovnako ako pri položke menu.
+
+Fotky položiek menu sa menia priamo pri položke v **Menu**.
+
 ### Oznam na webe
 V **Nastaveniach** je skupina **Oznam na webe**: nadpis, text a tlačidlo.
 Keď je zapnutý, návštevníkovi po otvorení stránky vyskočí okno. Kto ho

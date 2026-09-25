@@ -58,6 +58,17 @@ interface MenuContextValue {
     instagram: string;
     facebook: string;
   };
+  /**
+   * Ilustračné fotky a texty. Prázdna hodnota zo servera znamená
+   * „nechaj to, čo je v kóde“ — stránka sa nikdy nerozpadne na prázdno.
+   */
+  content: {
+    heroImage: string;
+    heroAlt: string;
+    promo: { image: string; title: string; text: string }[];
+    storyImages: string[];
+    storyBadge: string;
+  };
   /** Oznam do vyskakovacieho okna. Texty si píše prevádzka v admine. */
   notice: { enabled: boolean; title: string; text: string; cta: string };
   /** Fakturačné údaje do pätičky a na doklad — tiež z adminu. */
@@ -125,6 +136,13 @@ export function MenuProvider({ children }: { children: ReactNode }) {
   const [shop, setShop] = useState(FALLBACK_SHOP);
   const [company, setCompany] = useState(FALLBACK_COMPANY);
   const [notice, setNotice] = useState({ enabled: false, title: "", text: "", cta: "" });
+  const [content, setContent] = useState<MenuContextValue["content"]>({
+    heroImage: "",
+    heroAlt: "",
+    promo: [],
+    storyImages: [],
+    storyBadge: "",
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -151,6 +169,15 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           prepTimeDelivery: shop.order.prepTimeDelivery,
         });
         setPayments(shop.payments);
+        if (shop.content) {
+          setContent({
+            heroImage: shop.content.heroImage ?? "",
+            heroAlt: shop.content.heroAlt ?? "",
+            promo: shop.content.promo ?? [],
+            storyImages: shop.content.storyImages ?? [],
+            storyBadge: shop.content.storyBadge ?? "",
+          });
+        }
         if (shop.notice) {
           setNotice({
             enabled: shop.notice.enabled === true,
@@ -235,8 +262,9 @@ export function MenuProvider({ children }: { children: ReactNode }) {
       shop,
       company,
       notice,
+      content,
     };
-  }, [categories, products, live, settings, payments, zones, open, hours, load, shop, company, notice]);
+  }, [categories, products, live, settings, payments, zones, open, hours, load, shop, company, notice, content]);
 
   return <MenuContext.Provider value={value}>{children}</MenuContext.Provider>;
 }

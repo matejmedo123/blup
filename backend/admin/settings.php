@@ -119,6 +119,12 @@ flash_render();
       s obmedzením počtu použití a platnosti.</p>
     <span class="linkcard-go">Nastaviť →</span>
   </a>
+  <a class="card linkcard" href="content.php">
+    <h2>Fotky a texty na webe</h2>
+    <p class="hint">Veľká fotka navrchu, dlaždice a fotky pri značke —
+      aj s nadpismi. Fotky položiek sa menia priamo v menu.</p>
+    <span class="linkcard-go">Nastaviť →</span>
+  </a>
   <a class="card linkcard" href="load.php">
     <h2>Automatické časy</h2>
     <p class="hint">Keď je kuchyňa zavalená, web sám predĺži sľúbené časy.

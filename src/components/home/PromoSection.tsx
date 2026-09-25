@@ -1,6 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { Reveal } from "@/components/ui/Reveal";
+import { useMenu } from "@/context/MenuContext";
 
 const TILES = [
   {
@@ -27,6 +30,20 @@ const TILES = [
 ];
 
 export function PromoSection() {
+  // Prevádzka si dlaždice mení v admine — prázdne pole znamená,
+  // že ostáva to, čo je tu v kóde.
+  const { content } = useMenu();
+  const tiles = TILES.map((tile, i) => {
+    const edited = content.promo[i];
+    if (!edited) return tile;
+    return {
+      ...tile,
+      src: edited.image || tile.src,
+      title: edited.title || tile.title,
+      text: edited.text || tile.text,
+    };
+  });
+
   return (
     <section aria-labelledby="promo-heading" className="bg-ink py-16 text-cream lg:py-24">
       <div className="container-enzo">
@@ -49,7 +66,7 @@ export function PromoSection() {
         </Reveal>
 
         <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {TILES.map((t, i) => (
+          {tiles.map((t, i) => (
             <Reveal as="li" key={t.title} delay={i * 100} className="h-full">
               <article className="group relative flex h-full min-h-[22rem] flex-col justify-end overflow-hidden rounded-2xl">
                 <Image

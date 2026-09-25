@@ -163,7 +163,7 @@ layout_start($isNew ? 'Nová položka' : 'Upraviť položku', 'menu', $user);
   <div class="alert alert-err">Skontroluj prosím zvýraznené polia.</div>
 <?php endif; ?>
 
-<form method="post" enctype="multipart/form-data">
+<form method="post" enctype="multipart/form-data" id="productForm">
   <?= Csrf::field() ?>
   <div class="grid grid-2">
     <div class="card">
@@ -276,19 +276,27 @@ layout_start($isNew ? 'Nová položka' : 'Upraviť položku', 'menu', $user);
     </div>
   </div>
 
-  <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
-    <button class="btn btn-lg" type="submit"><?= $isNew ? 'Pridať položku' : 'Uložiť zmeny' ?></button>
-    <a class="btn btn-lg btn-ghost" href="menu.php">Zrušiť</a>
-    <?php if (!$isNew): ?>
-      <form method="post" action="menu.php" style="margin-left:auto"
-            onsubmit="return confirm('Naozaj zmazať túto položku? Objednávky ostanú nedotknuté.')">
-        <?= Csrf::field() ?>
-        <input type="hidden" name="action" value="delete">
-        <input type="hidden" name="product_id" value="<?= (int) $id ?>">
-        <button class="btn btn-lg btn-danger" type="submit">Zmazať</button>
-      </form>
-    <?php endif; ?>
-  </div>
 </form>
+
+<?php /* Mazanie je vlastný formulár — vnorený vo formulári položky ho
+         prehliadač zahodí a tlačidlo potom položku namiesto zmazania
+         uložilo. Preto stojí samostatne a tlačidlá sa k formulárom
+         viažu cez atribút `form`. */ ?>
+<?php if (!$isNew): ?>
+  <form method="post" action="menu.php" id="deleteForm"
+        onsubmit="return confirm('Naozaj zmazať túto položku? Objednávky ostanú nedotknuté.')">
+    <?= Csrf::field() ?>
+    <input type="hidden" name="action" value="delete">
+    <input type="hidden" name="product_id" value="<?= (int) $id ?>">
+  </form>
+<?php endif; ?>
+
+<div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
+  <button class="btn btn-lg" type="submit" form="productForm"><?= $isNew ? 'Pridať položku' : 'Uložiť zmeny' ?></button>
+  <a class="btn btn-lg btn-ghost" href="menu.php">Zrušiť</a>
+  <?php if (!$isNew): ?>
+    <button class="btn btn-lg btn-danger" type="submit" form="deleteForm" style="margin-left:auto">Zmazať</button>
+  <?php endif; ?>
+</div>
 
 <?php layout_end(); ?>

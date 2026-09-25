@@ -35,6 +35,9 @@ z čistej inštalácie.
 - [x] Nahrávanie fotiek položiek z počítača priamo v admine
 - [x] Kontakt, siete a fakturačné údaje z adminu sa prejavia na webe
 - [x] Oznam po otvorení stránky, nastaviteľný z adminu
+- [x] Ilustračné fotky a texty na webe sa menia z adminu
+- [x] Pizza zmazaná z databázy načisto (migrácia 005), nové telefónne číslo
+- [x] Právne texty prepísané na ostrú prevádzku
 - [x] Testy: 122 backendových + 32 E2E kontrol cez celý cyklus objednávky
 - [x] Finálny audit, build, zabalenie
 

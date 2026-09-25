@@ -30,11 +30,6 @@ export function LegalPage({
 
       <div className="container-enzo py-12 lg:py-20">
         <div className="max-w-3xl">
-          <p className="mb-10 rounded-xl border border-gold/50 bg-gold/12 px-5 py-4 text-[0.88rem] text-ink/75">
-            <strong>Pozn.:</strong> Toto je demo prototyp webu. Text je vzorový a
-            neslúži ako záväzný právny dokument.
-          </p>
-
           {sections.map((s) => (
             <section key={s.heading} className="mb-10">
               <h2 className="font-display text-[1.6rem] leading-[1.05] text-ink sm:text-[2rem]">

@@ -1,7 +1,10 @@
+"use client";
+
 import Image from "next/image";
 import { RESTAURANT } from "@/lib/config";
 import { Reveal } from "@/components/ui/Reveal";
 import { CheckerRule } from "@/components/ui/Checkerboard";
+import { useMenu } from "@/context/MenuContext";
 
 const VALUES = [
   {
@@ -23,6 +26,13 @@ const VALUES = [
 ];
 
 export function BrandStory() {
+  // Obe fotky aj text v zlatom rámčeku sa dajú vymeniť v admine.
+  const { content } = useMenu();
+  const storyLeft = content.storyImages[0] || "/images/editorial/story-duo.webp";
+  const storyRight =
+    content.storyImages[1] || "/images/products/crispy-chicken-burger.webp";
+  const badge = content.storyBadge || "Smashed, nie grilované.";
+
   return (
     <section id="o-nas" aria-labelledby="o-nas-heading" className="bg-burgundy text-cream">
       <CheckerRule className="text-cream" size="0.75rem" />
@@ -62,8 +72,8 @@ export function BrandStory() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="relative aspect-4/5 w-full overflow-hidden rounded-2xl bg-ink sm:mt-8">
                 <Image
-                  src="/images/editorial/story-duo.webp"
-                  alt="Štyri ENZO burgery v košíkoch na drevenom stole"
+                  src={storyLeft}
+                  alt="Ilustračná fotka ENZO"
                   fill
                   loading="lazy"
                   sizes="(max-width: 640px) 100vw, 28vw"
@@ -72,8 +82,8 @@ export function BrandStory() {
               </div>
               <div className="relative aspect-4/5 w-full overflow-hidden rounded-2xl bg-ink">
                 <Image
-                  src="/images/products/crispy-chicken-burger.webp"
-                  alt="Crispy Chicken Burger s coleslawom"
+                  src={storyRight}
+                  alt="Ilustračná fotka ENZO"
                   fill
                   loading="lazy"
                   sizes="(max-width: 640px) 100vw, 28vw"
@@ -83,7 +93,7 @@ export function BrandStory() {
             </div>
             <div className="mt-5 inline-flex rounded-xl bg-gold px-5 py-4">
               <p className="font-display text-[1.15rem] leading-none text-ink">
-                Smashed, nie grilované.
+                {badge}
               </p>
             </div>
           </Reveal>

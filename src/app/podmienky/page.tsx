@@ -31,7 +31,7 @@ export default function TermsPage() {
         {
           heading: "3. Platba",
           body: [
-            "Objednávku je možné uhradiť platobnou kartou online alebo v hotovosti pri prevzatí. V tejto demo verzii nie je platobná brána napojená a žiadna reálna platba sa nespracuje.",
+            "Objednávku je možné uhradiť v hotovosti pri prevzatí alebo platobnou kartou online, ak je táto možnosť v pokladni ponúknutá. Platbu kartou spracúva platobná brána.",
           ],
         },
         {

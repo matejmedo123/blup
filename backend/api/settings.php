@@ -56,6 +56,24 @@ try {
             },
             DeliveryZones::publicList(),
         ),
+        // Ilustračné fotky a texty — web ich preberá, keď sú vyplnené.
+        'content' => [
+            'heroImage'   => (string) Settings::get('content_hero_image'),
+            'heroAlt'     => (string) Settings::get('content_hero_alt'),
+            'promo'       => array_map(
+                static fn (int $i): array => [
+                    'image' => (string) Settings::get("content_promo{$i}_image"),
+                    'title' => (string) Settings::get("content_promo{$i}_title"),
+                    'text'  => (string) Settings::get("content_promo{$i}_text"),
+                ],
+                [1, 2, 3],
+            ),
+            'storyImages' => [
+                (string) Settings::get('content_story1_image'),
+                (string) Settings::get('content_story2_image'),
+            ],
+            'storyBadge'  => (string) Settings::get('content_story_badge'),
+        ],
         // Oznam sa posiela vždy; či sa zobrazí, rozhodne prepínač.
         'notice' => [
             'enabled' => Settings::bool('notice_enabled'),

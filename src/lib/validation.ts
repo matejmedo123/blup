@@ -41,7 +41,7 @@ export function validateCheckout({
   if (!customer.phone.trim()) {
     errors.phone = "Zadajte telefónne číslo.";
   } else if (!PHONE_RE.test(customer.phone.trim())) {
-    errors.phone = "Zadajte platné číslo, napr. 0948 238 346.";
+    errors.phone = "Zadajte platné číslo, napr. 0918 637 602.";
   }
 
   if (!customer.email.trim()) {
