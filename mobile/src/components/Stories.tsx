@@ -307,12 +307,18 @@ export function StoryViewer({
               <Animated.View
                 style={[
                   styles.barFill,
+                  // Not yet watched: empty. Watched: full. Playing: animated.
+                  at > index && styles.barEmpty,
                   at < index && styles.barDone,
+                  // scaleX, not an animated width. A width given as a
+                  // percentage does not animate on react-native-web — the bar
+                  // simply sat at full from the first frame — and a transform
+                  // is what the compositor can move without a layout pass
+                  // anyway. transformOrigin keeps it growing from the left
+                  // instead of out from the middle.
                   at === index && {
-                    width: progress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
+                    transform: [{ scaleX: progress }],
+                    transformOrigin: 'left center',
                   },
                 ]}
               />
@@ -572,8 +578,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.22)',
     overflow: 'hidden',
   },
-  barFill: { height: '100%', borderRadius: 2, backgroundColor: '#FFFFFF' },
-  barDone: { width: '100%' },
+  barFill: { width: '100%', height: '100%', borderRadius: 2, backgroundColor: '#FFFFFF' },
+  barDone: { transform: [{ scaleX: 1 }] },
+  barEmpty: { transform: [{ scaleX: 0 }], transformOrigin: 'left center' },
 
   head: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
