@@ -16,6 +16,9 @@ import { supabase } from '@/lib/supabase';
 const MAX_BYTES = 5 * 1024 * 1024;
 /** A GIF cannot be compressed on the way up, so it gets its own, larger cap. */
 const GIF_MAX_BYTES = 8 * 1024 * 1024;
+/** What a story video may weigh and last. The bucket enforces the bytes too. */
+const STORY_VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+export const STORY_VIDEO_SECONDS = 15;
 
 export type PickSource = 'library' | 'camera';
 
@@ -106,6 +109,113 @@ export async function pickGif(): Promise<PickedImage | null> {
     height: asset.height ?? 0,
     mimeType: 'image/gif',
   };
+}
+
+/**
+ * Picks a story: a photo or a short video.
+ *
+ * `videoMaxDuration` and `videoQuality` are not suggestions the app checks
+ * afterwards — the system picker enforces them and hands back a file it has
+ * already re-encoded, using the phone's own hardware encoder. That is the
+ * "prekonvertuje pri nahrávaní" part, and it is why a fifteen-second clip
+ * arrives as a few megabytes instead of a few dozen.
+ *
+ * The web has no such picker: a browser returns the file untouched. So the
+ * size is checked before the upload and a too-large file is refused with a
+ * sentence that says what to do, rather than failing inside storage.
+ */
+export interface PickedStory extends PickedImage {
+  kind: 'image' | 'video';
+  /** Seconds. Only known for video, and only where the picker reports it. */
+  duration?: number;
+}
+
+export async function pickStory(
+  source: PickSource = 'library',
+): Promise<PickedStory | null> {
+  const permission =
+    source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+  if (!permission.granted) {
+    throw new Error(
+      source === 'camera'
+        ? 'Prístup ku kamere je vypnutý. Zapni ho v Nastaveniach.'
+        : 'Prístup k fotkám je vypnutý. Zapni ho v Nastaveniach.',
+    );
+  }
+
+  const options: ImagePicker.ImagePickerOptions = {
+    mediaTypes: ['images', 'videos'],
+    allowsEditing: false,
+    quality: 0.9,
+    // Fifteen seconds is what a story is. It also bounds what has to be stored
+    // for the day it lives, which is the whole reason a cap exists.
+    videoMaxDuration: STORY_VIDEO_SECONDS,
+    videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+  };
+
+  const result = source === 'camera'
+    ? await ImagePicker.launchCameraAsync(options)
+    : await ImagePicker.launchImageLibraryAsync(options);
+
+  if (result.canceled || !result.assets?.[0]) return null;
+
+  const asset = result.assets[0];
+  const isVideo = asset.type === 'video'
+    || (asset.mimeType ?? '').startsWith('video/');
+
+  return {
+    uri: asset.uri,
+    width: asset.width ?? 0,
+    height: asset.height ?? 0,
+    mimeType: asset.mimeType ?? (isVideo ? 'video/mp4' : 'image/jpeg'),
+    kind: isVideo ? 'video' : 'image',
+    duration: asset.duration ? asset.duration / 1000 : undefined,
+  };
+}
+
+/**
+ * A story video, uploaded as it came out of the picker.
+ *
+ * Deliberately no re-encode here. The picker already did one with the phone's
+ * hardware encoder; doing a second pass in JavaScript would take minutes, heat
+ * the device and make the file worse. What this does instead is refuse a file
+ * that is too big *before* it is uploaded, so the failure is a sentence rather
+ * than a rejected request from storage.
+ */
+export async function uploadStoryVideo(uri: string, mimeType?: string): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) throw new Error('UNAUTHENTICATED');
+
+  const response = await fetch(uri);
+  const arrayBuffer = await response.arrayBuffer();
+
+  if (arrayBuffer.byteLength > STORY_VIDEO_MAX_BYTES) {
+    const mb = Math.round(arrayBuffer.byteLength / (1024 * 1024));
+    throw new Error(
+      `Toto video má ${mb} MB, viac než povolených 25 MB. `
+      + `Skús kratšie — príbeh berie najviac ${STORY_VIDEO_SECONDS} sekúnd.`,
+    );
+  }
+
+  // The bucket accepts mp4, quicktime and webm; anything else is refused there
+  // too, so guessing a type it does not know would only move the error.
+  const type = (mimeType ?? '').startsWith('video/') ? mimeType! : 'video/mp4';
+  const extension = type === 'video/quicktime' ? 'mov' : type === 'video/webm' ? 'webm' : 'mp4';
+
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+
+  const { error } = await supabase.storage
+    .from('stories')
+    .upload(path, arrayBuffer, { contentType: type, upsert: false });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from('stories').getPublicUrl(path);
+  return data.publicUrl;
 }
 
 /**

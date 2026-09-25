@@ -14,7 +14,9 @@ import {
   type CommunityPost, type FeedNewEvent,
 } from '@/api/communities';
 import { createStory } from '@/api/stories';
-import { pickImage, uploadCommunityImage, uploadStoryImage } from '@/storage/uploads';
+import {
+  pickImage, pickStory, uploadCommunityImage, uploadStoryImage, uploadStoryVideo,
+} from '@/storage/uploads';
 import { createPost } from '@/api/communities';
 import { StoryRow } from '@/components/Stories';
 import { SponsoredCard } from '@/components/SponsoredCard';
@@ -29,6 +31,7 @@ import {
 } from '@/components/ui';
 import { SiteFooter } from '@/components/SiteFooter';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { CARD_MAX } from '@/hooks/useLayout';
 import { GradientCover } from '@/components/GradientCover';
 import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
 
@@ -137,18 +140,31 @@ export default function FeedScreen() {
     return rows;
   }, [posts.data, announcements.data]);
 
-  /** Opening the story composer: pick a picture, then post it. */
+  /** Pick a photo or a short video, then post it as a story. */
   const addStory = async () => {
     if (!requireAuth('Príbeh sa pripína k tvojmu účtu.', () => {})) return;
     setError(null);
     try {
-      const picked = await pickImage({ source: 'library', aspect: [9, 16] });
+      const picked = await pickStory('library');
       if (!picked) return;
+
       setStoryBusy(true);
-      const url = await uploadStoryImage(picked.uri, picked.width);
-      await createStory({ imageUrl: url, organizationId: postAs });
+      // A video is uploaded as the picker re-encoded it; a photo goes through
+      // the usual downscale. Sending a video down the photo path would flatten
+      // it into a single frame.
+      const url = picked.kind === 'video'
+        ? await uploadStoryVideo(picked.uri, picked.mimeType)
+        : await uploadStoryImage(picked.uri, picked.width);
+
+      await createStory({
+        imageUrl: url,
+        organizationId: postAs,
+        mediaType: picked.kind,
+      });
       await queryClient.invalidateQueries({ queryKey: ['stories'] });
-      toast.show('Príbeh je vonku — zmizne o 24 hodín');
+      toast.show(picked.kind === 'video'
+        ? 'Video je vonku — zmizne o 24 hodín'
+        : 'Príbeh je vonku — zmizne o 24 hodín');
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -406,10 +422,15 @@ function NewEventCard({ event }: { event: FeedNewEvent }) {
         onPress={() => router.push(`/event/${event.slug || event.id}`)}
         accessibilityRole="button"
       >
+        {/* `whole` rather than a fixed height: a poster is usually portrait
+            and a banner is usually very wide, and cropping either one to the
+            same 190px strip throws away the half with the line-up on it. This
+            takes the picture's own proportions, within reason. */}
         <GradientCover
           uri={event.cover_image_url}
           category={event.category}
-          height={190}
+          height={event.cover_image_url ? undefined : 190}
+          whole={Boolean(event.cover_image_url)}
           style={styles.postImage}
         />
 
@@ -553,7 +574,23 @@ const styles = StyleSheet.create({
   },
   headerButtonLabel: { ...typography.chip, color: colors.accent },
 
-  list: { paddingHorizontal: spacing.gutter, paddingBottom: spacing.xxxl, flexGrow: 1 },
+  /**
+   * Capped, not full-bleed.
+   *
+   * The feed spanned the whole window, so on a desktop a card grew to two
+   * thousand pixels wide while its cover stayed 190px tall — a poster served
+   * as a letterbox strip with the middle third of it showing. CARD_MAX is the
+   * width the rest of the app already reads at; centring it is what everything
+   * else does with a single column.
+   */
+  list: {
+    paddingHorizontal: spacing.gutter,
+    paddingBottom: spacing.xxxl,
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: CARD_MAX,
+    alignSelf: 'center',
+  },
 
   stories: { gap: spacing.lg, paddingBottom: spacing.lg },
   story: { alignItems: 'center', width: 66, gap: 6 },
@@ -604,7 +641,6 @@ const styles = StyleSheet.create({
 
   postImage: {
     width: '100%',
-    height: 190,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceElevated,
   },

@@ -12,14 +12,16 @@ Nepotrebuješ Mac, Apple developer účet ani server. Web je celá aplikácia.
 
 > Príkazy spúšťaj z koreňa rozbaleného projektu, ak nie je napísané inak.
 
-> **Už si raz nasadzoval?** Potom ťa zaujíma šesť vecí, ktoré odvtedy pribudli:
+> **Už si raz nasadzoval?** Potom ťa zaujíma sedem vecí, ktoré odvtedy pribudli:
 > serverové funkcie `email-events` (**Fáza 5b·2**) a `gif-search` (nepovinná,
 > **Fáza 5b·3**), tri nové cron joby `blup-waitlist`, `blup-invites`
 > (**Fáza 8**) a `blup-stories` (**Fáza 8**), adminské obrazovky *Stav
 > nasadenia* a *E-maily* (**Fáza 9b**), editor plánu haly s piatimi hotovými
 > predlohami (**Fáza 10b**) a kontroly, ktoré nepotrebujú nasadenie —
 > `npm run db:verify`, `check:dns`, `check:speed`, `check:webevents`, `check:seats`
-> a `./scripts/preview.sh` (**Fáza 12**). Zvyšok návodu sa nezmenil.
+> a `./scripts/preview.sh` (**Fáza 12**), a pätnásť nových kategórií eventov
+> (kvíz, šport, koncert, stand-up a ďalšie) — pribudnú samy s migráciami.
+> Zvyšok návodu sa nezmenil.
 >
 > Migrácií je teraz **102**; `npx supabase db push` dobehne len tie, ktoré ti
 > chýbajú, a **Admin → Stav nasadenia** povie, či si niektorú nepreskočil.
@@ -74,7 +76,7 @@ npx supabase link --project-ref <project-ref>    # z URL dashboardu
 npx supabase db push
 ```
 
-Aplikuje sa 102 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
+Aplikuje sa 105 migrácií: tabuľky, prístupové pravidlá, platobné funkcie,
 účtovníctvo. Trvá to pol minúty.
 
 4. V **SQL Editore** zapni rozšírenia pre plánované úlohy:
@@ -97,8 +99,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje všetkých 102 migrácií od nuly a prejde
-**474 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
+Postaví dočasnú databázu, aplikuje všetkých 105 migrácií od nuly a prejde
+**477 tvrdení** — či peniaze sedia na cent, či rezervácia drží vstupenky, či sa
 nikto nedostane k cudzím dátam. Musí skončiť `✅ Database verified`.
 
 Ak toto prejde, schéma je v poriadku a každý neskorší problém je v konfigurácii.
@@ -784,7 +786,7 @@ Oba vracajú nenulový kód pri zlyhaní, takže sa dajú zapojiť do CI.
 ### A päť, ktoré netreba nasadenie
 
 ```bash
-npm run db:verify        # 102 migrácií a 52 testovacích súborov na dočasnej databáze
+npm run db:verify        # 105 migrácií a 53 testovacích súborov na dočasnej databáze
 npm run check:dns        # SPF, DKIM, DMARC a návratová cesta nedoručeniek
 npm run check:speed      # rýchlosť stránky na priemernom telefóne, s rozpočtom
 npm run check:webevents  # DOM udalosti, ktoré na webe ticho nerobia nič

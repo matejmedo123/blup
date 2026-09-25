@@ -26,6 +26,8 @@ export interface Story {
   author_id: string;
   organization_id: string | null;
   image_url: string;
+  /** What is at that URL. Not guessed from the extension — the server says. */
+  media_type: 'image' | 'video';
   caption: string | null;
   event_id: string | null;
   event_title: string | null;
@@ -65,12 +67,14 @@ export async function createStory(params: {
   eventId?: string | null;
   /** Post under an organization's name. Checked against membership server-side. */
   organizationId?: string | null;
+  mediaType?: 'image' | 'video';
 }): Promise<string> {
   const { data, error } = await supabase.rpc('create_story', {
     p_image_url: params.imageUrl,
     p_caption: params.caption ?? null,
     p_event_id: params.eventId ?? null,
     p_organization: params.organizationId ?? null,
+    p_media_type: params.mediaType ?? 'image',
   });
   if (error) throw error;
   return data as string;

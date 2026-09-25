@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { PremiumBadge } from '@/components/PremiumBadge';
 import { SignInInvite } from '@/components/SignInInvite';
 import { getFollowCounts, getInterestsFor, updateProfile } from '@/api/profiles';
 import { getMyEvents, getSavedEvents, getAttendingEvents, toFeedItem } from '@/api/events';
@@ -145,9 +146,15 @@ export default function ProfileScreen() {
           <Avatar url={profile?.avatar_url} name={profile?.display_name} size={74} square />
 
           <View style={styles.flex}>
-            <Text style={styles.name} numberOfLines={1}>
-              {profile?.display_name ?? 'Tvoj profil'}
-            </Text>
+            {/* The badge was on everybody else's profile and not on your own —
+                so the one person who is paying for it was the one person who
+                could not see it. */}
+            <View style={styles.nameRow}>
+              <Text style={styles.name} numberOfLines={1}>
+                {profile?.display_name ?? 'Tvoj profil'}
+              </Text>
+              <PremiumBadge until={profile?.premium_until} />
+            </View>
             <Text style={styles.handle} numberOfLines={1}>
               @{profile?.username ?? '—'}
               {profile?.city ? ` · ${profile.city}` : ''}
@@ -454,6 +461,7 @@ const styles = StyleSheet.create({
   headerButtonLabel: { ...typography.chip, color: colors.text },
 
   identity: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   name: { ...typography.profileName, color: colors.text },
   handle: { ...typography.metaSm, color: colors.textTertiary, marginTop: 2 },
   counters: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.md },

@@ -157,13 +157,28 @@ export function EventMap({
     setZoom((current) => Math.max(current, 16));
   });
 
-  const reported = useRef(false);
+  /**
+   * Tell the app what is on screen — whenever that changes, not once.
+   *
+   * It used to report exactly one time, the moment the size was first measured.
+   * The trouble is what happens immediately afterwards: `fitKey` below sets the
+   * zoom to whatever fits `radiusM`, and `focusKey` above sets it to 16. Both
+   * run after that single report, so the app was told about the view the map
+   * had for one frame and never about the view it settled into.
+   *
+   * The consequence was events that are plainly on screen and have no pin: the
+   * map was showing fifty kilometres while the query had been told to fetch
+   * two, and nothing corrected it until the next pan. Reporting from the state
+   * itself means every way of moving the map — fit, focus, wheel, pinch, drag —
+   * goes through one place and none of them can forget.
+   *
+   * A drag does not spam this: the centre is committed once, when the finger
+   * lifts, and the transform does the moving in between.
+   */
   useEffect(() => {
-    if (reported.current || !size.width || !size.height) return;
-    reported.current = true;
+    if (!size.width || !size.height) return;
     report(centre, zoom);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.width, size.height]);
+  }, [centre, zoom, size.width, size.height, report]);
 
   // Only when the requested radius (or the box it has to fit) changes, never on
   // a pan — so it is keyed on exactly those two and adjusts during render
@@ -228,7 +243,6 @@ export function EventMap({
     const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
     if (clamped === zoom) return;
     setZoom(clamped);
-    report(centre, clamped);
   };
 
   /**
@@ -325,8 +339,10 @@ export function EventMap({
       longitude: ((next.longitude + 540) % 360) - 180,
     };
 
+    // No report here: setCentre is what the effect above watches, so the drag
+    // is announced once the new centre is committed. Calling it by hand as well
+    // only sent the same region twice.
     setCentre(settled);
-    report(settled, zoom);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -364,10 +380,36 @@ export function EventMap({
     onPointerUp(e);
   };
 
+  /**
+   * How much wheel has been turned since the last zoom step.
+   *
+   * It has to be accumulated. A classic mouse sends one big event per notch,
+   * but a trackpad — and any mouse with smooth scrolling — sends a stream of
+   * small ones, dozens per flick. Stepping a whole zoom level on each event
+   * meant one gentle swipe fell through five or six levels and the map shot
+   * out to the whole of Europe. From the hand it reads as the map being
+   * violently oversensitive; it was really counting every twitch as a notch.
+   */
+  const wheelSteps = useRef(0);
+
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (!interactive) return;
-    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom + (e.deltaY < 0 ? 1 : -1)));
-    if (next !== zoom) { setZoom(next); report(centre, next); }
+
+    // deltaMode says what the number means: 0 pixels, 1 lines, 2 pages. A line
+    // is about 16 pixels and a page about a screen; without this a trackpad
+    // (pixels) and a mouse (lines) are off by a factor of sixteen.
+    const perNotch = e.deltaMode === 1 ? 3 : e.deltaMode === 2 ? 1 : 100;
+    wheelSteps.current += e.deltaY / perNotch;
+
+    // One notch, one level. Below that, nothing moves — which is what makes a
+    // small nudge feel like a small nudge.
+    if (Math.abs(wheelSteps.current) < 1) return;
+
+    const direction = wheelSteps.current < 0 ? 1 : -1;
+    wheelSteps.current = 0;
+
+    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom + direction));
+    if (next !== zoom) setZoom(next);
   };
 
   // --- tiles -----------------------------------------------------------------

@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FlatList, Modal, Platform, Pressable, StyleSheet, Text, View,
+  Animated, Easing, FlatList, Modal, Platform, Pressable, StyleSheet, Text, View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -64,23 +65,32 @@ export function StoryRow({ onAdd }: { onAdd: () => void }) {
             accessibilityRole="button"
             accessibilityLabel={mine ? 'Tvoj príbeh' : 'Pridať príbeh'}
           >
-            <View style={styles.plainRing}>
-              <View style={styles.inner}>
-                <Avatar url={profile?.avatar_url} name={profile?.display_name} size={50} />
-              </View>
-              {/* The plus is on your own circle whether or not you have one
-                  posted — adding a second story is the same gesture as adding
-                  a first, and hiding it behind "you already have one" is how
-                  people conclude the feature is missing. */}
-              <Pressable
-                onPress={onAdd}
-                accessibilityRole="button"
-                accessibilityLabel="Pridať príbeh"
-                style={styles.plus}
+            {/* Once you have posted, your own circle is lit like everybody
+                else's and the plus goes — that ring IS the confirmation that
+                the story went out. Before that it is a plain circle with a
+                plus on it, which is the only state where the plus means
+                anything. Adding a second one lives inside your own story. */}
+            {mine ? (
+              <LinearGradient
+                colors={[colors.accent, colors.pink]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.ring}
               >
-                <Text style={styles.plusGlyph}>＋</Text>
-              </Pressable>
-            </View>
+                <View style={styles.inner}>
+                  <Avatar url={profile?.avatar_url} name={profile?.display_name} size={50} />
+                </View>
+              </LinearGradient>
+            ) : (
+              <View style={styles.plainRing}>
+                <View style={styles.inner}>
+                  <Avatar url={profile?.avatar_url} name={profile?.display_name} size={50} />
+                </View>
+                <View style={styles.plus}>
+                  <Text style={styles.plusGlyph}>＋</Text>
+                </View>
+              </View>
+            )}
             <Text style={styles.name} numberOfLines={1}>
               {mine ? 'Tvoj príbeh' : 'Pridať'}
             </Text>
@@ -91,7 +101,7 @@ export function StoryRow({ onAdd }: { onAdd: () => void }) {
         )}
       />
 
-      <StoryViewer ring={open} onClose={() => setOpen(null)} />
+      <StoryViewer ring={open} onClose={() => setOpen(null)} onAdd={onAdd} />
     </>
   );
 }
@@ -145,12 +155,14 @@ function Ring({ ring, onPress }: { ring: StoryRing; onPress: () => void }) {
  * reading the caption is a way of hiding what was posted.
  */
 export function StoryViewer({
-  ring, onClose,
+  ring, onClose, onAdd,
 }: {
   /** null closes it. The whole ring rather than an id, so the header can name
       whose story this is without a second query for a name the row already had. */
   ring: StoryRing | null;
   onClose: () => void;
+  /** Posting another one. Only offered inside your own story. */
+  onAdd?: () => void;
 }) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
@@ -165,6 +177,16 @@ export function StoryViewer({
    * somebody having posted a black picture — and from the viewer being broken.
    */
   const [brokenImage, setBrokenImage] = useState(false);
+  /**
+   * Held down to keep reading.
+   *
+   * A story that moves on by itself is fine until there is a caption on it —
+   * then the timer is deciding how long you are allowed to read. Pressing and
+   * holding stops the clock, which is the gesture people already use.
+   */
+  const [held, setHeld] = useState(false);
+  /** 0 → 1 over STORY_MS, drawn as the fill of the current bar. */
+  const progress = useRef(new Animated.Value(0)).current;
 
   const authorId = ring?.author_id ?? null;
 
@@ -184,6 +206,7 @@ export function StoryViewer({
     setShowViewers(false);
     setError(null);
     setBrokenImage(false);
+    setHeld(false);
   }, [authorId]);
 
   // Each story gets its own verdict; one that failed says nothing about the next.
@@ -210,6 +233,29 @@ export function StoryViewer({
   const previous = useCallback(() => {
     setIndex((value) => Math.max(0, value - 1));
   }, []);
+
+  /**
+   * Ten seconds, then the next one.
+   *
+   * The bar above fills over that time, so the clock is visible rather than a
+   * surprise. Held down it stops; it also does not run at all while the
+   * picture is still loading or has failed, because counting down over a blank
+   * screen spends the ten seconds on nothing.
+   */
+  const running = Boolean(authorId) && Boolean(current) && !held && !brokenImage;
+
+  useEffect(() => {
+    if (!running) return;
+    progress.setValue(0);
+    const run = Animated.timing(progress, {
+      toValue: 1,
+      duration: STORY_MS,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    run.start(({ finished }) => { if (finished) next(); });
+    return () => run.stop();
+  }, [running, index, authorId, progress, next]);
 
   const onKey = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') onClose();
@@ -254,10 +300,23 @@ export function StoryViewer({
             tell a single story from the first of nine. */}
         <View style={styles.bars}>
           {items.map((story, at) => (
-            <View
-              key={story.id}
-              style={[styles.bar, at <= index && styles.barOn]}
-            />
+            <View key={story.id} style={styles.bar}>
+              {/* Watched ones are full, the one playing fills as it goes, the
+                  rest are empty — so the bar says both where you are and how
+                  long is left. */}
+              <Animated.View
+                style={[
+                  styles.barFill,
+                  at < index && styles.barDone,
+                  at === index && {
+                    width: progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
           ))}
         </View>
 
@@ -289,8 +348,18 @@ export function StoryViewer({
               {brokenImage ? (
                 <View style={styles.broken}>
                   <Text style={styles.brokenGlyph}>⚠</Text>
-                  <Text style={styles.brokenText}>Obrázok sa nepodarilo načítať.</Text>
+                  <Text style={styles.brokenText}>
+                    {current.media_type === 'video'
+                      ? 'Video sa nepodarilo načítať.'
+                      : 'Obrázok sa nepodarilo načítať.'}
+                  </Text>
                 </View>
+              ) : current.media_type === 'video' ? (
+                <StoryVideo
+                  uri={current.image_url}
+                  paused={held}
+                  onError={() => setBrokenImage(true)}
+                />
               ) : (
                 <Image
                   source={{ uri: current.image_url }}
@@ -304,8 +373,20 @@ export function StoryViewer({
               {/* The two halves. Rendered over the picture rather than round it
                   so the tap targets are the whole screen, which is where a
                   thumb actually lands. */}
-              <Pressable style={styles.halfLeft} onPress={previous} accessibilityLabel="Späť" />
-              <Pressable style={styles.halfRight} onPress={next} accessibilityLabel="Ďalej" />
+              <Pressable
+                style={styles.halfLeft}
+                onPress={previous}
+                onPressIn={() => setHeld(true)}
+                onPressOut={() => setHeld(false)}
+                accessibilityLabel="Späť"
+              />
+              <Pressable
+                style={styles.halfRight}
+                onPress={next}
+                onPressIn={() => setHeld(true)}
+                onPressOut={() => setHeld(false)}
+                accessibilityLabel="Ďalej"
+              />
             </View>
 
             {current.caption ? (
@@ -340,6 +421,19 @@ export function StoryViewer({
 
             {isMine && showViewers ? <Viewers storyId={current.id} /> : null}
 
+            {/* Where posting a second one lives now that the plus has gone off
+                the ring. It is your own story, so this is where you already
+                are when you think of it. */}
+            {isMine && onAdd ? (
+              <Pressable
+                style={styles.addMore}
+                onPress={() => { onClose(); onAdd(); }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.addMoreLabel}>＋ Pridať ďalší príbeh</Text>
+              </Pressable>
+            ) : null}
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </>
         ) : stories.isLoading ? (
@@ -354,6 +448,50 @@ export function StoryViewer({
         )}
       </View>
     </Modal>
+  );
+}
+
+/**
+ * A story that is a video.
+ *
+ * Muted and looping, like every story player: a clip that starts talking out
+ * loud is the reason people stop opening them. Holding the screen pauses it,
+ * the same press that pauses the ten-second clock — so the two never disagree
+ * about whether the story is running.
+ */
+function StoryVideo({
+  uri, paused, onError,
+}: {
+  uri: string;
+  paused: boolean;
+  onError: () => void;
+}) {
+  const player = useVideoPlayer(uri, (instance) => {
+    instance.loop = true;
+    instance.muted = true;
+    instance.play();
+  });
+
+  useEffect(() => {
+    if (paused) player.pause();
+    else player.play();
+  }, [paused, player]);
+
+  // The player reports a bad source through status, not by throwing.
+  useEffect(() => {
+    const subscription = player.addListener('statusChange', ({ status }) => {
+      if (status === 'error') onError();
+    });
+    return () => subscription.remove();
+  }, [player, onError]);
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.picture}
+      contentFit="contain"
+      nativeControls={false}
+    />
   );
 }
 
@@ -386,6 +524,9 @@ function Viewers({ storyId }: { storyId: string }) {
     />
   );
 }
+
+/** How long one story stays up before the next one. */
+const STORY_MS = 10_000;
 
 const RING = 58;
 
@@ -429,8 +570,10 @@ const styles = StyleSheet.create({
   bar: {
     flex: 1, height: 3, borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.22)',
+    overflow: 'hidden',
   },
-  barOn: { backgroundColor: '#FFFFFF' },
+  barFill: { height: '100%', borderRadius: 2, backgroundColor: '#FFFFFF' },
+  barDone: { width: '100%' },
 
   head: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -462,6 +605,14 @@ const styles = StyleSheet.create({
   },
   eventLinkLabel: { ...typography.metaSm, color: '#FFFFFF' },
 
+  addMore: {
+    alignSelf: 'flex-start',
+    margin: spacing.lg, marginTop: spacing.sm,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
+  },
+  addMoreLabel: { ...typography.metaSm, color: '#FFFFFF' },
   viewers: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   viewersLabel: { ...typography.metaSm, color: 'rgba(255,255,255,0.78)' },
   viewerList: { maxHeight: 180, paddingHorizontal: spacing.lg },

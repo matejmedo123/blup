@@ -78,6 +78,44 @@ Pri každej je aj to, čo presne bolo zle.
   zoznam, prichádzala ako jeden objekt namiesto poľa, takže obrazovky padali
   len v náhľade. Vyzeralo to ako chyba appky a bola to chyba náhľadu.
 
+**A ešte osem vecí z druhého kola**
+
+- **Futbalový štadión v plánoch sa konečne načíta.** Predloha má 67 sektorov a
+  jej použitie trvalo **77 sekúnd**, čiže z appky neprešlo vôbec — requestu
+  vyprší čas a ty vidíš len to, že sa nič nestalo. Obrys tribúny má 32 bodov a
+  funkcia, ktorá počíta miesta, ten obrys prechádzala znova pre každé jedno
+  miesto: asi **17 miliónov čítaní JSONu** na jeden štadión. Teraz sa tvar
+  rozparsuje raz. **77 s → 1,1 s**, a plán je do posledného sedadla ten istý
+  (porovnané, 10 356 miest, nula rozdielov).
+- **Event, ktorý nebolo vidno na mape.** Mapa hlásila, akú časť sveta ukazuje,
+  **iba raz** — a to ešte predtým, než si nastavila zoom podľa polomeru. Appka
+  teda načítala eventy pre výrez, ktorý mapa mala jednu snímku, a nie pre ten,
+  v ktorom skončila. Event na obrazovke bez špendlíka. Teraz sa výrez hlási
+  vždy, keď sa zmení.
+- **Mapa pri odďaľovaní.** Každá udalosť kolieska brala celý stupeň zoomu — a
+  trackpad ich pošle desiatky za jedno gesto, takže jedno šmyknutie prepadlo o
+  päť stupňov. Teraz sa načítava, kým to nie je jedno celé cvaknutie.
+- **Kategórie:** kvíz, šport, hokej, tenis, fitness, koncert, párty, stand-up,
+  comedy, trhy, konferencia, workshop, esport, pre rodiny, charita. Pätnásť,
+  ktoré chýbali — dovtedy museli ísť pod „Iné", čo event vyradí z filtrov aj zo
+  záujmov naraz.
+- **Karta vo feede už nie je roztiahnutá.** Feed sa rozťahoval na celú šírku
+  okna, takže na monitore mala karta dvetisíc pixelov a obálka stále 190 —
+  z plagátu bol prúžok. Teraz má feed šírku karty a obálka si berie pomer
+  strán obrázka.
+- **Premium pri tvojom mene.** Odznak bol na profiloch všetkých ostatných a na
+  tvojom vlastnom nie — čiže jediný človek, ktorý zaň platí, bol jediný, kto ho
+  nevidel.
+- **Príbeh beží 10 sekúnd** a pás hore sa počas toho plní, takže je vidieť,
+  koľko zostáva. Podržaním sa zastaví — príbeh s popisom inak rozhoduje za
+  teba, ako dlho ho smieš čítať.
+- **Príbeh môže byť video.** Do 15 sekúnd; systémový výber ho rovno prekóduje
+  vlastným hardvérom, takže z klipu je pár megabajtov a nie pár desiatok.
+  Prehráva sa stlmene a dokola. Nad 25 MB to appka odmietne vetou, nie chybou
+  z úložiska.
+- **Keď pridáš príbeh, je to vidieť:** tvoj kruh sa rozsvieti ako každý iný a
+  plusko zmizne. Ďalší príbeh sa pridáva zvnútra toho tvojho.
+
 ### Čo si k tomu musíš nastaviť
 
 Nič, okrem dvoch nepovinných vecí:
@@ -443,8 +481,8 @@ musí sa objaviť lišta s dvoma rovnocennými tlačidlami.
 npx supabase db push
 ```
 
-Aplikuje sa **33 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
-chyby) — 26 z predošlých balíkov a 7 z tohto. Existujúce tabuľky sa nemažú ani
+Aplikuje sa **36 nových migrácií** (počítané od verzie, v ktorej si hlásil tie
+chyby) — 26 z predošlých balíkov a 10 z tohto. Existujúce tabuľky sa nemažú ani
 neprepisujú; pridávajú sa stĺpce, tabuľky (`stories`, `story_views`) a funkcie.
 
 Nemusíš mi to veriť — `db push` sám vypíše, ktoré aplikuje, a čo je už v
@@ -628,7 +666,7 @@ Nič sa im nestratí — účty, vstupenky ani uložené eventy. Zmení sa toto:
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje **všetkých 102 migrácií od nuly** a prejde
-**474 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
+Postaví dočasnú databázu, aplikuje **všetkých 105 migrácií od nuly** a prejde
+**477 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
 potom zlyhá, chyba je v tvojich dátach, nie v schéme — a to je pri hľadaní
 veľmi cenné vedieť.

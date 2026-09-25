@@ -106,19 +106,21 @@ export const categoryFamilies: Record<
 const CATEGORY_TO_FAMILY: Record<string, CategoryFamily> = {
   techno: 'music', house: 'music', hiphop: 'music', rock: 'music', jazz: 'music',
   indie: 'music', festival: 'music', dance: 'music', karaoke: 'music', nightlife: 'music',
-  bars: 'music',
+  bars: 'music', concert: 'music', party: 'music',
 
   startups: 'startup', tech: 'startup', design: 'startup', networking: 'startup',
   investing: 'startup', business: 'startup', gaming: 'startup', 'board-games': 'startup',
-  language: 'startup',
+  language: 'startup', quiz: 'startup', esports: 'startup', conference: 'startup',
+  workshop: 'startup', family: 'startup',
 
   running: 'outdoor', cycling: 'outdoor', climbing: 'outdoor', football: 'outdoor',
   basketball: 'outdoor', swimming: 'outdoor', hiking: 'outdoor', camping: 'outdoor',
   skiing: 'outdoor', surfing: 'outdoor', sport: 'outdoor', volunteering: 'outdoor',
+  hockey: 'outdoor', tennis: 'outdoor', fitness: 'outdoor', charity: 'outdoor',
 
   art: 'art', theatre: 'art', cinema: 'art', museum: 'art', photography: 'art',
   books: 'art', culture: 'art', food: 'art', coffee: 'art', wine: 'art',
-  'craft-beer': 'art', cooking: 'art',
+  'craft-beer': 'art', cooking: 'art', standup: 'art', comedy: 'art', market: 'art',
 
   yoga: 'spirit', wellness: 'spirit', meditation: 'spirit', spirit: 'spirit',
   spiritualita: 'spirit',
@@ -342,6 +344,10 @@ export const categoryLabel: Record<string, string> = {
   karaoke: 'Karaoke', 'board-games': 'Board games', gaming: 'Gaming',
   language: 'Jazyky', volunteering: 'Dobrovoľníctvo', wellness: 'Wellness',
   meditation: 'Meditácia', dance: 'Tanec', other: 'Iné',
+  concert: 'Koncert', party: 'Párty', sport: 'Šport', hockey: 'Hokej',
+  tennis: 'Tenis', fitness: 'Fitness', standup: 'Stand-up', comedy: 'Comedy',
+  market: 'Trhy', conference: 'Konferencia', workshop: 'Workshop', quiz: 'Kvíz',
+  esports: 'Esport', family: 'Pre rodiny', charity: 'Charita',
   music: 'Hudba', startup: 'Startupy', outdoor: 'Outdoor', spirit: 'Spiritualita',
 };
 

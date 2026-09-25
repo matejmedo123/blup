@@ -25,12 +25,20 @@ import {
 import { colors, labelFor, radius, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
 
+// Roughly grouped, because the chips are read in order: music, then sport,
+// then culture, food, business, nightlife, social, wellness. "Other" stays last
+// — it is the honest answer when nothing fits, not the first thing offered.
 const CATEGORIES = [
-  'techno', 'house', 'hiphop', 'rock', 'jazz', 'indie', 'festival', 'running', 'cycling',
-  'climbing', 'football', 'basketball', 'yoga', 'hiking', 'art', 'theatre', 'cinema',
-  'photography', 'food', 'coffee', 'wine', 'craft-beer', 'startups', 'tech', 'design',
-  'networking', 'nightlife', 'bars', 'board-games', 'gaming', 'language', 'volunteering',
-  'wellness', 'dance', 'other',
+  'concert', 'techno', 'house', 'hiphop', 'rock', 'jazz', 'indie', 'festival', 'dance',
+  'sport', 'football', 'hockey', 'basketball', 'tennis', 'running', 'cycling', 'climbing',
+  'fitness', 'hiking', 'yoga',
+  'art', 'theatre', 'cinema', 'standup', 'comedy', 'photography', 'market',
+  'food', 'coffee', 'wine', 'craft-beer',
+  'startups', 'tech', 'design', 'networking', 'conference', 'workshop',
+  'nightlife', 'party', 'bars',
+  'quiz', 'board-games', 'gaming', 'esports', 'language', 'family', 'charity',
+  'volunteering', 'wellness',
+  'other',
 ];
 
 /**
