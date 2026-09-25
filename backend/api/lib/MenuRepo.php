@@ -61,7 +61,8 @@ final class MenuRepo
                 'available'   => (int) $p['is_available'] === 1,
             ];
             if (!empty($p['image'])) {
-                $item['image']    = $p['image'];
+                // S podpisom verzie, nech telefón neukazuje starú fotku.
+                $item['image']    = Assets::versioned((string) $p['image']);
                 $item['imageAlt'] = $p['image_alt'] ?? $p['name'];
             }
             if (!empty($p['badge'])) {
