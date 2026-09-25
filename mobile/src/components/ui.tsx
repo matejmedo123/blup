@@ -7,7 +7,10 @@ import {
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
+import { LinearGradient } from 'expo-linear-gradient';
+
 import { avatarColorFor, colors, radius, spacing, typography, shadow } from '@/theme';
+import { useStoryRing, useStoryRings } from '@/components/storyRings';
 import { useAccent } from '@/theme/accent';
 import { initialsFor } from '@/lib/format';
 import { CONTENT_MAX, useLayout } from '@/hooks/useLayout';
@@ -441,8 +444,11 @@ export function PricePill({ label, style }: { label: string; style?: StyleProp<V
   );
 }
 
+/** How thick the story ring is. Drawn inside the avatar's own size. */
+const RING_WIDTH = 2;
+
 export function Avatar({
-  url, name, size = 40, ring, square,
+  url, name, size = 40, ring, square, userId,
 }: {
   url?: string | null;
   name?: string | null;
@@ -450,13 +456,76 @@ export function Avatar({
   ring?: boolean;
   /** The handoff uses radius-16 rectangles for list rows, circles elsewhere. */
   square?: boolean;
+  /**
+   * Whose face this is.
+   *
+   * Given it, the avatar draws the story ring wherever it appears — in the
+   * inbox, under an event, in a list of people — and opens the story when it
+   * is tapped. A story somebody posted is worth seeing from anywhere their
+   * face is, not only from the row above the feed.
+   *
+   * The ring is drawn INSIDE the size asked for, so adding this to an existing
+   * screen never moves anything: the avatar shrinks by the width of the ring
+   * instead of the whole thing growing.
+   */
+  userId?: string | null;
 }) {
+  const story = useStoryRing(userId);
+  const { open: openStoryRing } = useStoryRings();
+  const ringed = Boolean(story);
+  const inner = ringed ? size - RING_WIDTH * 2 - 2 : size;
+  // The ring follows the avatar's own shape. Rows use rounded rectangles and a
+  // circle drawn round one of those reads as a mistake; this way a ring looks
+  // deliberate wherever a face is, which is the point of having it everywhere.
+  const ringRadius = square ? radius.md + RING_WIDTH : size / 2;
+
   const base = {
-    width: size,
-    height: size,
-    borderRadius: square ? radius.md : size / 2,
+    width: inner,
+    height: inner,
+    borderRadius: square ? radius.md : inner / 2,
     ...(ring ? { borderWidth: 2, borderColor: colors.surface } : {}),
   };
+
+  if (ringed) {
+    return (
+      <Pressable
+        onPress={() => story && openStoryRing(story)}
+        accessibilityRole="button"
+        accessibilityLabel={`Pozrieť príbeh · ${name ?? ''}`.trim()}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: ringRadius,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <LinearGradient
+          colors={[colors.accent, colors.pink]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: ringRadius,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <View style={{
+            width: size - RING_WIDTH * 2,
+            height: size - RING_WIDTH * 2,
+            borderRadius: square ? radius.md : (size - RING_WIDTH * 2) / 2,
+            backgroundColor: colors.background,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <Avatar url={url} name={name} size={inner} square={square} />
+          </View>
+        </LinearGradient>
+      </Pressable>
+    );
+  }
 
   if (url) {
     return (

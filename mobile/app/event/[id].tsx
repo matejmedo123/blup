@@ -874,7 +874,12 @@ export default function EventDetailScreen() {
                 style={styles.attendee}
                 onPress={() => router.push(`/user/${item.user_id}`)}
               >
-                <Avatar url={item.profile?.avatar_url} name={item.profile?.display_name} size={52} />
+                <Avatar
+                  url={item.profile?.avatar_url}
+                  name={item.profile?.display_name}
+                  size={52}
+                  userId={item.profile?.id}
+                />
                 <Caption numberOfLines={1} style={styles.attendeeName}>
                   {item.profile?.display_name?.split(' ')[0] ?? '—'}
                 </Caption>
@@ -1263,7 +1268,12 @@ export default function EventDetailScreen() {
         ) : (
           (comments.data ?? []).map((item) => (
             <View key={item.id} style={[styles.comment, styles.commentBlock]}>
-              <Avatar url={item.author?.avatar_url} name={item.author?.display_name} size={34} />
+              <Avatar
+                url={item.author?.avatar_url}
+                name={item.author?.display_name}
+                size={34}
+                userId={item.author?.id}
+              />
               <View style={styles.flex}>
                 <Text style={styles.commentAuthor}>
                   {item.author?.display_name ?? item.author?.username ?? 'Niekto'}

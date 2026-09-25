@@ -340,7 +340,12 @@ export function ChatThread({ id, embedded = false }: { id?: string; embedded?: b
               style={styles.threadInfo}
               onPress={() => router.push(`/user/${otherProfile.id}`)}
             >
-              <Avatar url={otherProfile.avatar_url} name={otherProfile.display_name} size={38} />
+              <Avatar
+                url={otherProfile.avatar_url}
+                name={otherProfile.display_name}
+                size={38}
+                userId={otherProfile.id}
+              />
               <View style={styles.flex}>
                 <Text style={styles.threadTitle} numberOfLines={1}>{heading}</Text>
                 <Mono style={styles.threadMeta}>@{otherProfile.username ?? '—'}</Mono>

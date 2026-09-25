@@ -151,7 +151,7 @@ export default function UserProfileScreen() {
       {notice ? <Notice tone="accent" title="Ďakujeme" body={notice} /> : null}
 
       <View style={styles.header}>
-        <Avatar url={person.avatar_url} name={person.display_name} size={84} />
+        <Avatar url={person.avatar_url} name={person.display_name} size={84} userId={person.id} />
 
         <View style={styles.headerBody}>
           <View style={styles.nameRow}>

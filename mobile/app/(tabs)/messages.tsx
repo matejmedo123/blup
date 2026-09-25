@@ -332,7 +332,12 @@ function SearchRow({ hit, onPress }: { hit: ChatSearchHit; onPress: () => void }
           <Text style={styles.eventGlyph}>◉</Text>
         </View>
       ) : (
-        <Avatar url={hit.avatar_url} name={hit.display_name ?? hit.username} size={52} />
+        <Avatar
+          url={hit.avatar_url}
+          name={hit.display_name ?? hit.username}
+          size={52}
+          userId={hit.user_id}
+        />
       )}
 
       <View style={styles.flex}>
@@ -402,6 +407,7 @@ function ConversationRow({
           name={conversation.other_name ?? conversation.title}
           size={52}
           ring={unread}
+          userId={conversation.other_user_id}
         />
       )}
 

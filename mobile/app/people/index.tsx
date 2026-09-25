@@ -229,7 +229,13 @@ function PersonRow({
   return (
     <View style={styles.row}>
       <Pressable onPress={() => router.push(`/user/${match.user_id}`)}>
-        <Avatar url={match.avatar_url} name={match.display_name} size={46} square />
+        <Avatar
+          url={match.avatar_url}
+          name={match.display_name}
+          size={46}
+          square
+          userId={match.user_id}
+        />
       </Pressable>
 
       <Pressable style={styles.flex} onPress={() => router.push(`/user/${match.user_id}`)}>
@@ -265,7 +271,13 @@ function NetworkingRow({ match, onFollow }: { match: PostEventMatch; onFollow: (
   return (
     <View style={styles.row}>
       <Pressable onPress={() => router.push(`/user/${match.user_id}`)}>
-        <Avatar url={match.avatar_url} name={match.display_name} size={46} square />
+        <Avatar
+          url={match.avatar_url}
+          name={match.display_name}
+          size={46}
+          square
+          userId={match.user_id}
+        />
       </Pressable>
 
       <Pressable style={styles.flex} onPress={() => router.push(`/user/${match.user_id}`)}>
@@ -295,7 +307,13 @@ function FoundRow({
   return (
     <View style={styles.row}>
       <Pressable onPress={() => router.push(`/user/${profile.id}`)}>
-        <Avatar url={profile.avatar_url} name={profile.display_name} size={46} square />
+        <Avatar
+          url={profile.avatar_url}
+          name={profile.display_name}
+          size={46}
+          square
+          userId={profile.id}
+        />
       </Pressable>
 
       <Pressable style={styles.flex} onPress={() => router.push(`/user/${profile.id}`)}>

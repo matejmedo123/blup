@@ -509,7 +509,12 @@ function PostCard({ post, onLike }: { post: CommunityPost; onLike: () => void })
             <Avatar name={post.organization.name} size={38} />
           )
         ) : (
-          <Avatar url={post.author?.avatar_url} name={post.author?.display_name} size={38} />
+          <Avatar
+            url={post.author?.avatar_url}
+            name={post.author?.display_name}
+            size={38}
+            userId={post.author?.id}
+          />
         )}
 
         <View style={styles.flex}>

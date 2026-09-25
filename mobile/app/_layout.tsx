@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
+import { StoryRingsProvider, useStoryRings } from '@/components/storyRings';
+import { StoryViewer } from '@/components/Stories';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -47,6 +49,18 @@ const persister = createAsyncStoragePersister({
 });
 
 void SplashScreen.preventAutoHideAsync();
+
+/**
+ * The story the app is currently showing, wherever it was opened from.
+ *
+ * One viewer for the whole app rather than one per list: tapping a ringed face
+ * in the inbox and tapping one in the feed have to land in the same place, and
+ * a modal that belongs to a row disappears the moment that row scrolls out.
+ */
+function GlobalStoryViewer() {
+  const { opened, close } = useStoryRings();
+  return <StoryViewer ring={opened} onClose={close} />;
+}
 
 export default function RootLayout() {
   const fontsReady = useAppFonts();
@@ -191,7 +205,14 @@ export default function RootLayout() {
                           empty function — every "are you sure?" written with it
                           silently did nothing in a browser. */}
                       <DialogProvider>
+                        {/* Who has a live story, asked once for the whole app.
+                            Every Avatar reads from it, so the ring appears
+                            wherever somebody's face does — and the viewer it
+                            opens hangs here, over every screen, rather than
+                            being re-mounted by each list that draws a face. */}
+                        <StoryRingsProvider>
                         <AppFrame>{content}</AppFrame>
+                        <GlobalStoryViewer />
                         {/* Floats over every screen so a basket with a ticket in
                             it cannot go unnoticed until the reservation expires. */}
                         <CartFab />
@@ -199,6 +220,7 @@ export default function RootLayout() {
                             somebody it fits. Every one of those words is a rule
                             in the database, not a habit of this component. */}
                         <SponsoredSpotlight />
+                        </StoryRingsProvider>
                       </DialogProvider>
                     </ImageCropProvider>
                     </AccentProvider>
