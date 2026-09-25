@@ -20,6 +20,7 @@ import {
 import { createPost } from '@/api/communities';
 import { StoryRow } from '@/components/Stories';
 import { StoryCamera, type StoryDraft } from '@/components/StoryCamera';
+import { StoryEditor } from '@/components/StoryEditor';
 import { SponsoredCard } from '@/components/SponsoredCard';
 import { getMyOrganizations } from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
@@ -77,6 +78,16 @@ export default function FeedScreen() {
   const [scope, setScope] = useState<FeedScope | null>(null);
   const [storyBusy, setStoryBusy] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  /**
+   * Fotka z galérie, ktorá čaká na orezanie.
+   *
+   * Nenahráva sa rovno: príbeh má jeden rozmer a fotka z galérie ho takmer
+   * nikdy nemá. Kým sa nahrávala taká, aká bola, prehrávač ju musel niekam
+   * vložiť a okolo ostali pásy. Teraz si výrez zvolí ten, kto ju posiela.
+   */
+  const [editing, setEditing] = useState<
+    { uri: string; width: number; height: number } | null
+  >(null);
 
   // How full each view is, so the first one shown has something in it. Opening
   // on an empty "Sledujem" and making somebody find the tab that works is a
@@ -91,7 +102,20 @@ export default function FeedScreen() {
     enabled: !isGuest,
   });
 
-  const activeScope: FeedScope = scope ?? (
+  /**
+   * Which view is open.
+   *
+   * A guest gets exactly one: "Všetko". The other two are about a person —
+   * who they follow, what they have shown interest in — and a guest is not a
+   * person the app knows anything about. Offering "Pre teba" to somebody with
+   * no account is a promise nothing can keep, and what it actually showed was
+   * the whole platform with a personal-sounding heading over it.
+   *
+   * The server agrees now rather than being asked nicely: feed_posts returns
+   * nothing for those two scopes when nobody is signed in. This only stops the
+   * tabs being drawn.
+   */
+  const activeScope: FeedScope = isGuest ? 'all' : scope ?? (
     (counts.data?.following ?? 0) > 0 ? 'following'
       : (counts.data?.for_you ?? 0) > 0 ? 'for_you'
         : 'all'
@@ -188,7 +212,14 @@ export default function FeedScreen() {
     try {
       const picked = await pickStory('library');
       if (!picked) return;
-      await postStory({ uri: picked.uri, kind: picked.kind });
+      if (picked.kind === 'video') {
+        // Video sa v JavaScripte orezať nedá — prekódovanie by trvalo minúty,
+        // zohrialo telefón a výsledok by bol horší. Prehráva sa preto v rámčeku
+        // príbehu, ktorý má vždy ten istý tvar, takže všetci vidia to isté.
+        await postStory({ uri: picked.uri, kind: 'video' });
+        return;
+      }
+      setEditing({ uri: picked.uri, width: picked.width, height: picked.height });
     } catch (caught) {
       setError(messageFor(caught));
     }
@@ -263,6 +294,7 @@ export default function FeedScreen() {
         </View>
       </View>
 
+      {isGuest ? null : (
       <View style={styles.scopeRow}>
         {SCOPES.map((option) => (
           <Pressable
@@ -276,6 +308,7 @@ export default function FeedScreen() {
           </Pressable>
         ))}
       </View>
+      )}
 
       {error ? <Notice tone="danger" title="Niečo sa pokazilo" body={error} /> : null}
 
@@ -342,6 +375,12 @@ export default function FeedScreen() {
             onAction={() => setComposerOpen(true)}
           />
         }
+      />
+
+      <StoryEditor
+        photo={editing}
+        onCancel={() => setEditing(null)}
+        onDone={(draft) => { setEditing(null); void postStory(draft); }}
       />
 
       <StoryCamera

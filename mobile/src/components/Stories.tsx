@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated, Easing, FlatList, Modal, Platform, Pressable, StyleSheet, Text, View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -13,6 +14,7 @@ import {
   type Story, type StoryRing,
 } from '@/api/stories';
 import { StoryText } from '@/components/StoryText';
+import { storyFrame } from '@/components/storyFormat';
 import { useAuth } from '@/auth/AuthProvider';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
@@ -193,6 +195,24 @@ export function StoryViewer({
    * somebody having posted a black picture — and from the viewer being broken.
    */
   const [brokenImage, setBrokenImage] = useState(false);
+  /**
+   * How big the 9:16 frame is, measured rather than assumed.
+   *
+   * The stage is what is left after the progress bars, the header and whatever
+   * sits under the picture, and that differs per platform and per story — a
+   * caption and an event link take room, a bare photo does not. Asking the
+   * layout is the only way to get a frame that fits every one of those.
+   */
+  const [stage, setStage] = useState({ width: 0, height: 0 });
+  const onStageLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setStage((current) =>
+      current.width === width && current.height === height ? current : { width, height });
+  }, []);
+  const frame = useMemo(
+    () => storyFrame(stage.width, stage.height),
+    [stage.width, stage.height],
+  );
   /**
    * Held down to keep reading.
    *
@@ -381,7 +401,14 @@ export function StoryViewer({
               </Pressable>
             </View>
 
-            <View style={styles.stage}>
+            <View style={styles.stage} onLayout={onStageLayout}>
+              {/* Rámček 9:16, v ktorom príbeh žije.
+                  Príbeh sa nahráva v jednom rozmere — 1080 × 1920 — takže
+                  prehrávač nemá čo dorovnávať a `cover` nič neoreže. Rámček
+                  je tu pre obrazovky, ktoré ten pomer nemajú: na širokom
+                  monitore je čierno po stranách, nie roztiahnutá fotka, a na
+                  veľmi vysokom telefóne nezostane pás hore a dole. */}
+              <View style={[styles.frame, frame]}>
               {brokenImage ? (
                 <View style={styles.broken}>
                   <Text style={styles.brokenGlyph}>⚠</Text>
@@ -401,7 +428,7 @@ export function StoryViewer({
                 <Image
                   source={{ uri: current.image_url }}
                   style={styles.picture}
-                  contentFit="contain"
+                  contentFit="cover"
                   transition={120}
                   onError={() => setBrokenImage(true)}
                 />
@@ -415,6 +442,7 @@ export function StoryViewer({
               {current.overlay?.text ? (
                 <StoryText overlay={current.overlay} />
               ) : null}
+              </View>
 
               <Pressable
                 style={styles.halfLeft}
@@ -519,7 +547,7 @@ function StoryVideo({
     <VideoView
       player={player}
       style={styles.picture}
-      contentFit="contain"
+      contentFit="cover"
       nativeControls={false}
     />
   );
@@ -613,7 +641,8 @@ const styles = StyleSheet.create({
   headTime: { color: 'rgba(255,255,255,0.7)' },
   headGlyph: { color: '#FFFFFF', fontSize: 18, paddingHorizontal: 6 },
 
-  stage: { flex: 1, position: 'relative' },
+  stage: { flex: 1, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  frame: { position: 'relative', overflow: 'hidden', backgroundColor: '#000000' },
   picture: { width: '100%', height: '100%' },
   broken: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm,

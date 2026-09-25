@@ -11,12 +11,32 @@ import { colors, radius, typography } from '@/theme';
 /**
  * The tab bar from the handoff: height 88 with `8px 8px 26px` padding, a
  * translucent app-coloured background and a subtle top border. Each tab is a
- * 54-tall pill that fills with `rgba(0,128,255,.1)` when active.
+ * pill that fills with `rgba(0,128,255,.1)` when active.
+ *
+ * Glyph and label are drawn together, in one box, and the navigator's own
+ * label is switched off. They used to be two separate things: the pill was
+ * this component and the label was drawn by the navigator underneath it, so
+ * the highlight ended above the word it was highlighting — on a phone, where
+ * the bar is tall enough to separate them, "Objav" sat visibly outside its own
+ * marking. A highlight that does not contain the thing it marks reads as a
+ * rendering fault, because that is what it looks like.
  */
-function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
+function TabItem({
+  glyph, label, focused,
+}: {
+  glyph: string;
+  label: string;
+  focused: boolean;
+}) {
   return (
-    <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
+    <View style={[styles.tabItem, focused && styles.tabItemActive]}>
       <Text style={[styles.tabGlyph, focused && styles.tabGlyphActive]}>{glyph}</Text>
+      <Text
+        style={[styles.tabLabel, focused && styles.tabLabelActive]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
@@ -42,8 +62,8 @@ export default function TabsLayout() {
           backgroundColor: Platform.OS === 'web' ? colors.background : 'rgba(10, 13, 18, 0.92)',
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: Platform.OS === 'web' ? 64 : 88,
-          paddingTop: 8,
+          height: Platform.OS === 'web' ? 70 : 88,
+          paddingTop: 6,
           paddingHorizontal: 8,
           // A phone needs room for the home indicator; a browser does not.
           paddingBottom: Platform.OS === 'web' ? 8 : 26,
@@ -55,11 +75,9 @@ export default function TabsLayout() {
         tabBarItemStyle: Platform.OS === 'web' ? { maxWidth: 152 } : undefined,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textQuaternary,
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontFamily: typography.tabLabel.fontFamily,
-          marginTop: -4,
-        },
+        // Off, because TabItem draws the label inside the pill. Leaving it on
+        // would put the word on the screen twice, once in each place.
+        tabBarShowLabel: false,
         tabBarBadgeStyle: {
           backgroundColor: colors.accent,
           fontSize: 10,
@@ -71,28 +89,36 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Domov',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="◉" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabItem glyph="◉" label="Domov" focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="discover"
         options={{
           title: 'Objav',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="◈" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabItem glyph="◈" label="Objav" focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="feed"
         options={{
           title: 'Feed',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="☰" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabItem glyph="☰" label="Feed" focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="messages"
         options={{
           title: 'Chat',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="✉" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabItem glyph="✉" label="Chat" focused={focused} />
+          ),
           tabBarBadge: unread && unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
         }}
       />
@@ -100,7 +126,9 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Ja',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="☺" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabItem glyph="☺" label="Ja" focused={focused} />
+          ),
         }}
       />
     </Tabs>
@@ -119,14 +147,23 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabIcon: {
-    width: 58,
-    height: 34,
+  tabItem: {
+    minWidth: 58,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 1,
   },
-  tabIconActive: { backgroundColor: 'rgba(0, 128, 255, 0.1)' },
-  tabGlyph: { fontSize: 18, color: colors.textQuaternary },
+  tabItemActive: { backgroundColor: 'rgba(0, 128, 255, 0.1)' },
+  tabGlyph: { fontSize: 18, lineHeight: 22, color: colors.textQuaternary },
   tabGlyphActive: { color: colors.accent },
+  tabLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontFamily: typography.tabLabel.fontFamily,
+    color: colors.textQuaternary,
+  },
+  tabLabelActive: { color: colors.accent },
 });

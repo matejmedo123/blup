@@ -31,7 +31,9 @@
     "check:functions": "./scripts/check-functions-types.sh",
     "preview": "./scripts/preview.sh",
     "web": "npm --prefix mobile run web",
-    "check:seats": "node scripts/check-seat-layout.mjs"
+    "check:seats": "node scripts/check-seat-layout.mjs",
+    "check:mapzoom": "node scripts/check-map-zoom.mjs",
+    "check:story": "node scripts/check-story-frame.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.112.3",

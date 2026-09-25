@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { wheelZoomStep, IDLE_WHEEL, type WheelState } from './mapZoomMath';
 import { categoryFamilies, colors, emojiFor, familyFor, radius, spacing, typography } from '@/theme';
 import { useSeed } from '@/hooks/useSeed';
 import { env } from '@/lib/env';
@@ -390,7 +391,7 @@ export function EventMap({
    * out to the whole of Europe. From the hand it reads as the map being
    * violently oversensitive; it was really counting every twitch as a notch.
    */
-  const wheelSteps = useRef(0);
+  const wheelSteps = useRef<WheelState>(IDLE_WHEEL);
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (!interactive) return;
@@ -398,18 +399,17 @@ export function EventMap({
     // deltaMode says what the number means: 0 pixels, 1 lines, 2 pages. A line
     // is about 16 pixels and a page about a screen; without this a trackpad
     // (pixels) and a mouse (lines) are off by a factor of sixteen.
-    const perNotch = e.deltaMode === 1 ? 3 : e.deltaMode === 2 ? 1 : 100;
-    wheelSteps.current += e.deltaY / perNotch;
+    // How many levels this event is worth lives in mapZoomMath, so
+    // scripts/check-map-zoom.mjs can ask the same question this does.
+    const step = wheelZoomStep(e.deltaY, e.deltaMode, wheelSteps.current, Date.now());
+    wheelSteps.current = step.state;
+    if (step.levels === 0) return;
 
-    // One notch, one level. Below that, nothing moves — which is what makes a
-    // small nudge feel like a small nudge.
-    if (Math.abs(wheelSteps.current) < 1) return;
-
-    const direction = wheelSteps.current < 0 ? 1 : -1;
-    wheelSteps.current = 0;
-
-    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom + direction));
-    if (next !== zoom) setZoom(next);
+    // Functional, because a flick delivers several wheel events before React
+    // re-renders. Reading `zoom` from this closure meant each of them computed
+    // the same "current + 1" from the same stale number, so a burst of six
+    // events still moved exactly one level.
+    setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current + step.levels)));
   };
 
   // --- tiles -----------------------------------------------------------------

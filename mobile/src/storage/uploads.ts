@@ -3,6 +3,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
+import { STORY_WIDTH } from '@/components/storyFormat';
 
 /**
  * Image uploads: pick → downscale → upload to Supabase Storage → return the
@@ -250,7 +251,11 @@ export async function uploadStoryImage(uri: string, sourceWidth?: number): Promi
   const userId = userData?.user?.id;
   if (!userId) throw new Error('UNAUTHENTICATED');
 
-  const compressed = await compress(uri, 1440, sourceWidth);
+  // 1080, nie 1440. Fotka sem prichádza už orezaná na 1080 × 1920 a `resize`
+  // šírku nastavuje, neobmedzuje — pri 1440 ju teda ZVÄČŠIL. To stálo bajty,
+  // prinieslo rozmazanie a hlavne zrušilo presne ten jeden rozmer, kvôli
+  // ktorému sa oreziava.
+  const compressed = await compress(uri, STORY_WIDTH, sourceWidth ?? STORY_WIDTH);
   return uploadToBucket({
     bucket: 'stories',
     // Never overwritten: two stories posted in the same second are two stories.

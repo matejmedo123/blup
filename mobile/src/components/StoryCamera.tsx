@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated, Easing, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { CameraView, useCameraPermissions, type CameraType } from 'expo-camera';
@@ -9,6 +10,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { messageFor } from '@/lib/errors';
 import { Button, Caption, Notice } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
+import { centreCropToStory, storyFrame } from '@/components/storyFormat';
 
 /**
  * Natáčanie príbehu.
@@ -74,6 +76,25 @@ export function StoryCamera({
   const [recording, setRecording] = useState(false);
   const [shot, setShot] = useState<{ uri: string; kind: 'image' | 'video' } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Hľadáčik má tvar príbehu, nie tvar snímača.
+   *
+   * Snímač dáva 4:3 aj vtedy, keď sa príbeh prehráva 9:16. Kým hľadáčik
+   * ukazoval celé pole snímača, človek zarámoval jedno a ostatným sa ukázalo
+   * niečo iné — hore a dole pribudlo, čo nevidel. Hľadáčik preto ukazuje
+   * presne toľko, koľko sa uloží.
+   */
+  const [stage, setStage] = useState({ width: 0, height: 0 });
+  const onStageLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setStage((current) =>
+      current.width === width && current.height === height ? current : { width, height });
+  }, []);
+  const frame = useMemo(
+    () => storyFrame(stage.width, stage.height),
+    [stage.width, stage.height],
+  );
 
   // --- the text written over the story --------------------------------------
   const [text, setText] = useState('');
@@ -142,7 +163,13 @@ export function StoryCamera({
     setError(null);
     try {
       const photo = await camera.current.takePictureAsync({ quality: 0.9 });
-      if (photo?.uri) setShot({ uri: photo.uri, kind: 'image' });
+      if (!photo?.uri) return;
+      // Orez na stred na 1080 × 1920, hneď tu. Snímač dal 4:3; hľadáčik
+      // ukazoval 9:16 stredom toho poľa, takže stredový výrez je presne to,
+      // čo bolo vidno. Robí sa to teraz a nie pri nahrávaní preto, aby sa
+      // človek pozeral na to, čo naozaj odošle.
+      const framed = await centreCropToStory(photo.uri, photo.width, photo.height);
+      setShot({ uri: framed, kind: 'image' });
     } catch (caught) {
       setError(messageFor(caught));
     }
@@ -177,12 +204,17 @@ export function StoryCamera({
     // --- what was just shot, with the text tool over it ---------------------
     if (shot) {
       return (
-        <View style={styles.stage}>
-          {shot.kind === 'video' ? (
-            <DraftVideo uri={shot.uri} />
-          ) : (
-            <Image source={{ uri: shot.uri }} style={styles.fill} contentFit="contain" />
-          )}
+        <View style={styles.stage} onLayout={onStageLayout}>
+          <View style={[styles.frame, frame]}>
+            {shot.kind === 'video' ? (
+              <DraftVideo uri={shot.uri} />
+            ) : (
+              // `cover`, lebo fotka je už orezaná na presne tento tvar —
+              // `contain` by na nej nemalo čo robiť a pri videu by nechalo
+              // pásy, ktoré ostatní neuvidia.
+              <Image source={{ uri: shot.uri }} style={styles.fill} contentFit="cover" />
+            )}
+          </View>
 
           {text.trim() && !writing ? (
             <Pressable style={styles.overlayHit} onPress={() => setWriting(true)}>
@@ -267,17 +299,19 @@ export function StoryCamera({
 
     // --- the camera ----------------------------------------------------------
     return (
-      <View style={styles.stage}>
-        <CameraView
-          ref={camera}
-          style={styles.fill}
-          facing={facing}
-          mode="video"
-          // 720p rather than whatever the sensor can do. This is the whole
-          // size fix: a fifteen-second clip lands at a few megabytes instead
-          // of thirty, and nothing has to be rejected afterwards.
-          videoQuality="720p"
-        />
+      <View style={styles.stage} onLayout={onStageLayout}>
+        <View style={[styles.frame, frame]}>
+          <CameraView
+            ref={camera}
+            style={styles.fill}
+            facing={facing}
+            mode="video"
+            // 720p rather than whatever the sensor can do. This is the whole
+            // size fix: a fifteen-second clip lands at a few megabytes instead
+            // of thirty, and nothing has to be rejected afterwards.
+            videoQuality="720p"
+          />
+        </View>
 
         <View style={styles.camBar}>
           <Pressable
@@ -361,7 +395,7 @@ function DraftVideo({ uri }: { uri: string }) {
     instance.muted = true;
     instance.play();
   });
-  return <VideoView player={player} style={styles.fill} contentFit="contain" nativeControls={false} />;
+  return <VideoView player={player} style={styles.fill} contentFit="cover" nativeControls={false} />;
 }
 
 const SHUTTER = 74;
@@ -376,7 +410,8 @@ const styles = StyleSheet.create({
   closeSpacer: { width: 22 },
   title: { ...typography.bodyStrong, color: '#FFFFFF' },
 
-  stage: { flex: 1 },
+  stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  frame: { position: 'relative', overflow: 'hidden', backgroundColor: '#000000' },
   fill: { flex: 1, width: '100%' },
   centre: { textAlign: 'center', marginTop: spacing.xxl },
 
