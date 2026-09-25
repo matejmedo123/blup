@@ -338,6 +338,11 @@ s prehliadačom.
 - predpokladané časy prípravy (základ, ku ktorému sa pripočítava vyťaženie)
 - text, ktorý sa ukáže, keď neprijímaš objednávky
 
+> **Keď vymeníš fotku a stará sa stále ukazuje:** znamená to, že ju má
+> prehliadač uložený. Nahrávanie z adminu dáva každej fotke nový názov,
+> takže sa to stať nemá. Keby si menil súbory cez FTP pod tým istým
+> názvom, premenuj ich — inak ich telefóny môžu ukazovať staré.
+
 ### Ilustračné fotky a texty na webe
 V **Nastavenia → Fotky a texty na webe** sa mení veľká fotka navrchu
 stránky, tri dlaždice (fotka, nadpis, text) a dve fotky pri sekcii

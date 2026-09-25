@@ -47,10 +47,10 @@ final class Settings
 
         // Ilustračné fotky a texty na webe. Prázdna hodnota = ostane to,
         // čo je v kóde, aby sa stránka nikdy nerozpadla na prázdne miesta.
-        'content_hero_image'   => '/images/editorial/hero-burger.webp',
+        'content_hero_image'   => '/images/editorial/hero-burger-2.webp',
         'content_hero_alt'     => 'Košíky s ENZO smash burgermi a objednávkovou podložkou',
 
-        'content_promo1_image' => '/images/editorial/promo-combo.webp',
+        'content_promo1_image' => '/images/editorial/promo-combo-2.webp',
         'content_promo1_title' => 'Double is better.',
         'content_promo1_text'  => 'Pridaj extra porciu mäsa a rozdiel pocítiš hneď pri prvom hryzení.',
 
@@ -58,12 +58,12 @@ final class Settings
         'content_promo2_title' => 'Meet the Enzo.',
         'content_promo2_text'  => 'Náš signature smash burger. Chedar, ENZO omáčka, žiadne kompromisy.',
 
-        'content_promo3_image' => '/images/products/trippple-king.webp',
+        'content_promo3_image' => '/images/products/trippple-king-2.webp',
         'content_promo3_title' => 'Tripple King.',
         'content_promo3_text'  => 'Tri smashed porcie, trojitý chedar. Keď jedna proste nestačí.',
 
-        'content_story1_image' => '/images/editorial/story-duo.webp',
-        'content_story2_image' => '/images/products/crispy-chicken-burger.webp',
+        'content_story1_image' => '/images/editorial/story-duo-2.webp',
+        'content_story2_image' => '/images/products/crispy-chicken-burger-2.webp',
         'content_story_badge'  => 'Smashed, nie grilované.',
 
         'delivery_zones'       => "Koniarovce\nPreseľany\nLudanice\nChrabrany\nTopoľčany\nNitrianska Streda",

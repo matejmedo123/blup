@@ -7,7 +7,7 @@ import { useMenu } from "@/context/MenuContext";
 
 const TILES = [
   {
-    src: "/images/editorial/promo-combo.webp",
+    src: "/images/editorial/promo-combo-2.webp",
     alt: "Ponuka ENZO burgerov v košíkoch s objednávkovou podložkou",
     title: "Double is better.",
     text: "Pridaj extra porciu mäsa a rozdiel pocítiš hneď pri prvom hryzení.",
@@ -21,7 +21,7 @@ const TILES = [
     tone: "cream" as const,
   },
   {
-    src: "/images/products/trippple-king.webp",
+    src: "/images/products/trippple-king-2.webp",
     alt: "Tripple King Smash — tri smashed porcie hovädzieho",
     title: "Tripple King.",
     text: "Tri smashed porcie, trojitý chedar. Keď jedna proste nestačí.",

@@ -40,19 +40,28 @@ ErrorDocument 404 /404.html
 
 # ---------- Cache ----------
 <IfModule mod_headers.c>
-  # Súbory v /_next/static/ majú v názve hash → môžu sa cachovať navždy.
-  SetEnvIf Request_URI "^/_next/static/" ENZO_IMMUTABLE
-  Header set Cache-Control "public, max-age=31536000, immutable" env=ENZO_IMMUTABLE
+  # Fotky sa dajú vymeniť z adminu pod tým istým názvom, tak sa server
+  # musí vždy spýtať, či sa nezmenili. Keď nie, odpovie prázdnym 304 —
+  # je to lacné a nová fotka je vidieť hneď, aj na telefóne.
+  <FilesMatch "\.(webp|jpg|jpeg|png|svg|ico)$">
+    Header set Cache-Control "public, max-age=0, must-revalidate"
+  </FilesMatch>
 
-  # Obrázky a logá — mesiac.
-  <FilesMatch "\.(webp|jpg|jpeg|png|svg|ico|woff2)$">
-    Header set Cache-Control "public, max-age=2592000"
+  # Fonty sa nemenia nikdy — tie sa cachovať oplatí.
+  <FilesMatch "\.woff2$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
 
   # HTML sa nikdy necachuje natvrdo, aby sa zmeny prejavili hneď.
   <FilesMatch "\.html$">
     Header set Cache-Control "public, max-age=0, must-revalidate"
   </FilesMatch>
+
+  # Až nakoniec: súbory v /_next/static/ majú v názve hash, takže sa
+  # nikdy nezmenia pod tou istou adresou. Toto pravidlo musí prebiť
+  # tie podľa prípony vyššie, preto stojí tu.
+  SetEnvIf Request_URI "^/_next/static/" ENZO_IMMUTABLE
+  Header set Cache-Control "public, max-age=31536000, immutable" env=ENZO_IMMUTABLE
 
   # Základné bezpečnostné hlavičky.
   Header always set X-Content-Type-Options "nosniff"

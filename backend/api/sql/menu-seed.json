@@ -57,7 +57,7 @@
       "description": "Náš signature smash burger — smashed hovädzie, chedar, ENZO omáčka",
       "price": 9.9,
       "category": "burgers",
-      "image": "/images/products/the-enzo-smash.webp",
+      "image": "/images/products/the-enzo-smash-2.webp",
       "imageAlt": "Smash burger THE ENZO SMASH s topeným chedarom",
       "badge": "NAJPREDÁVANEJŠIE",
       "tags": [
@@ -103,7 +103,7 @@
       "description": "Smashed hovädzie, chrumkavá slanina, chedar, slaninová mayo",
       "price": 9.9,
       "category": "burgers",
-      "image": "/images/products/bacon-boy.webp",
+      "image": "/images/products/bacon-boy-2.webp",
       "imageAlt": "Burger BACON BOY s chrumkavou slaninou",
       "tags": [
         "Bacon"
@@ -194,7 +194,7 @@
       "description": "Tri smashed hovädzie porcie, trojitý chedar, ENZO omáčka",
       "price": 12.5,
       "category": "burgers",
-      "image": "/images/products/trippple-king.webp",
+      "image": "/images/products/trippple-king-2.webp",
       "imageAlt": "Trojitý burger TRIPPPLE KING SMASH",
       "badge": "3× MÄSO",
       "tags": [
@@ -240,7 +240,7 @@
       "description": "Dve smashed porcie hovädzieho, dvojitý chedar, uhorky, cibuľa",
       "price": 9.5,
       "category": "burgers",
-      "image": "/images/products/double-cheeseburger.webp",
+      "image": "/images/products/double-cheeseburger-2.webp",
       "imageAlt": "DOUBLE CHEESEBURGER s dvojitým chedarom",
       "tags": [
         "2× mäso"
@@ -285,7 +285,7 @@
       "description": "Menší smash burger — akurát pre menších jedákov",
       "price": 5.9,
       "category": "burgers",
-      "image": "/images/products/junior.webp",
+      "image": "/images/products/junior-2.webp",
       "imageAlt": "Menší burger JUNIOR",
       "tags": [
         "Malý"
@@ -340,7 +340,7 @@
       "description": "Chrumkavé kuracie prsia, chedar, ľadový šalát, Factory mayo",
       "price": 9.5,
       "category": "chicken",
-      "image": "/images/products/crispy-chicken-burger.webp",
+      "image": "/images/products/crispy-chicken-burger-2.webp",
       "imageAlt": "Crispy chicken burger s chrumkavým kuracím mäsom",
       "tags": [
         "Crispy"
@@ -419,7 +419,7 @@
       "description": "Trhané bravčové, coleslaw, BBQ omáčka v brioške",
       "price": 9.9,
       "category": "pork",
-      "image": "/images/products/pulled-pork-burger.webp",
+      "image": "/images/products/pulled-pork-burger-2.webp",
       "imageAlt": "Pulled pork burger s coleslaw",
       "extras": [
         {

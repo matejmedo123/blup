@@ -28,9 +28,9 @@ const VALUES = [
 export function BrandStory() {
   // Obe fotky aj text v zlatom rámčeku sa dajú vymeniť v admine.
   const { content } = useMenu();
-  const storyLeft = content.storyImages[0] || "/images/editorial/story-duo.webp";
+  const storyLeft = content.storyImages[0] || "/images/editorial/story-duo-2.webp";
   const storyRight =
-    content.storyImages[1] || "/images/products/crispy-chicken-burger.webp";
+    content.storyImages[1] || "/images/products/crispy-chicken-burger-2.webp";
   const badge = content.storyBadge || "Smashed, nie grilované.";
 
   return (

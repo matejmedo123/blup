@@ -13,7 +13,7 @@ import { useMenu } from "@/context/MenuContext";
 export function Hero() {
   // Fotku si prevádzka mení v admine; kým nič nenastaví, platí táto.
   const { content } = useMenu();
-  const heroImage = content.heroImage || "/images/editorial/hero-burger.webp";
+  const heroImage = content.heroImage || "/images/editorial/hero-burger-2.webp";
   const heroAlt =
     content.heroAlt || "Košíky s ENZO smash burgermi a objednávkovou podložkou";
 

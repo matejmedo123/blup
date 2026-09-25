@@ -21,6 +21,7 @@ final class Migrations
         '003' => 'migrate-003',
         '004' => 'migrate-004',
         '005' => 'migrate-005',
+        '006' => 'migrate-006',
     ];
 
     /**
