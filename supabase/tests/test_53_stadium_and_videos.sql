@@ -180,4 +180,67 @@ begin
   raise notice 'PASS kvíz, šport a ďalšie kategórie sú v katalógu';
 end $$;
 
+-- ============================================================================
+-- 4. Text cez príbeh sa ukladá ako údaj, nie ako čokoľvek
+-- ============================================================================
+do $$
+declare
+  v_me     uuid := 'a5353535-0000-0000-0000-000000000001';
+  v_story  uuid;
+  v_over   jsonb;
+  v_failed boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', v_me::text, true);
+
+  v_story := public.create_story(
+    'https://tchvgzbxddqdneylkqvi.supabase.co/storage/v1/object/public/stories/a/t.jpg',
+    null, null, null, 'image',
+    jsonb_build_object('text', 'Dnes o ôsmej', 'y', 0.3, 'color', 'amber', 'size', 'l')
+  );
+
+  select overlay into v_over from public.stories_of(v_me) where id = v_story;
+  assert v_over ->> 'text' = 'Dnes o ôsmej', 'text cez príbeh sa neuložil';
+  assert (v_over ->> 'y')::numeric = 0.3, 'poloha textu sa stratila';
+  assert v_over ->> 'color' = 'amber', 'farba textu sa stratila';
+
+  -- Ten istý text slúži aj ako popis, aby sa dal prečítať v náhľade.
+  assert (select caption from public.stories_of(v_me) where id = v_story) = 'Dnes o ôsmej',
+    'text cez príbeh sa neprepísal do popisu';
+
+  -- Farba mimo palety je cesta, ako do štýlu prepašovať čokoľvek.
+  v_failed := false;
+  begin
+    perform public.create_story(
+      'https://tchvgzbxddqdneylkqvi.supabase.co/storage/v1/object/public/stories/a/u.jpg',
+      null, null, null, 'image',
+      jsonb_build_object('text', 'x', 'color', 'url(javascript:alert(1))')
+    );
+  exception when others then
+    v_failed := true;
+  end;
+  assert v_failed, 'príbeh prijal farbu mimo palety';
+
+  -- A poloha mimo obrazovky sa oreže, nie uloží.
+  v_story := public.create_story(
+    'https://tchvgzbxddqdneylkqvi.supabase.co/storage/v1/object/public/stories/a/v.jpg',
+    null, null, null, 'image',
+    jsonb_build_object('text', 'hore', 'y', 9)
+  );
+  select overlay into v_over from public.stories_of(v_me) where id = v_story;
+  assert (v_over ->> 'y')::numeric <= 1,
+    format('poloha sa neorezala, je %s', v_over ->> 'y');
+
+  -- Prázdny text nie je text.
+  v_story := public.create_story(
+    'https://tchvgzbxddqdneylkqvi.supabase.co/storage/v1/object/public/stories/a/w.jpg',
+    null, null, null, 'image', jsonb_build_object('text', '   ')
+  );
+  select overlay into v_over from public.stories_of(v_me) where id = v_story;
+  assert v_over is null, 'prázdny text sa uložil ako text';
+
+  reset role;
+  raise notice 'PASS text cez príbeh je údaj a mimo palety sa nedostane';
+end $$;
+
 rollback;

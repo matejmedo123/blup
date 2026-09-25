@@ -21,6 +21,14 @@ export interface StoryRing {
   is_mine: boolean;
 }
 
+export interface StoryOverlay {
+  text: string;
+  /** 0 = top, 1 = bottom. */
+  y?: number;
+  color?: 'white' | 'black' | 'accent' | 'pink' | 'amber';
+  size?: 's' | 'm' | 'l';
+}
+
 export interface Story {
   id: string;
   author_id: string;
@@ -28,6 +36,14 @@ export interface Story {
   image_url: string;
   /** What is at that URL. Not guessed from the extension — the server says. */
   media_type: 'image' | 'video';
+  /**
+   * Text written over the story.
+   *
+   * Kept as data rather than burned into the picture: burned-in text cannot be
+   * read by a screen reader, cannot be corrected, and on a video would have to
+   * be encoded into every frame.
+   */
+  overlay: StoryOverlay | null;
   caption: string | null;
   event_id: string | null;
   event_title: string | null;
@@ -68,6 +84,7 @@ export async function createStory(params: {
   /** Post under an organization's name. Checked against membership server-side. */
   organizationId?: string | null;
   mediaType?: 'image' | 'video';
+  overlay?: StoryOverlay | null;
 }): Promise<string> {
   const { data, error } = await supabase.rpc('create_story', {
     p_image_url: params.imageUrl,
@@ -75,6 +92,7 @@ export async function createStory(params: {
     p_event_id: params.eventId ?? null,
     p_organization: params.organizationId ?? null,
     p_media_type: params.mediaType ?? 'image',
+    p_overlay: params.overlay ?? null,
   });
   if (error) throw error;
   return data as string;

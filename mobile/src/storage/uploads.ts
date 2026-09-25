@@ -16,8 +16,22 @@ import { supabase } from '@/lib/supabase';
 const MAX_BYTES = 5 * 1024 * 1024;
 /** A GIF cannot be compressed on the way up, so it gets its own, larger cap. */
 const GIF_MAX_BYTES = 8 * 1024 * 1024;
-/** What a story video may weigh and last. The bucket enforces the bytes too. */
-const STORY_VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+/**
+ * What a story video may weigh.
+ *
+ * This is a backstop, not the mechanism. Twenty-five megabytes used to be the
+ * limit and it refused almost everything, because fifteen seconds off a phone
+ * camera is twenty to thirty megabytes — 1080p60 at a high bitrate. Rejecting
+ * that is answering the wrong question.
+ *
+ * The size is handled where it is created instead: a story shot in the app
+ * records 720p and the recorder holds its own 12 MB ceiling, so a full fifteen
+ * seconds lands at a few megabytes. This number only has to catch what comes
+ * in by another route — a file picked from the library in a browser, where
+ * nothing can transcode it — and it matches what the bucket accepts, so a file
+ * that passes here is not rejected a second later by storage.
+ */
+const STORY_VIDEO_MAX_BYTES = 75 * 1024 * 1024;
 export const STORY_VIDEO_SECONDS = 15;
 
 export type PickSource = 'library' | 'camera';
@@ -196,14 +210,22 @@ export async function uploadStoryVideo(uri: string, mimeType?: string): Promise<
   if (arrayBuffer.byteLength > STORY_VIDEO_MAX_BYTES) {
     const mb = Math.round(arrayBuffer.byteLength / (1024 * 1024));
     throw new Error(
-      `Toto video má ${mb} MB, viac než povolených 25 MB. `
-      + `Skús kratšie — príbeh berie najviac ${STORY_VIDEO_SECONDS} sekúnd.`,
+      `Toto video má ${mb} MB, a viac než 75 MB sa nahrať nedá. `
+      + 'Natoč ho rovno v príbehu — vtedy sa nahráva rovno v menšej kvalite '
+      + `a ${STORY_VIDEO_SECONDS} sekúnd vyjde na pár megabajtov.`,
     );
   }
 
   // The bucket accepts mp4, quicktime and webm; anything else is refused there
   // too, so guessing a type it does not know would only move the error.
-  const type = (mimeType ?? '').startsWith('video/') ? mimeType! : 'video/mp4';
+  //
+  // With no type given — which is the case for a clip the camera just recorded
+  // — the extension is the only thing that knows: iOS writes .mov, Android
+  // .mp4. Calling a QuickTime file mp4 makes storage reject it.
+  const fromName = /\.mov($|\?)/i.test(uri) ? 'video/quicktime'
+    : /\.webm($|\?)/i.test(uri) ? 'video/webm'
+      : 'video/mp4';
+  const type = (mimeType ?? '').startsWith('video/') ? mimeType! : fromName;
   const extension = type === 'video/quicktime' ? 'mov' : type === 'video/webm' ? 'webm' : 'mp4';
 
   const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;

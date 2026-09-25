@@ -78,6 +78,24 @@ Pri každej je aj to, čo presne bolo zle.
   zoznam, prichádzala ako jeden objekt namiesto poľa, takže obrazovky padali
   len v náhľade. Vyzeralo to ako chyba appky a bola to chyba náhľadu.
 
+**Príbehy ako na Instagrame**
+
+- **Fotíš a natáčaš rovno v príbehu.** Ťuknutie na spúšť je fotka, podržanie
+  natáča — a okolo spúšte sa plní krúžok, ktorý po pätnástich sekundách
+  dobehne a nahrávanie **skončí samo**. Pätnásť nie je náhodné číslo: presne
+  tak dlho sa príbeh prehráva, takže dlhšie video by sa aj tak nedopozeralo.
+  Dlhé podržanie kruhu „Pridať" berie niečo, čo už v telefóne máš.
+- **Text cez príbeh.** Napíšeš ho rovno cez fotku alebo video, päť farieb, tri
+  veľkosti. Neukladá sa vypálený do obrázka — vypálený text sa nedá opraviť,
+  neprečíta ho čítačka pre nevidiacich a pri videu by ho bolo treba zakódovať
+  do každého snímku. Ukladá sa ako údaj a kreslí sa nad médiom.
+- **Veľkosť videa sa rieši pri nahrávaní, nie odmietaním.** Mal si pravdu, že
+  25 MB je zlá páka: pätnásť sekúnd z telefónu má bežne 20–30 MB, lebo kamera
+  natáča 1080p60 pri vysokom toku. Appka teraz natáča **720p** a sám záznamník
+  si stráži strop 12 MB, takže celých pätnásť sekúnd vyjde okolo **5 MB**.
+  Strop na nahratie zostal len ako poistka pre súbor, ktorý príde inou cestou,
+  a zdvihol sa na 75 MB, aby neblokoval zbytočne.
+
 **A ešte osem vecí z druhého kola**
 
 - **Futbalový štadión v plánoch sa konečne načíta.** Predloha má 67 sektorov a
@@ -666,7 +684,7 @@ Nič sa im nestratí — účty, vstupenky ani uložené eventy. Zmení sa toto:
 ./scripts/verify-db.sh
 ```
 
-Postaví dočasnú databázu, aplikuje **všetkých 105 migrácií od nuly** a prejde
-**477 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
+Postaví dočasnú databázu, aplikuje **všetkých 106 migrácií od nuly** a prejde
+**478 tvrdení**. Tvojej databázy sa to nedotkne. Ak toto prejde a `db push`
 potom zlyhá, chyba je v tvojich dátach, nie v schéme — a to je pri hľadaní
 veľmi cenné vedieť.

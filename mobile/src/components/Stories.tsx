@@ -12,6 +12,7 @@ import {
   deleteStory, getStoriesOf, getStoryRings, getStoryViewers, markStorySeen,
   type Story, type StoryRing,
 } from '@/api/stories';
+import { StoryText } from '@/components/StoryText';
 import { useAuth } from '@/auth/AuthProvider';
 import { messageFor } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
@@ -28,7 +29,14 @@ import { colors, radius, spacing, typography } from '@/theme';
  * of a notification. Now a ring means one thing: this person has posted
  * something in the last 24 hours, and it is unwatched if the ring is coloured.
  */
-export function StoryRow({ onAdd }: { onAdd: () => void }) {
+export function StoryRow({
+  onAdd, onAddFromLibrary,
+}: {
+  /** Opens the camera. */
+  onAdd: () => void;
+  /** Takes something that is already in the library. */
+  onAddFromLibrary?: () => void;
+}) {
   const { profile, isGuest } = useAuth();
   /** Who is being watched — the whole ring, so the viewer can name them. */
   const [open, setOpen] = useState<StoryRing | null>(null);
@@ -62,6 +70,10 @@ export function StoryRow({ onAdd }: { onAdd: () => void }) {
           <Pressable
             style={styles.item}
             onPress={() => (mine ? setOpen(mine) : onAdd())}
+            // Shooting one is the tap; taking one you already have is the
+            // hold. Both are here rather than behind a menu, because a menu
+            // for two things is a menu nobody opens.
+            onLongPress={onAddFromLibrary}
             accessibilityRole="button"
             accessibilityLabel={mine ? 'Tvoj príbeh' : 'Pridať príbeh'}
           >
@@ -379,6 +391,12 @@ export function StoryViewer({
               {/* The two halves. Rendered over the picture rather than round it
                   so the tap targets are the whole screen, which is where a
                   thumb actually lands. */}
+              {/* The text the author wrote over it. Above the picture and
+                  below the tap targets, so reading it never eats a tap. */}
+              {current.overlay?.text ? (
+                <StoryText overlay={current.overlay} />
+              ) : null}
+
               <Pressable
                 style={styles.halfLeft}
                 onPress={previous}
@@ -395,7 +413,7 @@ export function StoryViewer({
               />
             </View>
 
-            {current.caption ? (
+            {current.caption && current.caption !== current.overlay?.text ? (
               <Text style={styles.caption}>{current.caption}</Text>
             ) : null}
 

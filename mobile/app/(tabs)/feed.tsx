@@ -19,6 +19,7 @@ import {
 } from '@/storage/uploads';
 import { createPost } from '@/api/communities';
 import { StoryRow } from '@/components/Stories';
+import { StoryCamera, type StoryDraft } from '@/components/StoryCamera';
 import { SponsoredCard } from '@/components/SponsoredCard';
 import { getMyOrganizations } from '@/api/organizations';
 import { messageFor } from '@/lib/errors';
@@ -75,6 +76,7 @@ export default function FeedScreen() {
 
   const [scope, setScope] = useState<FeedScope | null>(null);
   const [storyBusy, setStoryBusy] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   // How full each view is, so the first one shown has something in it. Opening
   // on an empty "Sledujem" and making somebody find the tab that works is a
@@ -140,35 +142,55 @@ export default function FeedScreen() {
     return rows;
   }, [posts.data, announcements.data]);
 
-  /** Pick a photo or a short video, then post it as a story. */
-  const addStory = async () => {
-    if (!requireAuth('Príbeh sa pripína k tvojmu účtu.', () => {})) return;
+  /**
+   * Uploads whatever the story ends up being and posts it.
+   *
+   * A video goes up as it was recorded; a photo goes through the usual
+   * downscale. Sending a video down the photo path would flatten it into a
+   * single frame.
+   */
+  const postStory = async (draft: StoryDraft) => {
     setError(null);
+    setStoryBusy(true);
     try {
-      const picked = await pickStory('library');
-      if (!picked) return;
-
-      setStoryBusy(true);
-      // A video is uploaded as the picker re-encoded it; a photo goes through
-      // the usual downscale. Sending a video down the photo path would flatten
-      // it into a single frame.
-      const url = picked.kind === 'video'
-        ? await uploadStoryVideo(picked.uri, picked.mimeType)
-        : await uploadStoryImage(picked.uri, picked.width);
+      const url = draft.kind === 'video'
+        ? await uploadStoryVideo(draft.uri)
+        : await uploadStoryImage(draft.uri);
 
       await createStory({
         imageUrl: url,
         organizationId: postAs,
-        mediaType: picked.kind,
+        mediaType: draft.kind,
+        overlay: draft.overlay ?? null,
       });
       await queryClient.invalidateQueries({ queryKey: ['stories'] });
-      toast.show(picked.kind === 'video'
+      toast.show(draft.kind === 'video'
         ? 'Video je vonku — zmizne o 24 hodín'
         : 'Príbeh je vonku — zmizne o 24 hodín');
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
       setStoryBusy(false);
+    }
+  };
+
+  /** The camera: shoot it here. */
+  const addStory = () => {
+    if (!requireAuth('Príbeh sa pripína k tvojmu účtu.', () => {})) return;
+    setError(null);
+    setCameraOpen(true);
+  };
+
+  /** The other way in: something already in the library. */
+  const addStoryFromLibrary = async () => {
+    if (!requireAuth('Príbeh sa pripína k tvojmu účtu.', () => {})) return;
+    setError(null);
+    try {
+      const picked = await pickStory('library');
+      if (!picked) return;
+      await postStory({ uri: picked.uri, kind: picked.kind });
+    } catch (caught) {
+      setError(messageFor(caught));
     }
   };
 
@@ -278,7 +300,10 @@ export default function FeedScreen() {
             {/* Real stories. This row used to be every person you follow with a
                 gradient ring drawn round them — a ring that always said "there
                 is something new here" and never led anywhere but a profile. */}
-            <StoryRow onAdd={() => void addStory()} />
+            <StoryRow
+              onAdd={addStory}
+              onAddFromLibrary={() => void addStoryFromLibrary()}
+            />
 
             {storyBusy ? <Caption style={styles.storyBusy}>Nahrávam príbeh…</Caption> : null}
 
@@ -317,6 +342,12 @@ export default function FeedScreen() {
             onAction={() => setComposerOpen(true)}
           />
         }
+      />
+
+      <StoryCamera
+        visible={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onDone={(draft) => { setCameraOpen(false); void postStory(draft); }}
       />
 
       <BottomSheet
