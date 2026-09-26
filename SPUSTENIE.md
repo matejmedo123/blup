@@ -566,6 +566,22 @@ $$);
 select cron.schedule('blup-stories', '23 * * * *', $$
   select public.purge_expired_stories();
 $$);
+
+-- burza: rezervácia, ktorej vypršal čas, musí pustiť vstupenku späť do predaja.
+-- Bez tohto jobu by ju držala navždy a listing by nikto nekúpil. Funkcie si
+-- vypršanie kontrolujú aj samy pri každom pohľade, takže kupujúci nevidí
+-- „rezervované" dlhšie než treba — toto je upratovanie, nie ochrana.
+select cron.schedule('blup-resale-holds', '*/2 * * * *', $$
+  select public.expire_resale_reservations();
+  select public.expire_resale_orders();
+$$);
+
+-- burza: komu už peniaze patria. Nárok vzniká až po evente a pri vstupenke z
+-- inej platformy až keď kupujúci potvrdí, že fungovala — obe podmienky sú
+-- v samotnej funkcii, tu sa len pravidelne spúšťa.
+select cron.schedule('blup-resale-settle', '41 * * * *', $$
+  select public.settle_resale_orders(500);
+$$);
 ```
 
 `cart-sweep` robí dve veci naraz a ani jedna nie je kritická. Označí eventy,
@@ -574,7 +590,7 @@ správá ako nadchádzajúci (presne tak sa dal boostnúť koncert spred mesiaca
 A je to upratovanie — vypršaná rezervácia prestáva držať vstupenky
 v tej sekunde, keď vyprší, nech beží čokoľvek.
 
-**✓ Kontrola:** `select jobname, schedule from cron.job;` — sedem riadkov.
+**✓ Kontrola:** `select jobname, schedule from cron.job;` — deväť riadkov.
 
 > **E-mailov bude výrazne viac než doteraz.** Okrem vstupeniek teraz chodia aj
 > upozornenia z čakačky a rozposielania od organizátorov. Koľko ich smie odísť
