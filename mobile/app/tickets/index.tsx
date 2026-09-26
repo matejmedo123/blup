@@ -10,6 +10,7 @@ import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatPrice } from '@/lib/format';
 import { ticketStatusLabel } from '@/lib/labels';
 import { Badge, Caption, EmptyState, ErrorState, LoadingState, Screen } from '@/components/ui';
+import { MySwapOrders } from '@/components/MySwapOrders';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { TicketStatus } from '@/types/models';
 
@@ -55,6 +56,10 @@ export default function TicketsScreen() {
     <Screen>
       <FlatList
         data={data ?? []}
+        // Objednávky zo SWAPu patria sem a nie na vlastnú obrazovku: kto kúpil
+        // vstupenku, hľadá ju tam, kde má ostatné. Schovať ju inam znamená, že
+        // si otvorí prázdne „moje vstupenky" a bude myslieť, že nákup zlyhal.
+        ListFooterComponent={<MySwapOrders />}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         refreshing={isRefetching}

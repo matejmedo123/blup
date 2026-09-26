@@ -17,7 +17,7 @@ import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, shadow, spacing, typography } from '@/theme';
 
 /**
- * Burza vstupeniek na jeden event.
+ * BLUP SWAP — ponuky na jeden event.
  *
  * Ponuky od ľudí, ktorí na event nemôžu ísť. Dve veci, na ktorých obrazovka
  * stojí:
@@ -83,7 +83,7 @@ export default function EventResaleScreen() {
 
   return (
     <Screen scroll={false}>
-      {/* Hlavička hore hovorí „Burza vstupeniek"; tu už len to, ktorého
+      {/* Hlavička hore nesie meno produktu; tu už len to, ktorého
           eventu sa týka — zopakovaný nadpis by bol ten istý text dvakrát. */}
       {event.data ? (
         <View style={styles.header}>
@@ -187,7 +187,7 @@ function ListingRow({ listing }: { listing: ResaleListing }) {
   return (
     <Pressable
       style={styles.card}
-      onPress={() => router.push(`/resale/checkout/${listing.id}`)}
+      onPress={() => router.push(`/swap/checkout/${listing.id}`)}
       accessibilityRole="button"
     >
       <View style={styles.cardTop}>

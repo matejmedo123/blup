@@ -82,7 +82,7 @@ export default function SellTicketScreen() {
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ['resale'] });
-      router.replace('/seller');
+      router.replace('/swap/selling');
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
@@ -191,7 +191,7 @@ export default function SellTicketScreen() {
 
       {source === 'blup' ? (
         <Button
-          title={busy ? 'Vypisujem…' : 'Ponúknuť na burze'}
+          title={busy ? 'Vypisujem…' : 'Ponúknuť na SWAPe'}
           onPress={() => void submit()}
           disabled={busy || !chosen || overCap || !price}
         />

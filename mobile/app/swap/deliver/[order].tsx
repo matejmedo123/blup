@@ -128,7 +128,7 @@ export default function DeliverTicketScreen() {
           title="Kupujúci má vstupenku"
           body="Dali sme mu vedieť. Peniaze sa uvoľnia po evente a keď potvrdí, že fungovala."
         />
-        <Button title="Späť na prehľad" onPress={() => router.replace('/seller')} />
+        <Button title="Späť na prehľad" onPress={() => router.replace('/swap/selling')} />
       </Screen>
     );
   }

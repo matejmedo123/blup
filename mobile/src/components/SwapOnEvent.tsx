@@ -24,7 +24,7 @@ import { CONTENT_MAX } from '@/hooks/useLayout';
  * Keď nie je ani jedno — event je zadarmo, alebo už bol — nekreslí sa nič.
  * Prázdna sekcia „burza" pod každým eventom je len šum.
  */
-export function ResaleOnEvent({
+export function SwapOnEvent({
   eventId, canSell,
 }: {
   eventId: string;
@@ -63,8 +63,8 @@ export function ResaleOnEvent({
               </Caption>
             </View>
             <Button
-              title="Na burzu"
-              onPress={() => router.push(`/resale/${eventId}`)}
+              title="Na SWAP"
+              onPress={() => router.push(`/swap/${eventId}`)}
               style={styles.button}
             />
           </View>
@@ -86,7 +86,7 @@ export function ResaleOnEvent({
           <Button
             title="Predať"
             variant="secondary"
-            onPress={() => router.push('/resale/sell')}
+            onPress={() => router.push('/swap/sell')}
             style={styles.button}
           />
         </View>

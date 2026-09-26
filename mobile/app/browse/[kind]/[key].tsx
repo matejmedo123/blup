@@ -127,7 +127,7 @@ function ResaleLine({ eventId }: { eventId: string }) {
       <Button
         title="Pozrieť"
         variant="secondary"
-        onPress={() => router.push(`/resale/${eventId}`)}
+        onPress={() => router.push(`/swap/${eventId}`)}
         style={styles.resaleButton}
       />
     </View>

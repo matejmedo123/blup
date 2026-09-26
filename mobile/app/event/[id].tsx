@@ -8,7 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getMyTickets } from '@/api/tickets';
-import { ResaleOnEvent } from '@/components/ResaleOnEvent';
+import { SwapOnEvent } from '@/components/SwapOnEvent';
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
 import {
@@ -988,7 +988,7 @@ export default function EventDetailScreen() {
             Pod vstupenkami a nad popisom zámerne: kto sem prišiel kúpiť a
             oficiálne sú vypredané, musí sa o burze dozvedieť skôr, než začne
             čítať, o čom event je. */}
-        <ResaleOnEvent eventId={data.id} canSell={hasMyTicket} />
+        <SwapOnEvent eventId={data.id} canSell={hasMyTicket} />
 
         {/* --- about -------------------------------------------------------- */}
         {data.description ? (

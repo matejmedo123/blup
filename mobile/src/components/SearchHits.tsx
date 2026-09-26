@@ -111,14 +111,14 @@ function HitCard({ hit }: { hit: SearchHit }) {
           </Caption>
         ) : null}
 
-        {/* Keď je koncert vypredaný, je burza jediná cesta dnu — a je to
+        {/* Keď je koncert vypredaný, je SWAP jediná cesta dnu — a je to
             presne tá informácia, pre ktorú človek hľadanie otvoril. */}
         {hit.resale_count > 0 ? (
           <View style={styles.resale}>
             <Text style={styles.resaleLabel}>
               {hit.resale_count === 1
-                ? '1 na burze'
-                : `${hit.resale_count} na burze`}
+                ? '1 na SWAPe'
+                : `${hit.resale_count} na SWAPe`}
             </Text>
           </View>
         ) : null}

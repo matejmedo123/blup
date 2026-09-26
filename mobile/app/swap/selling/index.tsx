@@ -122,7 +122,7 @@ export default function SellerScreen() {
       <Button
         title="Predať vstupenku"
         variant="secondary"
-        onPress={() => router.push('/resale/sell')}
+        onPress={() => router.push('/swap/sell')}
       />
 
       <SectionHeader title="V predaji" />
@@ -229,7 +229,7 @@ function ListingCard({
       {row.order_id && row.order_status === 'waiting_for_ticket' ? (
         <Button
           title="Doručiť vstupenku"
-          onPress={() => router.push(`/resale/deliver/${row.order_id}`)}
+          onPress={() => router.push(`/swap/deliver/${row.order_id}`)}
         />
       ) : null}
     </View>

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
+import { SWAP_BRAND } from '@/swap/brand';
 import { StoryRingsProvider, useStoryRings } from '@/components/storyRings';
 import { StoryViewer } from '@/components/Stories';
 import { StatusBar } from 'expo-status-bar';
@@ -131,11 +132,13 @@ export default function RootLayout() {
           na obrazovke o peniazoch svieti "resale/[event]", čo vyzerá ako
           nedokončená appka práve tam, kde treba vzbudiť dôveru. */}
       <Stack.Screen name="browse/[kind]/[key]" options={{ title: '' }} />
-      <Stack.Screen name="resale/[event]" options={{ title: 'Burza vstupeniek' }} />
-      <Stack.Screen name="resale/checkout/[listing]" options={{ title: 'Pokladňa' }} />
-      <Stack.Screen name="resale/sell" options={{ title: 'Predať vstupenku' }} />
-      <Stack.Screen name="resale/deliver/[order]" options={{ title: 'Doručiť vstupenku' }} />
-      <Stack.Screen name="seller/index" options={{ title: 'Predávam' }} />
+      <Stack.Screen name="swap/index" options={{ headerShown: false }} />
+      <Stack.Screen name="swap/for/[kind]/[key]" options={{ title: SWAP_BRAND }} />
+      <Stack.Screen name="swap/[event]" options={{ title: SWAP_BRAND }} />
+      <Stack.Screen name="swap/checkout/[listing]" options={{ title: 'Pokladňa' }} />
+      <Stack.Screen name="swap/sell" options={{ title: 'Predať vstupenku' }} />
+      <Stack.Screen name="swap/deliver/[order]" options={{ title: 'Doručiť vstupenku' }} />
+      <Stack.Screen name="swap/selling/index" options={{ title: 'Predávam na SWAPe' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />
       {/* Both of these are landed on from outside — one after paying, one from
           a link in a ticket e-mail. The header is the first thing that says

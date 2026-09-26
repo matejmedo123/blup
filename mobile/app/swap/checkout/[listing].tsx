@@ -144,9 +144,9 @@ export default function ResaleCheckoutScreen() {
           body={reasonBody(q.reason)}
         />
         <Button
-          title="Späť na burzu"
+          title="Späť na SWAP"
           variant="secondary"
-          onPress={() => router.replace(`/resale/${q.event_id}`)}
+          onPress={() => router.replace(`/swap/${q.event_id}`)}
         />
       </Screen>
     );
