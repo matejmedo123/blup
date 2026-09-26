@@ -179,13 +179,54 @@ Všetko v `platform_settings`, meniteľné adminom bez zásahu do kódu:
 | `resale_enabled` | `true` | vypínač celého SWAPu |
 | `resale_buyer_fee_bps` | **0** | poplatok kupujúceho, navrch |
 | `resale_seller_fee_bps` | **1000 (10 %)** | provízia SWAPu, strháva sa predajcovi |
-| `resale_max_markup_bps` | **0** | strop prirážky nad pôvodnou cenou |
+| `resale_price_cap_enabled` | **false** | vypínač stropu prirážky |
+| `resale_max_markup_bps` | 0 | strop prirážky — uplatní sa len keď je zapnutý |
 | `resale_hold_minutes` | 15 | ako dlho drží rezervácia |
 | `resale_settlement_days` | 2 | koľko dní po evente sú peniaze k dispozícii |
 
-**`resale_max_markup_bps = 0` znamená, že BLUP vstupenku nepredáš drahšie, než
-si ju kúpil.** Je to zámerne prísny východzí stav. Pri externej sa vynútiť
-nedá — pôvodnú cenu nepoznáme.
+### Cenu určuje predajca
+
+**Strop je štandardne vypnutý.** Vstupenku vypíšeš za akúkoľvek cenu — nad aj
+pod pôvodnou. Pôvodná cena sa uloží do `face_value_cents` a kupujúci ju vidí
+ako informáciu („v predpredaji stála 40 €"), nie ako hranicu. To je celý zmysel
+burzy; strop z nej robí len spôsob, ako sa vstupenky zbaviť.
+
+Z databázy však strop nezmizol. V niektorých krajinách je limit prirážky nad
+nominálnu hodnotu zákonná povinnosť, a keď tam BLUP pôjde, nemá sa to dopisovať
+narýchlo: admin prepne `resale_price_cap_enabled` na `true` a
+`resale_max_markup_bps` začne platiť. Vynútiť sa dá len pri BLUP vstupenke —
+pri externej pôvodnú cenu nepoznáme, tam je `face_value_cents` údaj od
+predajcu.
+
+Spodná hranica **50 centov** platí vždy. Nie je to morálka, je to platobná
+brána: nižšiu platbu Stripe odmietne a objednávka by uviazla v
+`payment_pending` bez toho, aby ktokoľvek vedel prečo.
+
+### Odporúčanie ceny
+
+Prázdne pole „Cena" je pre predajcu rovnako zlá rada ako strop — netuší, či
+pýta veľa alebo málo. Preto `resale_price_hint(event_id, ticket_id)` vráti trh
+a tri návrhy:
+
+| návrh | z čoho | komu |
+|---|---|---|
+| **Rýchly predaj** | tesne pod najlacnejšou cudzou ponukou | kto chce mať pokoj |
+| **Vyvážená** | medián — predajov, ak ich je dosť, inak ponúk | väčšine |
+| **Maximum** | horný kvartil ponúk | kto sa vie počkať |
+
+Pri každom návrhu appka rovno ukáže, koľko z toho predajcovi príde po 10 %
+provízii. Pod poľom s cenou beží hodnotenie napísanej sumy — „pod celým trhom",
+„dobrá cena", „v hornej polovici", „nad celým trhom". **Nikdy to nie je zákaz.**
+Nad trhom sa predávať smie; len to treba vedieť.
+
+Dve veci, ktoré funkcia robí zámerne:
+
+- **Vlastnú ponuku do trhu nepočíta.** Inak by si predajca radil sám sebe a
+  odporúčanie by rástlo samo od seba.
+- **Predajné ceny vydá až od troch predajov.** `resale_orders` vidí len
+  kupujúci a predajca; funkcia je `security definer`, takže do nich vidí, a
+  preto si sama stráži, aby sa z mediánu nedala dopočítať suma jedného človeka.
+  Kým predajov nie je dosť, `sold.count` je 0 a rada stojí na živých ponukách.
 
 ### Provízia: 10 %, platí ju predajca
 

@@ -35,11 +35,19 @@ FUNCTIONS=(
   "web-checkout:true"
   "iap-apple-verify:true"
   "ai-recommendations:true"
+  "gif-search:true"
+  # BLUP SWAP. Bez týchto troch je burza mŕtva: kupujúci nemá čím zaplatiť,
+  # predajca si nemá kam pripojiť účet a peniaze z nej nikdy neodídu.
+  "resale-checkout:true"
+  "seller-connect:true"
   "stripe-webhook:false"
   "iap-apple-notifications:false"
   "push-dispatch:false"
   "weekly-digest:false"
   "cart-sweep:false"
+  # Výplaty predajcom zo SWAPu. Spúšťa ju cron so service_role kľúčom a
+  # funkcia si ho sama kontroluje — overovanie tokenu by ju len zablokovalo.
+  "resale-payout:false"
   "config-status:false"
   "og:false"
   # The link in every marketing e-mail, clicked from a mail client that has no

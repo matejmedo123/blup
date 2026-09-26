@@ -389,3 +389,62 @@ Details worth knowing:
   `charge.refunded` still finds every order that charge paid for.
 * **A free basket takes no card.** If the total is zero, `web-checkout` fulfils
   it directly through `manual` and never touches Stripe.
+
+---
+
+## Resale (BLUP SWAP)
+
+The secondary market is a **separate money flow**, not a variant of the primary
+one. Details live in `SWAP.md`; what matters here is how it differs, because
+the differences are the kind that get missed.
+
+**No destination charge.** A primary ticket sale is a Stripe destination charge:
+the money lands on the organizer's connected account and BLUP takes an
+application fee. A resale is not. The buyer's money lands on the **platform
+account**, sits there until the event has happened and the settlement delay has
+passed, and only then is transferred to the seller. BLUP is the merchant of
+record and eats the chargebacks.
+
+The reason is refunds. A resale can go wrong in ways a primary sale cannot — the
+external ticket never arrives, it turns out to be a copy, the buyer is turned
+away at the door. If the money were already on the seller's account, there would
+be nothing to give back.
+
+**Different PaymentIntent metadata, different webhook branch.** This is the
+easiest thing to get wrong in the whole system:
+
+```
+metadata.order_id        -> fulfill_order()          issues a ticket
+metadata.resale_order_id -> mark_resale_order_paid()  does not
+```
+
+A resale order that arrived with `order_id` would mint a brand-new ticket for an
+event nobody sold one for. Hence `createResalePaymentIntent` is its own function
+in `_shared/stripe.ts` with its own idempotency key (`rpi_<id>`), and
+`stripe-webhook` branches on which key is present rather than assuming.
+
+**The commission is 10 %, paid by the seller.** The buyer pays exactly the
+listed price. In the ledger this is two entries and the sign convention matters:
+
+```
+sale          +ticket_price_cents     the gross, not the net
+platform_fee  −seller_fee_cents
+```
+
+Writing `sale = +seller_net_cents` looks right and charges the commission
+twice — on a 45 € sale the seller receives 40,50 € instead of 42,75 €. It
+passed review and was caught by `test_58`, which sums the ledger against the
+order to the cent for four different prices. Keep that test.
+
+**The seller sets the price.** There is no cap by default
+(`resale_price_cap_enabled = false`), so a ticket bought for 40 € can be listed
+for 120 €. The app does not forbid it; it shows the seller what the market is
+doing (`resale_price_hint`) and what each price leaves them after commission.
+A cap still exists in `platform_settings` for jurisdictions that require one.
+The floor of 50 cents is not a policy, it is Stripe's minimum charge.
+
+**Payouts are manual, by design.** `seller_accounts` are created with only the
+`transfers` capability and `payouts: manual`, so money cannot leave before
+`settle_resale_orders` has decided it belongs to the seller and
+`resale_seller_risk` has had a look. An open dispute holds the payout and the
+admin has to write a note to release it.

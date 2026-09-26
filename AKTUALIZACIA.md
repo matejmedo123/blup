@@ -100,6 +100,32 @@ npm run check:mapzoom   # prehrá skutočnú myš aj trackpad
 npm run check:story     # 84 výrezov zo 7 rôzne tvarovaných fotiek
 ```
 
+### BLUP SWAP — burza vstupeniek
+
+Celá nová časť appky: predaj vstupeniek medzi ľuďmi, s vlastným vyhľadávaním,
+vlastnou domovskou stránkou, adminom a rozhraním pre predajcu. BLUP sa jej týka
+len cez vstupenky. Všetko je v **`SWAP.md`**.
+
+Na nasadenie z toho vyplývajú tri veci a **žiadna z nich sa nestane sama**:
+
+1. **Migrácie** — `npx supabase db push` (krok 1 nižšie).
+2. **Tri nové serverové funkcie** — `resale-checkout`, `seller-connect`,
+   `resale-payout` (krok 2 nižšie). Bez nich je burza mŕtva: kupujúci nemá
+   čím zaplatiť a peniaze z nej nikdy neodídu.
+3. **Tri nové crony** — `blup-resale-holds`, `blup-resale-settle`,
+   `blup-resale-payout`. SQL je v `SPUSTENIE.md`.
+
+**Cenu si určuje predajca.** Vstupenku kúpenú za 19 € vieš ponúknuť za 60 € —
+strop je štandardne vypnutý (`resale_price_cap_enabled = false`) a pôvodná cena
+je pre kupujúceho už len informácia. Namiesto zákazu dostane predajca radu:
+appka mu ukáže, koľko ľudí na ten event práve ponúka a v akom rozpätí, za koľko
+sa reálne predalo, a navrhne tri ceny — rýchly predaj, vyvážená, maximum —
+s rovno dopočítanou sumou, ktorá mu po 10 % provízii ostane.
+
+Strop však z databázy nezmizol: v niektorých krajinách je limit prirážky nad
+nominálnu hodnotu zákonná povinnosť. Keď ho budeš potrebovať, zapneš ho
+v `platform_settings` a nemusí sa dopisovať kód.
+
 ---
 
 ## Čo bolo nové v balíku predtým
@@ -651,7 +677,20 @@ select count(*) from public.events where slug is null;
 npx supabase functions deploy
 ```
 
-Nasadí sa **19 funkcií**, z toho tri nové:
+Nasadí sa **22 funkcií**. Tri z nich patria SWAPu a sú nové:
+
+- **`resale-checkout`** — platba za vstupenku z burzy. Má vlastný
+  PaymentIntent s metadátom `resale_order_id`; keby šiel cez ten istý ako
+  primárny predaj, webhook by objednávke z burzy vyrobil úplne novú vstupenku
+  na event, na ktorý ju nikto nepredal.
+- **`seller-connect`** — pripojenie účtu predajcu. Zakladá sa len s
+  oprávnením na prevody a s **ručnými výplatami**, takže peniaze nemôžu odísť
+  skôr, než ich systém predajcovi prizná.
+- **`resale-payout`** — skutočné odoslanie peňazí. Spúšťa ju cron so
+  `service_role` kľúčom a funkcia si ho sama kontroluje; nasadzuje sa preto
+  bez overovania tokenu.
+
+A tri staršie, ak si ich ešte nenasadil:
 
 - **`og`** — náhľad odkazu na Instagrame a vo WhatsApp. Bez nej sa zdieľané
   eventy budú ďalej zobrazovať s generickou kartou.

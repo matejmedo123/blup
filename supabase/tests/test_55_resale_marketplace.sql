@@ -56,7 +56,7 @@ values ('c5555555-0000-0000-0000-000000000001', 'e5555555-0000-0000-0000-0000000
         'BLP-ORIGINAL1', 'secret-original', 4000, 'EUR');
 
 -- ============================================================================
--- 1. Vypísať sa dá len vlastná platná vstupenka a nie za koľkokoľvek
+-- 1. Vypísať sa dá len vlastná platná vstupenka — a za vlastnú cenu
 -- ============================================================================
 do $$
 declare
@@ -82,7 +82,33 @@ begin
 
   perform set_config('request.jwt.claim.sub', v_seller::text, true);
 
-  -- Strop prirážky. Východzie nastavenie je 0 bps, čiže najviac pôvodná cena.
+  -- Cenu určuje predajca. Vstupenka za 40 € sa musí dať vypísať za 120 €,
+  -- inak to nie je burza, ale len spôsob, ako sa vstupenky zbaviť.
+  v_listing := public.create_resale_listing(v_event, 'blup', 12000, v_ticket);
+  assert v_listing.price_cents = 12000,
+    'cenu nad pôvodnú sumu má určovať predajca, nie pôvodná faktúra';
+  assert v_listing.face_value_cents = 4000,
+    'pôvodná cena sa má uložiť ako údaj pre kupujúceho, nie ako strop';
+  perform public.cancel_resale_listing(v_listing.id);
+
+  -- Pod pol eura sa nedá — nie z morálky, ale preto, že takú platbu brána
+  -- odmietne a objednávka by uviazla bez vysvetlenia.
+  v_failed := false;
+  begin
+    perform public.create_resale_listing(v_event, 'blup', 10, v_ticket);
+  exception when others then
+    v_failed := true;
+    assert sqlerrm like '%PRICE_TOO_LOW%', format('čakala sa PRICE_TOO_LOW, prišlo: %s', sqlerrm);
+  end;
+  assert v_failed, 'vstupenka sa dala vypísať za 10 centov';
+
+  -- Strop však z databázy nezmizol: niekde je zákonná povinnosť. Keď sa
+  -- zapne, musí naozaj platiť.
+  reset role;
+  update public.platform_settings set resale_price_cap_enabled = true where id;
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', v_seller::text, true);
+
   v_failed := false;
   begin
     perform public.create_resale_listing(v_event, 'blup', 12000, v_ticket);
@@ -90,7 +116,12 @@ begin
     v_failed := true;
     assert sqlerrm like '%PRICE_ABOVE_CAP%', format('čakal sa strop ceny, prišlo: %s', sqlerrm);
   end;
-  assert v_failed, 'vstupenku sa dalo vypísať za trojnásobok pôvodnej ceny';
+  assert v_failed, 'zapnutý strop ceny nič nezastavil';
+
+  reset role;
+  update public.platform_settings set resale_price_cap_enabled = false where id;
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', v_seller::text, true);
 
   -- A teraz správne.
   v_listing := public.create_resale_listing(
@@ -114,7 +145,7 @@ begin
   assert v_failed, 'tá istá vstupenka visí na dvoch listingoch naraz';
 
   reset role;
-  raise notice 'PASS vypísať sa dá len vlastná vstupenka a nie za koľkokoľvek';
+  raise notice 'PASS vypísať sa dá len vlastná vstupenka a cenu si určuje predajca';
 end $$;
 
 -- ============================================================================
@@ -130,7 +161,10 @@ declare
   v_failed boolean;
   v_live integer;
 begin
-  select id into v_listing from public.resale_listings limit 1;
+  -- Práve tú ponuku, ktorá je živá. `limit 1` bez podmienky by po
+  -- zrušenej ponuke z prvého bloku chytilo ktorúkoľvek.
+  select id into v_listing from public.resale_listings
+   where status <> 'cancelled' order by created_at desc limit 1;
 
   set local role authenticated;
 
@@ -198,7 +232,10 @@ declare
   v_ord2 public.resale_orders;
   v_quote jsonb;
 begin
-  select id into v_listing from public.resale_listings limit 1;
+  -- Práve tú ponuku, ktorá je živá. `limit 1` bez podmienky by po
+  -- zrušenej ponuke z prvého bloku chytilo ktorúkoľvek.
+  select id into v_listing from public.resale_listings
+   where status <> 'cancelled' order by created_at desc limit 1;
   select id into v_res from public.resale_reservations
   where listing_id = v_listing and status = 'active';
 
@@ -305,7 +342,10 @@ declare
   v_failed boolean;
   v_listing uuid;
 begin
-  select id into v_listing from public.resale_listings limit 1;
+  -- Práve tú ponuku, ktorá je živá. `limit 1` bez podmienky by po
+  -- zrušenej ponuke z prvého bloku chytilo ktorúkoľvek.
+  select id into v_listing from public.resale_listings
+   where status <> 'cancelled' order by created_at desc limit 1;
 
   set local role authenticated;
 

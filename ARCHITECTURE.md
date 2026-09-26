@@ -199,6 +199,27 @@ Layered, so no single mistake is fatal:
    with the hard guarantees kept in the database (unique constraints, balance
    checks) rather than in a counter.
 
+The resale market (BLUP SWAP) adds three of its own, for problems the primary
+flow does not have:
+
+10. **Double-sell protection is two mechanisms, not one.** `reserve_resale_listing`
+    takes `select … for update` on the listing row *and* the table carries a
+    unique partial index allowing one live reservation. The lock is the speed;
+    the index is the guarantee, and it still holds if someone later adds a
+    second code path to the same table.
+11. **Aggregates that could identify one person are withheld.**
+    `resale_price_hint` is SECURITY DEFINER, so it can read `resale_orders`,
+    which buyers and sellers otherwise see only their own rows of. It returns
+    the median of past sale prices only from three sales up — below that, the
+    median plus one publicly known price reveals the other. It also excludes the
+    caller's own listings, which is not privacy but correctness: otherwise a
+    seller's advice is computed from the seller.
+12. **The resale ticket bucket is private and scoped by order.** An external
+    seller uploads a PDF; only the buyer of that order and the seller who
+    uploaded it can read it, through a 300-second signed URL. Storage policies
+    derive this from the order id in the path, the same way the public buckets
+    derive ownership from the user id.
+
 ---
 
 ## Realtime

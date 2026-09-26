@@ -1,9 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { createResaleListing, getSwapFees, type ResaleSource } from '@/api/resale';
+import {
+  createResaleListing, getResalePriceHint, getSwapFees, type ResaleSource,
+} from '@/api/resale';
+import { getEvent } from '@/api/events';
+import { PriceAdvice } from '@/swap/PriceAdvice';
 import { getMyTickets } from '@/api/tickets';
 import type { TicketWithEvent } from '@/types/models';
 import { AuthenticityBadge } from '@/components/AuthenticityBadge';
@@ -25,9 +29,22 @@ import { colors, radius, spacing, typography } from '@/theme';
  * číslo sa neopisuje ručne, lebo prevod potom robí server sám a nemá čo
  * hľadať. Pri cudzej sa údaje zadávajú, ale appka nikde nepovie, že sú
  * overené, lebo overené nie sú.
+ *
+ * Cenu si určuje predajca. Pôvodná cena nie je strop — je to len údaj, ktorý
+ * uvidí kupujúci. Namiesto zákazu dostane predajca radu: `PriceAdvice` mu
+ * ukáže, za koľko sa tá istá vstupenka na tom istom evente ponúka a predáva,
+ * a navrhne tri ceny podľa toho, či chce predať rýchlo alebo draho.
  */
 export default function SellTicketScreen() {
   const queryClient = useQueryClient();
+
+  /**
+   * Externú vstupenku vypisuješ na konkrétny event, a ten sa sem dostane z
+   * URL — z tlačidla „Predať" na stránke eventu. Bez neho by obrazovka nemala
+   * ku ktorému eventu ponuku pripnúť, a preto na to v tom prípade pošle.
+   */
+  const params = useLocalSearchParams<{ event?: string }>();
+  const eventParam = typeof params.event === 'string' ? params.event : null;
 
   const [source, setSource] = useState<ResaleSource>('blup');
   const [ticketId, setTicketId] = useState<string | null>(null);
@@ -36,6 +53,9 @@ export default function SellTicketScreen() {
   const [rowLabel, setRowLabel] = useState('');
   const [seatLabel, setSeatLabel] = useState('');
   const [provider, setProvider] = useState('');
+  const [reference, setReference] = useState('');
+  const [faceValue, setFaceValue] = useState('');
+  const [quantity, setQuantity] = useState('1');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +88,61 @@ export default function SellTicketScreen() {
     [tickets.data],
   );
 
+  /**
+   * Príchod z eventu: vyber rovno to, čo na ten event mám.
+   *
+   * Keď vstupenku z BLUPu na ten event mám, obrazovka ju predvyberie. Keď
+   * nemám, prepne sa na „mám ju odinakiaľ" — inak by človek pristál na zozname
+   * vstupeniek, v ktorom tá jeho nie je, a myslel si, že sa nedá nič robiť.
+   * Beží raz; potom už rozhoduje človek.
+   */
+  const settled = useRef(false);
+  useEffect(() => {
+    if (settled.current || !eventParam || !tickets.isSuccess) return;
+    settled.current = true;
+    const mine = sellable.find((t) => t.event_id === eventParam);
+    if (mine) {
+      setTicketId(mine.id);
+      setPrice((current) => current || ((mine.price_cents ?? 0) / 100).toFixed(2).replace('.', ','));
+    } else {
+      setSource('external');
+    }
+  }, [eventParam, sellable, tickets.isSuccess]);
+
   const chosen: TicketWithEvent | undefined = sellable.find((t) => t.id === ticketId);
+
+  /** Event, ku ktorému ponuka patrí — z vybranej vstupenky alebo z URL. */
+  const eventId = source === 'blup' ? chosen?.event_id ?? null : eventParam;
+
+  const externalEvent = useQuery({
+    queryKey: ['event', eventParam],
+    queryFn: () => getEvent(eventParam!),
+    enabled: source === 'external' && !!eventParam,
+  });
+
+  /**
+   * Rada k cene. Pýta sa až vtedy, keď je jasné, na ktorý event — inak by to
+   * bol dotaz do prázdna pri každom otvorení obrazovky.
+   */
+  /**
+   * Nominálnu hodnotu posielame len pri vlastnej BLUP vstupenke.
+   *
+   * Pri externej by to bola cena MOJEJ vstupenky na ten event — a rada by
+   * tvrdila „v predpredaji stála 19 €" o vstupenke, ktorú predávam odinakiaľ
+   * a o ktorej nič nevieme.
+   */
+  const hintTicketId = source === 'blup' ? chosen?.id ?? null : null;
+
+  const hint = useQuery({
+    queryKey: ['swap', 'price-hint', eventId, hintTicketId],
+    queryFn: () => getResalePriceHint(eventId!, hintTicketId),
+    enabled: !!eventId,
+    staleTime: 60_000,
+  });
+
   const cents = Math.round(Number(price.replace(',', '.')) * 100);
+  const faceCents = Math.round(Number(faceValue.replace(',', '.')) * 100);
+  const qty = Math.round(Number(quantity));
 
   // Rovnaký výpočet ako na serveri (celočíselné delenie desaťtisícom), aby sa
   // náhľad a skutočná suma nelíšili o cent.
@@ -78,14 +151,19 @@ export default function SellTicketScreen() {
     ? Math.floor((cents * sellerFeeBps) / 10000)
     : 0;
   const netCents = Number.isFinite(cents) && cents > 0 ? cents - feeCents : 0;
-  const overCap = Boolean(
-    chosen && Number.isFinite(cents) && cents > (chosen.price_cents ?? 0),
-  );
+
+  const minPrice = fees.data?.min_price_cents ?? 50;
+  const tooLow = Number.isFinite(cents) && cents > 0 && cents < minPrice;
+  const currency = chosen?.currency ?? externalEvent.data?.currency ?? 'EUR';
 
   const submit = async () => {
     setError(null);
-    if (!Number.isFinite(cents) || cents < 0) {
+    if (!Number.isFinite(cents) || cents <= 0) {
       setError('Zadaj cenu.');
+      return;
+    }
+    if (cents < minPrice) {
+      setError(`Najmenej ${formatMoney(minPrice, currency)} — nižšiu platbu brána nespracuje.`);
       return;
     }
     setBusy(true);
@@ -103,11 +181,33 @@ export default function SellTicketScreen() {
           note: note || null,
         });
       } else {
-        setError('Externú vstupenku zatiaľ vyberáš cez event — otvor ho a daj Predať.');
-        setBusy(false);
-        return;
+        if (!eventParam) {
+          setError('Otvor event, na ktorý vstupenku máš, a daj tam Predať.');
+          setBusy(false);
+          return;
+        }
+        if (!Number.isFinite(qty) || qty < 1 || qty > 20) {
+          setError('Počet vstupeniek musí byť od 1 do 20.');
+          setBusy(false);
+          return;
+        }
+        await createResaleListing({
+          eventId: eventParam,
+          source: 'external',
+          priceCents: cents,
+          quantity: qty,
+          deliveryMethod: 'file',
+          externalProvider: provider || null,
+          externalReference: reference || null,
+          faceValueCents: Number.isFinite(faceCents) && faceCents > 0 ? faceCents : null,
+          section: section || null,
+          rowLabel: rowLabel || null,
+          seatLabel: seatLabel || null,
+          note: note || null,
+        });
       }
       await queryClient.invalidateQueries({ queryKey: ['resale'] });
+      await queryClient.invalidateQueries({ queryKey: ['swap'] });
       router.replace('/swap/selling');
     } catch (caught) {
       setError(messageFor(caught));
@@ -153,8 +253,9 @@ export default function SellTicketScreen() {
                 key={t.id}
                 onPress={() => {
                   setTicketId(t.id);
-                  // Pôvodná cena je zároveň strop, tak ju rovno ponúkneme.
-                  if (!price) setPrice(((t.price_cents ?? 0) / 100).toFixed(2));
+                  // Pôvodná cena ako východzí bod, nie ako strop — odtiaľ sa
+                  // dá ísť hore aj dole podľa toho, čo poradí trh nižšie.
+                  if (!price) setPrice(((t.price_cents ?? 0) / 100).toFixed(2).replace('.', ','));
                 }}
                 style={[styles.ticket, ticketId === t.id && styles.ticketOn]}
               >
@@ -171,15 +272,55 @@ export default function SellTicketScreen() {
             ))
           )}
         </>
+      ) : eventParam ? (
+        <>
+          <SectionHeader title="Na ktorý event" />
+          <View style={styles.eventBox}>
+            <Text style={styles.ticketTitle} numberOfLines={2}>
+              {externalEvent.data?.title ?? 'Načítavam…'}
+            </Text>
+            {externalEvent.data ? (
+              <Caption>{formatEventDate(externalEvent.data.start_at)}</Caption>
+            ) : null}
+          </View>
+
+          <SectionHeader title="Odkiaľ ju máš" />
+          <Input
+            label="Predajca (nepovinné)"
+            value={provider}
+            onChangeText={setProvider}
+            placeholder="Ticketportal, Predpredaj…"
+          />
+          <Input
+            label="Číslo objednávky (nepovinné)"
+            value={reference}
+            onChangeText={setReference}
+            placeholder="Kupujúci ho neuvidí, slúži pri spore."
+          />
+          <Input
+            label="Pôvodná cena (nepovinné)"
+            value={faceValue}
+            onChangeText={setFaceValue}
+            keyboardType="decimal-pad"
+            placeholder="0,00"
+          />
+          <Input
+            label="Počet vstupeniek"
+            value={quantity}
+            onChangeText={setQuantity}
+            keyboardType="number-pad"
+            placeholder="1"
+          />
+        </>
       ) : (
         <Notice
           tone="accent"
           title="Otvor event a daj Predať"
-          body="Vstupenku odinakiaľ vypisuješ priamo na evente, ku ktorému patrí."
+          body="Vstupenku odinakiaľ vypisuješ priamo na evente, ku ktorému patrí — inak by nebolo kam ju pripnúť."
         />
       )}
 
-      {source === 'blup' && chosen ? (
+      {eventId ? (
         <>
           <SectionHeader title="Za koľko" />
           <Input
@@ -189,14 +330,21 @@ export default function SellTicketScreen() {
             keyboardType="decimal-pad"
             placeholder="0,00"
           />
-          {/* Strop nie je prekvapenie po odoslaní — človek ho vidí, kým píše. */}
-          <Caption style={overCap ? styles.capBad : undefined}>
-            {overCap
-              ? `Viac než ${formatMoney(chosen.price_cents ?? 0, chosen.currency ?? 'EUR')} `
-                + 'pýtať nemôžeš — toľko si za ňu zaplatil.'
-              : `Najviac ${formatMoney(chosen.price_cents ?? 0, chosen.currency ?? 'EUR')}, `
-                + 'teda toľko, koľko si za ňu zaplatil.'}
+          <Caption style={tooLow ? styles.capBad : undefined}>
+            {tooLow
+              ? `Najmenej ${formatMoney(minPrice, currency)} — nižšiu platbu brána nespracuje.`
+              : 'Cenu si určuješ ty. Pôvodná cena je pre kupujúceho len informácia.'}
           </Caption>
+
+          {/* Rada namiesto zákazu: koľko za ňu pýtajú ostatní a za koľko sa
+              reálne predáva. Návrh sa dá klepnutím vložiť do poľa vyššie. */}
+          {hint.data ? (
+            <PriceAdvice
+              hint={hint.data}
+              cents={cents}
+              onPick={(value) => setPrice((value / 100).toFixed(2).replace('.', ','))}
+            />
+          ) : null}
 
           {/* Koľko z toho príde predajcovi. Tu, pri poli s cenou, a nie až v
               prehľade po predaji — vtedy už je neskoro sa rozhodnúť inak. */}
@@ -205,7 +353,7 @@ export default function SellTicketScreen() {
               <View style={styles.payoutRow}>
                 <Text style={styles.payoutLabel}>Kupujúci zaplatí</Text>
                 <Text style={styles.payoutValue}>
-                  {formatMoney(cents, chosen.currency ?? 'EUR')}
+                  {formatMoney(cents, currency)}
                 </Text>
               </View>
               <View style={styles.payoutRow}>
@@ -213,13 +361,13 @@ export default function SellTicketScreen() {
                   Provízia SWAPu ({(sellerFeeBps / 100).toFixed(0)} %)
                 </Text>
                 <Text style={styles.payoutValue}>
-                  −{formatMoney(feeCents, chosen.currency ?? 'EUR')}
+                  −{formatMoney(feeCents, currency)}
                 </Text>
               </View>
               <View style={[styles.payoutRow, styles.payoutTotal]}>
                 <Text style={styles.payoutStrong}>Dostaneš</Text>
                 <Text style={styles.payoutStrong}>
-                  {formatMoney(netCents, chosen.currency ?? 'EUR')}
+                  {formatMoney(netCents, currency)}
                 </Text>
               </View>
               <Caption style={styles.payoutNote}>
@@ -245,11 +393,11 @@ export default function SellTicketScreen() {
 
       {error ? <Notice tone="danger" title="Nepodarilo sa" body={error} /> : null}
 
-      {source === 'blup' ? (
+      {eventId ? (
         <Button
           title={busy ? 'Vypisujem…' : 'Ponúknuť na SWAPe'}
           onPress={() => void submit()}
-          disabled={busy || !chosen || overCap || !price}
+          disabled={busy || !price || tooLow}
         />
       ) : null}
     </Screen>
@@ -307,6 +455,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   ticketOn: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  eventBox: {
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.xs,
+  },
   ticketMain: { flex: 1 },
   ticketTitle: { ...typography.bodyStrong, color: colors.text },
   ticketPrice: { ...typography.body, color: colors.textSecondary },

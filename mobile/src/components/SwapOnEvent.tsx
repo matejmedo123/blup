@@ -40,7 +40,11 @@ export function SwapOnEvent({
   const data = summary.data;
   const has = Boolean(data && data.listings > 0);
 
-  if (!has && !canSell) return null;
+  // Predať sa dá vždy — aj vstupenku odinakiaľ. Sekcia sa preto nekreslí len
+  // vtedy, keď na evente naozaj nie je čo robiť: žiadna ponuka a event, na
+  // ktorý sa vstupenky nepredávajú.
+  const canSellExternal = Boolean(data);
+  if (!has && !canSell && !canSellExternal) return null;
 
   return (
     <View style={styles.wrap}>
@@ -80,13 +84,32 @@ export function SwapOnEvent({
           <View style={styles.text}>
             <Text style={styles.title}>Nemôžeš ísť?</Text>
             <Caption>
-              Ponúkni vstupenku ďalej. Prevedieme ju a tvoj kód prestane platiť.
+              Ponúkni vstupenku ďalej za svoju cenu. Poradíme ti, za koľko ju
+              predávajú ostatní.
             </Caption>
           </View>
           <Button
             title="Predať"
             variant="secondary"
-            onPress={() => router.push('/swap/sell')}
+            onPress={() => router.push(`/swap/sell?event=${eventId}`)}
+            style={styles.button}
+          />
+        </View>
+      ) : canSellExternal ? (
+        /* Vstupenku odinakiaľ tu vypisuje ten, kto v BLUPe žiadnu nemá.
+           Donedávna sa na túto cestu iba odkazovalo a nikam neviedla. */
+        <View style={[styles.row, has && styles.rowSecond]}>
+          <View style={styles.text}>
+            <Text style={styles.title}>Máš vstupenku odinakiaľ?</Text>
+            <Caption>
+              Ponúkni ju tu za svoju cenu. Kupujúci uvidí, že pravosť overiť
+              nevieme, a ty dostaneš peniaze, až keď potvrdí, že fungovala.
+            </Caption>
+          </View>
+          <Button
+            title="Predať"
+            variant="secondary"
+            onPress={() => router.push(`/swap/sell?event=${eventId}`)}
             style={styles.button}
           />
         </View>

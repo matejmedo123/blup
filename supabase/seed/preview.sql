@@ -287,3 +287,54 @@ begin
   perform public.mark_resale_order_paid(v_ord.id, 'pi_preview_1');
   perform set_config('request.jwt.claim.sub', '', true);
 end $$;
+
+-- Trh na jednom evente, aby mala rada k cene z čoho vychádzať.
+--
+-- Bez cudzích ponúk by obrazovka „Za koľko" ukázala len „o tomto evente
+-- zatiaľ nič nevieme" a nedalo by sa posúdiť, či rada vôbec funguje.
+do $$
+declare
+  v_event uuid := '33333333-3333-3333-3333-333333333333';
+  v_eva   uuid := '77777777-0000-0000-0000-000000000001';
+  v_miro  uuid := '77777777-0000-0000-0000-000000000002';
+  v_l     public.resale_listings;
+begin
+  set local role authenticated;
+
+  perform set_config('request.jwt.claim.sub', v_eva::text, true);
+  perform public.create_resale_listing(
+    v_event, 'external', 1600, null,
+    p_delivery_method => 'file', p_ticket_label => 'Státie',
+    p_external_provider => 'Predpredaj.sk');
+  perform public.create_resale_listing(
+    v_event, 'external', 2600, null,
+    p_delivery_method => 'file', p_ticket_label => 'Tribúna Juh',
+    p_external_provider => 'Ticketportal');
+
+  perform set_config('request.jwt.claim.sub', v_miro::text, true);
+  perform public.create_resale_listing(
+    v_event, 'external', 3400, null,
+    p_delivery_method => 'file', p_ticket_label => 'VIP',
+    p_external_provider => 'Ticketmaster');
+  v_l := public.create_resale_listing(
+    v_event, 'external', 2200, null,
+    p_delivery_method => 'file', p_ticket_label => 'Státie',
+    p_external_provider => 'Predpredaj.sk');
+
+  reset role;
+  perform set_config('request.jwt.claim.sub', '', true);
+
+  -- Tri dokončené predaje. Menej než tri server zámerne neukáže, aby sa
+  -- z mediánu nedala dopočítať suma jedného človeka.
+  insert into public.resale_orders (
+    listing_id, event_id, buyer_id, seller_id, source, quantity,
+    ticket_price_cents, total_cents, seller_fee_cents, seller_net_cents,
+    currency, payment_status, order_status, paid_at, completed_at
+  ) values
+    (v_l.id, v_event, v_eva, v_miro, 'external', 1, 2100, 2100, 210, 1890,
+     'EUR', 'succeeded', 'completed', now() - interval '9 days', now() - interval '9 days'),
+    (v_l.id, v_event, v_eva, v_miro, 'external', 1, 2500, 2500, 250, 2250,
+     'EUR', 'succeeded', 'completed', now() - interval '5 days', now() - interval '5 days'),
+    (v_l.id, v_event, v_eva, v_miro, 'external', 1, 2900, 2900, 290, 2610,
+     'EUR', 'succeeded', 'completed', now() - interval '2 days', now() - interval '2 days');
+end $$;

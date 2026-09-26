@@ -412,7 +412,10 @@ export interface SwapFees {
   enabled: boolean;
   buyer_fee_bps: number;
   seller_fee_bps: number;
+  /** Uplatní sa len keď `price_cap_enabled`. Štandardne je vypnutý. */
   max_markup_bps: number;
+  price_cap_enabled: boolean;
+  min_price_cents: number;
   hold_minutes: number;
   settlement_days: number;
   currency: string;
@@ -422,4 +425,52 @@ export async function getSwapFees(): Promise<SwapFees> {
   const { data, error } = await supabase.rpc('resale_fees');
   if (error) throw error;
   return data as SwapFees;
+}
+
+/**
+ * Koľko za ňu pýtať.
+ *
+ * Cenu určuje predajca — server mu do nej nehovorí. Hovorí mu však, za koľko
+ * sa tá istá vstupenka na tom istom evente reálne ponúka a predáva, lebo bez
+ * toho je „daj si vlastnú cenu" len prázdne pole.
+ *
+ * `sold` je zámerne skúpe: predajné ceny sú súkromné a server ich vydá až ako
+ * štatistiku z troch a viac predajov, aby sa z mediánu nedala dopočítať suma
+ * jedného človeka. Keď ich ešte nie je dosť, `count` je 0 a rada stojí na
+ * živých ponukách.
+ */
+export interface ResalePriceMarket {
+  count: number;
+  min_cents: number | null;
+  p25_cents?: number | null;
+  median_cents: number | null;
+  p75_cents?: number | null;
+  max_cents: number | null;
+  window_days?: number;
+}
+
+export interface ResalePriceHint {
+  currency: string;
+  seller_fee_bps: number;
+  min_price_cents: number;
+  face_value_cents: number | null;
+  live: ResalePriceMarket;
+  sold: ResalePriceMarket;
+  suggest: {
+    fast_cents: number;
+    balanced_cents: number;
+    top_cents: number;
+  } | null;
+}
+
+export async function getResalePriceHint(
+  eventId: string,
+  ticketId?: string | null,
+): Promise<ResalePriceHint> {
+  const { data, error } = await supabase.rpc('resale_price_hint', {
+    p_event_id: eventId,
+    p_ticket_id: ticketId ?? null,
+  });
+  if (error) throw error;
+  return data as ResalePriceHint;
 }
