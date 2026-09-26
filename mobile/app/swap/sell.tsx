@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { createResaleListing, getSwapFees, type ResaleSource } from '@/api/resale';
 import { getMyTickets } from '@/api/tickets';
+import type { TicketWithEvent } from '@/types/models';
 import { AuthenticityBadge } from '@/components/AuthenticityBadge';
 import {
   Button, Caption, Input, Notice, Screen, SectionHeader, Title,
@@ -50,16 +51,24 @@ export default function SellTicketScreen() {
    */
   const fees = useQuery({ queryKey: ['swap', 'fees'], queryFn: getSwapFees, staleTime: 300_000 });
 
-  // Predať sa dá len to, čo ešte nebolo použité a na event, ktorý ešte bude.
+  /**
+   * Predať sa dá len to, čo ešte nebolo použité a na event, ktorý ešte bude.
+   *
+   * Dátum je v `t.event.start_at`, nie v `t.event_start_at`. Písané cez `any`
+   * to prešlo typovou kontrolou aj buildom, ale `new Date(undefined ?? 0)` je
+   * rok 1970 — takže podmienka „event ešte bude" neplatila NIKDY a obrazovka
+   * každému napísala „Nemáš čo predať". Odhalil to až screenshot; preto je tu
+   * teraz skutočný typ a nie `any`.
+   */
   const sellable = useMemo(
     () => (tickets.data ?? []).filter(
-      (t: any) => t.status === 'valid' && !t.checked_in_at
-        && new Date(t.event_start_at ?? t.start_at ?? 0).getTime() > Date.now(),
+      (t) => t.status === 'valid' && !t.checked_in_at
+        && new Date(t.event?.start_at ?? 0).getTime() > Date.now(),
     ),
     [tickets.data],
   );
 
-  const chosen = sellable.find((t: any) => t.id === ticketId);
+  const chosen: TicketWithEvent | undefined = sellable.find((t) => t.id === ticketId);
   const cents = Math.round(Number(price.replace(',', '.')) * 100);
 
   // Rovnaký výpočet ako na serveri (celočíselné delenie desaťtisícom), aby sa
@@ -109,8 +118,8 @@ export default function SellTicketScreen() {
 
   return (
     <Screen scroll>
-      <Title>Predať vstupenku</Title>
-
+      {/* Hlavička hore už hovorí „Predať vstupenku"; druhý raz pod ňou je to
+          ten istý text dvakrát. */}
       <SectionHeader title="Odkiaľ je vstupenka" />
       <View style={styles.sources}>
         <SourceOption
@@ -139,7 +148,7 @@ export default function SellTicketScreen() {
               body="Predať sa dá len nepoužitá vstupenka na event, ktorý ešte bude."
             />
           ) : (
-            sellable.map((t: any) => (
+            sellable.map((t) => (
               <Pressable
                 key={t.id}
                 onPress={() => {
@@ -151,9 +160,9 @@ export default function SellTicketScreen() {
               >
                 <View style={styles.ticketMain}>
                   <Text style={styles.ticketTitle} numberOfLines={1}>
-                    {t.event_title ?? 'Event'}
+                    {t.event?.title ?? 'Event'}
                   </Text>
-                  <Caption>{formatEventDate(t.event_start_at ?? t.start_at)}</Caption>
+                  <Caption>{formatEventDate(t.event?.start_at ?? '')}</Caption>
                 </View>
                 <Text style={styles.ticketPrice}>
                   {formatMoney(t.price_cents ?? 0, t.currency ?? 'EUR')}

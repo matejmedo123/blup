@@ -242,3 +242,48 @@ begin
   reset role;
   perform set_config('request.jwt.claim.sub', '', true);
 end $$;
+
+-- Účinkujúci, aby hľadanie v SWAPe malo čo nájsť podľa mena.
+update public.events set performers = array['Don Toliver', 'Travis Scott']
+where id = '33333333-3333-3333-3333-333333333333';
+update public.events set performers = array['Hidepark Live']
+where id = '33333333-0000-0000-0000-0000000d0e51';
+
+-- Prihlásený človek v náhľade je admin. Nech má aj on čo predávať a čo
+-- predané — inak je obrazovka „Predávam" prázdna a nedá sa na nej nič
+-- posúdiť.
+do $$
+declare
+  v_me    uuid := '11111111-1111-1111-1111-111111111111';
+  v_buyer uuid := '77777777-0000-0000-0000-000000000002';
+  v_event uuid := '33333333-3333-3333-3333-333333333333';
+  v_t     uuid;
+  v_l     public.resale_listings;
+  v_res   public.resale_reservations;
+  v_ord   public.resale_orders;
+begin
+  select id into v_t from public.tickets where code = 'PRV-0005' and buyer_id = v_me;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', v_me::text, true);
+  v_l := public.create_resale_listing(
+    v_event, 'blup', 1900, v_t,
+    p_section => 'A', p_row_label => '7', p_seat_label => '22'
+  );
+
+  -- A jedna už predaná, aby bolo vidieť aj peniaze a stav po predaji.
+  v_l := public.create_resale_listing(
+    v_event, 'external', 2400, null,
+    p_delivery_method => 'file',
+    p_ticket_label => 'Tribúna Sever',
+    p_external_provider => 'Ticketportal'
+  );
+
+  perform set_config('request.jwt.claim.sub', v_buyer::text, true);
+  v_res := public.reserve_resale_listing(v_l.id, 1);
+  v_ord := public.create_resale_order(v_res.id);
+
+  reset role;
+  perform public.mark_resale_order_paid(v_ord.id, 'pi_preview_1');
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;

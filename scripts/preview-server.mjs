@@ -175,26 +175,67 @@ function whereFrom(params) {
  * dôvodu, ktorý je v náhľade, nie v appke. („Event nemá typy vstupeniek" na
  * evente, ktorý ich má tri.)
  */
-function selectFrom(table, select) {
-  if (!select || select.trim() === '*') return 't.*';
+/**
+ * Rozdelí `a,b:c(d,e(f)),g` po čiarkach NA NAJVYŠŠEJ ÚROVNI.
+ *
+ * Bez toho sa vnorený embed rozpadne: regex s `[^()]*` v ňom nájde vnútornú
+ * zátvorku ako samostatný embed a z vonkajšej zostane zvyšok, ktorý nedáva
+ * zmysel. Dotaz potom nespadne — vráti prázdno, čo je horšie, lebo appka to
+ * číta ako „nič tu nie je" a záložná otázka sa ani nespustí.
+ */
+function splitTop(text) {
+  const parts = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of text) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) { parts.push(current); current = ''; continue; }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current);
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+
+/**
+ * Rozbalí `select=` do SQL, vrátane vnorených tabuliek.
+ *
+ * PostgREST vie vnoriť cez cudzí kľúč; tu sa to hádá podľa mena — dieťa má
+ * stĺpec `<rodič v jednotnom čísle>_id`. Na tento projekt to stačí a je to
+ * lepšie než embed ticho zahodiť: obrazovka by potom vyzerala pokazene z
+ * dôvodu, ktorý je v náhľade, nie v appke. („Event nemá typy vstupeniek" na
+ * evente, ktorý ich má tri.)
+ *
+ * Volá sa rekurzívne, takže `seat:venue_seats(..., venue_section:venue_sections(name))`
+ * funguje rovnako ako jednoúrovňový embed. `alias` odlišuje úrovne, aby si
+ * vnútorný dotaz nezatienil stĺpce vonkajšieho.
+ */
+function selectFrom(table, select, alias = 't') {
+  if (!select || select.trim() === '*') return `${alias}.*`;
 
   const parent = table.replace(/ies$/, 'y').replace(/s$/, '');
   const pieces = [];
+  const columns = [];
+  const embeds = [];
 
-  // `alias:table!hint (cols)` alebo `table (cols)`
-  const embeds = [...select.matchAll(/(?:(\w+)\s*:\s*)?(\w+)(?:!([\w]+))?\s*\(([^()]*)\)/g)];
-
-  const columns = select
-    .replace(/(?:(\w+)\s*:\s*)?(\w+)(?:![\w]+)?\s*\([^()]*\)/g, '')
-    .split(',').map((c) => c.trim()).filter(Boolean)
-    .filter((c) => !c.includes(':') && !c.endsWith('!'));
+  for (const part of splitTop(select)) {
+    const match = /^(?:(\w+)\s*:\s*)?(\w+)(?:!([\w]+))?\s*\(([\s\S]*)\)$/.exec(part);
+    if (match) {
+      const [, embedAlias, child, hint, inner] = match;
+      embeds.push({ alias: embedAlias ?? child, child, hint, inner });
+    } else if (!part.includes(':') && !part.endsWith('!')) {
+      columns.push(part);
+    }
+  }
 
   pieces.push(columns.length === 0 || columns.includes('*')
-    ? 't.*'
-    : columns.map((c) => `t."${c}"`).join(', '));
+    ? `${alias}.*`
+    : columns.map((c) => `${alias}."${c}"`).join(', '));
 
-  for (const [, alias, child, hint, inner] of embeds) {
-    const name = alias ?? child;
+  const inner = alias === 't' ? 'c' : `${alias}c`;
+
+  for (const embed of embeds) {
+    const { alias: name, child, hint } = embed;
     const fk = `${parent}_id`;
     // `profiles!events_creator_id_fkey` — the hint names the constraint, and
     // the column is what is left after the parent table and `_fkey`. Without
@@ -202,27 +243,25 @@ function selectFrom(table, select) {
     // the whole query fails rather than just that one embed.
     const hinted = hint ? new RegExp(`^${table}_(.+)_fkey$`).exec(hint)?.[1] : null;
 
-    if (inner.trim() === 'count') {
+    if (embed.inner.trim() === 'count') {
       pieces.push(`(select json_agg(json_build_object('count', n)) from `
-        + `(select count(*) as n from public."${child}" c where c."${fk}" = t.id) s) as "${name}"`);
+        + `(select count(*) as n from public."${child}" ${inner} `
+        + `where ${inner}."${fk}" = ${alias}.id) s) as "${name}"`);
       continue;
     }
 
-    // Rodič (events.organization_id -> organizations) alebo dieťa
-    // (ticket_types.event_id -> events). Rozhodne sa podľa toho, ktorý stĺpec
-    // naozaj existuje.
-    const childCols = inner.split(',').map((c) => c.trim()).filter(Boolean);
-    const list = childCols.includes('*') ? 'c.*' : childCols.map((c) => `c."${c}"`).join(', ');
+    // Rekurzia: vnútro embedu môže samo obsahovať ďalšie embedy.
+    const list = selectFrom(child, embed.inner, inner);
     const parentFk = hinted ?? `${child.replace(/ies$/, 'y').replace(/s$/, '')}_id`;
 
     if (!hinted && hasColumn(child, fk)) {
       // Dieťa: ticket_types.event_id -> events.id
-      pieces.push(`(select json_agg(x) from (select ${list} from public."${child}" c `
-        + `where c."${fk}" = t.id) x) as "${name}"`);
+      pieces.push(`(select json_agg(x) from (select ${list} from public."${child}" ${inner} `
+        + `where ${inner}."${fk}" = ${alias}.id) x) as "${name}"`);
     } else {
       // Rodič: events.organization_id -> organizations.id
-      pieces.push(`(select to_json(x) from (select ${list} from public."${child}" c `
-        + `where c.id = t."${parentFk}") x) as "${name}"`);
+      pieces.push(`(select to_json(x) from (select ${list} from public."${child}" ${inner} `
+        + `where ${inner}.id = ${alias}."${parentFk}") x) as "${name}"`);
     }
   }
 
