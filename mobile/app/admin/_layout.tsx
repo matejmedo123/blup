@@ -28,6 +28,7 @@ export default function AdminLayout() {
       <Stack.Screen name="verifications" options={{ title: 'Overenia' }} />
       <Stack.Screen name="reports" options={{ title: 'Nahlásenia' }} />
       <Stack.Screen name="payouts" options={{ title: 'Výplaty' }} />
+      <Stack.Screen name="swap" options={{ title: 'BLUP SWAP' }} />
       <Stack.Screen name="accounting" options={{ title: 'Účtovníctvo platformy' }} />
       <Stack.Screen name="fees" options={{ title: 'Poplatky' }} />
       <Stack.Screen name="marketing" options={{ title: 'Marketing' }} />

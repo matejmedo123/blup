@@ -57,6 +57,10 @@ export default function AdminDashboard() {
       />
       <Row label="Otvorené nahlásenia" badge={data.open_reports} onPress={() => router.push('/admin/reports')} />
       <Row label="Čakajúce výplaty" badge={data.pending_payouts} onPress={() => router.push('/admin/payouts')} />
+      {/* SWAP má vlastný riadok a nie položku v „Čakajúcich výplatách":
+          rozhoduje sa tam o sporoch medzi dvoma ľuďmi, nie o výplate
+          organizátorovi, a sú to iné peniaze z inej knihy. */}
+      <Row label="BLUP SWAP — spory a výplaty" onPress={() => router.push('/admin/swap')} />
       <Row
         label="Výplatná politika a spory"
         badge={data.open_disputes}
