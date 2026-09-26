@@ -212,13 +212,19 @@ begin
 
   v_ord := public.create_resale_order(v_res);
 
-  -- Cena: 35 € vstupenka, 5 % poplatok kupujúceho = 1,75 €, spolu 36,75 €.
+  -- Cena: 35 € vstupenka a nič navyše. Kupujúci platí presne toľko, koľko
+  -- videl v ponuke — provízia 10 % sa strháva predajcovi.
   assert v_ord.ticket_price_cents = 3500,
     format('cena vstupenky má byť 3500, je %s', v_ord.ticket_price_cents);
-  assert v_ord.buyer_fee_cents = 175,
-    format('poplatok kupujúceho má byť 175, je %s', v_ord.buyer_fee_cents);
-  assert v_ord.total_cents = 3675,
-    format('spolu má byť 3675, je %s', v_ord.total_cents);
+  assert v_ord.buyer_fee_cents = 0,
+    format('kupujúci nemá platiť nič navyše, platí %s', v_ord.buyer_fee_cents);
+  assert v_ord.total_cents = 3500,
+    format('spolu má byť 3500, je %s', v_ord.total_cents);
+  -- A predajcovi zostane 31,50 € — desatina ide platforme.
+  assert v_ord.seller_fee_cents = 350,
+    format('provízia má byť 350, je %s', v_ord.seller_fee_cents);
+  assert v_ord.seller_net_cents = 3150,
+    format('predajcovi má zostať 3150, zostáva %s', v_ord.seller_net_cents);
   assert v_ord.total_cents
          = v_ord.ticket_price_cents + v_ord.buyer_fee_cents + v_ord.delivery_fee_cents,
     'súčet objednávky nesedí';

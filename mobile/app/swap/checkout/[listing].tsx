@@ -164,8 +164,14 @@ export default function ResaleCheckoutScreen() {
       <View style={styles.bill}>
         <Line label={`Vstupenka${q.quantity > 1 ? ` × ${q.quantity}` : ''}`}
               value={formatMoney(q.ticket_price_cents, q.currency)} />
-        <Line label="Poplatok burzy"
-              value={formatMoney(q.buyer_fee_cents, q.currency)} />
+        {/* Nulový poplatok sa nevypisuje ako riadok „0,00 €". Riadok s nulou
+            človeka núti overovať, či tam naozaj nič nie je — a vyzerá ako
+            miesto, kde sa raz nejaké číslo objaví. Keď nič nie je, povie sa
+            to vetou. */}
+        {q.buyer_fee_cents > 0 ? (
+          <Line label="Poplatok SWAPu"
+                value={formatMoney(q.buyer_fee_cents, q.currency)} />
+        ) : null}
         {q.delivery_fee_cents > 0 ? (
           <Line label="Doručenie"
                 value={formatMoney(q.delivery_fee_cents, q.currency)} />
@@ -178,7 +184,9 @@ export default function ResaleCheckoutScreen() {
           <Text style={styles.totalValue}>{formatMoney(q.total_cents, q.currency)}</Text>
         </View>
         <Caption style={styles.totalNote}>
-          Toto je konečná suma. Nič ďalšie sa nepripočíta.
+          {q.buyer_fee_cents === 0 && q.delivery_fee_cents === 0
+            ? 'Presne toľko, koľko bolo v ponuke. Žiadne poplatky navyše.'
+            : 'Toto je konečná suma. Nič ďalšie sa nepripočíta.'}
         </Caption>
       </View>
 

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { createResaleListing, type ResaleSource } from '@/api/resale';
+import { createResaleListing, getSwapFees, type ResaleSource } from '@/api/resale';
 import { getMyTickets } from '@/api/tickets';
 import { AuthenticityBadge } from '@/components/AuthenticityBadge';
 import {
@@ -41,6 +41,15 @@ export default function SellTicketScreen() {
 
   const tickets = useQuery({ queryKey: ['tickets', 'mine'], queryFn: getMyTickets });
 
+  /**
+   * Sadzby zo servera, nie číslo v kóde.
+   *
+   * Predajca musí vidieť, koľko dostane, EŠTE PREDTÝM než ponuku zverejní.
+   * Dozvedieť sa o provízii až z prehľadu po predaji je presne to, čo ľudí
+   * na takýchto službách najviac nahnevá.
+   */
+  const fees = useQuery({ queryKey: ['swap', 'fees'], queryFn: getSwapFees, staleTime: 300_000 });
+
   // Predať sa dá len to, čo ešte nebolo použité a na event, ktorý ešte bude.
   const sellable = useMemo(
     () => (tickets.data ?? []).filter(
@@ -52,6 +61,14 @@ export default function SellTicketScreen() {
 
   const chosen = sellable.find((t: any) => t.id === ticketId);
   const cents = Math.round(Number(price.replace(',', '.')) * 100);
+
+  // Rovnaký výpočet ako na serveri (celočíselné delenie desaťtisícom), aby sa
+  // náhľad a skutočná suma nelíšili o cent.
+  const sellerFeeBps = fees.data?.seller_fee_bps ?? 0;
+  const feeCents = Number.isFinite(cents) && cents > 0
+    ? Math.floor((cents * sellerFeeBps) / 10000)
+    : 0;
+  const netCents = Number.isFinite(cents) && cents > 0 ? cents - feeCents : 0;
   const overCap = Boolean(
     chosen && Number.isFinite(cents) && cents > (chosen.price_cents ?? 0),
   );
@@ -172,6 +189,36 @@ export default function SellTicketScreen() {
                 + 'teda toľko, koľko si za ňu zaplatil.'}
           </Caption>
 
+          {/* Koľko z toho príde predajcovi. Tu, pri poli s cenou, a nie až v
+              prehľade po predaji — vtedy už je neskoro sa rozhodnúť inak. */}
+          {netCents > 0 ? (
+            <View style={styles.payout}>
+              <View style={styles.payoutRow}>
+                <Text style={styles.payoutLabel}>Kupujúci zaplatí</Text>
+                <Text style={styles.payoutValue}>
+                  {formatMoney(cents, chosen.currency ?? 'EUR')}
+                </Text>
+              </View>
+              <View style={styles.payoutRow}>
+                <Text style={styles.payoutLabel}>
+                  Provízia SWAPu ({(sellerFeeBps / 100).toFixed(0)} %)
+                </Text>
+                <Text style={styles.payoutValue}>
+                  −{formatMoney(feeCents, chosen.currency ?? 'EUR')}
+                </Text>
+              </View>
+              <View style={[styles.payoutRow, styles.payoutTotal]}>
+                <Text style={styles.payoutStrong}>Dostaneš</Text>
+                <Text style={styles.payoutStrong}>
+                  {formatMoney(netCents, chosen.currency ?? 'EUR')}
+                </Text>
+              </View>
+              <Caption style={styles.payoutNote}>
+                Peniaze ti pošleme po evente.
+              </Caption>
+            </View>
+          ) : null}
+
           <SectionHeader title="Kde sa sedí (nepovinné)" />
           <Input label="Sektor" value={section} onChangeText={setSection} placeholder="A" />
           <Input label="Rad" value={rowLabel} onChangeText={setRowLabel} placeholder="10" />
@@ -256,4 +303,23 @@ const styles = StyleSheet.create({
   ticketPrice: { ...typography.body, color: colors.textSecondary },
 
   capBad: { color: colors.danger },
+
+  payout: {
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    gap: 4,
+  },
+  payoutRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  payoutTotal: {
+    borderTopWidth: 1, borderTopColor: colors.border,
+    paddingTop: spacing.xs, marginTop: spacing.xs,
+  },
+  payoutLabel: { ...typography.body, color: colors.textSecondary },
+  payoutValue: { ...typography.body, color: colors.text },
+  payoutStrong: { ...typography.bodyStrong, color: colors.text },
+  payoutNote: { marginTop: 2 },
 });

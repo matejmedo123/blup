@@ -103,8 +103,13 @@ begin
   v_quote := public.quote_resale(v_listing.id, 1);
   assert (v_quote->>'valid')::boolean, format('ponuka neplatí: %s', v_quote->>'reason');
   assert v_quote->>'authenticity' = 'verified', 'BLUP vstupenka nie je označená ako overená';
-  assert (v_quote->>'total_cents')::integer = 4500 + (v_quote->>'buyer_fee_cents')::integer,
-    'súčet v ponuke nesedí';
+  assert (v_quote->>'total_cents')::integer = 4500,
+    format('kupujúci má zaplatiť presne 4500, má %s', v_quote->>'total_cents');
+  -- Desatina ide platforme a strháva sa predajcovi, nie kupujúcemu.
+  assert (v_quote->>'seller_fee_cents')::integer = 450,
+    format('provízia má byť 450, je %s', v_quote->>'seller_fee_cents');
+  assert (v_quote->>'seller_net_cents')::integer = 4050,
+    format('Anne má zostať 4050, zostáva %s', v_quote->>'seller_net_cents');
 
   -- 4. Podrží si ju a založí objednávku.
   v_res := public.reserve_resale_listing(v_listing.id, 1);
@@ -364,6 +369,95 @@ begin
   assert v_seen = 1, 'vrátená suma sa predajcovi nestrhla';
 
   raise notice 'PASS C: spor zadrží peniaze, admin rozhodne a dvakrát to nejde';
+end $$;
+
+-- ============================================================================
+-- SCENÁR D — desatina patrí platforme a predajcovi sedí zvyšok
+-- ============================================================================
+-- Provízia sa rátala v dvoch krokoch a na dvoch miestach: v objednávke pri
+-- predaji a v knihe pri zaúčtovaní. Práve medzi nimi sa raz stratila (strhla
+-- sa dvakrát) a nikto by si toho nevšimol, kým by sa niekto nesťažoval.
+--
+-- Tento blok preto neporovnáva kód s kódom, ale súčet knihy s tým, čo má
+-- podľa sadzby vyjsť — na cent, pre niekoľko cien vrátane tých, kde delenie
+-- nevychádza presne.
+do $$
+declare
+  v_anna  uuid := 'a5858585-0000-0000-0000-000000000002';
+  v_boris uuid := 'a5858585-0000-0000-0000-000000000003';
+  v_event uuid := 'e5858585-0000-0000-0000-000000000001';
+  v_bps   integer;
+  v_price integer;
+  v_listing public.resale_listings;
+  v_res   public.resale_reservations;
+  v_ord   public.resale_orders;
+  v_fee   integer;
+  v_book  integer;
+begin
+  select resale_seller_fee_bps into v_bps from public.platform_settings where id;
+  assert v_bps = 1000, format('provízia má byť 10 %%, je %s bps', v_bps);
+
+  -- Ceny zámerne aj také, kde desatina nevyjde na celý cent.
+  foreach v_price in array array[1000, 3333, 4999, 12345]
+  loop
+    reset role;
+    update public.events
+    set start_at = now() + interval '5 days', end_at = now() + interval '5 days 3 hours'
+    where id = v_event;
+
+    set local role authenticated;
+    perform set_config('request.jwt.claim.sub', v_boris::text, true);
+    v_listing := public.create_resale_listing(
+      v_event, 'external', v_price, null,
+      p_delivery_method => 'file', p_external_provider => 'Test'
+    );
+
+    perform set_config('request.jwt.claim.sub', v_anna::text, true);
+    v_res := public.reserve_resale_listing(v_listing.id, 1);
+    v_ord := public.create_resale_order(v_res.id);
+
+    v_fee := (v_price * v_bps) / 10000;
+
+    -- Kupujúci platí presne cenu z ponuky.
+    assert v_ord.total_cents = v_price,
+      format('pri %s má kupujúci platiť %s, platí %s', v_price, v_price, v_ord.total_cents);
+    assert v_ord.buyer_fee_cents = 0, 'kupujúcemu sa niečo pripočítalo';
+
+    -- A platforme patrí presne desatina.
+    assert v_ord.seller_fee_cents = v_fee,
+      format('pri %s má provízia byť %s, je %s', v_price, v_fee, v_ord.seller_fee_cents);
+    assert v_ord.seller_net_cents = v_price - v_fee,
+      format('pri %s má predajcovi zostať %s, zostáva %s',
+             v_price, v_price - v_fee, v_ord.seller_net_cents);
+
+    -- Zaplatí (toto robí webhook), doručí, potvrdí, event prebehne.
+    reset role;
+    v_ord := public.mark_resale_order_paid(v_ord.id, 'pi_fee_' || v_price::text);
+
+    set local role authenticated;
+    perform set_config('request.jwt.claim.sub', v_boris::text, true);
+    perform public.deliver_resale_ticket(v_ord.id, null, 'poslané');
+    perform set_config('request.jwt.claim.sub', v_anna::text, true);
+    perform public.confirm_resale_ticket(v_ord.id);
+
+    reset role;
+    update public.events
+    set start_at = now() - interval '4 hours', end_at = now() - interval '1 hour'
+    where id = v_event;
+    perform public.settle_resale_orders(100);
+
+    -- A TOTO je ten test: súčet knihy pre túto objednávku sa musí rovnať
+    -- tomu, čo je v objednávke. Keď sa provízia strhne dvakrát, nesedí to.
+    select coalesce(sum(amount_cents), 0) into v_book
+    from public.seller_ledger_entries
+    where resale_order_id = v_ord.id;
+
+    assert v_book = v_ord.seller_net_cents,
+      format('pri %s hovorí objednávka %s, ale kniha %s',
+             v_price, v_ord.seller_net_cents, v_book);
+  end loop;
+
+  raise notice 'PASS D: platforme patrí desatina a kniha sedí s objednávkou na cent';
 end $$;
 
 rollback;

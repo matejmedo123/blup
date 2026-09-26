@@ -400,3 +400,26 @@ export async function waitForResaleOrder(
   // ešte nevieme.
   return 'payment_pending';
 }
+
+/**
+ * Sadzby SWAPu, tak ako ich má nastavené admin.
+ *
+ * Appka si ich pýta zo servera a nepočíta s číslom vo svojom kóde. Keď sa
+ * provízia zmení, zmení sa v admine — a obrazovka predajcu ukáže novú hneď,
+ * nie až po ďalšom builde.
+ */
+export interface SwapFees {
+  enabled: boolean;
+  buyer_fee_bps: number;
+  seller_fee_bps: number;
+  max_markup_bps: number;
+  hold_minutes: number;
+  settlement_days: number;
+  currency: string;
+}
+
+export async function getSwapFees(): Promise<SwapFees> {
+  const { data, error } = await supabase.rpc('resale_fees');
+  if (error) throw error;
+  return data as SwapFees;
+}

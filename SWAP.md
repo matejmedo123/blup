@@ -177,8 +177,8 @@ Všetko v `platform_settings`, meniteľné adminom bez zásahu do kódu:
 | stĺpec | východzí | čo robí |
 |---|---|---|
 | `resale_enabled` | `true` | vypínač celého SWAPu |
-| `resale_buyer_fee_bps` | 500 (5 %) | poplatok kupujúceho, navrch |
-| `resale_seller_fee_bps` | 500 (5 %) | provízia predajcu, strháva sa |
+| `resale_buyer_fee_bps` | **0** | poplatok kupujúceho, navrch |
+| `resale_seller_fee_bps` | **1000 (10 %)** | provízia SWAPu, strháva sa predajcovi |
 | `resale_max_markup_bps` | **0** | strop prirážky nad pôvodnou cenou |
 | `resale_hold_minutes` | 15 | ako dlho drží rezervácia |
 | `resale_settlement_days` | 2 | koľko dní po evente sú peniaze k dispozícii |
@@ -186,6 +186,26 @@ Všetko v `platform_settings`, meniteľné adminom bez zásahu do kódu:
 **`resale_max_markup_bps = 0` znamená, že BLUP vstupenku nepredáš drahšie, než
 si ju kúpil.** Je to zámerne prísny východzí stav. Pri externej sa vynútiť
 nedá — pôvodnú cenu nepoznáme.
+
+### Provízia: 10 %, platí ju predajca
+
+BLUP si zo SWAPu berie **10 % z ceny vstupenky**. Celú províziu nesie
+predajca; kupujúci zaplatí presne toľko, koľko videl v ponuke.
+
+```
+ponuka          45,00 €
+kupujúci platí  45,00 €      ← nič navyše
+provízia SWAPu  − 4,50 €
+predajca dostane 40,50 €
+```
+
+Prečo takto a nie 5 % + 5 %: rozdelená provízia znamená, že človek vidí v
+zozname jednu cenu a v pokladni vyššiu. To je pri predaji vstupeniek tá
+najnenávidenejšia vec a konkurencia ju rieši štítkom „no extra fees" priamo
+v zozname. Cena v ponuke má byť cena, ktorú človek zaplatí.
+
+Predajcu to neprekvapí: pri vypisovaní vidí rozpis „kupujúci zaplatí /
+provízia / dostaneš" ešte predtým, než ponuku zverejní.
 
 ---
 

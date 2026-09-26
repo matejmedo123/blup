@@ -201,6 +201,10 @@ function ListingRow({ listing }: { listing: ResaleListing }) {
               {formatMoney(listing.face_value_cents!, listing.currency)}
             </Text>
           ) : null}
+          {/* Toto je celá cena, nie „od". Províziu platí predajca, takže v
+              pokladni nepribudne nič — a povedať to treba tu, kde sa ponuky
+              porovnávajú, nie až po kliknutí. */}
+          <Caption style={styles.noFees}>žiadne poplatky navyše</Caption>
         </View>
       </View>
 
@@ -294,6 +298,7 @@ const styles = StyleSheet.create({
     color: colors.textQuaternary,
     textDecorationLine: 'line-through',
   },
+  noFees: { fontSize: 11, color: colors.success },
   seat: { ...typography.body, color: colors.text },
   note: { color: colors.textTertiary },
   cardBottom: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
