@@ -187,3 +187,58 @@ values
   ('33333333-3333-3333-3333-333333333333', '77777777-0000-0000-0000-000000000001',
    'PRV-0006', 'preview-6', 'refunded', 1900, null)
 on conflict (code) do nothing;
+
+-- Burza: štyri ponuky na ten istý event, aby bolo vidieť rozdiel medzi
+-- overenou BLUP vstupenkou a vstupenkou odinakiaľ. Bez oboch druhov naraz sa
+-- na obrazovke nedá posúdiť, či sú od seba odlíšené dosť zreteľne.
+do $$
+declare
+  v_eva   uuid := '77777777-0000-0000-0000-000000000001';
+  v_miro  uuid := '77777777-0000-0000-0000-000000000002';
+  v_event uuid := '33333333-3333-3333-3333-333333333333';
+  v_t1    uuid;
+  v_t2    uuid;
+begin
+  select id into v_t1 from public.tickets
+  where code = 'PRV-0003' and buyer_id = v_eva;
+  select id into v_t2 from public.tickets
+  where code = 'PRV-0004' and buyer_id = v_miro;
+
+  set local role authenticated;
+
+  -- Dve naše, prevediteľné.
+  perform set_config('request.jwt.claim.sub', v_eva::text, true);
+  perform public.create_resale_listing(
+    v_event, 'blup', 1900, v_t1,
+    p_section => 'A', p_row_label => '4', p_seat_label => '12',
+    p_note => 'Nemôžem ísť, mám službu. Prevod hneď po zaplatení.'
+  );
+
+  perform set_config('request.jwt.claim.sub', v_miro::text, true);
+  perform public.create_resale_listing(
+    v_event, 'blup', 1700, v_t2,
+    p_section => 'B', p_row_label => '11', p_seat_label => '3'
+  );
+
+  -- A dve odinakiaľ, ktorých pravosť overiť nevieme.
+  perform public.create_resale_listing(
+    v_event, 'external', 2200, null,
+    p_quantity => 2,
+    p_delivery_method => 'file',
+    p_section => 'C', p_row_label => '2',
+    p_external_provider => 'Ticketportal',
+    p_face_value_cents => 2500,
+    p_note => 'Dve vedľa seba, PDF pošlem hneď po platbe.'
+  );
+
+  perform set_config('request.jwt.claim.sub', v_eva::text, true);
+  perform public.create_resale_listing(
+    v_event, 'external', 2000, null,
+    p_delivery_method => 'mobile_transfer',
+    p_ticket_label => 'Státie',
+    p_external_provider => 'Predpredaj.sk'
+  );
+
+  reset role;
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;

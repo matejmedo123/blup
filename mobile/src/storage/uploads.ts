@@ -620,3 +620,66 @@ export async function uploadVerificationDocument(
   if (error) throw error;
   return { path, kind };
 }
+
+/**
+ * Vstupenka, ktorú predajca na burze doručuje kupujúcemu.
+ *
+ * Ide do SÚKROMNÉHO úložiska, nie do verejného ako fotky. Vstupenka je cenina:
+ * verejná adresa by znamenala, že kto ju uhádne alebo dostane preposlanú, má
+ * vstupenku. Čítanie je obmedzené politikou na kupujúceho tejto objednávky,
+ * predajcu a admina, a appka si na zobrazenie pýta podpísanú adresu s krátkou
+ * platnosťou.
+ *
+ * Cesta musí začínať id-čkom objednávky — tak to kontroluje politika úložiska
+ * aj `deliver_resale_ticket`. Bez toho by sa dal „doručiť" súbor z cudzej
+ * objednávky.
+ */
+const RESALE_TICKET_MAX_BYTES = 15 * 1024 * 1024;
+
+export async function uploadResaleTicket(
+  orderId: string,
+  file: { uri: string; mimeType?: string },
+): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData?.user?.id) throw new Error('UNAUTHENTICATED');
+
+  const response = await fetch(file.uri);
+  const arrayBuffer = await response.arrayBuffer();
+
+  if (arrayBuffer.byteLength > RESALE_TICKET_MAX_BYTES) {
+    const mb = Math.round(arrayBuffer.byteLength / (1024 * 1024));
+    throw new Error(`Súbor má ${mb} MB, a viac než 15 MB sa nahrať nedá.`);
+  }
+
+  const type = file.mimeType && /^(application\/pdf|image\/(jpeg|png|webp))$/.test(file.mimeType)
+    ? file.mimeType
+    : /\.pdf($|\?)/i.test(file.uri) ? 'application/pdf' : 'image/jpeg';
+  const extension = type === 'application/pdf' ? 'pdf'
+    : type === 'image/png' ? 'png'
+      : type === 'image/webp' ? 'webp' : 'jpg';
+
+  const path = `${orderId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+
+  const { error } = await supabase.storage
+    .from('resale-tickets')
+    .upload(path, arrayBuffer, { contentType: type, upsert: false });
+  if (error) throw error;
+
+  // Vracia sa CESTA, nie adresa. Verejná adresa na tento bucket neexistuje a
+  // ani by nemala — kupujúci dostane podpísanú, keď si vstupenku otvorí.
+  return path;
+}
+
+/**
+ * Podpísaná adresa na doručenú vstupenku, platná pár minút.
+ *
+ * Krátka platnosť je zámer: adresa, ktorá by platila navždy, je to isté ako
+ * verejný súbor, len s dlhším menom.
+ */
+export async function signedResaleTicketUrl(path: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('resale-tickets')
+    .createSignedUrl(path, 300);
+  if (error) throw error;
+  return data.signedUrl;
+}

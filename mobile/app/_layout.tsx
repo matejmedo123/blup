@@ -127,6 +127,14 @@ export default function RootLayout() {
       <Stack.Screen name="pozvanka/[code]" options={{ title: 'Pozvánka' }} />
       <Stack.Screen name="cart" options={{ title: 'Košík' }} />
       <Stack.Screen name="tickets/index" options={{ title: 'Moje vstupenky' }} />
+      {/* Burza. Bez týchto riadkov ukazuje hlavička surový názov trasy —
+          na obrazovke o peniazoch svieti "resale/[event]", čo vyzerá ako
+          nedokončená appka práve tam, kde treba vzbudiť dôveru. */}
+      <Stack.Screen name="resale/[event]" options={{ title: 'Burza vstupeniek' }} />
+      <Stack.Screen name="resale/checkout/[listing]" options={{ title: 'Pokladňa' }} />
+      <Stack.Screen name="resale/sell" options={{ title: 'Predať vstupenku' }} />
+      <Stack.Screen name="resale/deliver/[order]" options={{ title: 'Doručiť vstupenku' }} />
+      <Stack.Screen name="seller/index" options={{ title: 'Predávam' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />
       {/* Both of these are landed on from outside — one after paying, one from
           a link in a ticket e-mail. The header is the first thing that says
