@@ -17,6 +17,7 @@ import {
 import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
+import { CARD_MAX } from '@/hooks/useLayout';
 
 /**
  * Checkout burzy.
@@ -286,10 +287,16 @@ function reasonBody(reason: string | null): string {
 }
 
 const styles = StyleSheet.create({
-  badgeBlock: { gap: spacing.xs, marginBottom: spacing.sm },
+  badgeBlock: { maxWidth: CARD_MAX, width: '100%', alignSelf: 'center', gap: spacing.xs, marginBottom: spacing.sm },
   explainer: { lineHeight: 18 },
 
   bill: {
+    // Účet je na čítanie, nie na rozťahovanie. Na monitore roztiahnutý cez
+    // celú šírku má popis vľavo a sumu o pol metra vpravo a oko ich musí
+    // spájať — presne to, čo sa pri peniazoch robiť nemá.
+    maxWidth: CARD_MAX,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.md,
     borderRadius: radius.card,
     backgroundColor: colors.surface,
@@ -310,7 +317,7 @@ const styles = StyleSheet.create({
   totalValue: { ...typography.subheading, color: colors.text },
   totalNote: { marginTop: 2 },
 
-  held: {
+  held: { maxWidth: CARD_MAX, width: '100%', alignSelf: 'center',
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     padding: spacing.md, marginBottom: spacing.md,
     borderRadius: radius.card,
@@ -320,7 +327,7 @@ const styles = StyleSheet.create({
   clock: { ...typography.subheading, color: colors.accent },
   heldNote: { flex: 1 },
 
-  guarantee: {
+  guarantee: { maxWidth: CARD_MAX, width: '100%', alignSelf: 'center',
     marginTop: spacing.lg,
     padding: spacing.md,
     borderRadius: radius.card,

@@ -5,11 +5,13 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import { useLocation } from '@/hooks/useLocation';
-import { searchEvents } from '@/api/events';
+import { searchAll, searchEvents } from '@/api/events';
+import { SearchHits } from '@/components/SearchHits';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatPrice } from '@/lib/format';
 import { GradientCover } from '@/components/GradientCover';
 import { ErrorState, IconButton, Input, LoadingState, Screen } from '@/components/ui';
+import { CONTENT_MAX } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
 
@@ -42,6 +44,20 @@ export default function SearchScreen() {
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState<QuickFilter | null>(null);
+
+  /**
+   * Interpreti, mestá a miesta.
+   *
+   * Vlastný dotaz vedľa zoznamu eventov: odpovedá na inú otázku a je
+   * podstatne lacnejší, takže sa pýta aj pri krátkom texte, kým sa zoznam
+   * eventov ešte len načítava.
+   */
+  const hits = useQuery({
+    queryKey: ['search', 'hits', query],
+    queryFn: () => searchAll(query, 8),
+    enabled: query.trim().length >= 2,
+    staleTime: 30_000,
+  });
 
   const results = useQuery({
     queryKey: ['search', query, active?.label, location.coords],
@@ -81,16 +97,22 @@ export default function SearchScreen() {
     <Screen contentStyle={styles.container}>
       <View style={styles.header}>
         <IconButton glyph="‹" size={40} onPress={() => router.back()} />
-        <Input
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Hľadaj event, miesto, náladu…"
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          autoFocus
-          style={styles.input}
-        />
+        {/* Obaľujúci View kvôli šírke: `Input` posiela `style` na vnútorný
+            TextInput, takže `flex: 1` sa naň nedostane a pole zostane úzke.
+            Na monitore zaberalo pätinu riadku — pri hľadaní, ktoré je hlavný
+            vstup do celej appky, je to najužšie miesto na najširšej obrazovke. */}
+        <View style={styles.inputWrap}>
+          <Input
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Hľadaj interpreta, mesto, miesto alebo event…"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            autoFocus
+            style={styles.input}
+          />
+        </View>
       </View>
 
       <FlatList
@@ -100,6 +122,10 @@ export default function SearchScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
+          <>
+          {/* Nad filtrami, lebo odpovedajú na otázku, ktorú človek naozaj
+              položil. Keby boli pod zoznamom eventov, nikto by ich nenašiel. */}
+          <SearchHits hits={hits.data ?? []} />
           <View style={styles.chipRow}>
             {QUICK.map((filter) => {
               const isActive = active?.label === filter.label;
@@ -120,6 +146,7 @@ export default function SearchScreen() {
               );
             })}
           </View>
+          </>
         }
         renderItem={({ item }) => <ResultRow event={item} />}
         ListEmptyComponent={
@@ -179,10 +206,19 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.gutter,
     marginBottom: spacing.lg,
+    // Na monitore sa pole nemá rozťahovať cez celú stenu — nad istú šírku sa
+    // už nečíta lepšie, len sa kurzor vzďaľuje od výsledkov pod ním.
+    maxWidth: CONTENT_MAX,
+    width: '100%',
+    alignSelf: 'center',
   },
-  input: { flex: 1, marginBottom: 0 },
+  inputWrap: { flex: 1, minWidth: 0 },
+  input: { marginBottom: 0 },
 
-  list: { paddingHorizontal: spacing.gutter, paddingBottom: spacing.xxxl, flexGrow: 1 },
+  list: {
+    paddingHorizontal: spacing.gutter, paddingBottom: spacing.xxxl, flexGrow: 1,
+    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+  },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   chip: {
     paddingHorizontal: spacing.lg,

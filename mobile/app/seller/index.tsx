@@ -15,6 +15,7 @@ import { useDialog } from '@/components/Dialog';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
+import { CONTENT_MAX } from '@/hooks/useLayout';
 
 /**
  * Predávam — prehľad pre toho, kto ponúka vstupenky.
@@ -266,6 +267,9 @@ function statusOf(row: MyResaleListing): [string, 'plain' | 'good' | 'warn'] {
 
 const styles = StyleSheet.create({
   money: {
+    maxWidth: CONTENT_MAX,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.md,
     borderRadius: radius.card,
     backgroundColor: colors.surface,
@@ -282,6 +286,9 @@ const styles = StyleSheet.create({
   moneyNote: { lineHeight: 18 },
 
   card: {
+    maxWidth: CONTENT_MAX,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.md,
     borderRadius: radius.card,
     backgroundColor: colors.surface,

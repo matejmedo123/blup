@@ -7,6 +7,8 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { getMyTickets } from '@/api/tickets';
+import { ResaleOnEvent } from '@/components/ResaleOnEvent';
 import { useAuth } from '@/auth/AuthProvider';
 import { useLocation } from '@/hooks/useLocation';
 import {
@@ -560,6 +562,26 @@ export default function EventDetailScreen() {
   const isFull = Boolean(data.capacity && data.attendee_count >= data.capacity);
   const hasTickets = data.ticket_types.length > 0;
 
+  /**
+   * Mám na tento event vstupenku, ktorú by som mohol ponúknuť ďalej?
+   *
+   * Pýta sa to len prihláseného a len na platné, nepoužité kusy. Ponúknuť
+   * „predaj ju ďalej" niekomu, kto žiadnu nemá, je tlačidlo, ktoré nevedie
+   * nikam — a ponúknuť to nad už oskenovanou vstupenkou je horšie: vyzerá to
+   * ako možnosť predať niečo, čo už bolo použité.
+   */
+  const myTickets = useQuery({
+    queryKey: ['tickets', 'mine'],
+    queryFn: getMyTickets,
+    enabled: Boolean(profile?.id),
+    staleTime: 60_000,
+  });
+  const hasMyTicket = (myTickets.data ?? []).some(
+    (ticket) => ticket.event_id === data.id
+      && ticket.status === 'valid'
+      && !ticket.checked_in_at,
+  );
+
   const numberedTypes = new Set(
     (seatMap.data?.sections ?? [])
       .filter((section) => section.numbered && section.ticket_type_id)
@@ -961,6 +983,12 @@ export default function EventDetailScreen() {
             />
           </>
         ) : null}
+
+        {/* --- burza --------------------------------------------------------
+            Pod vstupenkami a nad popisom zámerne: kto sem prišiel kúpiť a
+            oficiálne sú vypredané, musí sa o burze dozvedieť skôr, než začne
+            čítať, o čom event je. */}
+        <ResaleOnEvent eventId={data.id} canSell={hasMyTicket} />
 
         {/* --- about -------------------------------------------------------- */}
         {data.description ? (

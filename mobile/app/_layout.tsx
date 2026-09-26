@@ -130,6 +130,7 @@ export default function RootLayout() {
       {/* Burza. Bez týchto riadkov ukazuje hlavička surový názov trasy —
           na obrazovke o peniazoch svieti "resale/[event]", čo vyzerá ako
           nedokončená appka práve tam, kde treba vzbudiť dôveru. */}
+      <Stack.Screen name="browse/[kind]/[key]" options={{ title: '' }} />
       <Stack.Screen name="resale/[event]" options={{ title: 'Burza vstupeniek' }} />
       <Stack.Screen name="resale/checkout/[listing]" options={{ title: 'Pokladňa' }} />
       <Stack.Screen name="resale/sell" options={{ title: 'Predať vstupenku' }} />

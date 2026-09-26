@@ -809,3 +809,57 @@ export async function getEventsForCards(
   if (error) throw error;
   return (data ?? []) as EventFeedItem[];
 }
+
+/**
+ * Hľadanie, ktoré pozná interpreta, mesto aj miesto — nielen názov eventu.
+ *
+ * Jeden dotaz vracia všetky druhy naraz. Štyri samostatné dotazy by znamenali
+ * štyri kolá na server pri každom písmene a štyri príležitosti, aby sa
+ * odpovede navzájom predbehli a zoznam poskakoval.
+ */
+export type SearchHitKind = 'artist' | 'city' | 'venue' | 'event';
+
+export interface SearchHit {
+  kind: SearchHitKind;
+  /** Čím sa na to dá odkázať: meno interpreta, názov mesta, id eventu. */
+  key: string;
+  label: string;
+  sublabel: string | null;
+  image_url: string | null;
+  event_count: number;
+  next_at: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  /** Koľko vstupeniek sa na to práve ponúka na burze. */
+  resale_count: number;
+}
+
+export async function searchAll(query: string, limit = 8): Promise<SearchHit[]> {
+  const needle = query.trim();
+  if (!needle) return [];
+  const { data, error } = await supabase.rpc('search_all', {
+    p_query: needle,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  // `Array.isArray`, nie `?? []`. Funkcia vracia množinu riadkov a pri tvare,
+  // ktorý poľom nie je, by `?? []` prepustilo objekt ďalej — obrazovka by
+  // potom spadla na `hits.some is not a function`, čiže na chybovej hláške
+  // namiesto výsledkov hľadania.
+  return Array.isArray(data) ? (data as SearchHit[]) : [];
+}
+
+/** Eventy za jedným výsledkom hľadania — interpretom, mestom alebo miestom. */
+export async function eventsMatching(
+  kind: SearchHitKind,
+  key: string,
+  limit = 40,
+): Promise<EventFeedItem[]> {
+  const { data, error } = await supabase.rpc('events_matching', {
+    p_kind: kind,
+    p_key: key,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? (data as EventFeedItem[]) : [];
+}

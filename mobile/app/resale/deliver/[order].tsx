@@ -12,6 +12,7 @@ import {
 import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
+import { CARD_MAX } from '@/hooks/useLayout';
 
 /**
  * Doručenie vstupenky, ktorá nie je z BLUPu.
@@ -181,6 +182,9 @@ export default function DeliverTicketScreen() {
 
 const styles = StyleSheet.create({
   summary: {
+    maxWidth: CARD_MAX,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.md,
     borderRadius: radius.card,
     backgroundColor: colors.surface,

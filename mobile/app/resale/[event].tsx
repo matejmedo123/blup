@@ -12,6 +12,7 @@ import { AuthenticityBadge } from '@/components/AuthenticityBadge';
 import {
   Avatar, Caption, EmptyState, ErrorState, LoadingState, Screen,
 } from '@/components/ui';
+import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, shadow, spacing, typography } from '@/theme';
 
@@ -42,6 +43,7 @@ const SOURCES: { key: ResaleSource | null; label: string }[] = [
 
 export default function EventResaleScreen() {
   const { event: eventId } = useLocalSearchParams<{ event: string }>();
+  const layout = useLayout();
   const [sort, setSort] = useState<ResaleSort>('price_asc');
   const [source, setSource] = useState<ResaleSource | null>(null);
 
@@ -139,10 +141,20 @@ export default function EventResaleScreen() {
         ))}
       </View>
 
+      {/* Na monitore sa ponuky ukladajú do mriežky. Jeden stĺpec kariet cez
+          celú šírku znamená, že na obrazovku sa zmestia tri ponuky a
+          porovnávať ceny sa dá len rolovaním hore-dole — pri burze, kde je
+          porovnanie celý dôvod návštevy, je to to najhoršie rozloženie. */}
       <FlatList
         data={rows}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        numColumns={layout.columns}
+        key={`cols-${layout.columns}`}
+        columnWrapperStyle={layout.columns > 1 ? styles.columns : undefined}
+        contentContainerStyle={[
+          styles.list,
+          layout.isWide && { maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%' },
+        ]}
         ListEmptyComponent={
           <EmptyState
             emoji="🎟"
@@ -150,7 +162,11 @@ export default function EventResaleScreen() {
             body="Keď niekto nebude môcť ísť, jeho vstupenka sa objaví tu."
           />
         }
-        renderItem={({ item }) => <ListingRow listing={item} />}
+        renderItem={({ item }) => (
+          <View style={layout.columns > 1 ? styles.cell : undefined}>
+            <ListingRow listing={item} />
+          </View>
+        )}
       />
     </Screen>
   );
@@ -216,12 +232,16 @@ function ListingRow({ listing }: { listing: ResaleListing }) {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 2 },
+  header: {
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 2,
+    maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%',
+  },
   eventName: { ...typography.subheading, color: colors.text },
 
   summary: {
     flexDirection: 'row',
     marginHorizontal: spacing.lg,
+    maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%',
     marginBottom: spacing.md,
     padding: spacing.md,
     borderRadius: radius.card,
@@ -237,6 +257,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.xs,
     paddingHorizontal: spacing.lg,
+    maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%',
     paddingBottom: spacing.md,
     alignItems: 'center',
   },
@@ -253,6 +274,8 @@ const styles = StyleSheet.create({
   chipLabelOn: { color: '#FFFFFF', fontWeight: '700' },
 
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.sm },
+  columns: { gap: spacing.sm },
+  cell: { flex: 1 },
 
   card: {
     padding: spacing.md,
