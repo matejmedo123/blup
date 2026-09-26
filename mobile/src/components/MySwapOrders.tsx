@@ -42,7 +42,7 @@ const REASONS: { key: DisputeReason; label: string; body: string }[] = [
   { key: 'other',           label: 'Niečo iné',         body: 'Napíšem, čo sa stalo.' },
 ];
 
-export function MySwapOrders() {
+export function MySwapOrders({ showEmpty = false }: { showEmpty?: boolean } = {}) {
   const { isGuest } = useAuth();
   const queryClient = useQueryClient();
   const dialog = useDialog();
@@ -64,7 +64,10 @@ export function MySwapOrders() {
     (order) => order.buyer_id === profile?.id && order.payment_status === 'succeeded',
   );
 
-  if (bought.length === 0) return null;
+  // Pod „Moje vstupenky" sa prázdna sekcia nekreslí — bol by to nadpis nad
+  // ničím. Na vlastnej obrazovke áno: tam je prázdno odpoveď na otázku, po
+  // ktorej sem človek prišiel.
+  if (bought.length === 0 && !showEmpty) return null;
 
   const confirm = async (order: ResaleOrder) => {
     setError(null);
@@ -113,8 +116,11 @@ export function MySwapOrders() {
 
   return (
     <View style={styles.wrap}>
-      <SectionHeader title={SWAP_BRAND} />
+      {!showEmpty ? <SectionHeader title={SWAP_BRAND} /> : null}
       {error ? <Notice tone="danger" title="Nepodarilo sa" body={error} /> : null}
+      {bought.length === 0 ? (
+        <Caption>Zatiaľ si na SWAPe nič nekúpil.</Caption>
+      ) : null}
       {bought.map((order) => (
         <OrderCard
           key={order.id}

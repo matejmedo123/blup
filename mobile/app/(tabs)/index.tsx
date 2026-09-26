@@ -35,6 +35,7 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
   AvatarStack, Body, Button, Caption, EmptyState, ErrorState, IconButton, LoadingState, Notice,
 } from '@/components/ui';
+import { SwapEntry } from '@/components/SwapEntry';
 import {
   categoriesInFamily, categoryFilters, colors, radius, shadow, spacing, typography,
   type CategoryFamily,
@@ -573,6 +574,12 @@ export default function HomeScreen() {
           {...pull.handlers}
           ListHeaderComponent={
             <View>
+              {/* SWAP hneď hore v zozname: kto si prezerá, kam ísť, je presne
+                  ten, komu sa hodí vedieť, že na vypredaný koncert sa dá
+                  vstupenka ešte kúpiť od iného človeka. Kreslí sa len vtedy,
+                  keď je naozaj čo ponúknuť. */}
+              <SwapEntry compact />
+
               {(circles.data ?? []).length > 0 ? (
                 <Pressable style={styles.circles} onPress={() => router.push('/people')}>
                   <AvatarStack

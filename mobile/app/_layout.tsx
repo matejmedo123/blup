@@ -134,11 +134,15 @@ export default function RootLayout() {
       <Stack.Screen name="browse/[kind]/[key]" options={{ title: '' }} />
       <Stack.Screen name="swap/index" options={{ headerShown: false }} />
       <Stack.Screen name="swap/for/[kind]/[key]" options={{ title: SWAP_BRAND }} />
+      <Stack.Screen name="swap/family/[family]" options={{ title: SWAP_BRAND }} />
       <Stack.Screen name="swap/[event]" options={{ title: SWAP_BRAND }} />
       <Stack.Screen name="swap/checkout/[listing]" options={{ title: 'Pokladňa' }} />
       <Stack.Screen name="swap/sell" options={{ title: 'Predať vstupenku' }} />
       <Stack.Screen name="swap/deliver/[order]" options={{ title: 'Doručiť vstupenku' }} />
-      <Stack.Screen name="swap/selling/index" options={{ title: 'Predávam na SWAPe' }} />
+      <Stack.Screen name="swap/selling/index" options={{ title: 'Moje ponuky' }} />
+      <Stack.Screen name="swap/sales" options={{ title: 'Predaje' }} />
+      <Stack.Screen name="swap/orders" options={{ title: 'Moje nákupy' }} />
+      <Stack.Screen name="swap/wallet" options={{ title: 'Peniaze zo SWAPu' }} />
       <Stack.Screen name="tickets/[id]" options={{ title: 'Vstupenka' }} />
       {/* Both of these are landed on from outside — one after paying, one from
           a link in a ticket e-mail. The header is the first thing that says

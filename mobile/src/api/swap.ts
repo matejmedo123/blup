@@ -73,3 +73,69 @@ export async function swapEventsFor(
   if (error) throw error;
   return Array.isArray(data) ? (data as SwapEvent[]) : [];
 }
+
+/**
+ * Kategórie SWAPu.
+ *
+ * Iné než v BLUPe zámerne. BLUP triedi podľa nálady — Hudba, Outdoor,
+ * Spiritualita — lebo odpovedá na „čo by som si dnes dal". Na vstupenku sa
+ * podľa nálady nehľadá; hľadá sa podľa toho, na čo sa vôbec vstupenky
+ * predávajú.
+ */
+export type SwapFamily = 'concert' | 'festival' | 'sport' | 'stage' | 'other';
+
+export const SWAP_FAMILY_LABEL: Record<SwapFamily, string> = {
+  concert: 'Koncerty',
+  festival: 'Festivaly',
+  sport: 'Šport',
+  stage: 'Divadlo a kultúra',
+  other: 'Ostatné',
+};
+
+export const SWAP_FAMILY_GLYPH: Record<SwapFamily, string> = {
+  concert: '♪',
+  festival: '✦',
+  sport: '⚽',
+  stage: '◈',
+  other: '▣',
+};
+
+export interface SwapFamilyCount {
+  key: SwapFamily;
+  listing_count: number;
+  ticket_count: number;
+  from_cents: number | null;
+  currency: string | null;
+}
+
+export interface SwapHome {
+  total_listings: number;
+  total_tickets: number;
+  from_cents: number | null;
+  currency: string | null;
+  families: SwapFamilyCount[];
+  /** Čo sa hrá najskôr — najnaliehavejšie pre obe strany. */
+  soon: SwapEvent[];
+  /** Kde je najviac na výber. */
+  most: SwapEvent[];
+  /** Kde sú overené BLUP vstupenky. */
+  verified: SwapEvent[];
+}
+
+export async function getSwapHome(limit = 8): Promise<SwapHome> {
+  const { data, error } = await supabase.rpc('swap_home', { p_limit: limit });
+  if (error) throw error;
+  return data as SwapHome;
+}
+
+export async function swapEventsInFamily(
+  family: SwapFamily,
+  limit = 40,
+): Promise<SwapEvent[]> {
+  const { data, error } = await supabase.rpc('swap_events_in_family', {
+    p_family: family,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? (data as SwapEvent[]) : [];
+}

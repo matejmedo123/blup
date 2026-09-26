@@ -183,8 +183,14 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
   // A guest sees the parts that work without an account. Listing "Vstupenky"
   // to somebody who cannot have any is a menu item that only leads to a wall.
   const secondary: NavItem[] = isGuest
-    ? [{ href: '/community', label: 'Komunity', glyph: '◇' }]
+    ? [
+        // SWAP je aj pre neprihláseného: pozerať ponuky sa dá bez účtu a je to
+        // presne ten druh veci, kvôli ktorej si účet niekto založí.
+        { href: '/swap', label: 'SWAP', glyph: '⇄' },
+        { href: '/community', label: 'Komunity', glyph: '◇' },
+      ]
     : [
+        { href: '/swap', label: 'SWAP', glyph: '⇄' },
         { href: '/people', label: 'Ľudia', glyph: '☻' },
         { href: '/community', label: 'Komunity', glyph: '◇' },
         ...((cart.data?.quantity ?? 0) > 0

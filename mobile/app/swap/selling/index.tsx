@@ -12,6 +12,7 @@ import {
   SectionHeader,
 } from '@/components/ui';
 import { useDialog } from '@/components/Dialog';
+import { SwapNav } from '@/swap/SwapNav';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -74,6 +75,8 @@ export default function SellerScreen() {
 
   return (
     <Screen scroll>
+      <SwapNav active="/swap/selling" />
+
       {/* Bez vlastného nadpisu: hlavička hore už hovorí „Predávam" a druhý
           raz pod ňou to vyzerá ako chyba v rozložení. */}
       {b ? (
@@ -160,11 +163,16 @@ export default function SellerScreen() {
         ))
       )}
 
+      {/* Predané sem už nepatria: majú vlastnú obrazovku, kde sa predaj
+          dokončuje. Tu sa rozhoduje o cene a o tom, čo stiahnuť — to sú dve
+          rôzne úlohy a zmiešané dokopy je to zoznam, v ktorom treba hľadať
+          to jedno, čo si vyžaduje pozornosť. */}
       {sold.length > 0 ? (
-        <>
-          <SectionHeader title="Predané" />
-          {sold.map((row) => <ListingCard key={row.id} row={row} />)}
-        </>
+        <Pressable onPress={() => router.replace('/swap/sales')} style={styles.more}>
+          <Text style={styles.moreLabel}>
+            {sold.length === 1 ? '1 predaná vstupenka' : `${sold.length} predaných`} — pozrieť
+          </Text>
+        </Pressable>
       ) : null}
 
       {done.length > 0 ? (
@@ -315,4 +323,13 @@ const styles = StyleSheet.create({
   pillLabel: { ...typography.metaSm, color: colors.textSecondary },
   pillLabelGood: { color: colors.success },
   pillLabelWarn: { color: colors.warning },
+
+  more: {
+    padding: spacing.md, borderRadius: radius.card,
+    borderWidth: 1, borderColor: colors.accentBorder,
+    backgroundColor: colors.accentSoft,
+    marginBottom: spacing.sm,
+    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+  },
+  moreLabel: { ...typography.metaSm, color: colors.accent, fontWeight: '700' },
 });
