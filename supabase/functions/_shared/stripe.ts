@@ -172,6 +172,46 @@ export const stripe = {
     }, `pi_${params.orderId}`),
 
   /**
+   * PaymentIntent pre nákup NA BURZE.
+   *
+   * Vlastná funkcia a nie parameter pri `createPaymentIntent` kvôli jedinému,
+   * ale zásadnému detailu: metadata. Tá nesie `resale_order_id`, nie
+   * `order_id` — webhook sa rozhoduje práve podľa nich a keby tam stálo
+   * `order_id`, poslal by objednávku z burzy do `fulfill_order`, teda do
+   * vydávania nových vstupeniek na event. Vydalo by to vstupenku, ktorá
+   * nikomu nepatrí, a nikto by si toho nevšimol, kým by ju niekto nepoužil.
+   *
+   * Žiadne `transfer_data` a žiadny `application_fee_amount`: celá suma
+   * pristane na účte platformy a drží sa tam, kým predajcovi nevznikne nárok.
+   * Pri burze je BLUP merchant of record a spor z karty platí BLUP — to je
+   * cena za to, že vieme peniaze držať, a je to zámer, nie opomenutie.
+   */
+  createResalePaymentIntent: (params: {
+    amountCents: number;
+    currency: string;
+    resaleOrderId: string;
+    buyerId: string;
+    sellerId: string;
+    eventId: string;
+    customerEmail?: string;
+    descriptor?: string | null;
+  }) =>
+    stripeRequest<StripePaymentIntent>('/payment_intents', 'POST', {
+      amount: params.amountCents,
+      currency: params.currency.toLowerCase(),
+      'automatic_payment_methods[enabled]': 'true',
+      receipt_email: params.customerEmail,
+      statement_descriptor: statementDescriptor(params.descriptor),
+      metadata: {
+        resale_order_id: params.resaleOrderId,
+        buyer_id: params.buyerId,
+        seller_id: params.sellerId,
+        event_id: params.eventId,
+        platform: 'blup',
+      },
+    }, `rpi_${params.resaleOrderId}`),
+
+  /**
    * A hosted Checkout session — the web payment path.
    *
    * The browser is redirected to Stripe rather than collecting card details in
@@ -362,6 +402,33 @@ export const stripe = {
       // organizer's bank until BLUP sends a payout.
       settings: { payouts: { schedule: { interval: 'manual' } } },
       metadata: { organization_id: params.organizationId, platform: 'blup' },
+    }),
+
+  /**
+   * Účet pre PREDAJCU NA BURZE, teda pre fyzickú osobu.
+   *
+   * Vlastná funkcia a nie parameter pri `createConnectedAccount`: tá je
+   * natvrdo `business_type: 'company'` a berie `organizationId`, lebo
+   * organizátor je firma. Človek, ktorý predáva jednu vstupenku, firma nie je
+   * a Stripe od neho pýta iné údaje — poslať ho cez firemné onboardovanie
+   * znamená pýtať si IČO od niekoho, kto žiadne nemá.
+   *
+   * `card_payments` sa zámerne NEŽIADA. Predajca od nikoho neinkasuje —
+   * peniaze vyberá BLUP a predajcovi ich neskôr pošle. Žiadať si schopnosť,
+   * ktorú nikdy nepoužije, by mu len predĺžilo overovanie.
+   */
+  createSellerAccount: (params: { email?: string; country: string; userId: string }) =>
+    stripeRequest<StripeAccount>('/accounts', 'POST', {
+      type: 'express',
+      country: params.country,
+      email: params.email,
+      capabilities: { transfers: { requested: 'true' } },
+      business_type: 'individual',
+      // Rovnaký dôvod ako pri organizátorovi: bez toho si účet sám posiela
+      // peniaze do banky podľa Stripe rozvrhu a odtečú spod nášho zadržania
+      // skôr, než na ne vznikne nárok.
+      settings: { payouts: { schedule: { interval: 'manual' } } },
+      metadata: { seller_id: params.userId, platform: 'blup' },
     }),
 
   /**

@@ -165,3 +165,52 @@ export async function payForCampaign(input: {
     clientSecret: session.payment_intent_client_secret,
   };
 }
+
+/**
+ * Nákup na burze.
+ *
+ * Tá istá kostra ako pri primárnom predaji a zámerne: kartu zbiera ten istý
+ * hárok, cenu určuje server a zaplatené je to až vtedy, keď to povie webhook.
+ * Rozdiel je len v tom, čo sa kupuje a odkiaľ sa berie objednávka — z
+ * rezervácie, ktorá vstupenku drží, kým sa platí.
+ *
+ * Nemá zmysel z toho robiť jednu funkciu s prepínačom: čísla, poplatky aj
+ * následné kroky sa líšia a prepínač by ich len zamotal do seba.
+ */
+export async function payForResale(
+  reservationId: string,
+  handlers: PayHandlers,
+): Promise<PayResult> {
+  const { createResaleCheckout, waitForResaleOrder } = await import('@/api/resale');
+
+  const session = await createResaleCheckout(reservationId);
+
+  if (!session.requires_payment) {
+    return { status: 'succeeded', orderId: session.order_id };
+  }
+  if (!session.payment_intent_client_secret) {
+    throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+  }
+
+  const { error: initError } = await handlers.initPaymentSheet({
+    merchantDisplayName: handlers.merchantName ?? 'BLUP',
+    paymentIntentClientSecret: session.payment_intent_client_secret,
+    applePay: { merchantCountryCode: 'SK' },
+    googlePay: { merchantCountryCode: 'SK', testEnv: __DEV__ },
+    returnURL: 'blup://stripe-redirect',
+    allowsDelayedPaymentMethods: false,
+  });
+  if (initError) throw new Error(initError.message);
+
+  const { error: sheetError } = await handlers.presentPaymentSheet();
+  if (sheetError) {
+    if (sheetError.code === 'Canceled') return { status: 'cancelled', orderId: session.order_id };
+    throw new Error(sheetError.message);
+  }
+
+  const status = await waitForResaleOrder(session.order_id);
+  return {
+    status: status === 'payment_pending' ? 'pending' : 'succeeded',
+    orderId: session.order_id,
+  };
+}

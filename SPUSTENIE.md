@@ -582,6 +582,16 @@ $$);
 select cron.schedule('blup-resale-settle', '41 * * * *', $$
   select public.settle_resale_orders(500);
 $$);
+
+-- burza: skutočné odoslanie peňazí predajcom. Databáza vie KOMU a KOĽKO;
+-- peniaze hýbe až táto funkcia, lebo kľúč k poskytovateľovi platieb do
+-- databázy nepatrí. Zadržané výplaty (otvorený spor, zrušený event, vyššie
+-- riziko) preskakuje — tie majú prejsť cez človeka.
+select cron.schedule('blup-resale-payout', '7 * * * *', $$
+  select net.http_post(
+    url := 'https://<project-ref>.supabase.co/functions/v1/resale-payout',
+    headers := '{"Authorization": "Bearer <service-role-key>"}'::jsonb);
+$$);
 ```
 
 `cart-sweep` robí dve veci naraz a ani jedna nie je kritická. Označí eventy,
@@ -590,7 +600,7 @@ správá ako nadchádzajúci (presne tak sa dal boostnúť koncert spred mesiaca
 A je to upratovanie — vypršaná rezervácia prestáva držať vstupenky
 v tej sekunde, keď vyprší, nech beží čokoľvek.
 
-**✓ Kontrola:** `select jobname, schedule from cron.job;` — deväť riadkov.
+**✓ Kontrola:** `select jobname, schedule from cron.job;` — desať riadkov.
 
 > **E-mailov bude výrazne viac než doteraz.** Okrem vstupeniek teraz chodia aj
 > upozornenia z čakačky a rozposielania od organizátorov. Koľko ich smie odísť

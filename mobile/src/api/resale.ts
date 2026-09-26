@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { callFunction, supabase } from '@/lib/supabase';
 
 /**
  * Burza vstupeniek — ďalší predaj medzi dvoma ľuďmi.
@@ -340,4 +340,63 @@ export async function requestSellerPayout() {
   const { data, error } = await supabase.rpc('request_seller_payout');
   if (error) throw error;
   return data;
+}
+
+/**
+ * Prvý krok platby na burze: z rezervácie sa stane objednávka a vráti sa
+ * PaymentIntent.
+ *
+ * Posiela sa LEN id rezervácie. Žiadna suma — tú spočítal server pri zakladaní
+ * objednávky a appka ju nemá ako ovplyvniť.
+ */
+export interface ResaleCheckoutSession {
+  order_id: string;
+  status: string;
+  requires_payment: boolean;
+  payment_intent_client_secret?: string;
+  source: ResaleSource;
+  authenticity: Authenticity;
+  quantity: number;
+  ticket_price_cents: number;
+  buyer_fee_cents: number;
+  delivery_fee_cents: number;
+  amount_cents: number;
+  currency: string;
+}
+
+export async function createResaleCheckout(
+  reservationId: string,
+): Promise<ResaleCheckoutSession> {
+  return callFunction<ResaleCheckoutSession>('resale-checkout', {
+    reservation_id: reservationId,
+  });
+}
+
+/**
+ * Počká, kým webhook potvrdí platbu.
+ *
+ * Obrazovka sa zámerne nepýta Stripu a neverí návratovej stránke: zaplatené je
+ * to, čo takto povie náš server. Kým sa stav nezmení, kupujúci vidí „čakáme",
+ * čo je pravda — peniaze môžu byť strhnuté a webhook ešte na ceste.
+ */
+export async function waitForResaleOrder(
+  orderId: string,
+  timeoutMs = 25_000,
+): Promise<ResaleOrderStatus> {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const { data } = await supabase
+      .from('resale_orders')
+      .select('order_status, payment_status')
+      .eq('id', orderId)
+      .single();
+
+    const status = (data as { order_status: ResaleOrderStatus } | null)?.order_status;
+    if (status && status !== 'created' && status !== 'payment_pending') return status;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  // Nie chyba: platba mohla prejsť a webhook meškať. Objednávka je v prehľade
+  // a stav sa doplní sám — tvrdiť tu neúspech by bolo horšie než priznať, že
+  // ešte nevieme.
+  return 'payment_pending';
 }

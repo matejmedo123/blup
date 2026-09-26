@@ -122,6 +122,9 @@ Deno.serve(async (req) => {
     const boostId = metadata.boost_id;
     // A basket pays once for several orders; the checkout is the envelope.
     const checkoutId = metadata.checkout_id;
+    // Burza. Vlastný kľúč a nie `order_id` zámerne — objednávka z burzy sa
+    // nesmie dostať do `fulfill_order`, ktoré vydáva nové vstupenky.
+    const resaleOrderId = metadata.resale_order_id;
 
     switch (event.type) {
       case 'payment_intent.succeeded': {
@@ -151,6 +154,18 @@ Deno.serve(async (req) => {
           break;
         }
 
+        if (resaleOrderId) {
+          // Prevedie vstupenku (pri našej), upovedomí obe strany a zapíše
+          // do stopy. Je to idempotentné: ten istý webhook smie doraziť
+          // trikrát a druhý aj tretí raz nespraví nič.
+          const { error } = await db.rpc('mark_resale_order_paid', {
+            p_order_id: resaleOrderId,
+            p_reference: String(object.id),
+          });
+          if (error) throw error;
+          break;
+        }
+
         if (!orderId) break;
         const { error } = await db.rpc('fulfill_order', {
           p_order_id: orderId,
@@ -171,6 +186,28 @@ Deno.serve(async (req) => {
 
       case 'payment_intent.payment_failed':
       case 'payment_intent.canceled': {
+        if (resaleOrderId) {
+          // Neúspešná platba musí vstupenku pustiť späť do predaja. Bez toho
+          // by listing visel ako „rezervovaný", kým ho neupratá cron — a to
+          // je pri vstupenke na event budúci týždeň zbytočne dlho.
+          await db
+            .from('resale_orders')
+            .update({
+              payment_status: 'failed',
+              order_status: 'cancelled',
+              cancelled_at: new Date().toISOString(),
+              failure_reason: String(
+                (object.last_payment_error as Record<string, string> | undefined)?.message
+                  ?? 'PAYMENT_FAILED',
+              ),
+            })
+            .eq('id', resaleOrderId)
+            .neq('payment_status', 'succeeded');
+
+          await db.rpc('expire_resale_reservations');
+          break;
+        }
+
         const failure = (object.last_payment_error ?? {}) as Record<string, string>;
 
         if (boostId) {

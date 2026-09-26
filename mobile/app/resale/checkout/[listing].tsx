@@ -8,6 +8,8 @@ import {
   type ResaleQuote, type ResaleReservation,
 } from '@/api/resale';
 import { AuthenticityBadge, authenticityExplainer } from '@/components/AuthenticityBadge';
+import { canTakePayment, payForResale, unavailableMessage } from '@/payments/checkout';
+import { useStripeBridge } from '@/payments/stripe';
 import { useRequireAuth } from '@/auth/useRequireAuth';
 import {
   Button, Caption, Divider, ErrorState, LoadingState, Mono, Notice, Screen, Title,
@@ -33,11 +35,13 @@ import { colors, radius, spacing, typography } from '@/theme';
 export default function ResaleCheckoutScreen() {
   const { listing: listingId } = useLocalSearchParams<{ listing: string }>();
   const { requireAuth } = useRequireAuth();
+  const { initPaymentSheet, presentPaymentSheet } = useStripeBridge();
 
   const [reservation, setReservation] = useState<ResaleReservation | null>(null);
   const [holding, setHolding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [paying, setPaying] = useState(false);
 
   const quote = useQuery({
     queryKey: ['resale', 'quote', listingId],
@@ -77,6 +81,40 @@ export default function ResaleCheckoutScreen() {
       setError(messageFor(caught));
     } finally {
       setHolding(false);
+    }
+  };
+
+  /**
+   * Zaplatenie.
+   *
+   * Appka neposiela sumu — posiela id rezervácie. Cenu spočítal server pri
+   * zakladaní objednávky a objednávka zostane nezaplatená, kým to nepotvrdí
+   * webhook s overeným podpisom. Návrat z platobnej brány je len návrat.
+   */
+  const pay = async () => {
+    if (!reservation) return;
+    setError(null);
+    setPaying(true);
+    try {
+      const result = await payForResale(reservation.id, {
+        initPaymentSheet,
+        presentPaymentSheet,
+        merchantName: 'BLUP',
+      });
+
+      // Na webe prehliadač už odchádza na platobnú bránu; nechať obrazovku
+      // tak, ako je, je lepšie než blysnúť výsledkom, ktorý nikto neprečíta.
+      if (result.status === 'redirecting') return;
+      if (result.status === 'cancelled') { setPaying(false); return; }
+
+      // Rezervácia sa premenila na objednávku — odchod z obrazovky ju už nemá
+      // čo púšťať späť do predaja.
+      leaving.current = null;
+      router.replace('/tickets');
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -168,11 +206,18 @@ export default function ResaleCheckoutScreen() {
           onPress={() => void hold()}
           disabled={holding}
         />
-      ) : (
+      ) : canTakePayment() ? (
         <Button
-          title="Zaplatiť"
-          onPress={() => {}}
-          disabled={secondsLeft <= 0}
+          title={paying ? 'Platím…' : `Zaplatiť ${formatMoney(q.total_cents, q.currency)}`}
+          onPress={() => void pay()}
+          disabled={secondsLeft <= 0 || paying}
+        />
+      ) : (
+        // Radšej to povedať, než ukázať tlačidlo, ktoré nič nespraví.
+        <Notice
+          tone="warning"
+          title="Platba tu zatiaľ nejde"
+          body={unavailableMessage}
         />
       )}
 

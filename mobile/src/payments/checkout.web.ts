@@ -180,3 +180,25 @@ export async function payForCampaign(input: {
   go(session.redirect_url);
   return { status: 'redirecting', orderId: session.boost_id };
 }
+
+/**
+ * Nákup na burze v prehliadači.
+ *
+ * Rovnako ako všetko ostatné na webe: presmerovanie na hostovaný Checkout.
+ * Číslo karty sa nedotkne našej domény a zaplatené je to až vtedy, keď to
+ * povie webhook — návrat z platobnej brány je len návrat, nie dôkaz.
+ */
+export async function payForResale(
+  reservationId: string,
+  _handlers?: PayHandlers,
+): Promise<PayResult> {
+  const session = await callFunction<WebCheckoutResponse>('web-checkout', {
+    kind: 'resale',
+    reservation_id: reservationId,
+  });
+
+  if (!session.redirect_url) throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+
+  go(session.redirect_url);
+  return { status: 'redirecting', orderId: session.order_id };
+}

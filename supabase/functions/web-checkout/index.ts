@@ -8,6 +8,7 @@
  * Three kinds, one function, because they differ only in what is being priced:
  *
  *   ticket   { kind, ticket_type_id, quantity, promo_code? }
+ *   resale   { kind, reservation_id }  — nákup na burze
  *   cart     { kind, promo_code? }  — whatever is reserved in the basket
  *   premium  { kind, plan: 'monthly' | 'yearly' }
  *   boost    { kind, event_id, package_code }
@@ -30,7 +31,7 @@ import type { BoostRow, CheckoutRow, OrderRow } from '../_shared/rows.ts';
 import { stripe } from '../_shared/stripe.ts';
 import { env } from '../_shared/env.ts';
 
-type Kind = 'ticket' | 'cart' | 'premium' | 'boost' | 'campaign' | 'portal';
+type Kind = 'ticket' | 'resale' | 'cart' | 'premium' | 'boost' | 'campaign' | 'portal';
 
 /**
  * Who is buying, when nobody is signed in.
@@ -49,6 +50,8 @@ interface Guest {
 
 interface Body {
   kind?: Kind;
+  // resale
+  reservation_id?: string;
   guest?: Guest;
   return_url?: string;
   // ticket
@@ -159,6 +162,91 @@ Deno.serve(async (req) => {
     const user = guest ? null : await requireUser(req);
 
     rateLimit(`web-checkout:${user?.id ?? guest?.email ?? 'anon'}`, 12, 60_000);
+
+    if (kind === 'resale') {
+      // Nákup na burze. Rovnaká cesta ako pri vstupenke — hostovaný Checkout,
+      // karta sa nikdy nedotkne našej domény — ale s dvoma rozdielmi, ktoré
+      // sú celý zmysel burzy:
+      //
+      //   Žiadny `connectedAccountId` a žiadny `applicationFeeCents`. Peniaze
+      //   pristanú na účte platformy a držia sa tam, kým predajcovi nevznikne
+      //   nárok. Keby pristali priamo uňho, nemali by sme čo vrátiť, a sľub
+      //   „vrátime ti peniaze" by bol prázdny.
+      //
+      //   Metadata nesú `resale_order_id`, nie `order_id`. S obyčajným
+      //   `order_id` by webhook objednávku poslal do `fulfill_order` a vydal
+      //   by úplne novú vstupenku na event.
+      if (!signedIn || !user) {
+        throw new ApiError('UNAUTHENTICATED', 'Na burze sa nakupuje na účet', 401);
+      }
+      if (!body.reservation_id) {
+        throw new ApiError('INVALID_BODY', 'reservation_id is required');
+      }
+
+      const { data: created, error: orderError } = await db
+        .rpc('create_resale_order', { p_reservation_id: body.reservation_id })
+        .single();
+      if (orderError || !created) {
+        throw new ApiError('RESALE_ORDER_FAILED',
+          orderError?.message ?? 'Objednávku sa nepodarilo založiť', 400);
+      }
+      const order = created as {
+        id: string; event_id: string; buyer_id: string; seller_id: string;
+        total_cents: number; currency: string; quantity: number; source: string;
+      };
+
+      if (order.buyer_id !== user.id) {
+        throw new ApiError('FORBIDDEN', 'Táto objednávka nie je tvoja', 403);
+      }
+      if (order.total_cents <= 0) {
+        throw new ApiError('INVALID_PRICE', 'Nulová suma sa na burze neplatí', 400);
+      }
+
+      const { data: resaleEvent } = await db
+        .from('events').select('title').eq('id', order.event_id).single();
+
+      const session = await stripe.createCheckoutSession({
+        mode: 'payment',
+        amountCents: order.total_cents,
+        currency: order.currency,
+        productName: resaleEvent?.title ?? 'Vstupenka z burzy',
+        productDescription: order.source === 'blup'
+          ? `${order.quantity}× vstupenka — overená, prevedieme ju na teba`
+          : `${order.quantity}× vstupenka z inej platformy — peniaze držíme do potvrdenia`,
+        applicationFeeCents: 0,
+        connectedAccountId: null,
+        descriptor: resaleEvent?.title ?? null,
+        customerId: await customerFor(db, user),
+        customerEmail: null,
+        clientReferenceId: order.id,
+        metadata: {
+          resale_order_id: order.id,
+          buyer_id: user.id,
+          seller_id: order.seller_id,
+          event_id: order.event_id,
+          platform: 'blup_web',
+        },
+        successUrl: safeReturn(
+          `/checkout/return?resale=${order.id}&session={CHECKOUT_SESSION_ID}`,
+          '/tickets',
+        ),
+        cancelUrl: safeReturn(`/resale/${order.event_id}`, '/'),
+        idempotencyKey: `cs_resale_${order.id}`,
+      });
+
+      await db.from('resale_orders').update({
+        provider: 'stripe',
+        provider_reference: session.id,
+        payment_status: 'processing',
+      }).eq('id', order.id);
+
+      return json({
+        kind, order_id: order.id, status: 'requires_payment', requires_payment: true,
+        redirect_url: session.url,
+        amount_cents: order.total_cents,
+        currency: order.currency,
+      });
+    }
 
     if (kind === 'ticket') {
       const quantity = Number(body.quantity);
