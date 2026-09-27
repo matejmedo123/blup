@@ -3,12 +3,14 @@ import { Redirect, Stack } from 'expo-router';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { colors } from '@/theme';
+import { useStackScreenOptions } from '@/navigation/stackOptions';
 
 /**
  * Admin section. Hiding it is not the security control — every admin RPC
  * re-checks is_admin() in the database — but there is no reason to show it.
  */
 export default function AdminLayout() {
+  const stackOptions = useStackScreenOptions();
   const { isAdmin, initializing, loadingProfile } = useAuth();
 
   if (initializing || loadingProfile) return null;
@@ -16,12 +18,7 @@ export default function AdminLayout() {
 
   return (
     <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.background },
-      }}
+      screenOptions={stackOptions}
     >
       <Stack.Screen name="index" options={{ title: 'Admin' }} />
       <Stack.Screen name="users" options={{ title: 'Používatelia' }} />

@@ -4,8 +4,10 @@ import { Stack } from 'expo-router';
 import { useAuth } from '@/auth/AuthProvider';
 import { SignInInvite } from '@/components/SignInInvite';
 import { colors } from '@/theme';
+import { useStackScreenOptions } from '@/navigation/stackOptions';
 
 export default function SettingsLayout() {
+  const stackOptions = useStackScreenOptions();
   const { isGuest, initializing } = useAuth();
 
   if (initializing) return null;
@@ -24,12 +26,7 @@ export default function SettingsLayout() {
 
   return (
     <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.background },
-      }}
+      screenOptions={stackOptions}
     >
       <Stack.Screen name="index" options={{ title: 'Nastavenia' }} />
       <Stack.Screen name="profile" options={{ title: 'Upraviť profil' }} />

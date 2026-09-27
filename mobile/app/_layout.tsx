@@ -34,6 +34,7 @@ import { registerServiceWorker } from '@/lib/pwa';
 import { Wordmark } from '@/components/Wordmark';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useAppFonts } from '@/theme/fonts';
+import { useStackScreenOptions } from '@/navigation/stackOptions';
 
 /**
  * Offline mode ("offline režim – event agenda aj bez netu").
@@ -65,6 +66,7 @@ function GlobalStoryViewer() {
 
 export default function RootLayout() {
   const fontsReady = useAppFonts();
+  const stackOptions = useStackScreenOptions();
 
   // Web only: the service worker gives the browser offline support and lets it
   // receive push while no tab is open. A no-op everywhere else.
@@ -98,16 +100,12 @@ export default function RootLayout() {
   const content = (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.text,
-        headerTitleStyle: { fontWeight: '700' },
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.background },
-        // Without this the navigator cuts straight from one screen to the next,
-        // which reads as a slide deck rather than an app — and made a fast
-        // connection feel exactly as abrupt as a slow one. A phone slides,
-        // because that is the direction the gesture goes; the web fades, where
-        // there is no gesture and a slide only draws attention to itself.
+        ...stackOptions,
+        // Bez tohto navigátor strihá z obrazovky na obrazovku, čo pôsobí ako
+        // prezentácia, nie appka — a na rýchlom pripojení to bolo rovnako
+        // strohé ako na pomalom. Telefón posúva, lebo tým smerom ide gesto;
+        // web stmieva, lebo tam žiadne gesto nie je a posun by len upozorňoval
+        // sám na seba.
         animation: Platform.OS === 'web' ? 'fade' : 'slide_from_right',
         animationDuration: 220,
       }}
