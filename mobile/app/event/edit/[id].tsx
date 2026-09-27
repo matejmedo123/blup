@@ -17,6 +17,7 @@ import {
   SectionHeader, Switch,
 } from '@/components/ui';
 import { colors, labelFor, radius, spacing } from '@/theme';
+import { useDialog } from '@/components/Dialog';
 
 const CATEGORIES = [
   'techno', 'house', 'hiphop', 'rock', 'jazz', 'indie', 'festival', 'running', 'cycling',
@@ -43,6 +44,7 @@ const CATEGORIES = [
  *     do it quietly are not the same power.
  */
 export default function EditEventScreen() {
+  const dialog = useDialog();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile, isAdmin } = useAuth();
   const queryClient = useQueryClient();
@@ -154,12 +156,20 @@ export default function EditEventScreen() {
     setError(null);
     setSaved(false);
 
-    if (title.trim().length < 3) {
-      setError('Názov musí mať aspoň 3 znaky.');
-      return;
-    }
-    if (asAdmin && reason.trim().length < 5) {
-      setError('Napíš dôvod zásahu — zapíše sa do audit logu.');
+    // Tie isté pravidlá ako pri zakladaní. Keby platili len tam, dal by sa
+    // event „opraviť" na stav, ktorý by sa nedal vytvoriť — a miesto by sa
+    // dalo vymazať aj eventu, ktorý ho mal.
+    const problem =
+      title.trim().length < 3 ? 'Názov musí mať aspoň 3 znaky.'
+      : venueName.trim().length < 2
+        ? 'Napíš, kde to bude — názov klubu, baru alebo miesta. Samotný bod na mape človeku pred budovou nepomôže.'
+      : asAdmin && reason.trim().length < 5
+        ? 'Napíš dôvod zásahu — zapíše sa do audit logu.'
+      : null;
+
+    if (problem) {
+      setError(problem);
+      await dialog.alert({ title: 'Toto ešte oprav', body: problem });
       return;
     }
 

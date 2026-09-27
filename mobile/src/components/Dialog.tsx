@@ -36,15 +36,26 @@ type PromptOptions = ConfirmOptions & {
 
 type Pending =
   | { kind: 'confirm'; options: ConfirmOptions; resolve: (ok: boolean) => void }
+  | { kind: 'alert'; options: ConfirmOptions; resolve: (ok: boolean) => void }
   | { kind: 'prompt'; options: PromptOptions; resolve: (value: string | null) => void };
 
 type DialogValue = {
   confirm: (options: ConfirmOptions) => Promise<boolean>;
+  /**
+   * Jedna správa a jedno tlačidlo.
+   *
+   * Na to, čo sa `Alert.alert` snaží byť — s tým rozdielom, že vo webovom
+   * builde je `Alert.alert` prázdna funkcia a nespraví vôbec nič. Používa sa
+   * tam, kde sa človeku musí niečo povedať TERAZ: napríklad že formulár má
+   * chybu, ktorá je o tristo pixelov vyššie, než kam práve pozerá.
+   */
+  alert: (options: ConfirmOptions) => Promise<void>;
   prompt: (options: PromptOptions) => Promise<string | null>;
 };
 
 const DialogContext = React.createContext<DialogValue>({
   confirm: async () => false,
+  alert: async () => {},
   prompt: async () => null,
 });
 
@@ -75,11 +86,11 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const cancel = useCallback(() => {
-    close((p) => (p.kind === 'confirm' ? p.resolve(false) : p.resolve(null)));
+    close((p) => (p.kind === 'prompt' ? p.resolve(null) : p.resolve(false)));
   }, [close]);
 
   const accept = useCallback((value: string) => {
-    close((p) => (p.kind === 'confirm' ? p.resolve(true) : p.resolve(value)));
+    close((p) => (p.kind === 'prompt' ? p.resolve(value) : p.resolve(true)));
   }, [close]);
 
   // Asking a second question while the first is still up would strand the first
@@ -88,7 +99,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
   const replace = useCallback((next: Pending) => {
     const previous = openRef.current;
     if (previous) {
-      if (previous.kind === 'confirm') previous.resolve(false);
+      if (previous.kind !== 'prompt') previous.resolve(false);
       else previous.resolve(null);
     }
     openRef.current = next;
@@ -99,6 +110,10 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     confirm: (options) => new Promise<boolean>((resolve) => {
       setText('');
       replace({ kind: 'confirm', options, resolve });
+    }),
+    alert: (options) => new Promise<void>((resolve) => {
+      setText('');
+      replace({ kind: 'alert', options, resolve: () => resolve() });
     }),
     prompt: (options) => new Promise<string | null>((resolve) => {
       setText(options.initialValue ?? '');
@@ -156,9 +171,13 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
             ) : null}
 
             <View style={styles.actions}>
-              <Pressable onPress={cancel} style={[styles.button, styles.buttonGhost]}>
-                <Text style={styles.buttonGhostLabel}>{options?.cancelLabel ?? 'Zrušiť'}</Text>
-              </Pressable>
+              {/* Oznam má jedno tlačidlo. „Zrušiť" pri vete „takto to nejde"
+                  je otázka, na ktorú sa nedá odpovedať. */}
+              {pending?.kind === 'alert' ? null : (
+                <Pressable onPress={cancel} style={[styles.button, styles.buttonGhost]}>
+                  <Text style={styles.buttonGhostLabel}>{options?.cancelLabel ?? 'Zrušiť'}</Text>
+                </Pressable>
+              )}
               <Pressable
                 onPress={() => accept(text)}
                 disabled={blocked}
@@ -168,7 +187,9 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                   blocked && styles.buttonDisabled,
                 ]}
               >
-                <Text style={styles.buttonLabel}>{options?.confirmLabel ?? 'Potvrdiť'}</Text>
+                <Text style={styles.buttonLabel}>
+                  {options?.confirmLabel ?? (pending?.kind === 'alert' ? 'Rozumiem' : 'Potvrdiť')}
+                </Text>
               </Pressable>
             </View>
           </Pressable>

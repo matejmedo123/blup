@@ -24,6 +24,7 @@ import {
 } from '@/components/ui';
 import { colors, labelFor, radius, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
+import { useDialog } from '@/components/Dialog';
 
 // Roughly grouped, because the chips are read in order: music, then sport,
 // then culture, food, business, nightlife, social, wellness. "Other" stays last
@@ -75,6 +76,7 @@ const cheapestCents = (tickets: TicketDraft[]): number => {
 };
 
 export default function CreateEventScreen() {
+  const dialog = useDialog();
   const { profile, isFullAdmin } = useAuth();
   const { crop } = useImageCrop();
   const location = useLocation();
@@ -395,6 +397,12 @@ export default function CreateEventScreen() {
       }
     }
     if (!eventCoords) return 'Vyber miesto — klikni na mapu alebo zapni GPS.';
+    // Bod na mape povie, KDE to je; nepovie, KAM ísť. Bez názvu miesta appka
+    // pod eventom napíše len „podľa mapy" a človek pred budovou nevie, či má
+    // ísť do klubu, na dvor alebo na strechu.
+    if (venueName.trim().length < 2) {
+      return 'Napíš, kde to bude — názov klubu, baru alebo miesta. Samotný bod na mape človeku pred budovou nepomôže.';
+    }
     if (startAt.getTime() < Date.now() - 60_000) return 'Vyber čas začiatku v budúcnosti.';
     if (!isFree) {
       if (listedByBlup) return 'Event pridaný za niekoho iného nemôže predávať vstupenky cez BLUP.';
@@ -466,6 +474,11 @@ export default function CreateEventScreen() {
     const problem = validate();
     if (problem) {
       setError(problem);
+      // Hláška hore je k ničomu, keď je človek pri tlačidle o tristo pixelov
+      // nižšie: zdanlivo sa nestalo nič a formulár sa „neodoslal bez dôvodu".
+      // Okno to povie tam, kam práve pozerá; text hore zostáva, aby sa dal
+      // po zavretí prečítať znova.
+      await dialog.alert({ title: 'Toto ešte oprav', body: problem });
       return;
     }
 
@@ -696,6 +709,7 @@ export default function CreateEventScreen() {
         onChangeText={setVenueName}
         placeholder="Stará tržnica"
         editable={!saving}
+        error={fieldErrors['venueName']}
       />
       <Input
         label="Adresa"
