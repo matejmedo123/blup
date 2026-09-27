@@ -56,3 +56,9 @@ supabase/functions/deno.lock
 scripts/_shot.mjs
 scripts/_probe.mjs
 query.sql
+
+# balíky so zdrojákmi
+# Vyrábajú sa cez `git archive` z tohto istého repozitára, takže commitnúť ich
+# späť doň znamená priložiť ku každej verzii kópiu tej predošlej. Posielajú sa
+# ako súbor, do histórie nepatria.
+*.zip
