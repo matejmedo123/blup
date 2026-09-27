@@ -448,8 +448,12 @@ const styles = StyleSheet.create({
   },
   verifiedLabel: { ...typography.metaSm, color: '#22C55E', fontWeight: '700' },
 
+  // Tlačidlá sa držia v strede. `Button` má vlastný strop šírky (360 px), takže
+  // dve vedľa seba nikdy nevyplnia široký riadok — bez `justifyContent` sa
+  // zhlukli pri ľavom okraji a vyzeralo to ako nedokončený riadok mriežky.
   footer: {
     flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md,
+    justifyContent: 'center', flexWrap: 'wrap',
     maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
   },
   footerButton: { flex: 1 },
