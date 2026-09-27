@@ -268,7 +268,6 @@ Nič, okrem dvoch nepovinných vecí:
 - **Cron na príbehy** — riadok `blup-stories` v SPUSTENIE.md, kapitola o cron
   jobs. Bez neho príbehy **nikto neuvidí** po 24 hodinách (to zariaďuje každé
   čítanie), len sa riadky nebudú mazať.
-- **`TENOR_API_KEY`** — ak chceš vyhľadávanie GIFov. Bez neho funguje posielanie
   vlastných GIFov a picker to povie nahlas.
 
 ---
@@ -677,7 +676,7 @@ select count(*) from public.events where slug is null;
 npx supabase functions deploy
 ```
 
-Nasadí sa **22 funkcií**. Tri z nich patria SWAPu a sú nové:
+Nasadí sa **21 funkcií**. Tri z nich patria SWAPu a sú nové:
 
 - **`resale-checkout`** — platba za vstupenku z burzy. Má vlastný
   PaymentIntent s metadátom `resale_order_id`; keby šiel cez ten istý ako
@@ -694,11 +693,6 @@ A tri staršie, ak si ich ešte nenasadil:
 
 - **`og`** — náhľad odkazu na Instagrame a vo WhatsApp. Bez nej sa zdieľané
   eventy budú ďalej zobrazovať s generickou kartou.
-- **`gif-search`** — vyhľadávanie GIFov v chate. **Nepovinná.** Bez nej (alebo
-  bez `TENOR_API_KEY`) picker povie, že vyhľadávanie nie je nastavené, a
-  posielanie vlastných GIFov z fotiek funguje aj tak. Kľúč sa nastavuje cez
-  `npx supabase secrets set TENOR_API_KEY=…` a **nikdy nesmie ísť do appky** —
-  kľúč v nahratom JavaScripte si vie ktokoľvek vybrať a míňať.
 - **`unsubscribe`** — odkaz na konci každého newslettera. **Nasadzuje sa bez
   overovania tokenu** (skript to robí sám, `--no-verify-jwt`), pretože naň
   kliká človek v poštovom klientovi, ktorý účet často ani nemá. Bez nej každé
@@ -781,7 +775,6 @@ Tieto sa nedajú nasadiť z kódu — sú v Supabase.
 | **Authentication → Emails → SMTP** | Resend, podľa Fázy 5c v `SPUSTENIE.md` | Bez toho chodia 2 e-maily za hodinu a len členom tímu |
 | **Authentication → Rate Limits** | *Emails per hour* z `2` na `100` | Tretia registrácia v hodine inak ticho odpadne |
 | **SQL Editor** | Tri nové cron joby (`blup-waitlist`, `blup-invites`, `blup-stories`) | Fáza 8 v `SPUSTENIE.md`. Bez prvých dvoch sa nikdy nikomu neozveme, že sa uvoľnila vstupenka, a body za pozvánky nikto nedostane. Bez `blup-stories` sa vypršané príbehy nikomu nezobrazujú (to rieši každé čítanie), len sa riadky a obrázky nemažú |
-| **Edge Functions → Secrets** | `TENOR_API_KEY` — **nepovinné** | Len na vyhľadávanie GIFov v chate. Bez neho picker povie, že nie je nastavené, a vlastné GIFy z fotiek fungujú |
 | **Admin → Poplatky a sadzby** | `email_per_hour` (predvolene 500) | Strop na hodinu. Vstupenky idú vždy prvé, takže rozposielanie nikdy nezdrží vstupenku |
 | **Authentication → Providers → Google** | Client ID a Secret | Tlačidlo sa objaví samo, keď je zapnuté |
 

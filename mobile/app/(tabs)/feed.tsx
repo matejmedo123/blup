@@ -36,6 +36,7 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { CARD_MAX, usePageColumn } from '@/hooks/useLayout';
 import { GradientCover } from '@/components/GradientCover';
 import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
+import { SignInInvite } from '@/components/SignInInvite';
 
 /**
  * Feed.
@@ -263,6 +264,24 @@ export default function FeedScreen() {
       setBusy(false);
     }
   };
+
+  /**
+   * Feed je o ľuďoch, ktorých sleduješ.
+   *
+   * Neprihlásený nesleduje nikoho, takže by videl buď prázdno, alebo cudzie
+   * príspevky bez kontextu — a ani jedno nie je feed. Záložka sa mu v menu
+   * neponúka (na jej mieste je SWAP), ale na adresu sa dá prísť aj z odkazu,
+   * takže sa to musí ustrážiť aj tu.
+   */
+  if (isGuest) {
+    return (
+      <SignInInvite
+        glyph="☰"
+        title="Feed je pre prihlásených"
+        body="Sleduj kamarátov a organizátorov a uvidíš tu, čo je u nich nové. Bez účtu nemá feed koho sledovať."
+      />
+    );
+  }
 
   if (posts.isLoading) {
     return (

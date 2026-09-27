@@ -51,8 +51,6 @@ export const env = {
 
   // GIF search. The key stays here and never reaches the app: a client-side
   // key in a shipped bundle is a key anybody can lift and spend your quota on.
-  tenorApiKey: () => requireEnv('TENOR_API_KEY', 'GIF_SEARCH_NOT_CONFIGURED'),
-  tenorClientKey: () => optionalEnv('TENOR_CLIENT_KEY') ?? 'blup',
 
   resendApiKey: () => requireEnv('RESEND_API_KEY', 'EMAIL_NOT_CONFIGURED'),
   emailFrom: () => optionalEnv('EMAIL_FROM') ?? 'Blup <tickets@blup.sk>',
@@ -83,7 +81,6 @@ export const configured = {
   emailWebhook: () => Boolean(optionalEnv('RESEND_WEBHOOK_SECRET')),
   webPush: () =>
     Boolean(optionalEnv('VAPID_PUBLIC_KEY')) && Boolean(optionalEnv('VAPID_PRIVATE_KEY')),
-  gifSearch: () => Boolean(optionalEnv('TENOR_API_KEY')),
   webPremium: () =>
     Boolean(optionalEnv('STRIPE_SECRET_KEY')) &&
     Boolean(optionalEnv('STRIPE_PRICE_PREMIUM_MONTHLY')),

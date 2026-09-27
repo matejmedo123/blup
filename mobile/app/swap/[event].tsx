@@ -113,6 +113,7 @@ export default function EventResaleScreen() {
             uri={event.data.cover_image_url}
             category={event.data.category}
             height={168}
+            whole
             overlay
           >
             <View style={styles.heroText}>

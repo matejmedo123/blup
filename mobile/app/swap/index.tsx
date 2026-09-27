@@ -94,6 +94,22 @@ export default function SwapHomeScreen() {
     <Screen scroll>
       <SwapIntro visible={intro.visible} onClose={() => void intro.dismiss()} />
 
+      {/* Cesta späť do BLUPu.
+          SWAP je samostatná časť a dá sa doň prísť z odkazu — vtedy niet čo
+          vrátiť a človek zostal zavretý v burze. Na monitore je vľavo menu,
+          takže tam je to zbytočné. */}
+      {layout.isDesktop ? null : (
+        <Pressable
+          onPress={() => router.replace('/')}
+          accessibilityRole="button"
+          accessibilityLabel="Späť na BLUP"
+          hitSlop={8}
+          style={styles.back}
+        >
+          <Text style={styles.backLabel}>‹  Späť na BLUP</Text>
+        </Pressable>
+      )}
+
       <View style={styles.header}>
         <View style={styles.brandRow}>
           <Text style={styles.brand}>{SWAP_BRAND}</Text>
@@ -441,4 +457,10 @@ const styles = StyleSheet.create({
   chipLabelActive: { color: '#FFFFFF' },
   chipCount: { color: 'rgba(255,255,255,0.7)' },
   guestNote: { marginTop: spacing.md, textAlign: 'center' },
+  back: {
+    alignSelf: 'flex-start',
+    maxWidth: CONTENT_MAX, width: '100%',
+    paddingBottom: spacing.xs,
+  },
+  backLabel: { ...typography.metaSm, color: colors.accent, fontWeight: '700' },
 });

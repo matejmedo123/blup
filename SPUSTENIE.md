@@ -13,8 +13,7 @@ Nepotrebuješ Mac, Apple developer účet ani server. Web je celá aplikácia.
 > Príkazy spúšťaj z koreňa rozbaleného projektu, ak nie je napísané inak.
 
 > **Už si raz nasadzoval?** Potom ťa zaujíma sedem vecí, ktoré odvtedy pribudli:
-> serverové funkcie `email-events` (**Fáza 5b·2**) a `gif-search` (nepovinná,
-> **Fáza 5b·3**), tri nové cron joby `blup-waitlist`, `blup-invites`
+> serverová funkcia `email-events` (**Fáza 5b·2**), tri nové cron joby `blup-waitlist`, `blup-invites`
 > (**Fáza 8**) a `blup-stories` (**Fáza 8**), adminské obrazovky *Stav
 > nasadenia* a *E-maily* (**Fáza 9b**), editor plánu haly s piatimi hotovými
 > predlohami (**Fáza 10b**) a kontroly, ktoré nepotrebujú nasadenie —
@@ -453,7 +452,7 @@ npx supabase secrets set --env-file supabase/.env
 ./scripts/deploy-functions.sh
 ```
 
-Nasadí 22 funkcií. Skript vie, ktoré musia bežať bez overenia tokenu — Stripe,
+Nasadí 21 funkcií. Skript vie, ktoré musia bežať bez overenia tokenu — Stripe,
 poskytovateľ pošty ani cron nevedia poslať prihlasovací token, overujú sa
 podpisom alebo servisným kľúčom.
 

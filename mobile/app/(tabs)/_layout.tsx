@@ -103,9 +103,22 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/*
+        Feed je o ľuďoch, ktorých sleduješ — bez účtu nemá koho sledovať a
+        nemá čo ukázať. Neprihlásenému sa preto vôbec neponúka a na jeho
+        mieste je SWAP: burza je jediná časť appky, ktorú má zmysel prezerať
+        bez účtu, a na telefóne sa k nej inak nedostane (bočné menu je len na
+        monitore).
+      */}
       <Tabs.Screen
         name="feed"
-        options={{
+        options={isGuest ? {
+          title: 'SWAP',
+          href: '/swap',
+          tabBarIcon: ({ focused }) => (
+            <TabItem glyph="⇄" label="SWAP" focused={focused} />
+          ),
+        } : {
           title: 'Feed',
           tabBarIcon: ({ focused }) => (
             <TabItem glyph="☰" label="Feed" focused={focused} />

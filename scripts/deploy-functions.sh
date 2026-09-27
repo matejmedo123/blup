@@ -35,7 +35,6 @@ FUNCTIONS=(
   "web-checkout:true"
   "iap-apple-verify:true"
   "ai-recommendations:true"
-  "gif-search:true"
   # BLUP SWAP. Bez týchto troch je burza mŕtva: kupujúci nemá čím zaplatiť,
   # predajca si nemá kam pripojiť účet a peniaze z nej nikdy neodídu.
   "resale-checkout:true"
