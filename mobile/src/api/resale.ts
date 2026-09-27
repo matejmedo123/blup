@@ -164,6 +164,8 @@ export async function getEventResaleListings(
     maxPrice?: number | null;
     quantity?: number | null;
     source?: ResaleSource | null;
+    /** Sektor, rad, miesto alebo popis vstupenky — hľadá sa vo všetkom naraz. */
+    section?: string | null;
     limit?: number;
   } = {},
 ): Promise<ResaleListing[]> {
@@ -173,10 +175,34 @@ export async function getEventResaleListings(
     p_max_price: options.maxPrice ?? null,
     p_quantity: options.quantity ?? null,
     p_source: options.source ?? null,
+    p_section: options.section?.trim() || null,
     p_limit: options.limit ?? 50,
   });
   if (error) throw error;
   return (data ?? []) as ResaleListing[];
+}
+
+/**
+ * Kde sa na tomto evente dá sedieť — podľa toho, čo je naozaj v ponuke.
+ *
+ * Nie zoznam sektorov haly, ale zoznam sektorov, na ktoré niekto niečo
+ * ponúka. Štítok, po kliknutí na ktorý je prázdno, je horší než žiadny.
+ */
+export interface ResaleSection {
+  label: string;
+  listing_count: number;
+  ticket_count: number;
+  from_cents: number | null;
+  currency: string | null;
+  verified_count: number;
+}
+
+export async function getEventResaleSections(eventId: string): Promise<ResaleSection[]> {
+  const { data, error } = await supabase.rpc('event_resale_sections', {
+    p_event_id: eventId,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? (data as ResaleSection[]) : [];
 }
 
 export async function getEventResaleSummary(eventId: string): Promise<ResaleSummary> {

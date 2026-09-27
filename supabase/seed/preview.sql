@@ -402,3 +402,29 @@ update public.events set cover_image_url = 'data:image/svg+xml;base64,PHN2ZyB4bW
 -- orezávania vyjde, keď si organizátor plagát oddiali, aby bol celý.
 update public.events set cover_image_url = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIwIiBoZWlnaHQ9IjEwODAiIHZpZXdCb3g9IjAgMCAxOTIwIDEwODAiPgo8cmVjdCB3aWR0aD0iMTkyMCIgaGVpZ2h0PSIxMDgwIiBmaWxsPSIjRjJGMkVFIi8+CjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDcwMCwwKSI+CjxyZWN0IHdpZHRoPSI1MjAiIGhlaWdodD0iMTA4MCIgZmlsbD0iI0ZGRkZGRiIvPgo8cmVjdCB4PSI0MCIgeT0iNzAiIHdpZHRoPSI0NDAiIGhlaWdodD0iNzAiIGZpbGw9IiNFMTFEMkUiLz4KPHRleHQgeD0iMjYwIiB5PSIxMjIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EsQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIzNCIgZm9udC13ZWlnaHQ9IjcwMCIgZmlsbD0iI0ZGRkZGRiI+UE9TTEVETsOBIFNIT1cgVE9IVE8gUk9LQTwvdGV4dD4KPHRleHQgeD0iMjYwIiB5PSIyNjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EsQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3NCIgZm9udC13ZWlnaHQ9IjgwMCIgZmlsbD0iIzExMTExMSI+Tk/EjE7DgTwvdGV4dD4KPHRleHQgeD0iMjYwIiB5PSIzNDUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EsQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3NCIgZm9udC13ZWlnaHQ9IjgwMCIgZmlsbD0iIzExMTExMSI+U0PDiU5BPC90ZXh0Pgo8dGV4dCB4PSIyNjAiIHk9IjQ3MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkhlbHZldGljYSxBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9IjQ2IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMTExMTExIj5FTEVLVFJPIMK3IDAwMTwvdGV4dD4KPHJlY3QgeD0iNDAiIHk9IjU0MCIgd2lkdGg9IjQ0MCIgaGVpZ2h0PSI2IiBmaWxsPSIjMTExMTExIi8+Cjx0ZXh0IHg9IjI2MCIgeT0iNjQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iSGVsdmV0aWNhLEFyaWFsLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNDAiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxMTExMTEiPjYuIE9LVMOTQkVSIDIwMjY8L3RleHQ+Cjx0ZXh0IHg9IjI2MCIgeT0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iSGVsdmV0aWNhLEFyaWFsLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzQiIGZpbGw9IiM0NDQ0NDQiPk5PVsOBIENWRVJOT1ZLQSwgQkE8L3RleHQ+CjxjaXJjbGUgY3g9IjI2MCIgY3k9Ijg4MCIgcj0iMTEwIiBmaWxsPSJub25lIiBzdHJva2U9IiMxMTExMTEiIHN0cm9rZS13aWR0aD0iOCIvPgo8dGV4dCB4PSIyNjAiIHk9IjkwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkhlbHZldGljYSxBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9IjQ0IiBmb250LXdlaWdodD0iODAwIiBmaWxsPSIjMTExMTExIj4yMjowMDwvdGV4dD4KPC9nPjwvc3ZnPg=='
  where id = '33333333-0000-0000-0000-00000000c001';
+
+-- Viac sektorov na jednom evente, aby sa dalo posúdiť hľadanie miesta.
+do $$
+declare
+  v_event uuid := '33333333-3333-3333-3333-333333333333';
+  v_eva   uuid := '77777777-0000-0000-0000-000000000001';
+  v_miro  uuid := '77777777-0000-0000-0000-000000000002';
+  r       record;
+begin
+  set local role authenticated;
+  for r in
+    select * from (values
+      (v_eva,  'Tribúna Sever', 2400), (v_miro, 'Tribúna Sever', 2700),
+      (v_eva,  'Tribúna Juh',   1900), (v_miro, 'Tribúna Juh',   2100),
+      (v_miro, 'Tribúna Juh',   2300), (v_eva,  'VIP lóža',      6900),
+      (v_miro, 'Státie sever',  1500), (v_eva,  'Státie sever',  1700)
+    ) as t(seller, label, price)
+  loop
+    perform set_config('request.jwt.claim.sub', r.seller::text, true);
+    perform public.create_resale_listing(v_event, 'external', r.price, null,
+      p_delivery_method => 'file', p_ticket_label => r.label,
+      p_external_provider => 'Ticketportal');
+  end loop;
+  reset role;
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;

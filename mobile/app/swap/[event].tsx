@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import {
-  getEventResaleListings, getEventResaleSummary,
+  getEventResaleListings, getEventResaleSections, getEventResaleSummary,
   type ResaleListing, type ResaleSort, type ResaleSource,
 } from '@/api/resale';
 import { getEvent } from '@/api/events';
 import { AuthenticityBadge } from '@/components/AuthenticityBadge';
 import {
-  Avatar, Caption, EmptyState, ErrorState, LoadingState, Screen,
+  Avatar, Caption, EmptyState, ErrorState, Input, LoadingState, Screen,
 } from '@/components/ui';
 import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
@@ -47,6 +47,15 @@ export default function EventResaleScreen() {
   const layout = useLayout();
   const [sort, setSort] = useState<ResaleSort>('price_asc');
   const [source, setSource] = useState<ResaleSource | null>(null);
+  /**
+   * Sektor, rad alebo miesto.
+   *
+   * Na vypredanom štadióne je pod eventom tridsať ponúk a človek nehľadá „tú
+   * najlacnejšiu" — chce tribúnu, na ktorej sedia jeho ľudia. Jedno pole,
+   * ktoré hľadá naraz v sektore, rade, mieste aj popise vstupenky, lebo
+   * kupujúci nemá ako tušiť, kam to predajca zapísal.
+   */
+  const [place, setPlace] = useState('');
 
   const event = useQuery({
     queryKey: ['event', eventId],
@@ -61,9 +70,18 @@ export default function EventResaleScreen() {
   });
 
   const listings = useQuery({
-    queryKey: ['resale', 'listings', eventId, sort, source],
-    queryFn: () => getEventResaleListings(eventId!, { sort, source }),
+    queryKey: ['resale', 'listings', eventId, sort, source, place],
+    queryFn: () => getEventResaleListings(eventId!, { sort, source, section: place }),
     enabled: Boolean(eventId),
+  });
+
+  // Štítky sa neodvodzujú z načítaných ponúk, ale zo servera — inak by po
+  // zapnutí filtra zmizli práve tie, medzi ktorými si chce človek prepínať.
+  const sections = useQuery({
+    queryKey: ['resale', 'sections', eventId],
+    queryFn: () => getEventResaleSections(eventId!),
+    enabled: Boolean(eventId),
+    staleTime: 60_000,
   });
 
   if (listings.isLoading) return <Screen><LoadingState label="Načítavam ponuky…" /></Screen>;
@@ -134,6 +152,61 @@ export default function EventResaleScreen() {
         </View>
       ) : null}
 
+      {/* --- kde chcem sedieť ------------------------------------------- */}
+      <View style={styles.place}>
+        <Input
+          value={place}
+          onChangeText={setPlace}
+          placeholder="Sektor, rad alebo miesto…"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {/* Štítky sú to, čo na evente NAOZAJ je — nie zoznam sektorov haly.
+            Prázdne pole s nápisom „skús sektor" je rada rovnako zlá ako
+            žiadna: človek nevie, či sa sektory volajú A/B/C alebo Sever/Juh,
+            a po treťom prázdnom výsledku to vzdá. */}
+        {(sections.data ?? []).length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.sectionRow}
+          >
+            <Pressable
+              onPress={() => setPlace('')}
+              style={[styles.chip, place === '' && styles.chipOn]}
+            >
+              <Text style={[styles.chipLabel, place === '' && styles.chipLabelOn]}>
+                Všade
+              </Text>
+            </Pressable>
+
+            {(sections.data ?? []).map((section) => {
+              const on = place.trim().toLowerCase() === section.label.toLowerCase();
+              return (
+                <Pressable
+                  key={section.label}
+                  onPress={() => setPlace(on ? '' : section.label)}
+                  style={[styles.chip, on && styles.chipOn]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${section.label}, ${section.ticket_count} vstupeniek`}
+                >
+                  <Text style={[styles.chipLabel, on && styles.chipLabelOn]}>
+                    {section.label}
+                    <Text style={styles.chipCount}>{`  ${section.ticket_count}`}</Text>
+                    {section.from_cents != null
+                      ? <Text style={styles.chipCount}>
+                          {`  od ${formatMoney(section.from_cents, section.currency ?? 'EUR')}`}
+                        </Text>
+                      : null}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+      </View>
+
       <View style={styles.filters}>
         {SORTS.map((option) => (
           <Pressable
@@ -175,11 +248,33 @@ export default function EventResaleScreen() {
           layout.isWide && { maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%' },
         ]}
         ListEmptyComponent={
-          <EmptyState
-            emoji="🎟"
-            title="Zatiaľ tu nikto nepredáva"
-            body="Keď niekto nebude môcť ísť, jeho vstupenka sa objaví tu."
-          />
+          /* Prázdno kvôli filtru a prázdno kvôli tomu, že tu nikto nepredáva,
+             sú dva úplne iné stavy. Keby sa vypísal ten druhý aj po zapnutí
+             filtra, človek by odišiel z eventu, na ktorom je dvadsať ponúk —
+             len nie v sektore, ktorý si vybral. */
+          place.trim() ? (
+            <EmptyState
+              emoji="🔍"
+              title={`V „${place.trim()}" nič nie je`}
+              body="Skús iný sektor alebo sa pozri na všetky ponuky."
+              actionLabel="Ukázať všetky"
+              onAction={() => setPlace('')}
+            />
+          ) : source ? (
+            <EmptyState
+              emoji="🔍"
+              title="Overená vstupenka tu zatiaľ nie je"
+              body="Na tento event ponúkajú len vstupenky z iných platforiem."
+              actionLabel="Ukázať všetky"
+              onAction={() => setSource(null)}
+            />
+          ) : (
+            <EmptyState
+              emoji="🎟"
+              title="Zatiaľ tu nikto nepredáva"
+              body="Keď niekto nebude môcť ísť, jeho vstupenka sa objaví tu."
+            />
+          )
         }
         renderItem={({ item }) => (
           <View style={layout.columns > 1 ? styles.cell : undefined}>
@@ -286,6 +381,12 @@ const styles = StyleSheet.create({
   summaryCell: { flex: 1, alignItems: 'center', gap: 2 },
   summaryBig: { ...typography.subheading, color: colors.text },
 
+  place: {
+    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    paddingHorizontal: spacing.lg, gap: spacing.xs,
+  },
+  sectionRow: { flexDirection: 'row', gap: spacing.xs, paddingBottom: spacing.xs },
+  chipCount: { color: colors.textTertiary },
   filters: {
     flexDirection: 'row',
     flexWrap: 'wrap',
