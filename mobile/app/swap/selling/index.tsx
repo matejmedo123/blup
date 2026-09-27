@@ -16,7 +16,7 @@ import { SwapNav } from '@/swap/SwapNav';
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
-import { CONTENT_MAX } from '@/hooks/useLayout';
+import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { swapAccountRoute } from '@/swap/SwapGuestGate';
 
 /**
@@ -276,7 +276,7 @@ function statusOf(row: MyResaleListing): [string, 'plain' | 'good' | 'warn'] {
 
 const styles = StyleSheet.create({
   money: {
-    maxWidth: CONTENT_MAX,
+    maxWidth: CONTENT_MAX_WIDE,
     width: '100%',
     alignSelf: 'center',
     padding: spacing.md,
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   moneyNote: { lineHeight: 18 },
 
   card: {
-    maxWidth: CONTENT_MAX,
+    maxWidth: CONTENT_MAX_WIDE,
     width: '100%',
     alignSelf: 'center',
     padding: spacing.md,
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.accentBorder,
     backgroundColor: colors.accentSoft,
     marginBottom: spacing.sm,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   moreLabel: { ...typography.metaSm, color: colors.accent, fontWeight: '700' },
 });

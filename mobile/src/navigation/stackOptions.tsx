@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform, Text } from 'react-native';
 
-import { useLayout, CONTENT_MAX, SIDEBAR_WIDTH } from '@/hooks/useLayout';
+import { useLayout, contentMaxFor, SIDEBAR_WIDTH } from '@/hooks/useLayout';
 import { colors, typography } from '@/theme';
 
 /**
@@ -28,8 +28,11 @@ import { colors, typography } from '@/theme';
 export function useStackScreenOptions() {
   const layout = useLayout();
 
+  // Musí sedieť na SKUTOČNÚ šírku stĺpca, nie na jedno pevné číslo — stĺpec
+  // rastie s oknom, a keby sa odsadenie rátalo z 1180, nadpis by na veľkom
+  // monitore zase stál vedľa obsahu, len na druhú stranu.
   const gutter = layout.isDesktop
-    ? Math.max(0, (layout.width - SIDEBAR_WIDTH - CONTENT_MAX) / 2)
+    ? Math.max(0, (layout.width - SIDEBAR_WIDTH - contentMaxFor(layout.width)) / 2)
     : 0;
 
   return {

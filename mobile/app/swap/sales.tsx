@@ -7,7 +7,7 @@ import { getMyResaleListings, type MyResaleListing } from '@/api/resale';
 import { SwapNav } from '@/swap/SwapNav';
 import { Button, Caption, EmptyState, LoadingState, Screen } from '@/components/ui';
 import { formatEventDate, formatMoney } from '@/lib/format';
-import { CONTENT_MAX } from '@/hooks/useLayout';
+import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
 import { swapAccountRoute } from '@/swap/SwapGuestGate';
 
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     padding: spacing.md, borderRadius: radius.card,
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
     marginBottom: spacing.md, gap: 2,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   summaryBig: { ...typography.subheading, color: colors.text },
 
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     padding: spacing.md, borderRadius: radius.card,
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
     gap: spacing.sm, marginBottom: spacing.sm,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   cardUrgent: { borderColor: colors.warning },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },

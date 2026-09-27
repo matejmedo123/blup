@@ -14,7 +14,7 @@ import {
 } from '@/components/ui';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatRelative } from '@/lib/format';
-import { CONTENT_MAX } from '@/hooks/useLayout';
+import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm,
     marginBottom: spacing.md,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   stat: {
     minWidth: 140, flexGrow: 1,
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     padding: spacing.md, borderRadius: radius.card,
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
     gap: spacing.sm, marginBottom: spacing.sm,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   cardTitle: { flex: 1 },

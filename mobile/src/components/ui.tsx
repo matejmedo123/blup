@@ -48,7 +48,7 @@ export function Screen({
   const column = Platform.OS === 'web'
     ? {
         width: '100%' as const,
-        maxWidth: layout.isDesktop ? CONTENT_MAX : layout.isWide ? 860 : 760,
+        maxWidth: layout.isDesktop ? layout.contentMax : layout.isWide ? 860 : 760,
         marginHorizontal: 'auto' as const,
       }
     : null;

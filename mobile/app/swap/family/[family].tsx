@@ -9,7 +9,7 @@ import {
   type SwapEvent, type SwapFamily,
 } from '@/api/swap';
 import { Caption, EmptyState, LoadingState, Screen } from '@/components/ui';
-import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
+import { useLayout, CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 import { SwapEventCard } from '@/swap/SwapEventCard';
@@ -74,12 +74,12 @@ export default function SwapFamilyScreen() {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 2,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   title: { ...typography.heading, color: colors.text },
   list: {
     paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.sm,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   columns: { gap: spacing.sm },
   cell: { flex: 1 },

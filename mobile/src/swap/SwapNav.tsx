@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 
-import { CONTENT_MAX } from '@/hooks/useLayout';
+import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
   row: {
     gap: spacing.xs,
     paddingBottom: spacing.md,
-    maxWidth: CONTENT_MAX,
+    maxWidth: CONTENT_MAX_WIDE,
     width: '100%',
     alignSelf: 'center',
   },

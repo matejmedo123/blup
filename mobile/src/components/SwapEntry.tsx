@@ -7,7 +7,7 @@ import { getSwapHome } from '@/api/swap';
 import { SWAP_BRAND } from '@/swap/brand';
 import { Caption } from '@/components/ui';
 import { formatMoney } from '@/lib/format';
-import { CONTENT_MAX } from '@/hooks/useLayout';
+import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.accentBorder,
     backgroundColor: colors.accentSoft,
-    maxWidth: CONTENT_MAX,
+    maxWidth: CONTENT_MAX_WIDE,
     width: '100%',
     alignSelf: 'center',
   },

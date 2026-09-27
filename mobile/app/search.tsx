@@ -11,7 +11,7 @@ import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatPrice } from '@/lib/format';
 import { GradientCover } from '@/components/GradientCover';
 import { ErrorState, IconButton, Input, LoadingState, Screen } from '@/components/ui';
-import { CONTENT_MAX } from '@/hooks/useLayout';
+import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
 
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     // Na monitore sa pole nemá rozťahovať cez celú stenu — nad istú šírku sa
     // už nečíta lepšie, len sa kurzor vzďaľuje od výsledkov pod ním.
-    maxWidth: CONTENT_MAX,
+    maxWidth: CONTENT_MAX_WIDE,
     width: '100%',
     alignSelf: 'center',
   },
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
 
   list: {
     paddingHorizontal: spacing.gutter, paddingBottom: spacing.xxxl, flexGrow: 1,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   chip: {

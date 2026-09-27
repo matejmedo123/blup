@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { callFunction } from '@/lib/supabase';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, formatRelative } from '@/lib/format';
-import { CONTENT_MAX } from '@/hooks/useLayout';
+import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
 import { swapAccountRoute } from '@/swap/SwapGuestGate';
 
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     padding: spacing.md, borderRadius: radius.card,
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
     gap: spacing.sm, marginBottom: spacing.md,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   row: { flexDirection: 'row' },
   cell: { flex: 1, alignItems: 'center', gap: 2 },
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     padding: spacing.md, borderRadius: radius.card,
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
     marginBottom: spacing.xs,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   payoutText: { flex: 1 },
   payoutAmount: { ...typography.bodyStrong, color: colors.text },

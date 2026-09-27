@@ -26,7 +26,7 @@ import { messageFor } from '@/lib/errors';
 import { EventCard } from '@/components/EventCard';
 import { SiteFooter } from '@/components/SiteFooter';
 import { useClaimBottom } from '@/components/BottomInset';
-import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
+import { useLayout, CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { useRequireAuth } from '@/auth/useRequireAuth';
 import { EventMap } from '@/components/EventMap';
 import { useToast } from '@/components/Toast';
@@ -831,7 +831,7 @@ const styles = StyleSheet.create({
   tripCard: { width: 280, gap: spacing.xs },
   screen: { flex: 1, backgroundColor: colors.background },
   page: { flex: 1, width: '100%' },
-  pageWide: { maxWidth: CONTENT_MAX, alignSelf: 'center' },
+  pageWide: { maxWidth: CONTENT_MAX_WIDE, alignSelf: 'center' },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },

@@ -16,7 +16,7 @@ import { Button, Caption, Notice, SectionHeader } from '@/components/ui';
 import { SWAP_BRAND } from '@/swap/brand';
 import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
-import { CONTENT_MAX } from '@/hooks/useLayout';
+import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -331,7 +331,7 @@ function stateOf(order: ResaleOrder): [string, 'plain' | 'good' | 'warn'] {
 }
 
 const styles = StyleSheet.create({
-  wrap: { maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center' },
+  wrap: { maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center' },
   card: {
     padding: spacing.md,
     borderRadius: radius.card,

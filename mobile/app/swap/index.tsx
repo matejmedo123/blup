@@ -14,7 +14,7 @@ import { SwapIntro, useSwapIntro } from '@/swap/SwapIntro';
 import {
   Button, Caption, EmptyState, Input, LoadingState, Screen,
 } from '@/components/ui';
-import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
+import { useLayout, CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useAuth } from '@/auth/AuthProvider';
@@ -369,7 +369,7 @@ const CARD_WIDTH = 220;
 const styles = StyleSheet.create({
   header: {
     gap: spacing.xs, marginBottom: spacing.md,
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   // Odkaz patrí k nadpisu, nie k pravému okraju okna. So `space-between` sa
   // na širokom monitore odsunul o pol obrazovky ďalej a prestal vyzerať ako
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   familyLabel: { ...typography.bodyStrong, color: colors.text },
   familyPrice: { color: colors.textSecondary },
 
-  row: { marginBottom: spacing.lg, maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center' },
+  row: { marginBottom: spacing.lg, maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center' },
   rowTitle: { ...typography.subheading, color: colors.text },
   rowBody: { marginBottom: spacing.sm },
   strip: { gap: spacing.sm, paddingRight: spacing.lg },
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md,
     justifyContent: 'center', flexWrap: 'wrap',
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   footerButton: { flex: 1 },
   chipRow: {
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   guestNote: { marginTop: spacing.md, textAlign: 'center' },
   back: {
     alignSelf: 'flex-start',
-    maxWidth: CONTENT_MAX, width: '100%',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%',
     paddingBottom: spacing.xs,
   },
   backLabel: { ...typography.metaSm, color: colors.accent, fontWeight: '700' },

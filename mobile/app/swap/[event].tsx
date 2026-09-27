@@ -12,7 +12,7 @@ import { AuthenticityBadge } from '@/components/AuthenticityBadge';
 import {
   Avatar, Caption, EmptyState, ErrorState, Input, LoadingState, Screen,
 } from '@/components/ui';
-import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
+import { useLayout, CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, shadow, spacing, typography } from '@/theme';
 import { GradientCover } from '@/components/GradientCover';
@@ -246,7 +246,7 @@ export default function EventResaleScreen() {
         columnWrapperStyle={layout.columns > 1 ? styles.columns : undefined}
         contentContainerStyle={[
           styles.list,
-          layout.isWide && { maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%' },
+          layout.isWide && { maxWidth: CONTENT_MAX_WIDE, alignSelf: 'center', width: '100%' },
         ]}
         ListEmptyComponent={
           /* Prázdno kvôli filtru a prázdno kvôli tomu, že tu nikto nepredáva,
@@ -353,10 +353,10 @@ function ListingRow({ listing }: { listing: ResaleListing }) {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 2,
-    maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%',
+    maxWidth: CONTENT_MAX_WIDE, alignSelf: 'center', width: '100%',
   },
   hero: {
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
     paddingHorizontal: spacing.lg, paddingTop: spacing.xs,
     marginBottom: spacing.md,
   },
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   summary: {
     flexDirection: 'row',
     marginHorizontal: spacing.lg,
-    maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%',
+    maxWidth: CONTENT_MAX_WIDE, alignSelf: 'center', width: '100%',
     marginBottom: spacing.md,
     padding: spacing.md,
     borderRadius: radius.card,
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   summaryBig: { ...typography.subheading, color: colors.text },
 
   place: {
-    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
     paddingHorizontal: spacing.lg, gap: spacing.xs,
   },
   sectionRow: { flexDirection: 'row', gap: spacing.xs, paddingBottom: spacing.xs },
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.xs,
     paddingHorizontal: spacing.lg,
-    maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%',
+    maxWidth: CONTENT_MAX_WIDE, alignSelf: 'center', width: '100%',
     paddingBottom: spacing.md,
     alignItems: 'center',
   },

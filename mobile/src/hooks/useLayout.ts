@@ -18,8 +18,33 @@ export type LayoutSize = 'phone' | 'tablet' | 'desktop';
 export const TABLET_MIN = 720;
 export const DESKTOP_MIN = 1080;
 
-/** Widest the reading column ever gets, whatever the monitor. */
+/**
+ * Widest the reading column gets on a laptop.
+ *
+ * On a bigger monitor it grows — see `contentMaxFor`. A fixed 1180 looked
+ * right on a 1440 laptop and wrong on a 2560 monitor, where it left 590px of
+ * empty space beside the content and read as if the app had been narrowed by
+ * mistake.
+ */
 export const CONTENT_MAX = 1180;
+
+/** And this is as wide as it ever gets, however big the monitor. */
+export const CONTENT_MAX_WIDE = 1560;
+
+/**
+ * How wide the content column may be in a window this wide.
+ *
+ * Grows with the window instead of stopping at one number, but never fills it:
+ * a card grid is happy at 1560, and a line of text 2300px wide is unreadable
+ * however much room there is. The 64px on each side is the breathing space
+ * between the column and the window edge — without it the grid touches the
+ * scrollbar the moment the window is just wide enough.
+ */
+export function contentMaxFor(width: number): number {
+  if (width < DESKTOP_MIN) return CONTENT_MAX;
+  const available = width - SIDEBAR_WIDTH - 2 * 64;
+  return Math.min(Math.max(CONTENT_MAX, available), CONTENT_MAX_WIDE);
+}
 export const SIDEBAR_WIDTH = 244;
 
 /**
@@ -33,6 +58,8 @@ export const CARD_MAX = 560;
 
 export interface LayoutInfo {
   size: LayoutSize;
+  /** Widest the content column may be right now. Grows with the window. */
+  contentMax: number;
   /** Sidebar navigation instead of a bottom tab bar. */
   isDesktop: boolean;
   /** Enough room for at least two cards side by side. */
@@ -46,7 +73,10 @@ export function useLayout(): LayoutInfo {
   const { width } = useWindowDimensions();
 
   if (Platform.OS !== 'web') {
-    return { size: 'phone', isDesktop: false, isWide: false, columns: 1, width };
+    return {
+      size: 'phone', isDesktop: false, isWide: false,
+      columns: 1, width, contentMax: CONTENT_MAX,
+    };
   }
 
   const size: LayoutSize =
@@ -54,6 +84,7 @@ export function useLayout(): LayoutInfo {
 
   return {
     size,
+    contentMax: contentMaxFor(width),
     isDesktop: size === 'desktop',
     isWide: size !== 'phone',
     // Three columns only on a genuinely wide window; two is the honest default
@@ -77,5 +108,5 @@ export function useLayout(): LayoutInfo {
 export function usePageColumn() {
   const layout = useLayout();
   if (!layout.isWide) return null;
-  return { width: '100%' as const, maxWidth: CONTENT_MAX, alignSelf: 'center' as const };
+  return { width: '100%' as const, maxWidth: layout.contentMax, alignSelf: 'center' as const };
 }
