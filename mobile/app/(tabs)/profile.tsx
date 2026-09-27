@@ -201,7 +201,12 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgeRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.rail}
+          contentContainerStyle={styles.badgeRow}
+        >
           {(badges.data ?? []).slice(0, 8).map((badge) => (
             <View key={badge.slug} style={[styles.badge, badge.earned && styles.badgeEarned]}>
               <Text style={[styles.badgeEmoji, !badge.earned && styles.badgeEmojiLocked]}>
@@ -486,6 +491,8 @@ const styles = StyleSheet.create({
   section: { ...typography.heading, color: colors.text },
   sectionAction: { ...typography.chip, color: colors.accent },
 
+  // Vodorovný pás si bez `flexGrow: 0` vypýta všetko zvislé miesto.
+  rail: { flexGrow: 0, flexShrink: 0, alignSelf: 'stretch' },
   badgeRow: { gap: spacing.md },
   badge: {
     width: 92,

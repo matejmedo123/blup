@@ -111,7 +111,18 @@ export async function callFunction<T>(
       throw new FunctionError('FUNCTION_UNREACHABLE', name, 0);
     }
 
-    throw new FunctionError('FUNCTION_ERROR', error.message, 500);
+    // A 404 znamená to isté, len sa k nám dostalo inou cestou: požiadavka
+    // dorazila, ale na tej adrese nič nie je. Bez tohto vetvenia sa človeku
+    // ukázalo doslova „Edge Function returned a non-2xx status code" — veta,
+    // z ktorej sa nedá spraviť vôbec nič, a v appke to vyzerá, že tlačidlo
+    // nefunguje.
+    if (context?.status === 404) {
+      throw new FunctionError('FUNCTION_UNREACHABLE', name, 404);
+    }
+
+    // Čokoľvek iné: nesie meno funkcie aj stavový kód, nech je z hlášky
+    // vidieť, kde sa pozrieť do logov.
+    throw new FunctionError('FUNCTION_ERROR', name, context?.status ?? 500);
   }
 
   return data as T;

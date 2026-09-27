@@ -187,6 +187,7 @@ export default function SwapHomeScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
             contentContainerStyle={styles.chipRow}
           >
             <Chip
@@ -436,6 +437,8 @@ const styles = StyleSheet.create({
     maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
   },
   footerButton: { flex: 1 },
+  // Vodorovný pás si bez `flexGrow: 0` vypýta všetko zvislé miesto.
+  chipScroll: { flexGrow: 0, flexShrink: 0, alignSelf: 'stretch' },
   chipRow: {
     flexDirection: 'row',
     gap: spacing.xs,

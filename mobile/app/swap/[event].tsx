@@ -171,6 +171,7 @@ export default function EventResaleScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
             contentContainerStyle={styles.sectionRow}
           >
             <Pressable
@@ -386,6 +387,8 @@ const styles = StyleSheet.create({
     maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
     paddingHorizontal: spacing.lg, gap: spacing.xs,
   },
+  // Vodorovný pás si bez `flexGrow: 0` vypýta všetko zvislé miesto.
+  chipScroll: { flexGrow: 0, flexShrink: 0, alignSelf: 'stretch' },
   sectionRow: { flexDirection: 'row', gap: spacing.xs, paddingBottom: spacing.xs },
   chipCount: { color: colors.textTertiary },
   filters: {

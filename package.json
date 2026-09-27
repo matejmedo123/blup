@@ -13,7 +13,7 @@
     "functions:deploy": "./scripts/deploy-functions.sh",
     "mobile": "npm --prefix mobile run start",
     "typecheck": "npm --prefix mobile run typecheck",
-    "check": "npm run typecheck && node scripts/check-hooks.mjs && node scripts/check-platform-files.mjs && node scripts/check-titles.mjs && node scripts/check-story-frame.mjs && node scripts/check-map-zoom.mjs && node scripts/check-seat-layout.mjs",
+    "check": "npm run typecheck && node scripts/check-hooks.mjs && node scripts/check-platform-files.mjs && node scripts/check-titles.mjs && node scripts/check-story-frame.mjs && node scripts/check-map-zoom.mjs && node scripts/check-seat-layout.mjs && node scripts/check-rails.mjs",
     "check:origin": "node scripts/check-origin.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
     "check:crop": "node scripts/smoke-crop.mjs",
@@ -34,7 +34,8 @@
     "web": "npm --prefix mobile run web",
     "check:seats": "node scripts/check-seat-layout.mjs",
     "check:mapzoom": "node scripts/check-map-zoom.mjs",
-    "check:story": "node scripts/check-story-frame.mjs"
+    "check:story": "node scripts/check-story-frame.mjs",
+    "check:rails": "node scripts/check-rails.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.112.3",

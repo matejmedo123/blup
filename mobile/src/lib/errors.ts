@@ -148,6 +148,16 @@ export function messageFor(error: unknown): string {
         + '`mobile/.env` je ten, do ktorého si ju nasadil.';
     }
 
+    // Funkcia existuje, ale vrátila chybu. Meno a stavový kód sú to jediné,
+    // čo z prehliadača vieme — a sú to presne tie dve veci, s ktorými sa dá
+    // ísť do logov. Bez nich tu stála veta „Edge Function returned a non-2xx
+    // status code", z ktorej sa nedá spraviť nič.
+    if (error.code === 'FUNCTION_ERROR') {
+      return `Serverová funkcia „${error.message}" vrátila chybu`
+        + (error.status ? ` (${error.status})` : '')
+        + '. Ak si ju práve nasadil, skontroluj jej logy v Supabase → Edge Functions.';
+    }
+
     return MESSAGES[error.code] ?? error.message ?? 'Niečo sa pokazilo.';
   }
 

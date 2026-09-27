@@ -68,6 +68,7 @@ export function SearchHits({ hits }: { hits: SearchHit[] }) {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
+                style={styles.rail}
                 contentContainerStyle={styles.row}
                 keyboardShouldPersistTaps="handled"
               >
@@ -133,6 +134,8 @@ const styles = StyleSheet.create({
   wrap: { gap: spacing.md, marginBottom: spacing.md },
   group: { gap: spacing.xs },
   groupTitle: { ...typography.bodyStrong, color: colors.text },
+  // Vodorovný pás si bez `flexGrow: 0` vypýta všetko zvislé miesto.
+  rail: { flexGrow: 0, flexShrink: 0, alignSelf: 'stretch' },
   row: { gap: spacing.sm, paddingRight: spacing.lg },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 

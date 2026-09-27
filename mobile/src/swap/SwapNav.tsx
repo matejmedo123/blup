@@ -27,6 +27,16 @@ export function SwapNav({ active }: { active: string }) {
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      /**
+       * `flexGrow: 0` nie je kozmetika.
+       *
+       * Vodorovný `ScrollView` vnorený do zvislého si bez toho vypýta všetko
+       * zvislé miesto, ktoré je k dispozícii. Na monitore z prepínača širokého
+       * 34 px vyšiel pás cez pol obrazovky — medzi nadpisom a obsahom zostala
+       * diera a celé rozhranie pôsobilo rozsekane a poskakovalo podľa toho,
+       * koľko obsahu bolo pod ním.
+       */
+      style={styles.scroll}
       contentContainerStyle={styles.row}
     >
       {TABS.map((tab) => {
@@ -47,6 +57,7 @@ export function SwapNav({ active }: { active: string }) {
 }
 
 const styles = StyleSheet.create({
+  scroll: { flexGrow: 0, flexShrink: 0, alignSelf: 'stretch' },
   row: {
     gap: spacing.xs,
     paddingBottom: spacing.md,
