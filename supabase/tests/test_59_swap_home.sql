@@ -164,4 +164,52 @@ begin
   raise notice 'PASS „Čoskoro" radí podľa dátumu, „Najviac" podľa ponúk';
 end $$;
 
+
+-- ============================================================================
+-- 4. Jeden zoznam ponuky — filtre nemenia čísla na kartách
+-- ============================================================================
+-- Domovská SWAPu je postavená ako domovská BLUPu: pás filtrov a pod ním jeden
+-- zoznam. Filter „len overené" je tu tá zákerná časť — keby sa uplatnil pred
+-- zoskupením, event by na karte tvrdil menej vstupeniek, než na ňom naozaj je,
+-- a človek by prišiel do ponuky, ktorá vyzerá inak než jej vlastný náhľad.
+do $$
+declare
+  v_all      integer;
+  v_filtered integer;
+  v_tickets_all integer;
+  v_tickets_ver integer;
+  v_event    uuid;
+begin
+  set local role anon;
+  perform set_config('request.jwt.claim.sub', '', true);
+
+  select count(*) into v_all from public.swap_events(null, false, 100);
+  assert v_all >= 1, 'zoznam ponuky je prázdny, hoci ponuky sú';
+
+  -- 'all' z URL znamená to isté, čo prázdny filter.
+  select count(*) into v_filtered from public.swap_events('all', false, 100);
+  assert v_filtered = v_all, format('„all" má znamenať to isté čo nič: %s vs %s', v_filtered, v_all);
+
+  -- Kategória zúži, ale nevymyslí.
+  select count(*) into v_filtered from public.swap_events('concert', false, 100);
+  assert v_filtered <= v_all, 'kategória vrátila viac než všetko';
+
+  -- A teraz to podstatné: počty na karte sú počty CELÉHO eventu, aj keď sa
+  -- filtruje na overené.
+  select event_id, ticket_count into v_event, v_tickets_all
+    from public.swap_events(null, false, 100)
+   where verified_count > 0 and ticket_count > verified_count
+   limit 1;
+
+  if v_event is not null then
+    select ticket_count into v_tickets_ver
+      from public.swap_events(null, true, 100) where event_id = v_event;
+    assert v_tickets_ver = v_tickets_all,
+      format('filter zmenil počet vstupeniek na karte: %s vs %s', v_tickets_ver, v_tickets_all);
+  end if;
+
+  reset role;
+  raise notice 'PASS zoznam ponuky sa filtruje a počty na kartách zostávajú pravdivé';
+end $$;
+
 rollback;

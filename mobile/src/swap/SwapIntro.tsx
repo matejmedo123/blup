@@ -106,7 +106,8 @@ export function SwapIntro({
 
             <Caption style={styles.footnote}>
               Predávať sa dá len nepoužitá vstupenka na event, ktorý ešte bude.
-              BLUP vstupenku navyše nepredáš drahšie, než za koľko si ju kúpil.
+              Cenu si určuje predajca — pôvodná cena je pre teba informácia,
+              nie strop. Pozerať môžeš bez účtu; na kúpu ho treba.
             </Caption>
 
             <Button title="Rozumiem, poď ďalej" onPress={onClose} style={styles.button} />

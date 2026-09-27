@@ -13,6 +13,7 @@ import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 import { CARD_MAX } from '@/hooks/useLayout';
+import { swapAccountRoute } from '@/swap/SwapGuestGate';
 
 /**
  * Doručenie vstupenky, ktorá nie je z BLUPu.
@@ -35,7 +36,7 @@ import { CARD_MAX } from '@/hooks/useLayout';
  * uplynutie eventu; toto je jediný poctivý postup pri vstupenke, ktorej
  * pravosť overiť nevieme.
  */
-export default function DeliverTicketScreen() {
+function DeliverTicketScreen() {
   const { order: orderId } = useLocalSearchParams<{ order: string }>();
   const queryClient = useQueryClient();
 
@@ -196,3 +197,8 @@ const styles = StyleSheet.create({
   summaryLine: { ...typography.bodyStrong, color: colors.text },
   hint: { marginBottom: spacing.xs, lineHeight: 18 },
 });
+
+export default swapAccountRoute(
+  'Doručuje sa konkrétna objednávka a tá patrí k účtu.',
+  DeliverTicketScreen,
+);

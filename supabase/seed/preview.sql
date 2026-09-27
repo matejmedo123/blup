@@ -338,3 +338,50 @@ begin
     (v_l.id, v_event, v_eva, v_miro, 'external', 1, 2900, 2900, 290, 2610,
      'EUR', 'succeeded', 'completed', now() - interval '2 days', now() - interval '2 days');
 end $$;
+
+-- Zopár ďalších eventov s ponukou, nech má domovská SWAPu čo ukázať v mriežke
+-- a nech sa dá posúdiť, či filtre naozaj filtrujú.
+do $$
+declare
+  v_org   uuid := '22222222-2222-2222-2222-222222222222';
+  v_me    uuid := '11111111-1111-1111-1111-111111111111';
+  v_eva   uuid := '77777777-0000-0000-0000-000000000001';
+  v_miro  uuid := '77777777-0000-0000-0000-000000000002';
+  v_ev    uuid;
+  r       record;
+begin
+  for r in
+    select * from (values
+      ('33333333-0000-0000-0000-00000000c001'::uuid, 'Nočná scéna — Elektro',  'concert',  9,  'Bratislava', 'Nová Cvernovka'),
+      ('33333333-0000-0000-0000-00000000c002'::uuid, 'Letný festival pri rieke','festival', 34, 'Piešťany',   'Lodenica'),
+      ('33333333-0000-0000-0000-00000000c003'::uuid, 'Stand-up: dlhý večer',    'comedy',   5,  'Košice',     'Kunsthalle'),
+      ('33333333-0000-0000-0000-00000000c004'::uuid, 'Hokej — semifinále',      'hockey',   16, 'Nitra',      'Zimný štadión')
+    ) as t(id, title, category, days, city, venue)
+  loop
+    insert into public.events (
+      id, creator_id, organization_id, title, category, city, venue_name,
+      latitude, longitude, start_at, end_at, is_free, price_cents, currency,
+      status, visibility
+    ) values (
+      r.id, v_me, v_org, r.title, r.category, r.city, r.venue,
+      48.15, 17.11,
+      now() + (r.days || ' days')::interval,
+      now() + (r.days || ' days')::interval + interval '3 hours',
+      false, 3000, 'EUR', 'published', 'public'
+    ) on conflict (id) do nothing;
+
+    v_ev := r.id;
+
+    set local role authenticated;
+    perform set_config('request.jwt.claim.sub', v_eva::text, true);
+    perform public.create_resale_listing(v_ev, 'external', 1800 + r.days * 40, null,
+      p_delivery_method => 'file', p_ticket_label => 'Státie',
+      p_external_provider => 'Predpredaj.sk');
+    perform set_config('request.jwt.claim.sub', v_miro::text, true);
+    perform public.create_resale_listing(v_ev, 'external', 2600 + r.days * 40, null,
+      p_delivery_method => 'file', p_ticket_label => 'Sedenie',
+      p_external_provider => 'Ticketportal');
+    reset role;
+    perform set_config('request.jwt.claim.sub', '', true);
+  end loop;
+end $$;

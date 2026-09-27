@@ -14,6 +14,7 @@ import { messageFor } from '@/lib/errors';
 import { formatMoney, formatRelative } from '@/lib/format';
 import { CONTENT_MAX } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
+import { swapAccountRoute } from '@/swap/SwapGuestGate';
 
 /**
  * Peniaze zo SWAPu.
@@ -26,7 +27,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * Výplatný účet je tu aj vtedy, keď ešte nie je — bez neho nemáme peniaze kam
  * poslať a je lepšie to povedať skôr, než po prvom predaji.
  */
-export default function SwapWalletScreen() {
+function SwapWalletScreen() {
   const queryClient = useQueryClient();
   const dialog = useDialog();
   const [error, setError] = useState<string | null>(null);
@@ -224,3 +225,8 @@ const styles = StyleSheet.create({
   pillLabelGood: { color: colors.success },
   pillLabelWarn: { color: colors.warning },
 });
+
+export default swapAccountRoute(
+  'Tu sú peniaze z tvojich predajov a výplatný účet.',
+  SwapWalletScreen,
+);

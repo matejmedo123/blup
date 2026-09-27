@@ -17,6 +17,7 @@ import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 import { CONTENT_MAX } from '@/hooks/useLayout';
+import { swapAccountRoute } from '@/swap/SwapGuestGate';
 
 /**
  * Predávam — prehľad pre toho, kto ponúka vstupenky.
@@ -26,7 +27,7 @@ import { CONTENT_MAX } from '@/hooks/useLayout';
  * kupujúci naozaj dostal dnu. Keby to obrazovka nepovedala, vyzeralo by to
  * ako zadržiavanie bez dôvodu.
  */
-export default function SellerScreen() {
+function SellerScreen() {
   const queryClient = useQueryClient();
   const dialog = useDialog();
   const [error, setError] = React.useState<string | null>(null);
@@ -333,3 +334,8 @@ const styles = StyleSheet.create({
   },
   moreLabel: { ...typography.metaSm, color: colors.accent, fontWeight: '700' },
 });
+
+export default swapAccountRoute(
+  'Tu budú tvoje ponuky — čo práve predávaš a za koľko.',
+  SellerScreen,
+);

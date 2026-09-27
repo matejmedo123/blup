@@ -9,6 +9,7 @@ import { Button, Caption, EmptyState, LoadingState, Screen } from '@/components/
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { CONTENT_MAX } from '@/hooks/useLayout';
 import { colors, radius, spacing, typography } from '@/theme';
+import { swapAccountRoute } from '@/swap/SwapGuestGate';
 
 /**
  * Čo sa mi predalo.
@@ -21,7 +22,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * Preto je hore vytiahnuté to naliehavé: vstupenka, ktorú kupujúci zaplatil a
  * ešte ju nemá.
  */
-export default function SwapSalesScreen() {
+function SwapSalesScreen() {
   const listings = useQuery({
     queryKey: ['resale', 'mine'],
     queryFn: () => getMyResaleListings(60),
@@ -179,3 +180,8 @@ const styles = StyleSheet.create({
   pillLabelGood: { color: colors.success },
   pillLabelWarn: { color: colors.warning },
 });
+
+export default swapAccountRoute(
+  'Tu uvidíš, čo si predal a čo ešte treba doručiť.',
+  SwapSalesScreen,
+);

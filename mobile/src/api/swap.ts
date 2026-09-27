@@ -128,6 +128,28 @@ export async function getSwapHome(limit = 8): Promise<SwapHome> {
   return data as SwapHome;
 }
 
+/**
+ * Ponuka SWAPu ako jeden zoznam.
+ *
+ * Domovská SWAPu je postavená rovnako ako domovská BLUPu: pás filtrov a pod
+ * ním jeden zoznam eventov podľa dátumu. Tri kurátorské zoznamy pod sebou
+ * vyzerali inak než zvyšok appky a ten istý event sa v nich objavil aj
+ * trikrát.
+ */
+export async function swapEvents(
+  family: SwapFamily | null,
+  verifiedOnly = false,
+  limit = 60,
+): Promise<SwapEvent[]> {
+  const { data, error } = await supabase.rpc('swap_events', {
+    p_family: family ?? 'all',
+    p_verified_only: verifiedOnly,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? (data as SwapEvent[]) : [];
+}
+
 export async function swapEventsInFamily(
   family: SwapFamily,
   limit = 40,

@@ -18,6 +18,7 @@ import { messageFor } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 import { CARD_MAX } from '@/hooks/useLayout';
+import { useAuth } from '@/auth/AuthProvider';
 
 /**
  * Checkout burzy.
@@ -36,6 +37,7 @@ import { CARD_MAX } from '@/hooks/useLayout';
 export default function ResaleCheckoutScreen() {
   const { listing: listingId } = useLocalSearchParams<{ listing: string }>();
   const { requireAuth } = useRequireAuth();
+  const { isGuest } = useAuth();
   const { initPaymentSheet, presentPaymentSheet } = useStripeBridge();
 
   const [reservation, setReservation] = useState<ResaleReservation | null>(null);
@@ -192,6 +194,18 @@ export default function ResaleCheckoutScreen() {
 
       {error ? <Notice tone="danger" title="Nepodarilo sa" body={error} /> : null}
 
+      {/* Rozpis vidí aj neprihlásený — inak nemá podľa čoho sa rozhodnúť, či
+          mu účet stojí za to. Že ho bude treba, sa dozvie TU a nie až po
+          kliknutí; prekvapiť človeka prihlasovaním v momente, keď si myslí,
+          že kupuje, je presne to, po čom zavrie okno. */}
+      {isGuest && !reservation ? (
+        <Notice
+          tone="accent"
+          title="Na kúpu treba účet"
+          body="Vstupenku musíme mať komu priradiť — bez účtu by nemala majiteľa. Registrácia je na e-mail a vrátime ťa sem."
+        />
+      ) : null}
+
       {reservation && secondsLeft > 0 ? (
         <View style={styles.held}>
           <Mono style={styles.clock}>{formatClock(secondsLeft)}</Mono>
@@ -211,7 +225,7 @@ export default function ResaleCheckoutScreen() {
 
       {!reservation ? (
         <Button
-          title={holding ? 'Držím…' : 'Podržať a pokračovať'}
+          title={holding ? 'Držím…' : isGuest ? 'Zaregistrovať sa a kúpiť' : 'Podržať a pokračovať'}
           onPress={() => void hold()}
           disabled={holding}
         />

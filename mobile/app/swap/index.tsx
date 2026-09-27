@@ -5,8 +5,8 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import {
-  getSwapHome, swapSearch,
-  SWAP_FAMILY_GLYPH, SWAP_FAMILY_LABEL,
+  getSwapHome, swapEvents, swapSearch,
+  SWAP_FAMILY_LABEL,
   type SwapEvent, type SwapFamily, type SwapHit, type SwapHitKind,
 } from '@/api/swap';
 import { SWAP_BRAND, SWAP_TAGLINE } from '@/swap/brand';
@@ -17,6 +17,7 @@ import {
 import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
+import { useAuth } from '@/auth/AuthProvider';
 
 /**
  * Domov BLUP SWAPu.
@@ -38,7 +39,18 @@ import { colors, radius, spacing, typography } from '@/theme';
  *   Overené    pre toho, kto nechce riskovať nič
  */
 export default function SwapHomeScreen() {
+  /**
+   * Do SWAPu sa dá vojsť bez účtu a vidieť celú ponuku — to je celý zmysel
+   * burzy pri vypredanom evente. Účet sa pýta až pri tom, čo sa bez neho
+   * spraviť nedá, takže neprihlásenému sa neponúka „Môj SWAP": nie je čí.
+   */
+  const { isGuest } = useAuth();
   const [query, setQuery] = useState('');
+  // Filtre presne ako na domovskej BLUPu: kategória a „len overené". Sú to
+  // dve nezávislé veci, nie jeden prepínač — človek môže chcieť overené
+  // vstupenky na čokoľvek aj čokoľvek na koncert.
+  const [family, setFamily] = useState<SwapFamily | null>(null);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const layout = useLayout();
   const searching = query.trim().length > 0;
 
@@ -50,6 +62,20 @@ export default function SwapHomeScreen() {
   const home = useQuery({
     queryKey: ['swap', 'home'],
     queryFn: () => getSwapHome(8),
+    enabled: !searching,
+    staleTime: 60_000,
+  });
+
+  /**
+   * Zoznam ponuky. Jeden, zoradený podľa dátumu — rovnako ako „Dnes okolo
+   * teba" na domovskej BLUPu.
+   *
+   * `swap_home` zostáva, ale už len kvôli číslam v hlavičke a kategóriám do
+   * filtra; eventy kreslí tento dotaz.
+   */
+  const list = useQuery({
+    queryKey: ['swap', 'events', family, verifiedOnly],
+    queryFn: () => swapEvents(family, verifiedOnly, 60),
     enabled: !searching,
     staleTime: 60_000,
   });
@@ -132,105 +158,136 @@ export default function SwapHomeScreen() {
           emoji="🎟"
           title="Zatiaľ tu nikto nepredáva"
           body="Keď niekto nebude môcť ísť, jeho vstupenka sa objaví tu."
-          actionLabel="Predať vstupenku"
-          onAction={() => router.push('/swap/sell')}
+          actionLabel={isGuest ? 'Zaregistrovať sa a predať' : 'Predať vstupenku'}
+          onAction={() => router.push(isGuest ? '/(auth)/sign-up' : '/swap/sell')}
         />
       ) : (
         <>
-          {/* --- kategórie ---------------------------------------------- */}
+          {/* --- filtre ------------------------------------------------- */}
+          {/* Rovnaký pás ako na domovskej BLUPu. Kategórie sa berú z toho, čo
+              je naozaj v ponuke — škatuľka bez jedinej vstupenky je sľub,
+              ktorý sa po kliknutí nedodrží. */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.families}
+            contentContainerStyle={styles.chipRow}
           >
-            {h.families.map((family) => (
-              <Pressable
-                key={family.key}
-                style={styles.family}
-                accessibilityRole="button"
-                onPress={() => router.push(`/swap/family/${family.key}`)}
-              >
-                <Text style={styles.familyGlyph}>{SWAP_FAMILY_GLYPH[family.key]}</Text>
-                <Text style={styles.familyLabel}>{SWAP_FAMILY_LABEL[family.key]}</Text>
-                <Caption>
-                  {family.ticket_count}{' '}
-                  {plural(family.ticket_count, 'vstupenka', 'vstupenky', 'vstupeniek')}
-                </Caption>
-                {family.from_cents != null ? (
-                  <Caption style={styles.familyPrice}>
-                    od {formatMoney(family.from_cents, family.currency ?? 'EUR')}
-                  </Caption>
-                ) : null}
-              </Pressable>
+            <Chip
+              label="Všetko"
+              active={family === null}
+              onPress={() => setFamily(null)}
+            />
+            {h.families.map((f) => (
+              <Chip
+                key={f.key}
+                label={SWAP_FAMILY_LABEL[f.key]}
+                count={f.ticket_count}
+                active={family === f.key}
+                onPress={() => setFamily(family === f.key ? null : f.key)}
+              />
             ))}
+            <View style={styles.chipGap} />
+            <Chip
+              label="✓ Len overené"
+              active={verifiedOnly}
+              tone="good"
+              onPress={() => setVerifiedOnly((v) => !v)}
+            />
           </ScrollView>
 
-          <Row title="Čoskoro" body="Tieto sú za rohom" events={h.soon} layout={layout} />
-          <Row title="Najviac na výber" body="Kde sa dá porovnávať" events={h.most} layout={layout} />
-          {h.verified.length > 0 ? (
-            <Row
-              title="Overené vstupenky"
-              body="Vydal ich BLUP — prevedieme ich a starý kód prestane platiť"
-              events={h.verified}
-              layout={layout}
+          {/* --- zoznam ------------------------------------------------- */}
+          {list.isLoading ? (
+            <LoadingState label="Pozerám, čo je v ponuke…" />
+          ) : (list.data ?? []).length === 0 ? (
+            <EmptyState
+              emoji="🎟"
+              title="V tomto filtri nič nie je"
+              body="Skús inú kategóriu alebo vypni „Len overené“."
             />
-          ) : null}
+          ) : (
+            <View style={styles.grid}>
+              {(list.data ?? []).map((event) => (
+                <View key={event.event_id} style={cellStyle(layout.columns)}>
+                  <EventCard event={event} />
+                </View>
+              ))}
+            </View>
+          )}
         </>
       )}
 
+      {/* Prečo, a nie len „prihlás sa". Človek, ktorý práve pozerá ponuku, má
+          vedieť, že ju pozerať smie a načo mu účet bude. */}
+      {isGuest ? (
+        <Caption style={styles.guestNote}>
+          Pozerať môžeš aj bez účtu. Na kúpu a predaj ho treba — vstupenku
+          musíme mať komu priradiť a peniaze komu poslať.
+        </Caption>
+      ) : null}
+
       <View style={styles.footer}>
-        <Button
-          title="Predať vstupenku"
-          onPress={() => router.push('/swap/sell')}
-          style={styles.footerButton}
-        />
-        <Button
-          title="Môj SWAP"
-          variant="secondary"
-          onPress={() => router.push('/swap/selling')}
-          style={styles.footerButton}
-        />
+        {isGuest ? (
+          <>
+            <Button
+              title="Zaregistrovať sa"
+              onPress={() => router.push('/(auth)/sign-up')}
+              style={styles.footerButton}
+            />
+            <Button
+              title="Už mám účet"
+              variant="secondary"
+              onPress={() => router.push('/(auth)/sign-in')}
+              style={styles.footerButton}
+            />
+          </>
+        ) : (
+          <>
+            <Button
+              title="Predať vstupenku"
+              onPress={() => router.push('/swap/sell')}
+              style={styles.footerButton}
+            />
+            <Button
+              title="Môj SWAP"
+              variant="secondary"
+              onPress={() => router.push('/swap/selling')}
+              style={styles.footerButton}
+            />
+          </>
+        )}
       </View>
     </Screen>
   );
 }
 
-function Row({
-  title, body, events, layout,
+/**
+ * Filter. Vizuálne to isté, čo má domovská BLUPu — aby sa človek na SWAPe
+ * nemusel učiť druhé ovládanie tej istej veci.
+ */
+function Chip({
+  label, count, active, tone, onPress,
 }: {
-  title: string;
-  body: string;
-  events: SwapEvent[];
-  layout: ReturnType<typeof useLayout>;
+  label: string;
+  count?: number;
+  active: boolean;
+  tone?: 'good';
+  onPress: () => void;
 }) {
-  if (events.length === 0) return null;
-
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowTitle}>{title}</Text>
-      <Caption style={styles.rowBody}>{body}</Caption>
-
-      {/* Na širokom okne mriežka, na telefóne vodorovný pás — tri zoznamy pod
-          sebou v jednom stĺpci by znamenali, že k tretiemu sa nikto nedorolo. */}
-      {layout.isWide ? (
-        <View style={styles.grid}>
-          {events.map((event) => (
-            <View key={event.event_id} style={cellStyle(layout.columns)}>
-              <EventCard event={event} />
-            </View>
-          ))}
-        </View>
-      ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.strip}>
-          {events.map((event) => (
-            <View key={event.event_id} style={styles.stripCell}>
-              <EventCard event={event} />
-            </View>
-          ))}
-        </ScrollView>
-      )}
-    </View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={[
+        styles.chip,
+        active && styles.chipActive,
+        active && tone === 'good' && styles.chipActiveGood,
+      ]}
+    >
+      <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
+        {label}
+        {count != null ? <Text style={styles.chipCount}>{`  ${count}`}</Text> : null}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -315,7 +372,18 @@ function plural(n: number, one: string, few: string, many: string): string {
   return many;
 }
 
-const cellStyle = (columns: number) => ({ width: columns > 1 ? `${100 / columns - 2}%` as const : '100%' as const });
+/**
+ * Šírka jednej bunky mriežky.
+ *
+ * Od podielu sa odpočíta medzera, ktorú medzi sebou karty majú — inak by si
+ * `gap` a `width` protirečili a posledná karta v riadku by pretiekla do
+ * ďalšieho. Pri troch stĺpcoch sú medzery dve, takže sa delia tromi.
+ */
+const GRID_GAP = spacing.lg;
+const cellStyle = (columns: number) =>
+  columns > 1
+    ? { width: `calc(${100 / columns}% - ${(GRID_GAP * (columns - 1)) / columns}px)` as unknown as number }
+    : { width: '100%' as const };
 
 const CARD_WIDTH = 220;
 
@@ -324,9 +392,12 @@ const styles = StyleSheet.create({
     gap: spacing.xs, marginBottom: spacing.md,
     maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
   },
+  // Odkaz patrí k nadpisu, nie k pravému okraju okna. So `space-between` sa
+  // na širokom monitore odsunul o pol obrazovky ďalej a prestal vyzerať ako
+  // vysvetlivka k tomu, čo je vedľa neho.
   brandRow: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', gap: spacing.sm,
+    gap: spacing.md, flexWrap: 'wrap',
   },
   brand: { ...typography.heading, color: colors.text, letterSpacing: 0.5 },
   what: { ...typography.metaSm, color: colors.accent, textDecorationLine: 'underline' },
@@ -353,7 +424,9 @@ const styles = StyleSheet.create({
   rowBody: { marginBottom: spacing.sm },
   strip: { gap: spacing.sm, paddingRight: spacing.lg },
   stripCell: { width: CARD_WIDTH },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // Karty potrebujú vzduch. So `spacing.sm` sa na širokom okne takmer
+  // dotýkali a mriežka sa čítala ako jeden blok namiesto piatich ponúk.
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
 
   card: {
     borderRadius: radius.card, borderWidth: 1, borderColor: colors.border,
@@ -380,4 +453,25 @@ const styles = StyleSheet.create({
     maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
   },
   footerButton: { flex: 1 },
+  chipRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    alignItems: 'center',
+    paddingBottom: spacing.md,
+  },
+  chipGap: { width: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: radius.chip,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+  },
+  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  chipActiveGood: { backgroundColor: colors.green, borderColor: colors.green },
+  chipLabel: { ...typography.metaSm, color: colors.textSecondary, fontWeight: '600' },
+  chipLabelActive: { color: '#FFFFFF' },
+  chipCount: { color: 'rgba(255,255,255,0.7)' },
+  guestNote: { marginTop: spacing.md, textAlign: 'center' },
 });

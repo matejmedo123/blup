@@ -26,7 +26,7 @@ import { messageFor } from '@/lib/errors';
 import { EventCard } from '@/components/EventCard';
 import { SiteFooter } from '@/components/SiteFooter';
 import { useClaimBottom } from '@/components/BottomInset';
-import { useLayout } from '@/hooks/useLayout';
+import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
 import { useRequireAuth } from '@/auth/useRequireAuth';
 import { EventMap } from '@/components/EventMap';
 import { useToast } from '@/components/Toast';
@@ -35,7 +35,7 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
   AvatarStack, Body, Button, Caption, EmptyState, ErrorState, IconButton, LoadingState, Notice,
 } from '@/components/ui';
-import { SwapEntry } from '@/components/SwapEntry';
+import { WelcomeIntro, useWelcomeIntro } from '@/onboarding/WelcomeIntro';
 import {
   categoriesInFamily, categoryFilters, colors, radius, shadow, spacing, typography,
   type CategoryFamily,
@@ -76,6 +76,10 @@ function tripPitch(event: EventFeedItem): string {
 }
 
 export default function HomeScreen() {
+  // Prvé otvorenie appky: krátky úvod, čo sa tu vlastne dá robiť. Sedí na
+  // domovskej obrazovke, lebo tá je pre každého prvá — na tlačidle v menu by
+  // sa neukázal nikdy tomu, kto naň neklikol.
+  const welcome = useWelcomeIntro();
   const { requireAuth } = useRequireAuth();
   const layout = useLayout();
   const { profile, isGuest } = useAuth();
@@ -332,6 +336,16 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
+      <WelcomeIntro visible={welcome.visible} onClose={() => void welcome.dismiss()} />
+
+      {/* Na širokom monitore sa obsah drží v strede a v čitateľnej šírke.
+          Bez toho sa karty roztiahli cez celých 1920 px: obal eventu bol pás
+          a nadpis plával sám na veľmi dlhom riadku. Ostatné obrazovky to majú
+          cez `Screen`; domovská má vlastný `FlatList`, takže to potrebuje tu.
+          Plávajúce tlačidlo a spodný panel zostávajú mimo — tie patria k oknu,
+          nie k stĺpcu. */}
+      <View style={[styles.page, layout.isWide && styles.pageWide]}>
+
       {/* --- header --------------------------------------------------------- */}
       {/* On a desktop the sidebar carries the wordmark; on a phone there was
           nothing to say whose app this is. Small, above the fold, and a tap
@@ -574,11 +588,11 @@ export default function HomeScreen() {
           {...pull.handlers}
           ListHeaderComponent={
             <View>
-              {/* SWAP hneď hore v zozname: kto si prezerá, kam ísť, je presne
-                  ten, komu sa hodí vedieť, že na vypredaný koncert sa dá
-                  vstupenka ešte kúpiť od iného človeka. Kreslí sa len vtedy,
-                  keď je naozaj čo ponúknuť. */}
-              <SwapEntry compact />
+              {/* Tu SWAP nie je a nemá tu byť. Domovská je o tom, kam ísť;
+                  pás burzy nad eventmi odtláčal to, kvôli čomu sem človek
+                  prišiel, a pýtal si pozornosť skôr, než vôbec niečo videl.
+                  Do SWAPu sa ide z menu, z „Moje vstupenky" a zo stránky
+                  eventu — teda vtedy, keď už je o čo. */}
 
               {(circles.data ?? []).length > 0 ? (
                 <Pressable style={styles.circles} onPress={() => router.push('/people')}>
@@ -742,6 +756,8 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
+      </View>
+
       {/* --- weekly sheet ----------------------------------------------------- */}
       <BottomSheet
         visible={weeklyOpen}
@@ -814,6 +830,8 @@ const styles = StyleSheet.create({
   tripRail: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingVertical: spacing.sm },
   tripCard: { width: 280, gap: spacing.xs },
   screen: { flex: 1, backgroundColor: colors.background },
+  page: { flex: 1, width: '100%' },
+  pageWide: { maxWidth: CONTENT_MAX, alignSelf: 'center' },
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },

@@ -17,6 +17,7 @@ import {
 import { messageFor } from '@/lib/errors';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
+import { swapAccountRoute } from '@/swap/SwapGuestGate';
 
 /**
  * Vypísanie vstupenky na predaj.
@@ -35,7 +36,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * ukáže, za koľko sa tá istá vstupenka na tom istom evente ponúka a predáva,
  * a navrhne tri ceny podľa toho, či chce predať rýchlo alebo draho.
  */
-export default function SellTicketScreen() {
+function SellTicketScreen() {
   const queryClient = useQueryClient();
 
   /**
@@ -487,3 +488,8 @@ const styles = StyleSheet.create({
   payoutStrong: { ...typography.bodyStrong, color: colors.text },
   payoutNote: { marginTop: 2 },
 });
+
+export default swapAccountRoute(
+  'Vstupenku treba previesť z tvojho účtu a peniaze ti máme kam poslať.',
+  SellTicketScreen,
+);
