@@ -40,6 +40,14 @@ export function PriceAdvice({
 
       {hint.suggest ? (
         <>
+          {/*
+            Zvýraznený je ten návrh, ktorý má človek NAOZAJ napísaný v poli.
+            Predtým bola „Vyvážená" zvýraznená natvrdo, takže po kliknutí na
+            „Maximum" svietila ďalej tá istá a vyzeralo to, že tlačidlá
+            nefungujú. (Fungovali — cenu doplnili — len to nebolo vidieť.)
+            Keď si človek cenu prepíše na vlastnú, nesvieti žiadny; to je tiež
+            pravda, lebo vtedy nedrží ani jeden z návrhov.
+          */}
           <View style={styles.chips}>
             <Chip
               label="Rýchly predaj"
@@ -47,6 +55,7 @@ export function PriceAdvice({
               cents={hint.suggest.fast_cents}
               net={fee(hint.suggest.fast_cents)}
               currency={cur}
+              accent={cents === hint.suggest.fast_cents}
               onPress={() => onPick(hint.suggest!.fast_cents)}
             />
             <Chip
@@ -55,7 +64,7 @@ export function PriceAdvice({
               cents={hint.suggest.balanced_cents}
               net={fee(hint.suggest.balanced_cents)}
               currency={cur}
-              accent
+              accent={cents === hint.suggest.balanced_cents}
               onPress={() => onPick(hint.suggest!.balanced_cents)}
             />
             <Chip
@@ -64,6 +73,7 @@ export function PriceAdvice({
               cents={hint.suggest.top_cents}
               net={fee(hint.suggest.top_cents)}
               currency={cur}
+              accent={cents === hint.suggest.top_cents}
               onPress={() => onPick(hint.suggest!.top_cents)}
             />
           </View>
@@ -107,7 +117,11 @@ function Market({ hint }: { hint: ResalePriceHint }) {
   }
 
   if (hint.face_value_cents != null) {
-    lines.push(`V predpredaji stála ${formatMoney(hint.face_value_cents, cur)}.`);
+    // Vstupenka zadarmo stála nula, a veta „v predpredaji stála 0,00 €" znie
+    // ako chyba výpočtu, nie ako údaj.
+    lines.push(hint.face_value_cents === 0
+      ? 'Vstupenka bola v predpredaji zadarmo.'
+      : `V predpredaji stála ${formatMoney(hint.face_value_cents, cur)}.`);
   }
 
   return (
