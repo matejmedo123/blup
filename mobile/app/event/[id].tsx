@@ -317,6 +317,27 @@ export default function EventDetailScreen() {
 
   // Only asked for on an event BLUP listed for somebody — the claim button has
   // to know whether the viewer runs an organization to claim it for.
+  /**
+   * Mám na tento event vstupenku, ktorú by som mohol ponúknuť ďalej?
+   *
+   * Pýta sa to len prihláseného a len na platné, nepoužité kusy. Ponúknuť
+   * „predaj ju ďalej" niekomu, kto žiadnu nemá, je tlačidlo, ktoré nevedie
+   * nikam — a ponúknuť to nad už oskenovanou vstupenkou je horšie: vyzerá to
+   * ako možnosť predať niečo, čo už bolo použité.
+   *
+   * MUSÍ byť medzi ostatnými hookmi, nie až pri vykresľovaní. Stálo to nižšie,
+   * pod `if (event.isLoading) return …`, takže prvé vykreslenie (načítavanie)
+   * malo o jeden hook menej než druhé — a React na to odpovie chybou #310 a
+   * celá stránka eventu spadne do chybovej hlášky. Nebolo to vidieť na
+   * typoch ani v builde, len na obrazovke.
+   */
+  const myTickets = useQuery({
+    queryKey: ['tickets', 'mine'],
+    queryFn: getMyTickets,
+    enabled: Boolean(profile?.id),
+    staleTime: 60_000,
+  });
+
   const myOrgs = useQuery({
     queryKey: ['organizations', 'mine'],
     queryFn: getMyOrganizations,
@@ -558,29 +579,15 @@ export default function EventDetailScreen() {
       )
     : null;
 
-  const isOwner = data.creator_id === profile?.id;
-  const isFull = Boolean(data.capacity && data.attendee_count >= data.capacity);
-  const hasTickets = data.ticket_types.length > 0;
-
-  /**
-   * Mám na tento event vstupenku, ktorú by som mohol ponúknuť ďalej?
-   *
-   * Pýta sa to len prihláseného a len na platné, nepoužité kusy. Ponúknuť
-   * „predaj ju ďalej" niekomu, kto žiadnu nemá, je tlačidlo, ktoré nevedie
-   * nikam — a ponúknuť to nad už oskenovanou vstupenkou je horšie: vyzerá to
-   * ako možnosť predať niečo, čo už bolo použité.
-   */
-  const myTickets = useQuery({
-    queryKey: ['tickets', 'mine'],
-    queryFn: getMyTickets,
-    enabled: Boolean(profile?.id),
-    staleTime: 60_000,
-  });
   const hasMyTicket = (myTickets.data ?? []).some(
     (ticket) => ticket.event_id === data.id
       && ticket.status === 'valid'
       && !ticket.checked_in_at,
   );
+
+  const isOwner = data.creator_id === profile?.id;
+  const isFull = Boolean(data.capacity && data.attendee_count >= data.capacity);
+  const hasTickets = data.ticket_types.length > 0;
 
   const numberedTypes = new Set(
     (seatMap.data?.sections ?? [])

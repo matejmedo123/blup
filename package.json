@@ -13,6 +13,7 @@
     "functions:deploy": "./scripts/deploy-functions.sh",
     "mobile": "npm --prefix mobile run start",
     "typecheck": "npm --prefix mobile run typecheck",
+    "check": "npm run typecheck && node scripts/check-hooks.mjs && node scripts/check-platform-files.mjs && node scripts/check-titles.mjs && node scripts/check-story-frame.mjs && node scripts/check-map-zoom.mjs && node scripts/check-seat-layout.mjs",
     "check:origin": "node scripts/check-origin.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
     "check:crop": "node scripts/smoke-crop.mjs",

@@ -13,6 +13,7 @@ import {
   Body, Button, Caption, Input, LoadingState, Notice, Screen, SectionHeader, Switch,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
+import { useImageCrop } from '@/components/ImageCrop';
 
 /**
  * The organization's public face.
@@ -28,6 +29,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * because a receipt must carry it, and is not touched from this screen.
  */
 export default function OrganizationProfileScreen() {
+  const { crop } = useImageCrop();
   const queryClient = useQueryClient();
   const organizations = useQuery({ queryKey: ['organizations', 'mine'], queryFn: getMyOrganizations });
   const organization = organizations.data?.[0];
@@ -72,8 +74,18 @@ export default function OrganizationProfileScreen() {
     try {
       const picked = await pickImage({ source: 'library', aspect: [1, 1] });
       if (!picked) return;
+
+      // `aspect` vie vynútiť iba systémový výber na telefóne — vo webovom
+      // prehliadači ho expo-image-picker ignoruje. Bez orezania sem teda na
+      // webe prišla fotka na výšku a logo z nej vyšlo roztiahnuté. Orezáva sa
+      // tu, rovnako ako titulná fotka eventu, len na štvorec.
+      const cropped = await crop({
+        uri: picked.uri, size: [600, 600], title: 'Orezať logo',
+      });
+      if (!cropped) return;
+
       setBusy(true);
-      setLogoUrl(await uploadOrganizationLogo(picked.uri, organization.id));
+      setLogoUrl(await uploadOrganizationLogo(cropped, organization.id));
     } catch (caught) {
       setError(messageFor(caught));
     } finally {

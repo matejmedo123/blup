@@ -40,6 +40,8 @@ export interface SwapEvent {
   venue_name: string | null;
   start_at: string;
   cover_image_url: string | null;
+  /** Rozhoduje o gradiente, keď fotka chýba — rovnako ako na karte v BLUPe. */
+  category: string | null;
   listing_count: number;
   ticket_count: number;
   from_cents: number | null;

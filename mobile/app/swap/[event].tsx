@@ -15,6 +15,7 @@ import {
 import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, shadow, spacing, typography } from '@/theme';
+import { GradientCover } from '@/components/GradientCover';
 
 /**
  * BLUP SWAP — ponuky na jeden event.
@@ -83,12 +84,30 @@ export default function EventResaleScreen() {
 
   return (
     <Screen scroll={false}>
-      {/* Hlavička hore nesie meno produktu; tu už len to, ktorého
-          eventu sa týka — zopakovaný nadpis by bol ten istý text dvakrát. */}
+      {/* Náhľad eventu, na ktorý sa kupuje.
+          Predtým tu bol len nadpis a kupujúci nemal ako overiť, či je na
+          správnom evente — meno koncertu sa dá pomýliť, plagát nie. Fotka je
+          tá istá 16:9, ktorá sa nahráva k eventu, a keď chýba, kreslí sa
+          gradient podľa kategórie, rovnako ako na karte v BLUPe. */}
       {event.data ? (
-        <View style={styles.header}>
-          <Text style={styles.eventName} numberOfLines={1}>{event.data.title}</Text>
-          <Caption>{formatEventDate(event.data.start_at)}</Caption>
+        <View style={styles.hero}>
+          <GradientCover
+            uri={event.data.cover_image_url}
+            category={event.data.category}
+            height={168}
+            overlay
+          >
+            <View style={styles.heroText}>
+              <Text style={styles.eventName} numberOfLines={2}>{event.data.title}</Text>
+              <Text style={styles.heroMeta} numberOfLines={1}>
+                {[
+                  formatEventDate(event.data.start_at),
+                  event.data.venue_name,
+                  event.data.city,
+                ].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          </GradientCover>
         </View>
       ) : null}
 
@@ -240,7 +259,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 2,
     maxWidth: CONTENT_MAX, alignSelf: 'center', width: '100%',
   },
-  eventName: { ...typography.subheading, color: colors.text },
+  hero: {
+    maxWidth: CONTENT_MAX, width: '100%', alignSelf: 'center',
+    paddingHorizontal: spacing.lg, paddingTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  heroText: {
+    marginTop: 'auto',
+    padding: spacing.md,
+    gap: 2,
+  },
+  heroMeta: { ...typography.metaSm, color: 'rgba(255,255,255,0.86)' },
+  eventName: { ...typography.subheading, color: "#FFFFFF" },
 
   summary: {
     flexDirection: 'row',

@@ -18,6 +18,7 @@ import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useAuth } from '@/auth/AuthProvider';
+import { SwapEventCard } from '@/swap/SwapEventCard';
 
 /**
  * Domov BLUP SWAPu.
@@ -208,7 +209,7 @@ export default function SwapHomeScreen() {
             <View style={styles.grid}>
               {(list.data ?? []).map((event) => (
                 <View key={event.event_id} style={cellStyle(layout.columns)}>
-                  <EventCard event={event} />
+                  <SwapEventCard event={event} />
                 </View>
               ))}
             </View>
@@ -287,44 +288,6 @@ function Chip({
         {label}
         {count != null ? <Text style={styles.chipCount}>{`  ${count}`}</Text> : null}
       </Text>
-    </Pressable>
-  );
-}
-
-function EventCard({ event }: { event: SwapEvent }) {
-  return (
-    <Pressable
-      style={styles.card}
-      accessibilityRole="button"
-      onPress={() => router.push(`/swap/${event.event_id}`)}
-    >
-      {event.cover_image_url ? (
-        <Image source={{ uri: event.cover_image_url }} style={styles.cover} contentFit="cover" />
-      ) : (
-        <View style={[styles.cover, styles.coverEmpty]} />
-      )}
-      <View style={styles.body}>
-        <Text style={styles.name} numberOfLines={1}>{event.title}</Text>
-        <Caption numberOfLines={1}>
-          {[formatEventDate(event.start_at), event.city].filter(Boolean).join(' · ')}
-        </Caption>
-        <View style={styles.numbers}>
-          <Text style={styles.price}>
-            {event.from_cents != null
-              ? `od ${formatMoney(event.from_cents, event.currency ?? 'EUR')}`
-              : '—'}
-          </Text>
-          <Caption>
-            {event.ticket_count}{' '}
-            {plural(event.ticket_count, 'vstupenka', 'vstupenky', 'vstupeniek')}
-          </Caption>
-        </View>
-        {event.verified_count > 0 ? (
-          <View style={styles.verified}>
-            <Text style={styles.verifiedLabel}>✓ {event.verified_count} overených</Text>
-          </View>
-        ) : null}
-      </View>
     </Pressable>
   );
 }

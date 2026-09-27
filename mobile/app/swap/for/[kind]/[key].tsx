@@ -9,6 +9,7 @@ import { Caption, EmptyState, LoadingState, Screen } from '@/components/ui';
 import { useLayout, CONTENT_MAX } from '@/hooks/useLayout';
 import { formatEventDate, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
+import { SwapEventCard } from '@/swap/SwapEventCard';
 
 /**
  * Ponuky za jedným interpretom, mestom alebo miestom.
@@ -63,47 +64,11 @@ export default function SwapForScreen() {
         }
         renderItem={({ item }) => (
           <View style={layout.columns > 1 ? styles.cell : undefined}>
-            <EventRow event={item} />
+            <SwapEventCard event={item} />
           </View>
         )}
       />
     </Screen>
-  );
-}
-
-function EventRow({ event }: { event: SwapEvent }) {
-  return (
-    <Pressable
-      style={styles.card}
-      accessibilityRole="button"
-      onPress={() => router.push(`/swap/${event.event_id}`)}
-    >
-      {event.cover_image_url ? (
-        <Image source={{ uri: event.cover_image_url }} style={styles.cover} contentFit="cover" />
-      ) : (
-        <View style={[styles.cover, styles.coverEmpty]} />
-      )}
-
-      <View style={styles.body}>
-        <Text style={styles.name} numberOfLines={1}>{event.title}</Text>
-        <Caption numberOfLines={1}>
-          {[formatEventDate(event.start_at), event.venue_name, event.city]
-            .filter(Boolean).join(' · ')}
-        </Caption>
-
-        <View style={styles.numbers}>
-          <Text style={styles.price}>
-            {event.from_cents != null
-              ? `od ${formatMoney(event.from_cents, event.currency ?? 'EUR')}`
-              : '—'}
-          </Text>
-          <Caption>
-            {event.ticket_count === 1 ? '1 vstupenka' : `${event.ticket_count} vstupeniek`}
-            {event.verified_count > 0 ? ` · ${event.verified_count} overených` : ''}
-          </Caption>
-        </View>
-      </View>
-    </Pressable>
   );
 }
 
