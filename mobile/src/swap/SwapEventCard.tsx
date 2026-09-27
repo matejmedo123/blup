@@ -38,6 +38,8 @@ export function SwapEventCard({ event }: { event: SwapEvent }) {
         uri={event.cover_image_url}
         category={event.category}
         height={COVER_HEIGHT}
+        whole
+        showPlaceholderLabel
       />
 
       <View style={styles.body}>
@@ -69,13 +71,16 @@ export function SwapEventCard({ event }: { event: SwapEvent }) {
 }
 
 /**
- * Výška obalu.
+ * Výška obalu, keď fotka chýba.
  *
- * Fixné číslo, nie pomer: karty v jednom riadku mriežky musia mať obal rovnako
- * vysoký, inak sa ich nadpisy rozídu o pár pixelov a riadok prestane byť
- * riadkom. `GradientCover` fotku do tohto tvaru oreže sám.
+ * S fotkou sa nepoužije: `whole` dá obalu pomer SAMOTNEJ fotky, takže titulná
+ * fotka — orezaná pri nahrávaní na 1920 × 1080 — vyjde presne 16:9 a nič sa
+ * z nej neodreže. Presne to isté robí karta na domovskej BLUPu; karta na
+ * SWAPe mala predtým pevnú výšku 132 px a na širokej karte z toho vyšiel pás
+ * asi 4:1, teda orezok plagátu, ktorý si organizátor pred chvíľou naskladal
+ * do rámčeka.
  */
-const COVER_HEIGHT = 132;
+const COVER_HEIGHT = 168;
 
 /** 1 / 2–4 / 5+ */
 function plural(n: number, one: string, few: string, many: string) {
