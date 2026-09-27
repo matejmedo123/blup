@@ -178,7 +178,8 @@ Všetko v `platform_settings`, meniteľné adminom bez zásahu do kódu:
 |---|---|---|
 | `resale_enabled` | `true` | vypínač celého SWAPu |
 | `resale_buyer_fee_bps` | **0** | poplatok kupujúceho, navrch |
-| `resale_seller_fee_bps` | **1000 (10 %)** | provízia SWAPu, strháva sa predajcovi |
+| `resale_seller_fee_bps` | **1500 (15 %)** | provízia SWAPu, strháva sa predajcovi |
+| `resale_organizer_share_bps` | **500 (5 %)** | koľko z provízie ide organizátorovi (len BLUP vstupenka) |
 | `resale_price_cap_enabled` | **false** | vypínač stropu prirážky |
 | `resale_max_markup_bps` | 0 | strop prirážky — uplatní sa len keď je zapnutý |
 | `resale_hold_minutes` | 15 | ako dlho drží rezervácia |
@@ -245,25 +246,48 @@ Dve veci, ktoré funkcia robí zámerne:
   preto si sama stráži, aby sa z mediánu nedala dopočítať suma jedného človeka.
   Kým predajov nie je dosť, `sold.count` je 0 a rada stojí na živých ponukách.
 
-### Provízia: 10 %, platí ju predajca
+### Provízia: 15 %, platí ju predajca — a časť ide organizátorovi
 
-BLUP si zo SWAPu berie **10 % z ceny vstupenky**. Celú províziu nesie
-predajca; kupujúci zaplatí presne toľko, koľko videl v ponuke.
+BLUP si zo SWAPu berie **15 % z ceny vstupenky**. Celú províziu nesie predajca;
+kupujúci zaplatí presne toľko, koľko videl v ponuke.
+
+Kam tých 15 % ide, závisí od toho, čia vstupenka to je:
+
+| pôvod vstupenky | BLUP | organizátor eventu |
+|---|---|---|
+| **BLUP vstupenka** na BLUP evente | 10 % | **5 %** |
+| vstupenka odinakiaľ (Ticketportal a spol.) | 15 % | 0 % |
 
 ```
-ponuka          45,00 €
-kupujúci platí  45,00 €      ← nič navyše
-provízia SWAPu  − 4,50 €
-predajca dostane 40,50 €
+ponuka          60,00 €
+kupujúci platí  60,00 €      ← nič navyše
+provízia        − 9,00 €     ← z toho 3,00 € organizátorovi
+predajca dostane 51,00 €
 ```
 
-Prečo takto a nie 5 % + 5 %: rozdelená provízia znamená, že človek vidí v
-zozname jednu cenu a v pokladni vyššiu. To je pri predaji vstupeniek tá
-najnenávidenejšia vec a konkurencia ju rieši štítkom „no extra fees" priamo
-v zozname. Cena v ponuke má byť cena, ktorú človek zaplatí.
+**Prečo dostane organizátor podiel.** Bez neho je burza pre organizátora dôvod
+na nenávisť: jeho vstupenka sa predá druhýkrát, zarobí na tom niekto iný a jemu
+zostane len práca pri dverách. Päť percent z ďalšieho predaja z neho robí
+niekoho, komu sa burza oplatí.
 
-Predajcu to neprekvapí: pri vypisovaní vidí rozpis „kupujúci zaplatí /
-provízia / dostaneš" ešte predtým, než ponuku zverejní.
+**Prečo je to pre predajcu rovnaké číslo v oboch prípadoch.** Keby sa provízia
+líšila podľa pôvodu vstupenky, tlačilo by to ľudí vypisovať naše vstupenky ako
+cudzie — a práve tie naše sú jediné, ktorých pravosť vieme zaručiť.
+
+Podiel sa do knihy organizátora zapíše ako `adjustment`, nie ako `sale`. Nebol
+to predaj jeho vstupenky — tú predal niekto iný — a keby to bol `sale`, rozišli
+by sa mu tržby s počtom predaných vstupeniek. Väzba `resale_order_id`
+s unikátnym indexom poistí, že sa podiel nepripíše dvakrát, keď cron zbehne
+dvakrát; overuje to `test_63_swap_organizer_share.sql`.
+
+Prečo nie 5 % kupujúcemu + 10 % predajcovi: rozdelená provízia znamená, že
+človek vidí v zozname jednu cenu a v pokladni vyššiu. To je pri predaji
+vstupeniek tá najnenávidenejšia vec a konkurencia ju rieši štítkom „no extra
+fees" priamo v zozname. Cena v ponuke má byť cena, ktorú človek zaplatí.
+
+Predajcu to neprekvapí: pri vypisovaní vidí rozpis „kupujúci zaplatí / provízia
+/ dostaneš" ešte predtým, než ponuku zverejní — aj s vetou, že časť provízie
+ide organizátorovi.
 
 ---
 

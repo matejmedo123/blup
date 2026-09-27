@@ -106,10 +106,10 @@ begin
   assert (v_quote->>'total_cents')::integer = 4500,
     format('kupujúci má zaplatiť presne 4500, má %s', v_quote->>'total_cents');
   -- Desatina ide platforme a strháva sa predajcovi, nie kupujúcemu.
-  assert (v_quote->>'seller_fee_cents')::integer = 450,
-    format('provízia má byť 450, je %s', v_quote->>'seller_fee_cents');
-  assert (v_quote->>'seller_net_cents')::integer = 4050,
-    format('Anne má zostať 4050, zostáva %s', v_quote->>'seller_net_cents');
+  assert (v_quote->>'seller_fee_cents')::integer = 675,
+    format('provízia má byť 675, je %s', v_quote->>'seller_fee_cents');
+  assert (v_quote->>'seller_net_cents')::integer = 3825,
+    format('Anne má zostať 3825, zostáva %s', v_quote->>'seller_net_cents');
 
   -- 4. Podrží si ju a založí objednávku.
   v_res := public.reserve_resale_listing(v_listing.id, 1);
@@ -372,7 +372,7 @@ begin
 end $$;
 
 -- ============================================================================
--- SCENÁR D — desatina patrí platforme a predajcovi sedí zvyšok
+-- SCENÁR D — provízia patrí platforme a predajcovi sedí zvyšok
 -- ============================================================================
 -- Provízia sa rátala v dvoch krokoch a na dvoch miestach: v objednávke pri
 -- predaji a v knihe pri zaúčtovaní. Práve medzi nimi sa raz stratila (strhla
@@ -395,9 +395,9 @@ declare
   v_book  integer;
 begin
   select resale_seller_fee_bps into v_bps from public.platform_settings where id;
-  assert v_bps = 1000, format('provízia má byť 10 %%, je %s bps', v_bps);
+  assert v_bps = 1500, format('provízia má byť 15 %%, je %s bps', v_bps);
 
-  -- Ceny zámerne aj také, kde desatina nevyjde na celý cent.
+  -- Ceny zámerne aj také, kde provízia nevyjde na celý cent.
   foreach v_price in array array[1000, 3333, 4999, 12345]
   loop
     reset role;
@@ -423,7 +423,7 @@ begin
       format('pri %s má kupujúci platiť %s, platí %s', v_price, v_price, v_ord.total_cents);
     assert v_ord.buyer_fee_cents = 0, 'kupujúcemu sa niečo pripočítalo';
 
-    -- A platforme patrí presne desatina.
+    -- A platforme patrí presne pätnástina ceny.
     assert v_ord.seller_fee_cents = v_fee,
       format('pri %s má provízia byť %s, je %s', v_price, v_fee, v_ord.seller_fee_cents);
     assert v_ord.seller_net_cents = v_price - v_fee,
@@ -457,7 +457,7 @@ begin
              v_price, v_ord.seller_net_cents, v_book);
   end loop;
 
-  raise notice 'PASS D: platforme patrí desatina a kniha sedí s objednávkou na cent';
+  raise notice 'PASS D: provízia sedí a kniha sedí s objednávkou na cent';
 end $$;
 
 rollback;

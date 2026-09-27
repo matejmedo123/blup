@@ -438,6 +438,13 @@ export interface SwapFees {
   enabled: boolean;
   buyer_fee_bps: number;
   seller_fee_bps: number;
+  /**
+   * Koľko z provízie ide organizátorovi eventu.
+   *
+   * Len pri BLUP vstupenke na evente, ktorý má organizáciu. Neplatí sa navyše
+   * — je to podiel z tých istých 15 %, ktoré platí predajca.
+   */
+  organizer_share_bps: number;
   /** Uplatní sa len keď `price_cap_enabled`. Štandardne je vypnutý. */
   max_markup_bps: number;
   price_cap_enabled: boolean;

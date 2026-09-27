@@ -148,6 +148,7 @@ function SellTicketScreen() {
   // Rovnaký výpočet ako na serveri (celočíselné delenie desaťtisícom), aby sa
   // náhľad a skutočná suma nelíšili o cent.
   const sellerFeeBps = fees.data?.seller_fee_bps ?? 0;
+  const organizerShareBps = fees.data?.organizer_share_bps ?? 0;
   const feeCents = Number.isFinite(cents) && cents > 0
     ? Math.floor((cents * sellerFeeBps) / 10000)
     : 0;
@@ -373,6 +374,13 @@ function SellTicketScreen() {
               </View>
               <Caption style={styles.payoutNote}>
                 Peniaze ti pošleme po evente.
+                {/* Kam ide časť provízie. Pri našej vstupenke dostane
+                    organizátor eventu podiel — je to z tých istých 15 %, nie
+                    navyše, a predajca má vedieť, že tým podporil aj toho, kto
+                    event robí. */}
+                {source === 'blup' && organizerShareBps > 0
+                  ? ` Z provízie ide ${(organizerShareBps / 100).toFixed(0)} % organizátorovi eventu.`
+                  : ''}
               </Caption>
             </View>
           ) : null}
