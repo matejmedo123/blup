@@ -202,6 +202,23 @@ Spodná hranica **50 centov** platí vždy. Nie je to morálka, je to platobná
 brána: nižšiu platbu Stripe odmietne a objednávka by uviazla v
 `payment_pending` bez toho, aby ktokoľvek vedel prečo.
 
+### Nájdi si miesto, aké chceš
+
+Na vypredanom štadióne je pod eventom tridsať ponúk a človek nehľadá „tú
+najlacnejšiu" — chce tribúnu, na ktorej sedia jeho ľudia. Stránka ponúk má
+preto pole „Sektor, rad alebo miesto" a nad zoznamom štítky s tým, čo na evente
+naozaj je: `Tribúna Juh 4 od 19,00 €`.
+
+`event_resale_sections(event_id)` vracia tie štítky — zoskupené podľa `section`,
+a keď chýba (státie odinakiaľ), podľa `ticket_label`. Zoradené podľa toho, kde
+je najviac na výber. Štítok, po kliknutí na ktorý je prázdno, sa neukáže.
+
+`event_resale_listings` dostal `p_section`. Hľadá naraz v sektore, rade, mieste
+aj popise vstupenky, cez `blup_norm` (takže „tribuna juh" nájde „Tribúna Juh"),
+a **od začiatku slova**. Obyčajné `like '%a%'` vyzeralo správne, kým sa nehľadal
+sektor „A": vrátilo aj „Tribúna Juh" aj „VIP lóža". Overuje to
+`test_62_swap_sections.sql`.
+
 ### Odporúčanie ceny
 
 Prázdne pole „Cena" je pre predajcu rovnako zlá rada ako strop — netuší, či
