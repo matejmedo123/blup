@@ -16,6 +16,7 @@ import { useToast } from '@/components/Toast';
 import { ErrorState, LoadingState, Notice } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { EventFeedItem } from '@/types/models';
+import { usePageColumn } from '@/hooks/useLayout';
 
 /**
  * Objav — the swipe deck.
@@ -25,6 +26,8 @@ import type { EventFeedItem } from '@/types/models';
  * is a behavioural signal for the ranker, so the deck teaches the feed.
  */
 export default function DiscoverScreen() {
+  // Na monitore sa obsah drží v čitateľnom stĺpci uprostred.
+  const pageColumn = usePageColumn();
   const { requireAuth } = useRequireAuth();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -87,7 +90,7 @@ export default function DiscoverScreen() {
 
   if (nearby.isLoading) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
         <EventListSkeleton count={3} />
       </SafeAreaView>
     );
@@ -95,14 +98,14 @@ export default function DiscoverScreen() {
 
   if (nearby.isError) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
         <ErrorState message={messageFor(nearby.error)} onRetry={() => void nearby.refetch()} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.flex}>
           <Text style={styles.title}>Blupni si program</Text>

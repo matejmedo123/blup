@@ -20,6 +20,7 @@ import {
   Body, Button, ErrorState, IconButton, LoadingState, Notice,
 } from '@/components/ui';
 import { categoryFamilies, colors, familyFor, radius, spacing, typography } from '@/theme';
+import { usePageColumn } from '@/hooks/useLayout';
 
 /**
  * Organizátor.
@@ -30,6 +31,8 @@ import { categoryFamilies, colors, familyFor, radius, spacing, typography } from
  * packages was the only door into the whole ad system and nobody found it.
  */
 export default function OrganizerScreen() {
+  // Na monitore sa obsah drží v čitateľnom stĺpci uprostred.
+  const pageColumn = usePageColumn();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -146,12 +149,12 @@ export default function OrganizerScreen() {
   };
 
   if (organizations.isLoading) {
-    return <SafeAreaView style={styles.screen} edges={['top']}><LoadingState /></SafeAreaView>;
+    return <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}><LoadingState /></SafeAreaView>;
   }
 
   if (organizations.isError) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
         <ErrorState
           message={messageFor(organizations.error)}
           onRetry={() => void organizations.refetch()}
@@ -179,7 +182,7 @@ export default function OrganizerScreen() {
   const currency = balance.data?.currency;
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
       <View style={styles.header}>
         <IconButton glyph="‹" size={40} onPress={() => router.back()} />
         <Text style={styles.screenTitle}>Organizátor</Text>

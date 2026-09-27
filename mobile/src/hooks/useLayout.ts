@@ -62,3 +62,20 @@ export function useLayout(): LayoutInfo {
     width,
   };
 }
+
+/**
+ * Stĺpec obsahu na monitore.
+ *
+ * Obrazovky, ktoré si kreslia vlastný koreň (tab-y, zoznamy ľudí a komunít,
+ * nástenka organizátora), sa bez tohto roztiahli cez celú plochu vedľa
+ * bočného menu — na 1920 px to znamenalo riadok so 60 znakmi a tlačidlo
+ * „Sledujem" 1600 px od mena, ku ktorému patrí. `Screen` to má v sebe; toto
+ * je to isté pre tých, čo `Screen` nepoužívajú.
+ *
+ * Vracia `null` na telefóne, aby sa tam nepridával žiadny štýl navyše.
+ */
+export function usePageColumn() {
+  const layout = useLayout();
+  if (!layout.isWide) return null;
+  return { width: '100%' as const, maxWidth: CONTENT_MAX, alignSelf: 'center' as const };
+}

@@ -6,6 +6,7 @@ import { signUpWithEmail } from '@/auth/api';
 import { messageFor } from '@/lib/errors';
 import { Body, Button, Caption, Input, Notice, Screen } from '@/components/ui';
 import { colors, spacing } from '@/theme';
+import { AUTH_FORM_MAX } from '@/components/authForm';
 
 export default function SignUpScreen() {
   const [displayName, setDisplayName] = useState('');
@@ -144,6 +145,9 @@ const styles = StyleSheet.create({
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },
-  content: { padding: spacing.xl },
+  content: { padding: spacing.xl ,
+    // Formulár sa drží úzky a v strede. Pole na heslo široké 1144 px
+    // vyzerá ako chyba a oko nemá kam skočiť z popisky na vstup.
+    width: '100%', maxWidth: AUTH_FORM_MAX, alignSelf: 'center' },
   intro: { marginBottom: spacing.xl },
 });

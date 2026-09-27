@@ -33,7 +33,7 @@ import {
 } from '@/components/ui';
 import { SiteFooter } from '@/components/SiteFooter';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { CARD_MAX } from '@/hooks/useLayout';
+import { CARD_MAX, usePageColumn } from '@/hooks/useLayout';
 import { GradientCover } from '@/components/GradientCover';
 import { avatarColorFor, colors, radius, spacing, typography } from '@/theme';
 
@@ -63,6 +63,8 @@ const SCOPES: { key: FeedScope; label: string }[] = [
 ];
 
 export default function FeedScreen() {
+  // Na monitore sa obsah drží v čitateľnom stĺpci uprostred.
+  const pageColumn = usePageColumn();
   const { requireAuth } = useRequireAuth();
   const { profile, isGuest } = useAuth();
   const queryClient = useQueryClient();
@@ -264,7 +266,7 @@ export default function FeedScreen() {
 
   if (posts.isLoading) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
         <EventListSkeleton count={3} />
       </SafeAreaView>
     );
@@ -272,14 +274,14 @@ export default function FeedScreen() {
 
   if (posts.isError) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
         <ErrorState message={messageFor(posts.error)} onRetry={() => void posts.refetch()} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Feed</Text>
         {/* Two destinations, not one: people are no longer a block inside

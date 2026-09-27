@@ -12,6 +12,7 @@ import { messageFor } from '@/lib/errors';
 import { formatCount } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import { ErrorState, IconButton, Input, LoadingState, Notice } from '@/components/ui';
+import { usePageColumn } from '@/hooks/useLayout';
 import {
   categoryFamilies, colors, familyFor, labelFor, radius, spacing, typography,
 } from '@/theme';
@@ -29,6 +30,8 @@ import {
  * were permanently the part you scrolled past.
  */
 export default function CommunityScreen() {
+  // Na monitore sa obsah drží v čitateľnom stĺpci uprostred.
+  const pageColumn = usePageColumn();
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -73,12 +76,12 @@ export default function CommunityScreen() {
   };
 
   if (communities.isLoading) {
-    return <SafeAreaView style={styles.screen} edges={['top']}><LoadingState /></SafeAreaView>;
+    return <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}><LoadingState /></SafeAreaView>;
   }
 
   if (communities.isError) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
         <ErrorState
           message={messageFor(communities.error)}
           onRetry={() => { void communities.refetch(); }}
@@ -88,7 +91,7 @@ export default function CommunityScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
       <View style={styles.header}>
         <IconButton glyph="‹" size={40} onPress={() => router.back()} />
         <Text style={styles.screenTitle}>Komunita</Text>

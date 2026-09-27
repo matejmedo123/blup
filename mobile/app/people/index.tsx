@@ -16,6 +16,7 @@ import { useToast } from '@/components/Toast';
 import { Avatar, ErrorState, IconButton, Input, LoadingState, Notice } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import type { PeopleMatch, Profile } from '@/types/models';
+import { usePageColumn } from '@/hooks/useLayout';
 
 /**
  * Ľudia.
@@ -31,6 +32,8 @@ import type { PeopleMatch, Profile } from '@/types/models';
  * actually in a room with — and Komunita is now about communities.
  */
 export default function PeopleScreen() {
+  // Na monitore sa obsah drží v čitateľnom stĺpci uprostred.
+  const pageColumn = usePageColumn();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { isGuest, user } = useAuth();
@@ -105,7 +108,7 @@ export default function PeopleScreen() {
   const loading = !searching && people.isLoading && networking.isLoading;
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={[styles.screen, pageColumn]} edges={['top']}>
       <View style={styles.header}>
         <IconButton glyph="‹" size={40} onPress={() => router.back()} />
         <Text style={styles.screenTitle}>Ľudia</Text>

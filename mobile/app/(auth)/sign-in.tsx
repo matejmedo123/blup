@@ -7,6 +7,7 @@ import { messageFor } from '@/lib/errors';
 import { Body, Button, Input, Mono, Notice, Screen } from '@/components/ui';
 import { HeroBackground, Tagline, Wordmark } from '@/components/Wordmark';
 import { colors, spacing, typography } from '@/theme';
+import { AUTH_FORM_MAX } from '@/components/authForm';
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
@@ -150,7 +151,10 @@ const styles = StyleSheet.create({
   // minWidth 0 so a long label can shrink inside a row instead of pushing
   // its neighbour out; react-native-web defaults flex items to min-width:auto.
   flex: { flex: 1, minWidth: 0 },
-  content: { padding: spacing.xl, paddingTop: spacing.xxxl, flexGrow: 1 },
+  content: { padding: spacing.xl, paddingTop: spacing.xxxl, flexGrow: 1 ,
+    // Formulár sa drží úzky a v strede. Pole na heslo široké 1144 px
+    // vyzerá ako chyba a oko nemá kam skočiť z popisky na vstup.
+    width: '100%', maxWidth: AUTH_FORM_MAX, alignSelf: 'center' },
   header: { alignItems: 'center', marginBottom: spacing.xxxl },
   subtitle: { color: colors.textTertiary, marginTop: spacing.sm },
 
