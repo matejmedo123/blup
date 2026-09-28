@@ -84,6 +84,14 @@ export default function EventDetailScreen() {
   const [crewName, setCrewName] = useState('');
   const [reviewBody, setReviewBody] = useState('');
   const [claimed, setClaimed] = useState(false);
+  /**
+   * Rozbalený zoznam lístkov.
+   *
+   * Na širokej obrazovke stoja vstupenky vedľa plagátu a pri festivale s
+   * desiatimi typmi by sa stĺpec natiahol hlboko pod plagát — vľavo by ostala
+   * prázdna stena. Ukážu sa preto prvé štyri a zvyšok si človek vypýta.
+   */
+  const [allTypes, setAllTypes] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
 
   const event = useQuery({
@@ -599,9 +607,21 @@ export default function EventDetailScreen() {
   const isFull = Boolean(data.capacity && data.attendee_count >= data.capacity);
   const hasTickets = data.ticket_types.length > 0;
 
-  const numberedTypes = new Set(
+  /**
+   * Typy lístkov, ktoré sú nakreslené v pláne sály.
+   *
+   * Tie do zoznamu nepatria: kupujú sa klikom do sektora, nie tlačidlom
+   * „Pridať" pri riadku. Dvakrát to isté dvoma cestami bola presne tá
+   * nejednoznačnosť, ktorú sme z tejto stránky vyhadzovali.
+   *
+   * Nič sa tým nestratí: políčko `ticket_type_id` môže mať iba sektor, ktorý
+   * nie je orientačný bod (to stráži databáza), takže akonáhle je táto množina
+   * neprázdna, `sellsFromPlan` je zákonite true a tlačidlo do plánu je na
+   * stránke.
+   */
+  const planTypes = new Set(
     (seatMap.data?.sections ?? [])
-      .filter((section) => section.numbered && section.ticket_type_id)
+      .filter((section) => !section.landmark && section.ticket_type_id)
       .map((section) => section.ticket_type_id as string),
   );
   // A venue with a plan is bought from the plan. That is the whole flow people
@@ -705,6 +725,47 @@ export default function EventDetailScreen() {
   const sellsTickets = hasTickets && !isPast && data.status !== 'cancelled';
 
   /**
+   * Čo sa naozaj vypisuje v paneli.
+   *
+   * `listedTypes` sú lístky, ktoré plán sály nepokrýva — pri sále s plánom to
+   * býva prázdne a panel je potom len hlavička a tlačidlo do plánu.
+   * `shownTypes` je z nich prvá štvorica; strop je tu kvôli šírke, nie kvôli
+   * tajnostiam, a `hiddenTypes` hneď ponúkne zvyšok.
+   */
+  const listedTypes = data.ticket_types.filter((ticket) => !planTypes.has(ticket.id));
+  const TYPES_AT_ONCE = 4;
+  const shownTypes = allTypes ? listedTypes : listedTypes.slice(0, TYPES_AT_ONCE);
+  const hiddenTypes = listedTypes.length - shownTypes.length;
+
+  /**
+   * Cenník sektorov — čítanie, nie nákup.
+   *
+   * Samotné tlačidlo „Otvoriť plán" je pravda, ale skúpa: človek pred klikom
+   * nevie, či sa bavíme o dvanástich eurách alebo o osemdesiatich, a vedľa
+   * neho ostala v širokom rozložení prázdna stena. Ceny sa berú zo sektorov,
+   * lebo tam ich organizátor nastavuje; keď sektor vlastnú cenu nemá, platí
+   * cena typu lístka.
+   */
+  const planPrices = sellsFromPlan
+    ? data.ticket_types
+      .filter((ticket) => planTypes.has(ticket.id))
+      .map((ticket) => {
+        const sections = (seatMap.data?.sections ?? [])
+          .filter((section) => section.ticket_type_id === ticket.id);
+        const prices = sections
+          .map((section) => section.price_cents ?? ticket.price_cents)
+          .filter((value): value is number => typeof value === 'number');
+        return {
+          id: ticket.id,
+          name: ticket.name,
+          currency: ticket.currency,
+          from: prices.length ? Math.min(...prices) : ticket.price_cents,
+          available: sections.reduce((sum, section) => sum + section.available, 0),
+        };
+      })
+    : [];
+
+  /**
    * Jedna cesta ku kúpe, nie dve.
    *
    * Pri každom lístku bolo „Pridať" a pod tým ešte veľké „Kúpiť — vybrať
@@ -724,10 +785,41 @@ export default function EventDetailScreen() {
         ) : null}
       </View>
 
-      {data.ticket_types.map((ticket) => {
+      {/* Sála s plánom: jedno tlačidlo do plánu namiesto zoznamu sektorov.
+          Vymenovať „Tribúna A — Pridať", „Tribúna B — Pridať" znamená pýtať si
+          od človeka rozhodnutie, ktoré bez obrázka haly nevie spraviť. */}
+      {sellsFromPlan ? (
+        <View style={styles.planBox}>
+          {planPrices.map((sector) => (
+            <View key={sector.id} style={styles.planRow}>
+              <Text style={styles.planName} numberOfLines={1}>{sector.name}</Text>
+              <Caption style={sector.available <= 0 ? styles.soldOut : styles.planLeft}>
+                {sector.available <= 0 ? 'vypredané' : `${sector.available} voľných`}
+              </Caption>
+              <Text style={styles.planPrice}>
+                {formatPrice(sector.from, sector.currency)}
+              </Text>
+            </View>
+          ))}
+
+          <Caption style={styles.planHint}>
+            {data.venue_name
+              ? `Miesta si vyberieš priamo v pláne — ${data.venue_name}.`
+              : 'Miesta si vyberieš priamo v pláne sály.'}
+          </Caption>
+          <Button
+            title="Otvoriť plán a vybrať miesto"
+            onPress={() => router.push(`/event/seats/${data.id}`)}
+            full
+          />
+        </View>
+      ) : null}
+
+      {/* Zvyšok — teda lístky, ktoré plán nepokrýva (státie, permanentka).
+          Keď je plán a pokrýva všetko, tu nie je nič a panel ostáva krátky. */}
+      {shownTypes.map((ticket) => {
         const remaining = ticket.quantity_total - ticket.quantity_sold;
         const soldOut = remaining <= 0;
-        const numbered = numberedTypes.has(ticket.id);
 
         return (
           <View key={ticket.id} style={styles.ticketRow}>
@@ -755,13 +847,6 @@ export default function EventDetailScreen() {
                 disabled={busy}
                 onPress={() => void toggleWaitlist(ticket.id, waitingFor.has(ticket.id))}
               />
-            ) : numbered ? (
-              <Button
-                title="Vybrať miesto"
-                variant="secondary"
-                compact
-                onPress={() => router.push(`/event/seats/${data.id}`)}
-              />
             ) : HAS_CART ? (
               <Button
                 title="Pridať"
@@ -775,9 +860,23 @@ export default function EventDetailScreen() {
         );
       })}
 
+      {/* Zvyšok zoznamu na vyžiadanie — nie preto, aby sa niečo skrylo, ale
+          aby panel vedľa plagátu nebol trikrát vyšší ako plagát sám. */}
+      {hiddenTypes > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setAllTypes(true)}
+          style={styles.moreTypes}
+        >
+          <Text style={styles.moreTypesLabel}>
+            Zobraziť všetky typy ({listedTypes.length})
+          </Text>
+        </Pressable>
+      ) : null}
+
       {/* Tlačidlo dole len vtedy, keď má čo spraviť. Pri sále s plánom sa
-          miesto vyberá pri konkrétnom lístku a druhé tlačidlo, ktoré vedie
-          na to isté, je len otázka navyše. */}
+          miesto vyberá v pláne a druhé tlačidlo, ktoré vedie na to isté, je
+          len otázka navyše. */}
       {allSoldOut ? (
         <Notice
           tone="warning"
@@ -789,14 +888,6 @@ export default function EventDetailScreen() {
           title={`Do košíka (${cartCount})`}
           loading={busy}
           onPress={() => void buy()}
-          full
-          style={styles.ticketButton}
-        />
-      ) : sellsFromPlan ? (
-        <Button
-          title="Vybrať miesto"
-          loading={busy}
-          onPress={() => router.push(`/event/seats/${data.id}`)}
           full
           style={styles.ticketButton}
         />
@@ -837,19 +928,25 @@ export default function EventDetailScreen() {
           o polovicu nižší a na širokej obrazovke stojí vedľa neho to, kvôli
           čomu sem ľudia prišli. */}
       <View style={[styles.hero, layout.isWide && styles.heroWide]}>
-        <View style={[styles.heroArt, layout.isWide && styles.heroArtWide]}>
-          <GradientCover
-            uri={data.cover_image_url}
-            category={data.category}
-            height={layout.isWide ? 260 : 170}
-            whole
-            wholeMinRatio={0.66}
-            backdrop="blur"
-            showPlaceholderLabel={false}
-          />
-        </View>
+        {/* testID-čka sú tu kvôli meraniu: rozloženie hlavičky sa dá overiť
+            iba súradnicami a hádať tie prvky podľa textu už raz zmeralo bočné
+            menu namiesto stránky. */}
+        <View
+          testID="hero-main"
+          style={[styles.heroMain, layout.isWide && styles.heroMainWide]}
+        >
+          <View testID="hero-art" style={styles.heroArt}>
+            <GradientCover
+              uri={data.cover_image_url}
+              category={data.category}
+              height={layout.isWide ? 260 : 170}
+              whole
+              wholeMinRatio={0.66}
+              backdrop="blur"
+              showPlaceholderLabel={false}
+            />
+          </View>
 
-        <View style={[styles.heroMain, layout.isWide && styles.heroMainWide]}>
           <View style={styles.heroChips}>
             <Chip label={categoryFamilies[familyFor(data.category)].label} />
             {data.attendee_count > 20 ? <Chip label="Frčí" /> : null}
@@ -860,9 +957,16 @@ export default function EventDetailScreen() {
             <InfoBox label="Kedy" value={formatEventDate(data.start_at)} />
             <InfoBox label="Kde" value={data.venue_name ?? data.city ?? 'Podľa mapy'} />
           </View>
-
-          {ticketPanel}
         </View>
+
+        {ticketPanel ? (
+          <View
+            testID="hero-side"
+            style={[styles.heroSide, layout.isWide && styles.heroSideWide]}
+          >
+            {ticketPanel}
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.body}>
@@ -966,11 +1070,15 @@ export default function EventDetailScreen() {
           />
         ) : null}
 
-        {/* --- actions ------------------------------------------------------ */}
+        {/* --- actions ------------------------------------------------------
+            „Idem" nie je nákup a nesmie tak vyzerať. Ako jediné veľké modré
+            tlačidlo na stránke, ešte nad lístkami, ho ľudia stláčali
+            v domnienke, že kupujú — a odchádzali bez vstupenky. Hlavné tlačidlo
+            je teraz to s cenou, hore pri lístkoch; toto je vedľajšie. */}
         <View style={styles.actionRow}>
           <Button
             title={data.my_rsvp === 'going' ? '✓ Idem' : 'Idem'}
-            variant={data.my_rsvp === 'going' ? 'secondary' : 'primary'}
+            variant="secondary"
             onPress={() => handleRsvp('going')}
             loading={busy}
             disabled={isPast || (isFull && data.my_rsvp !== 'going') || data.status === 'cancelled'}
@@ -1541,10 +1649,11 @@ const styles = StyleSheet.create({
   /**
    * Plagát a to, kvôli čomu sem ľudia prišli, vedľa seba.
    *
-   * Na širokej obrazovke dve stĺpce: vľavo plagát, vpravo názov, kedy, kde a
-   * vstupenky. Na telefóne pod sebou, ale plagát o polovicu nižší — cez celú
-   * výšku tlačil cenu pod ohyb a človek sa k nej dostal až po troch palcoch
-   * scrollovania.
+   * Vľavo plagát a pod ním názov, kedy a kde — teda presne v poradí, v akom to
+   * človek číta na letáku. Vpravo iba vstupenky, a preto hore: keď nad nimi
+   * stál ešte názov a dva boxy, začínal zoznam lístkov až v polovici stránky.
+   * Na telefóne je to všetko pod sebou v tom istom poradí, len plagát je
+   * o polovicu nižší — cez celú výšku tlačil cenu pod ohyb.
    */
   hero: {
     paddingHorizontal: spacing.gutter,
@@ -1556,11 +1665,19 @@ const styles = StyleSheet.create({
   },
   heroWide: { flexDirection: 'row', alignItems: 'flex-start' },
   heroArt: { borderRadius: radius.lg, overflow: 'hidden' },
-  // Plagát si vezme menšiu polovicu; vstupenky potrebujú viac miesta než
-  // obrázok, lebo sa v nich čítajú ceny a názvy.
-  heroArtWide: { flex: 5, minWidth: 0 },
   heroMain: { gap: spacing.sm },
-  heroMainWide: { flex: 6, minWidth: 320 },
+  // Plagát s popisom si vezme väčšiu polovicu — je v ňom obrázok aj názov.
+  heroMainWide: { flex: 6, minWidth: 0 },
+  /**
+   * Stĺpec s lístkami.
+   *
+   * `alignSelf: 'flex-start'` je tu naschvál: bez neho sa panel natiahne na
+   * výšku plagátu a orámovaná karta má zrazu pod poslednou cenou dlaň prázdna.
+   * `minWidth` drží riadok „názov — cena — tlačidlo" pohromade; pod tým sa
+   * začne lámať názov lístka.
+   */
+  heroSide: {},
+  heroSideWide: { flex: 5, minWidth: 300, alignSelf: 'flex-start' },
   heroChips: { flexDirection: 'row', gap: spacing.sm },
   heroTitle: { ...typography.eventTitle, color: colors.text },
 
@@ -1581,6 +1698,23 @@ const styles = StyleSheet.create({
   },
   ticketPanelTitle: { ...typography.subheading, color: colors.text },
   ticketPanelFrom: { ...typography.bodyStrong, color: colors.accentText },
+  ticketPanelHint: { marginBottom: spacing.xs },
+  planBox: { gap: spacing.sm, marginTop: spacing.xs },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  // minWidth 0, aby sa dlhý názov sektora zalomil v sebe a netlačil cenu von.
+  planName: { ...typography.body, color: colors.text, flex: 1, minWidth: 0 },
+  planLeft: { color: colors.textSecondary },
+  planPrice: { ...typography.bodyStrong, color: colors.text },
+  planHint: { marginTop: spacing.xs },
+  moreTypes: { paddingVertical: spacing.md, alignItems: 'center' },
+  moreTypesLabel: { ...typography.captionStrong, color: colors.accentText },
 
   // Vodorovný rad potrebuje vlastný štýl, inak si vezme celú zvyšnú výšku
   // stránky. Stráži to `npm run check:rails`.

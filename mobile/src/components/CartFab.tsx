@@ -72,7 +72,17 @@ export function CartFab() {
   const total = cart.data?.total_cents ?? 0;
   /** To, čo stoja samotné lístky — teda číslo, ktoré je aj pri lístku. */
   const subtotal = (cart.data?.subtotal_cents ?? 0) - (cart.data?.discount_cents ?? 0);
-  const fee = (cart.data?.archive_fee_cents ?? 0) + (cart.data?.commission_cents ?? 0);
+  /**
+   * Poplatok ako ROZDIEL, nie ako vybraté políčko.
+   *
+   * Sčítať `archive_fee_cents` s `commission_cents` sa ponúkalo a bolo by to
+   * zle: provízia je náš podiel z peňazí organizátora, kupujúci ju neplatí.
+   * Pri lístku za 12 € by tam tak pribudlo 1,48 € a súčet by sedel na 13,48 —
+   * pričom server účtuje 13,00. Takto sa tri riadky nemôžu rozísť ani vtedy,
+   * keď sa pravidlá poplatkov raz zmenia: dva sú zo servera a tretí je ich
+   * rozdiel.
+   */
+  const fee = Math.max(0, total - subtotal);
   const currency = cart.data?.currency ?? 'EUR';
 
   // Whatever the screen has already put in this corner — the create-event
