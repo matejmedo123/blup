@@ -7,6 +7,27 @@
  * downstream should hard-code a hex.
  */
 
+/**
+ * Akcentová farba ako premenná, keď sa dá.
+ *
+ * Premium prefarbuje akcent — jednu farbu, ktorá nesie značku cez celú appku.
+ * Problém je, že `StyleSheet.create` si hodnoty zapamätá pri importe modulu, a
+ * tých miest je v appke vyše dvesto; vymeniť ich všetky za čítanie z kontextu
+ * by znamenalo prepísať skoro každý štýl v projekte.
+ *
+ * Na webe sa to dá bez toho: `var(--blup-accent)` prejde cez react-native-web
+ * do CSS a prefarbí sa VŠETKO naraz, v okamihu, keď `AccentProvider` premennú
+ * zmení. Žiadny reštart, žiadne obnovenie stránky.
+ *
+ * Na telefóne `var()` farba nie je, tak tam ostáva pevná hodnota a akcent sa
+ * číta z kontextu tam, kde je ho naozaj vidno (tlačidlá, prepínače, záložky).
+ * Je to rozdiel medzi platformami a treba o ňom vedieť — nie predstierať, že
+ * ho niet.
+ */
+const onWeb = typeof document !== 'undefined';
+const v = (name: string, fallback: string) =>
+  (onWeb ? `var(--blup-${name}, ${fallback})` : fallback);
+
 export const colors = {
   // --- surfaces -------------------------------------------------------------
   page: '#06080B',            // plane behind the phone
@@ -29,16 +50,18 @@ export const colors = {
   textInverse: '#06080B',
 
   // --- accents --------------------------------------------------------------
-  accent: '#0080FF',
-  accentHover: '#1A8CFF',
+  accent: v('accent', '#0080FF'),
+  accentHover: v('accent-hover', '#1A8CFF'),
   // Accent-coloured TEXT, for a link or a label on a dark surface. It is not a
   // foreground for an accent-coloured background — used that way it paints blue
   // on blue, which is how the crop sheet shipped with two invisible buttons.
   // White is the label colour on `accent`; see buttonLabelPrimary.
-  accentText: '#0080FF',
-  accentSoft: 'rgba(0, 128, 255, 0.12)',
-  accentSofter: 'rgba(0, 128, 255, 0.16)',
-  accentBorder: 'rgba(0, 128, 255, 0.4)',
+  accentText: v('accent-text', '#0080FF'),
+  accentSoft: v('accent-soft', 'rgba(0, 128, 255, 0.12)'),
+  accentSofter: v('accent-softer', 'rgba(0, 128, 255, 0.16)'),
+  /** Najjemnejší akcent: aktívna položka menu, zvýraznený riadok. */
+  accentFaint: v('accent-faint', 'rgba(0, 128, 255, 0.10)'),
+  accentBorder: v('accent-border', 'rgba(0, 128, 255, 0.4)'),
 
   cyan: '#22D3EE',
   cyanSoft: 'rgba(34, 211, 238, 0.18)',
@@ -63,7 +86,7 @@ export const colors = {
 
   // --- lines and overlays ----------------------------------------------------
   border: 'rgba(255, 255, 255, 0.07)',
-  borderAccent: 'rgba(0, 128, 255, 0.4)',
+  borderAccent: v('accent-border', 'rgba(0, 128, 255, 0.4)'),
   overlay: 'rgba(6, 8, 11, 0.5)',       // glass badge on a photo
   overlayModal: 'rgba(4, 6, 9, 0.66)',  // behind a bottom sheet
   chipOnCover: 'rgba(6, 8, 11, 0.5)',
@@ -269,30 +292,34 @@ export const typography = {
   label:       { fontFamily: fontFamily.monoBold, fontSize: 10, letterSpacing: 1.2 },
 } as const;
 
+/**
+ * Žiara pod hlavným tlačidlom má tú istú farbu ako tlačidlo.
+ *
+ * `shadowColor` premennú neprijme — react-native-web si farbu tieňa rozoberie
+ * a `var(...)` z nej spraví natvrdo zapísanú modrú. Odmerané, nie odhadnuté:
+ * ružové tlačidlo malo pod sebou modrú žiaru, čo vyzerá ako chyba a je to
+ * presne to „Premium nič nezmenilo", o ktorom je celá táto zmena.
+ *
+ * Na webe sa preto píše rovno `boxShadow` s premennou; na telefóne zostáva
+ * `shadowColor` s pevnou hodnotou, lebo tam sa premenná použiť nedá.
+ */
+const glowShadow = (offsetY: number, blur: number, opacity: number, elevation: number) =>
+  (onWeb
+    ? { boxShadow: `0px ${offsetY}px ${blur}px var(--blup-accent-glow, rgba(0, 128, 255, ${opacity}))` }
+    : {
+        shadowColor: '#0080FF',
+        shadowOffset: { width: 0, height: offsetY },
+        shadowOpacity: opacity,
+        shadowRadius: blur,
+        elevation,
+      });
+
 export const shadow = {
   /** Primary CTA. */
-  cta: {
-    shadowColor: '#0080FF',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.34,
-    shadowRadius: 28,
-    elevation: 12,
-  },
-  ctaLarge: {
-    shadowColor: '#0080FF',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.34,
-    shadowRadius: 34,
-    elevation: 14,
-  },
+  cta: glowShadow(12, 28, 0.34, 12),
+  ctaLarge: glowShadow(14, 34, 0.34, 14),
   /** The BLUP circle on the swipe deck. */
-  glow: {
-    shadowColor: '#0080FF',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 30,
-    elevation: 14,
-  },
+  glow: glowShadow(12, 30, 0.4, 14),
   pin: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },

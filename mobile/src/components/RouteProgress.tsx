@@ -3,6 +3,7 @@ import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet } from 'react
 import { usePathname } from 'expo-router';
 
 import { colors } from '@/theme';
+import { useAccent } from '@/theme/accent';
 
 /**
  * A thin blue bar across the top while a screen changes.
@@ -24,6 +25,15 @@ import { colors } from '@/theme';
  */
 export function RouteProgress() {
   const pathname = usePathname();
+  /**
+   * Farba sa berie z kontextu, nie zo štýlu.
+   *
+   * `Animated.View` si na webe štýl skladá v JavaScripte a farbu pritom
+   * rozoberie — `var(--blup-accent)` z nej spraví natvrdo zapísanú modrú.
+   * Bola to jediná vec na obrazovke, ktorá po prefarbení zostala modrá, a
+   * odhalilo ju až meranie, nie pohľad: pruh je tenký a beží pol sekundy.
+   */
+  const accent = useAccent();
   const progress = useState(() => new Animated.Value(0))[0];
   const opacity = useState(() => new Animated.Value(0))[0];
   const wash = useState(() => new Animated.Value(0))[0];
@@ -71,13 +81,17 @@ export function RouteProgress() {
 
   return (
     <>
-      <Animated.View pointerEvents="none" style={[styles.wash, { opacity: wash }]} />
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.wash, { opacity: wash, backgroundColor: accent.soft }]}
+      />
       <Animated.View
         pointerEvents="none"
         style={[
           styles.bar,
           {
             opacity,
+            backgroundColor: accent.accent,
             width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
           },
         ]}
@@ -104,8 +118,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     // Above every screen, below nothing.
     zIndex: 9999,
+    // Farba žiary ide cez premennú, ktorej NÁHRADNÁ hodnota je `rgba(...)`.
+    // Vyzerá to ako drobnosť a nie je: keď je náhradná hodnota hex,
+    // react-native-web si celý `boxShadow` prepíše na natvrdo zapísanú modrú
+    // a pod ružovým pruhom svietila modrá žiara. `shadowColor` premennú
+    // neprijme vôbec, preto sa na webe píše rovno `boxShadow`.
     ...(Platform.OS === 'web'
-      ? { boxShadow: `0 0 12px ${colors.accent}` } as object
+      ? { boxShadow: '0px 0px 12px var(--blup-accent-bar, rgba(0, 128, 255, 0.9))' } as object
       : { shadowColor: colors.accent, shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } }),
+    // Farbu prepíše `accent` vo vykreslení; tu je len pre istotu.
   },
 });

@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: spacing.xs,
   },
-  placementOn: { borderColor: colors.accent, backgroundColor: 'rgba(0, 128, 255, 0.08)' },
+  placementOn: { borderColor: colors.accent, backgroundColor: colors.accentFaint },
   placementLabel: { ...typography.body, color: colors.text },
   placementNote: { ...typography.caption, color: colors.textTertiary },
   placementMark: { ...typography.body, color: colors.accent },

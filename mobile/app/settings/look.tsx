@@ -111,8 +111,9 @@ export default function LookScreen() {
 
       <SectionHeader title="Farba BLUPu" />
       <Body muted style={styles.intro}>
-        Prefarbí tlačidlá, prepínače a to, čo je práve vybrané. Šesť farieb, nie paleta — každá
-        z nich je čitateľná na tmavom aj s bielym textom na sebe.
+        Prefarbí celú appku — menu, odkazy, tlačidlá, prepínače aj to, čo je práve
+        vybrané. Šesť farieb, nie paleta: každá z nich je čitateľná na tmavom aj
+        s bielym textom na sebe.
       </Body>
 
       <View style={styles.swatches}>

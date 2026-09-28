@@ -201,7 +201,6 @@ export default function RootLayout() {
               {/* On a desktop the sidebar frames every screen, not only the
                   five tabs; AppFrame is a passthrough on phones. */}
               <AuthGateProvider>
-                <RouteProgress />
                 <StartupGate>
                   {/* Screens say how much of the bottom corner they use, so the
                       basket bubble sits above it instead of on top of it. */}
@@ -213,6 +212,13 @@ export default function RootLayout() {
                         because it asks the server what applies; outside every
                         screen because it repaints all of them. */}
                     <AccentProvider>
+                    {/* VNÚTRI `AccentProvider`, nie nad ním. Pruh pri prechode
+                        medzi obrazovkami si farbu číta z kontextu — `Animated.View`
+                        si na webe štýl skladá v JavaScripte a premennú v ňom
+                        rozoberie na natvrdo zapísanú modrú. Keď bol nad
+                        poskytovateľom, bol to jediný kus obrazovky, ktorý po
+                        prefarbení zostal modrý. */}
+                    <RouteProgress />
                     <ImageCropProvider>
                       {/* Confirmations and prompts. Ours rather than
                           Alert.alert, which react-native-web implements as an

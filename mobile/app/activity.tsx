@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: spacing.md,
   },
-  rowHot: { backgroundColor: 'rgba(0,128,255,0.1)', borderColor: colors.accentBorder },
+  rowHot: { backgroundColor: colors.accentFaint, borderColor: colors.accentBorder },
   rowPressed: { backgroundColor: colors.surfacePressed },
 
   icon: {

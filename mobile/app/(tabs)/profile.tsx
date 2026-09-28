@@ -292,7 +292,7 @@ export default function ProfileScreen() {
           validTickets.slice(0, 2).map((ticket) => (
             <Pressable key={ticket.id} onPress={() => router.push(`/tickets/${ticket.id}`)}>
               <LinearGradient
-                colors={['rgba(0,128,255,0.2)', 'rgba(34,211,238,0.12)']}
+                colors={[colors.accentSofter, 'rgba(34,211,238,0.12)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.ticket}
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     gap: 6,
   },
-  badgeEarned: { backgroundColor: 'rgba(0,128,255,0.14)', borderColor: colors.accentBorder },
+  badgeEarned: { backgroundColor: colors.accentSoft, borderColor: colors.accentBorder },
   badgeEmoji: { fontSize: 24 },
   badgeEmojiLocked: { opacity: 0.35 },
   badgeName: { ...typography.monoSm, color: colors.textDisabled, textAlign: 'center' },

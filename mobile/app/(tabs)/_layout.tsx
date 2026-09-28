@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 1,
   },
-  tabItemActive: { backgroundColor: 'rgba(0, 128, 255, 0.1)' },
+  tabItemActive: { backgroundColor: colors.accentFaint },
   tabGlyph: { fontSize: 18, lineHeight: 22, color: colors.textQuaternary },
   tabGlyphActive: { color: colors.accent },
   tabLabel: {

@@ -38,7 +38,7 @@ export const PREMIUM_FEATURES = [
   {
     icon: '🎨',
     title: 'Farba celého BLUPu',
-    body: 'Šesť farieb. Prefarbí tlačidlá, prepínače aj to, čo je vybrané — celá appka, nie jeden pruh.',
+    body: 'Šesť farieb. Prefarbí menu, odkazy, tlačidlá aj prepínače — celú appku, nie jeden pruh.',
   },
   {
     icon: '🖼️',

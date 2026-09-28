@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { getMyLook } from '@/api/premium';
@@ -106,7 +106,52 @@ export function AccentProvider({ children }: { children: React.ReactNode }) {
     };
   }, [look.data]);
 
+  /**
+   * Na webe sa farba zapíše do CSS premenných na koreni dokumentu.
+   *
+   * Tým sa prefarbí všetko, čo kedy prešlo cez `colors.accent*` — a to je
+   * vyše dvesto miest v štýloch, ktoré si hodnotu zapamätali pri importe a
+   * inak by ju už nikdy nezmenili. Bez toho Premium prefarbí tlačidlá a
+   * prepínače, ale bočné menu, odkazy aj záložky zostanú modré — appka teda
+   * vyzerá skoro rovnako a človek má pocit, že si kúpil nič.
+   */
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const vars: Record<string, string> = {
+      '--blup-accent': value.accent,
+      // Žiara pod hlavným tlačidlom. Priehľadnosť sa dopočíta z farby, aby
+      // nebolo treba viesť šesť ďalších hodnôt, ktoré sa raz rozídu.
+      '--blup-accent-glow': withAlpha(value.accent, 0.34),
+      '--blup-accent-glow-strong': withAlpha(value.accent, 0.4),
+      '--blup-accent-bar': withAlpha(value.accent, 0.9),
+      '--blup-accent-faint': withAlpha(value.accent, 0.1),
+      '--blup-accent-hover': value.accent,
+      '--blup-accent-text': value.text,
+      '--blup-accent-soft': value.soft,
+      '--blup-accent-softer': value.soft,
+      '--blup-accent-border': value.border,
+    };
+    for (const [name, colour] of Object.entries(vars)) {
+      root.style.setProperty(name, colour);
+    }
+  }, [value.accent, value.text, value.soft, value.border]);
+
   return <AccentContext.Provider value={value}>{children}</AccentContext.Provider>;
+}
+
+/**
+ * `#RRGGBB` na `rgba(r, g, b, a)`.
+ *
+ * Šesť akcentov je zapísaných ako hex; tieň potrebuje priehľadnosť. Prepočet
+ * tu je lacnejší než šesť ďalších reťazcov v palete, ktoré by sa pri zmene
+ * farby raz rozišli s tou hlavnou.
+ */
+function withAlpha(hex: string, alpha: number): string {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return hex;
+  const n = parseInt(match[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
 /** The default palette, for styles created at module scope. */

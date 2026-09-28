@@ -87,8 +87,8 @@ const styles = StyleSheet.create({
   // Modrá, nie zelená. Ochrana peňazí je dobrá vec, ale nie je to overenie a
   // nesmie tak vyzerať.
   protected: {
-    backgroundColor: 'rgba(0, 128, 255, 0.12)',
-    borderColor: 'rgba(0, 128, 255, 0.45)',
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentBorder,
   },
 
   glyph: { fontSize: 13, color: colors.textSecondary },

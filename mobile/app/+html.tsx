@@ -200,8 +200,10 @@ const SHELL_CSS = `
 
   /* Keyboard focus must stay visible in a browser, where it is the only way
      some people navigate at all. */
-  :focus-visible { outline: 2px solid #0080FF; outline-offset: 2px; }
-  ::selection { background: #0080FF; color: #fff; }
+  /* Cez premennú, nie natvrdo: Premium prefarbuje akcent a obrys po tabulátore
+     ani výber textu nemajú byť to jediné, čo zostalo modré. */
+  :focus-visible { outline: 2px solid var(--blup-accent, #0080FF); outline-offset: 2px; }
+  ::selection { background: var(--blup-accent, #0080FF); color: #fff; }
 
   /* The plan of a hall is drawn on by dragging, and a browser has two habits
      that make that impossible. It starts its own drag-and-drop the moment a

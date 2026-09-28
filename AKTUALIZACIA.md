@@ -205,6 +205,27 @@ Stráži to `npm run check:avatars`: tvár musí mať buď krúžok, alebo komen
 `bez krúžku: <prečo>`. Dôvod v komentári je lacný; dôvod, ktorý si nikto
 nezapísal, sa o pol roka nedá odlíšiť od zabudnutia.
 
+### Premium konečne prefarbí celú appku
+
+Šesť farieb v Premium existovalo, ale prefarbili tlačidlá, prepínače a vybrané
+záložky — bočné menu, odkazy, odznaky aj žiara pod tlačidlom zostali modré.
+Človek si kúpil farbu a appka vyzerala skoro rovnako.
+
+Dôvod: `StyleSheet.create` si farbu zapamätá pri importe modulu a tých miest je
+v appke **197**. Prepísať ich všetky na čítanie z kontextu by znamenalo prepísať
+skoro každý štýl v projekte.
+
+Na webe sa to dá bez toho — akcent je odteraz CSS premenná (`var(--blup-accent)`)
+a `AccentProvider` ju prestaví na koreni dokumentu. Prefarbí sa tým **všetko
+naraz**, v okamihu, keď si vyberieš farbu; žiadny reštart, žiadne obnovenie
+stránky. Odmerané: na feede nezostalo po prefarbení ani jedno modré miesto (pred
+zmenou ich tam bolo sedem, vrátane celého bočného menu).
+
+**Na telefóne to takto nejde** a treba o tom vedieť: `var()` v natívnom štýle
+farba nie je, takže v appke pre iOS a Android Premium naďalej prefarbuje to, čo
+doteraz — tlačidlá, prepínače, záložky. Web je na tom lepšie než telefón a je to
+vedomý rozdiel, nie prehliadnutie.
+
 ---
 
 ## Čo bolo nové v balíku predtým
