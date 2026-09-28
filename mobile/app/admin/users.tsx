@@ -94,6 +94,8 @@ export default function AdminUsersScreen() {
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <View style={styles.row}>
+              {/* bez krúžku: zoznam na moderovanie. Krúžok by ukradol ťuknutie
+                  riadku, ktorý má otvoriť kartu človeka. */}
               <Avatar url={item.avatar_url} name={item.display_name} size={40} />
               <View style={styles.flex}>
                 <Text style={styles.name}>{item.display_name ?? item.username}</Text>

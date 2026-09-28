@@ -53,7 +53,12 @@ export default function AttendeesScreen() {
                   style={styles.row}
                   onPress={() => router.push(`/user/${match.user_id}`)}
                 >
-                  <Avatar url={match.avatar_url} name={match.display_name} size={44} />
+                  <Avatar
+                    url={match.avatar_url}
+                    name={match.display_name}
+                    size={44}
+                    userId={match.user_id}
+                  />
                   <View style={styles.flex}>
                     <Text style={styles.name}>{match.display_name ?? match.username}</Text>
                     <Caption style={styles.reason}>{describeMatch(match)}</Caption>
@@ -67,7 +72,12 @@ export default function AttendeesScreen() {
         }
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => router.push(`/user/${item.user_id}`)}>
-            <Avatar url={item.profile?.avatar_url} name={item.profile?.display_name} size={44} />
+            <Avatar
+              url={item.profile?.avatar_url}
+              name={item.profile?.display_name}
+              size={44}
+              userId={item.user_id}
+            />
             <View style={styles.flex}>
               <Text style={styles.name}>{item.profile?.display_name ?? item.profile?.username}</Text>
               {item.profile?.bio ? <Caption numberOfLines={1}>{item.profile.bio}</Caption> : null}

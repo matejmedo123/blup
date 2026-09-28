@@ -217,7 +217,12 @@ export default function CommunityScreen() {
                         style={styles.member}
                         onPress={() => router.push(`/user/${person.id}`)}
                       >
-                        <Avatar url={person.avatar_url} name={person.display_name} size={48} />
+                        <Avatar
+                          url={person.avatar_url}
+                          name={person.display_name}
+                          size={48}
+                          userId={person.id}
+                        />
                         <Caption numberOfLines={1} style={styles.memberName}>
                           {person.display_name?.split(' ')[0] ?? '—'}
                         </Caption>
@@ -243,7 +248,12 @@ export default function CommunityScreen() {
                       style={styles.personMain}
                       onPress={() => router.push(`/user/${person.user_id}`)}
                     >
-                      <Avatar url={person.avatar_url} name={person.display_name} size={44} />
+                      <Avatar
+                        url={person.avatar_url}
+                        name={person.display_name}
+                        size={44}
+                        userId={person.user_id}
+                      />
                       <View style={styles.flex}>
                         <Text style={styles.personName} numberOfLines={1}>
                           {person.display_name ?? person.username ?? 'Niekto'}
@@ -300,7 +310,12 @@ export default function CommunityScreen() {
               style={styles.postHeader}
               onPress={() => item.author && router.push(`/user/${item.author.id}`)}
             >
-              <Avatar url={item.author?.avatar_url} name={item.author?.display_name} size={38} />
+              <Avatar
+                url={item.author?.avatar_url}
+                name={item.author?.display_name}
+                size={38}
+                userId={item.author?.id}
+              />
               <View style={styles.flex}>
                 <Text style={styles.postAuthor}>
                   {item.author?.display_name ?? item.author?.username ?? 'Niekto'}

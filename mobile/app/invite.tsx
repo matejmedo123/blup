@@ -148,6 +148,8 @@ export default function InviteScreen() {
           <SectionHeader title={`Koho si pozval · ${data?.people.length}`} />
           {(data?.people ?? []).map((person, i) => (
             <View key={`${person.username ?? person.name ?? i}`} style={styles.row}>
+              {/* bez krúžku: pozvaní ľudia sa vracajú bez id, takže nie je
+                  koho sa na príbeh spýtať. */}
               <Avatar url={person.avatar_url} name={person.name} size={40} />
               <View style={styles.flex}>
                 <Text style={styles.rowName}>{person.name ?? person.username ?? 'Niekto'}</Text>

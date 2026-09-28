@@ -135,6 +135,8 @@ export default function OnboardingProfileScreen() {
 
       <View style={styles.avatarSection}>
         <Pressable onPress={changePhoto} disabled={uploading} accessibilityRole="button">
+          {/* bez krúžku: toto nie je cudzia tvár, ale ovládací prvok — ťukom
+              sa mení fotka, nie otvára príbeh. */}
           <Avatar url={avatarUrl} name={displayName} size={104} />
           {uploading ? (
             <View style={styles.avatarOverlay}>

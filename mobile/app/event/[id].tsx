@@ -776,6 +776,10 @@ export default function EventDetailScreen() {
               : (data.organization?.name ?? data.creator?.display_name)}
             size={40}
             square={Boolean(data.organization) || data.listed_by_platform}
+            // Krúžok príbehu len vtedy, keď je to naozaj tvár človeka. Logo
+            // organizácie príbehy nemá a krúžok okolo neho by sľuboval niečo,
+            // čo sa po ťuknutí neotvorí.
+            userId={data.organization || data.listed_by_platform ? null : data.creator_id}
           />
           <View style={styles.flex}>
             <Caption>Organizuje</Caption>

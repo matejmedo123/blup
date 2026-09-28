@@ -367,6 +367,8 @@ export default function FeedScreen() {
                 requireAuth('Aby ostatní vedeli, kto moment zdieľa.', () => setComposerOpen(true))
               }
             >
+              {/* bez krúžku: tvoja tvár v poli na písanie. Ťuknutie musí
+                  otvoriť písanie, nie tvoj vlastný príbeh. */}
               <Avatar url={profile?.avatar_url} name={profile?.display_name} size={38} />
               <Text style={styles.composerHint}>Zdieľaj moment z eventu…</Text>
               <Text style={styles.composerGlyph}>＋</Text>
@@ -496,6 +498,7 @@ function NewEventCard({ event }: { event: FeedNewEvent }) {
             url={event.organization_id ? null : event.creator_avatar_url}
             name={who}
             size={38}
+            userId={event.organization_id ? null : event.creator_id}
           />
         )}
         <View style={styles.flex}>
@@ -566,6 +569,7 @@ function PostCard({ post, onLike }: { post: CommunityPost; onLike: () => void })
           post.organization.logo_url ? (
             <Image source={{ uri: post.organization.logo_url }} style={styles.postOrgLogo} />
           ) : (
+            // bez krúžku: logo organizácie. Príbehy majú ľudia, nie značky.
             <Avatar name={post.organization.name} size={38} />
           )
         ) : (

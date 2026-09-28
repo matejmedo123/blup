@@ -143,6 +143,8 @@ export default function ProfileScreen() {
 
         {/* --- identity ------------------------------------------------------ */}
         <View style={styles.identity}>
+          {/* bez krúžku: hlavička tvojho vlastného profilu. Svoj príbeh
+              otváraš z radu nad feedom, tu spravuješ účet. */}
           <Avatar url={profile?.avatar_url} name={profile?.display_name} size={74} square />
 
           <View style={styles.flex}>

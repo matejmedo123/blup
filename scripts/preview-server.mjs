@@ -254,7 +254,16 @@ function selectFrom(table, select, alias = 't') {
 
     // Rekurzia: vnútro embedu môže samo obsahovať ďalšie embedy.
     const list = selectFrom(child, embed.inner, inner);
-    const parentFk = hinted ?? `${child.replace(/ies$/, 'y').replace(/s$/, '')}_id`;
+    // Meno stĺpca podľa mena tabuľky je odhad a niekedy je vedľa:
+    // `event_attendees` ukazuje na `profiles` stĺpcom `user_id`, nie
+    // `profile_id`. Keď odhad na rodičovi neexistuje, skúsi sa `user_id` —
+    // tak sa v tejto schéme volá odkaz na človeka. Bez toho vrátil embed
+    // prázdno a obrazovka „Kto ide" vyzerala v náhľade prázdna na evente,
+    // na ktorý idú dvaja.
+    const guess = `${child.replace(/ies$/, 'y').replace(/s$/, '')}_id`;
+    const parentFk = hinted
+      ?? (hasColumn(table, guess) ? guess
+        : hasColumn(table, 'user_id') ? 'user_id' : guess);
 
     if (!hinted && hasColumn(child, fk)) {
       // Dieťa: ticket_types.event_id -> events.id

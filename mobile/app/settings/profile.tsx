@@ -123,6 +123,7 @@ export default function EditProfileScreen() {
 
       <View style={styles.avatarSection}>
         <Pressable onPress={() => changePhoto('library')} disabled={uploading}>
+          {/* bez krúžku: ovládací prvok na zmenu fotky, nie odkaz na príbeh. */}
           <Avatar url={profile?.avatar_url} name={displayName} size={104} />
           {uploading ? (
             <View style={styles.overlay}>

@@ -520,6 +520,7 @@ export function Avatar({
             alignItems: 'center',
             justifyContent: 'center',
           }}>
+            {/* bez krúžku: toto je vnútro krúžku, ktorý kreslí `Avatar` sám. */}
             <Avatar url={url} name={name} size={inner} square={square} />
           </View>
         </LinearGradient>
@@ -564,6 +565,8 @@ export function AvatarStack({
     <View style={styles.avatarStack}>
       {people.slice(0, max).map((person, index) => (
         <View key={person.id} style={{ marginLeft: index === 0 ? 0 : -8 }}>
+          {/* bez krúžku: preložené tváre veľkosti 26–30 bodov. Krúžky by sa
+              navzájom prekrývali a každá tvár by kradla ťuknutie karty. */}
           <Avatar url={person.avatar_url} name={person.name} size={size} ring />
         </View>
       ))}

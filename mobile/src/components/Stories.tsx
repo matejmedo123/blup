@@ -92,6 +92,8 @@ export function StoryRow({
                 style={styles.ring}
               >
                 <View style={styles.inner}>
+                  {/* bez krúžku: krúžok kreslí rad sám a je to ten istý krúžok.
+                      Dvakrát by boli dva. */}
                   <Avatar url={profile?.avatar_url} name={profile?.display_name} size={50} />
                 </View>
               </LinearGradient>
@@ -100,11 +102,13 @@ export function StoryRow({
               // Svietiaci krúžok nad vlastnou tvárou až do vypršania príbehu
               // hovoril „tu je niečo nové" o niečom, čo si práve pozeral.
               <View style={styles.seenRing}>
+                {/* bez krúžku: pozretý príbeh krúžok nemá — o tom je tento stav. */}
                 <Avatar url={profile?.avatar_url} name={profile?.display_name} size={RING - 6} />
               </View>
             ) : (
               <View style={styles.plainRing}>
                 <View style={styles.inner}>
+                  {/* bez krúžku: ešte nič nemáš, kruh je tu s plusom na pridanie. */}
                   <Avatar url={profile?.avatar_url} name={profile?.display_name} size={50} />
                 </View>
                 <View style={styles.plus}>
@@ -145,6 +149,7 @@ function Ring({ ring, onPress }: { ring: StoryRing; onPress: () => void }) {
           style={styles.ring}
         >
           <View style={styles.inner}>
+            {/* bez krúžku: krúžok kreslí tento rad sám, viď `LinearGradient` vyššie. */}
             <Avatar
               url={ring.avatar_url}
               name={ring.display_name ?? ring.username}
@@ -160,6 +165,7 @@ function Ring({ ring, onPress }: { ring: StoryRing; onPress: () => void }) {
         // story and is tappable, so nothing is lost by taking it off: the ring
         // now means one thing only, and it means it loudly.
         <View style={styles.seenRing}>
+          {/* bez krúžku: pozretý príbeh krúžok nemá — o tom je tento stav. */}
           <Avatar
             url={ring.avatar_url}
             name={ring.display_name ?? ring.username}
@@ -393,6 +399,8 @@ export function StoryViewer({
         {current ? (
           <>
             <View style={styles.head}>
+              {/* bez krúžku: hlavička príbehu, ktorý práve pozeráš. Krúžok
+                  vedúci na to, čo je pod ním, by bol kruh v kruhu. */}
               <Avatar
                 size={34}
                 url={ring?.avatar_url}
@@ -600,7 +608,12 @@ function Viewers({ storyId }: { storyId: string }) {
       style={styles.viewerList}
       renderItem={({ item }) => (
         <View style={styles.viewerRow}>
-          <Avatar url={item.avatar_url} name={item.display_name ?? item.username} size={28} />
+          <Avatar
+            url={item.avatar_url}
+            name={item.display_name ?? item.username}
+            size={28}
+            userId={item.viewer_id}
+          />
           <Text style={styles.viewerName} numberOfLines={1}>
             {item.display_name ?? item.username}
           </Text>

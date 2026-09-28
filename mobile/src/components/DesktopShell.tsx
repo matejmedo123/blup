@@ -277,6 +277,8 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
               isHovered(state) && styles.linkHovered,
             ]}
           >
+            {/* bez krúžku: položka ponuky. Ťuknutie vedie na účet a musí tam
+                viesť vždy, nech máš príbeh alebo nie. */}
             <Avatar name={profile?.display_name ?? profile?.username ?? '·'} url={profile?.avatar_url} size={32} />
             {collapsed ? null : (
             <View style={styles.meText}>

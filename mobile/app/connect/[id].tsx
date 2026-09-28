@@ -104,7 +104,12 @@ function MatchRow({ match }: { match: PeopleMatch }) {
       style={styles.row}
       onPress={() => router.push(profileHref({ id: match.user_id, username: match.username }))}
     >
-      <Avatar url={match.avatar_url} name={match.display_name} size={46} />
+      <Avatar
+        url={match.avatar_url}
+        name={match.display_name}
+        size={46}
+        userId={match.user_id}
+      />
       <View style={styles.flex}>
         <Text style={styles.name}>{match.display_name ?? match.username}</Text>
         <Caption style={styles.reason}>{describeMatch(match)}</Caption>

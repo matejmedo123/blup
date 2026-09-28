@@ -188,6 +188,23 @@ kľúčom (rad nad feedom si pýtal 30 krúžkov, zvyšok appky 60). Dve odpoved
 tú istú otázku sa vždy raz rozídu — a vtedy vidíš krúžok nad feedom a pri tej
 istej tvári v zozname ľudí už nie.
 
+### A krúžok je teraz naozaj všade
+
+Krúžok kreslí `Avatar` sám, ale len keď dostane `userId`. Bez neho nakreslí
+obyčajnú tvár a nič sa nestane — nespadne to, nevypíše sa nič, len tá obrazovka
+ticho nevie o príbehoch. Malo ho deväť miest z dvadsiatich piatich.
+
+Pribudol v komunitách (členovia aj autori príspevkov), medzi tými, čo idú na
+event, u organizátora na stránke eventu, na karte eventu vo feede, v návrhoch
+ľudí a v zozname tých, čo ti príbeh pozreli. Nepribudol tam, kde je tvár
+ovládacím prvkom (nastavenia, hlavička vlastného profilu, položka ponuky),
+kde ide o logo značky a kde by sa preložené tváre pod kartou eventu navzájom
+prekrývali — každé také miesto má odteraz napísané prečo.
+
+Stráži to `npm run check:avatars`: tvár musí mať buď krúžok, alebo komentár
+`bez krúžku: <prečo>`. Dôvod v komentári je lacný; dôvod, ktorý si nikto
+nezapísal, sa o pol roka nedá odlíšiť od zabudnutia.
+
 ---
 
 ## Čo bolo nové v balíku predtým
