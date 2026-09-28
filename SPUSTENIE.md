@@ -576,8 +576,11 @@ select cron.schedule('blup-resale-holds', '*/2 * * * *', $$
 $$);
 
 -- burza: komu už peniaze patria. Nárok vzniká až po evente a pri vstupenke z
--- inej platformy až keď kupujúci potvrdí, že fungovala — obe podmienky sú
--- v samotnej funkcii, tu sa len pravidelne spúšťa.
+-- inej platformy až keď kupujúci potvrdí, že fungovala — a keď sa neozve,
+-- objednávku po uplynutí `resale_settlement_days` uzavrie za neho
+-- `auto_complete_resale_orders`, ktorú si táto funkcia zavolá sama. Preto je
+-- to jeden cron a nie dva: dva by sa museli spúšťať v správnom poradí, a to je
+-- vec, ktorú človek pri nastavovaní pokazí.
 select cron.schedule('blup-resale-settle', '41 * * * *', $$
   select public.settle_resale_orders(500);
 $$);
