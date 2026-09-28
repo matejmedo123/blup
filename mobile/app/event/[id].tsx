@@ -995,7 +995,7 @@ export default function EventDetailScreen() {
             Pod vstupenkami a nad popisom zámerne: kto sem prišiel kúpiť a
             oficiálne sú vypredané, musí sa o burze dozvedieť skôr, než začne
             čítať, o čom event je. */}
-        <SwapOnEvent eventId={data.id} canSell={hasMyTicket} />
+        <SwapOnEvent eventId={data.id} eventSlug={data.slug} canSell={hasMyTicket} />
 
         {/* --- about -------------------------------------------------------- */}
         {data.description ? (

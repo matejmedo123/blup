@@ -25,9 +25,15 @@ import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
  * Prázdna sekcia „burza" pod každým eventom je len šum.
  */
 export function SwapOnEvent({
-  eventId, canSell,
+  eventId, eventSlug, canSell,
 }: {
+  /** Uuid. Tým sa pýtame servera a tým sa vypisuje ponuka. */
   eventId: string;
+  /**
+   * Čitateľná časť adresy. Do odkazu na SWAP ide ona, do dotazov nie —
+   * `/swap/hypeland` sa dá prečítať aj nadiktovať, uuid ani jedno.
+   */
+  eventSlug?: string | null;
   /** Mám na tento event vstupenku, ktorú by som mohol ponúknuť ďalej? */
   canSell: boolean;
 }) {
@@ -68,7 +74,7 @@ export function SwapOnEvent({
             </View>
             <Button
               title="Na SWAP"
-              onPress={() => router.push(`/swap/${eventId}`)}
+              onPress={() => router.push(`/swap/${eventSlug || eventId}`)}
               style={styles.button}
             />
           </View>

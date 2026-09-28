@@ -43,7 +43,15 @@ const SOURCES: { key: ResaleSource | null; label: string }[] = [
 ];
 
 export default function EventResaleScreen() {
-  const { event: eventId } = useLocalSearchParams<{ event: string }>();
+  /**
+   * V adrese je slug (`/swap/hypeland`) alebo uuid (`/swap/863b30b0-…`).
+   *
+   * Obe musia fungovať: odkaz, ktorý si niekto pred mesiacom hodil do chatu,
+   * nesmie prestať fungovať preto, že sa adresy stali čitateľnými. `getEvent`
+   * si s oboma poradí sám; funkcie pre ponuky ale poznajú len uuid, takže sa
+   * čaká, kým event dorazí, a až z neho sa berie `id`.
+   */
+  const { event: eventRef } = useLocalSearchParams<{ event: string }>();
   const layout = useLayout();
   const [sort, setSort] = useState<ResaleSort>('price_asc');
   const [source, setSource] = useState<ResaleSource | null>(null);
@@ -58,10 +66,12 @@ export default function EventResaleScreen() {
   const [place, setPlace] = useState('');
 
   const event = useQuery({
-    queryKey: ['event', eventId],
-    queryFn: () => getEvent(eventId!),
-    enabled: Boolean(eventId),
+    queryKey: ['event', eventRef],
+    queryFn: () => getEvent(eventRef!),
+    enabled: Boolean(eventRef),
   });
+
+  const eventId = event.data?.id ?? null;
 
   const summary = useQuery({
     queryKey: ['resale', 'summary', eventId],
@@ -84,7 +94,24 @@ export default function EventResaleScreen() {
     staleTime: 60_000,
   });
 
-  if (listings.isLoading) return <Screen><LoadingState label="Načítavam ponuky…" /></Screen>;
+  // Aj kým sa hľadá event. Bez toho by sa na moment ukázalo „žiadne ponuky" —
+  // dotaz na ponuky totiž ešte nebeží, lebo nevie, na aký event sa pýtať, a
+  // vypnutý dotaz sa netvári, že načítava.
+  if (event.isLoading || listings.isLoading) {
+    return <Screen><LoadingState label="Načítavam ponuky…" /></Screen>;
+  }
+  if (event.error) {
+    return (
+      <Screen>
+        <ErrorState
+          title="Taký event sme nenašli"
+          message="Odkaz je asi neúplný alebo event medzitým zmizol."
+          onRetry={() => router.replace('/swap')}
+          retryLabel="Späť na SWAP"
+        />
+      </Screen>
+    );
+  }
   if (listings.error) {
     return (
       <Screen>

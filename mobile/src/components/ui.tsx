@@ -613,18 +613,24 @@ export function EmptyState({
 }
 
 export function ErrorState({
-  message, onRetry, title = 'Toto nevyšlo',
+  message, onRetry, title = 'Toto nevyšlo', retryLabel = 'Skúsiť znova',
 }: {
   message: string;
   onRetry?: () => void;
   title?: string;
+  /**
+   * Čo je na tlačidle. Nie vždy je to „skúsiť znova": pri zlom odkaze sa
+   * opakovaním nič nezmení a jediné rozumné je odísť inam. Tlačidlo, ktoré
+   * sľubuje opakovanie tam, kde opakovanie nemá zmysel, je horšie než žiadne.
+   */
+  retryLabel?: string;
 }) {
   return (
     <View style={styles.stateContainer}>
       <Text style={styles.stateEmoji}>⚠️</Text>
       <Text style={styles.stateTitle}>{title}</Text>
       <Text style={styles.stateBody}>{message}</Text>
-      {onRetry ? <Button title="Skúsiť znova" onPress={onRetry} style={styles.stateAction} /> : null}
+      {onRetry ? <Button title={retryLabel} onPress={onRetry} style={styles.stateAction} /> : null}
     </View>
   );
 }

@@ -10,7 +10,7 @@ import {
   Button, Caption, EmptyState, LoadingState, Screen,
 } from '@/components/ui';
 import { useLayout, CARD_MAX } from '@/hooks/useLayout';
-import { formatMoney } from '@/lib/format';
+import { eventHref, formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -85,8 +85,8 @@ export default function BrowseScreen() {
         }
         renderItem={({ item }) => (
           <View style={layout.columns > 1 ? styles.cell : undefined}>
-            <EventCard event={item} onPress={() => router.push(`/event/${item.id}`)} />
-            <ResaleLine eventId={item.id} />
+            <EventCard event={item} onPress={() => router.push(eventHref(item))} />
+            <ResaleLine eventId={item.id} eventRef={item.slug || item.id} />
           </View>
         )}
       />
@@ -101,7 +101,12 @@ export default function BrowseScreen() {
  * vypredanom koncerte je toto to jediné tlačidlo, ktoré niekam vedie, a musí
  * byť pri tom správnom termíne.
  */
-function ResaleLine({ eventId }: { eventId: string }) {
+function ResaleLine({ eventId, eventRef }: {
+  /** Uuid — funkcie pre ponuky poznajú len to. */
+  eventId: string;
+  /** Čo ide do adresy: slug, keď ho event má. */
+  eventRef: string;
+}) {
   const summary = useQuery({
     queryKey: ['resale', 'summary', eventId],
     queryFn: () => getEventResaleSummary(eventId),
@@ -127,7 +132,7 @@ function ResaleLine({ eventId }: { eventId: string }) {
       <Button
         title="Pozrieť"
         variant="secondary"
-        onPress={() => router.push(`/swap/${eventId}`)}
+        onPress={() => router.push(`/swap/${eventRef}`)}
         style={styles.resaleButton}
       />
     </View>

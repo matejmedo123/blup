@@ -20,6 +20,12 @@ export const queryClient = new QueryClient({
         // Never retry an authorization failure — it will never succeed.
         const message = (error as Error)?.message ?? '';
         if (message.includes('NOT_AUTHORIZED') || message.includes('UNAUTHENTICATED')) return false;
+        // Nor "there is no such row". PostgREST answers `.single()` with
+        // PGRST116 when nothing matched; a bad address will not start matching
+        // on the third attempt. Retrying it only means the person stares at a
+        // spinner for ten seconds before being told the page is not there.
+        const code = (error as { code?: string })?.code ?? '';
+        if (code === 'PGRST116' || message.includes('PGRST116')) return false;
         return failureCount < 2;
       },
       refetchOnWindowFocus: false,

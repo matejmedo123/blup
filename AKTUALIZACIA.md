@@ -146,6 +146,12 @@ Na nasadenie z toho **nevyplýva nič navyše**: je to jedna migrácia, ktorú
 zachytí `npx supabase db push` v kroku 1, a žiadna nová serverová funkcia ani
 cron. Bucket `resale-tickets` už existuje, len dostal ďalšie dve politiky.
 
+**A SWAP má čitateľné adresy.** Namiesto
+`blup.sk/swap/863b30b0-f37e-4acc-8e6f-d856a0b1c0b6` je tam
+`blup.sk/swap/hypeland`. Uuid nikde nezmizlo — stará adresa vedie na tú istú
+stránku, takže odkaz, ktorý si niekto pred mesiacom hodil do chatu, funguje
+ďalej. Aj toto je len migrácia a nový web.
+
 ---
 
 ## Čo bolo nové v balíku predtým

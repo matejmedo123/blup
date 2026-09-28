@@ -95,6 +95,31 @@ nenapísal. Vtedy sa ukáže všetko, čo je v ponuke.
 
 ---
 
+## Adresy
+
+```
+https://blup.sk/swap/hypeland                            ← takto
+https://blup.sk/swap/863b30b0-f37e-4acc-8e6f-d856a0b1c0b6 ← funguje ďalej
+```
+
+Eventy majú `slug` od začiatku; SWAP ho dlho nedostával do ruky, lebo karty
+a hľadanie vracali len `event_id`. Teraz ho vracajú obe (`event_slug`, a
+v `swap_search` je slug rovno v `key`, čiže v tom, z čoho appka skladá adresu)
+a `swapRef()` v `api/swap.ts` je jediné miesto, kde sa rozhoduje medzi slugom
+a uuid.
+
+**Uuid sa neodstránilo ani zo vstupov, ani z výstupov.** Odkaz, ktorý si niekto
+pred mesiacom hodil do chatu, nesmie prestať fungovať preto, že sa adresy stali
+čitateľnými — a eventy z čias pred slugmi žiadny nemajú. Obrazovka ponúk si
+adresu preloží cez `getEvent`, ktorý prijíma oboje, a funkciám pre ponuky
+podáva už len uuid; tie poznajú výhradne jeho.
+
+Zlá adresa skončí vetou „Taký event sme nenašli", nie nekonečným točiacim sa
+kolieskom: dotaz, ktorý zlyhal na „taký riadok neexistuje" (`PGRST116`), sa
+neopakuje — tretí pokus by dopadol rovnako.
+
+---
+
 ## Cesta kupujúceho
 
 ```

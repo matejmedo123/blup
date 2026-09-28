@@ -19,6 +19,10 @@ export type SwapHitKind = 'artist' | 'city' | 'venue' | 'event';
 
 export interface SwapHit {
   kind: SwapHitKind;
+  /**
+   * Čo ide do adresy. Pri interpretovi, meste a mieste je to ich meno; pri
+   * evente slug, a keď ho nemá, uuid.
+   */
   key: string;
   label: string;
   sublabel: string | null;
@@ -35,6 +39,14 @@ export interface SwapHit {
 
 export interface SwapEvent {
   event_id: string;
+  /**
+   * Čitateľná časť adresy, napríklad `hypeland`.
+   *
+   * Môže chýbať: eventy založené pred zavedením slugov ho nemajú a adresa sa
+   * vtedy postaví z uuid. Na to je `swapRef()` nižšie — aby sa to nemuselo
+   * rozhodovať na každom mieste, kde sa na SWAP odkazuje.
+   */
+  event_slug: string | null;
   title: string;
   city: string | null;
   venue_name: string | null;
@@ -47,6 +59,17 @@ export interface SwapEvent {
   from_cents: number | null;
   currency: string | null;
   verified_count: number;
+}
+
+/**
+ * Čo sa má objaviť v adrese `/swap/…`.
+ *
+ * Slug, keď ho event má, inak uuid. Jedno miesto, nie rozhodovanie na každej
+ * karte — inak jedna z nich ostane pri uuid a človek dostane raz čitateľný
+ * odkaz a raz nečitateľný podľa toho, kde klikol.
+ */
+export function swapRef(event: { event_slug?: string | null; event_id: string }): string {
+  return event.event_slug || event.event_id;
 }
 
 /**

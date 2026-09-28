@@ -314,7 +314,9 @@ function HitCard({ hit }: { hit: SwapHit }) {
     artist: 'Interpret', city: 'Mesto', venue: 'Miesto', event: 'Event',
   };
   const go = () => {
-    if (hit.kind === 'event' && hit.event_id) router.push(`/swap/${hit.event_id}`);
+    // Pri evente je `key` už čitateľná adresa (slug, a keď ho event nemá, tak
+    // uuid) — rozhoduje o tom server, nie táto obrazovka.
+    if (hit.kind === 'event') router.push(`/swap/${encodeURIComponent(hit.key)}`);
     else router.push(`/swap/for/${hit.kind}/${encodeURIComponent(hit.key)}`);
   };
 

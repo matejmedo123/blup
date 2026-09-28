@@ -129,6 +129,12 @@ function SellTicketScreen() {
 
   const chosen: TicketWithEvent | undefined = sellable.find((t) => t.id === ticketId);
 
+  const externalEvent = useQuery({
+    queryKey: ['event', eventParam],
+    queryFn: () => getEvent(eventParam!),
+    enabled: source === 'external' && !!eventParam,
+  });
+
   /**
    * Event, ku ktorému ponuka patrí.
    *
@@ -137,16 +143,18 @@ function SellTicketScreen() {
    * priamo tu. Predtým sa bez URL nedalo vypísať nič a človek, ktorý prišiel
    * na SWAP s lístkom v ruke, narazil na vetu „otvor event a daj Predať“ bez
    * toho, aby vedel, kde ten event hľadať.
+   *
+   * Poradie nie je náhodné: `externalEvent` musí byť vyhlásené VYŠŠIE, inak
+   * sa na túto premennú siahne skôr, než vznikne, a obrazovka spadne pri
+   * každom vykreslení. TypeScript to nezachytí.
    */
   const eventId = source === 'blup'
     ? chosen?.event_id ?? null
-    : eventParam ?? pickedEvent?.id ?? null;
-
-  const externalEvent = useQuery({
-    queryKey: ['event', eventParam],
-    queryFn: () => getEvent(eventParam!),
-    enabled: source === 'external' && !!eventParam,
-  });
+    // `eventParam` môže byť slug aj uuid — adresy SWAPu sú čitateľné a odkaz
+    // sem sa skladá z nich. Server pri vypisovaní ponuky pozná len uuid, tak
+    // sa berie to, ktoré prišlo s eventom, a `eventParam` je len záloha, kým
+    // sa event načíta.
+    : externalEvent.data?.id ?? pickedEvent?.id ?? eventParam ?? null;
 
   /** Hľadanie eventu, keď sa sem neprišlo z konkrétneho. */
   const eventHits = useQuery({

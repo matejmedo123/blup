@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
-import type { SwapEvent } from '@/api/swap';
+import { swapRef, type SwapEvent } from '@/api/swap';
 import { GradientCover } from '@/components/GradientCover';
 import { Caption } from '@/components/ui';
 import { formatEventDate, formatMoney } from '@/lib/format';
@@ -32,7 +32,7 @@ export function SwapEventCard({ event }: { event: SwapEvent }) {
       style={styles.card}
       accessibilityRole="button"
       accessibilityLabel={`${event.title}, ${event.ticket_count} vstupeniek`}
-      onPress={() => router.push(`/swap/${event.event_id}`)}
+      onPress={() => router.push(`/swap/${swapRef(event)}`)}
     >
       <GradientCover
         uri={event.cover_image_url}
