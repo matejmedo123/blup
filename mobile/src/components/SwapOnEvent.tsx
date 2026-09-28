@@ -74,6 +74,7 @@ export function SwapOnEvent({
             </View>
             <Button
               title="Na SWAP"
+              inRow
               onPress={() => router.push(`/swap/${eventSlug || eventId}`)}
               style={styles.button}
             />
@@ -97,6 +98,7 @@ export function SwapOnEvent({
           <Button
             title="Predať"
             variant="secondary"
+            inRow
             onPress={() => router.push(`/swap/sell?event=${eventId}`)}
             style={styles.button}
           />
@@ -115,6 +117,7 @@ export function SwapOnEvent({
           <Button
             title="Predať"
             variant="secondary"
+            inRow
             onPress={() => router.push(`/swap/sell?event=${eventId}`)}
             style={styles.button}
           />
@@ -137,14 +140,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     gap: spacing.xs,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   rowSecond: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: spacing.sm,
     marginTop: spacing.xs,
   },
-  text: { flex: 1 },
+  // `minWidth` je poistka, nie ozdoba: `flex: 1` sám osebe dovolí zmrštiť sa
+  // až na nulu a vtedy sa text láme po jednom písmene pod seba. So zalomením
+  // riadku vyššie to pri úzkej karte znamená, že tlačidlo spadne pod text —
+  // a nie že text zmizne.
+  text: { flex: 1, minWidth: 180 },
   title: { ...typography.bodyStrong, color: colors.text },
   button: { minWidth: 120 },
   note: { color: colors.textTertiary },

@@ -157,9 +157,15 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'teal
  *
  * `full` opts out for the rare case that genuinely wants edge-to-edge — a
  * sticky bottom bar, a button sharing a row with a price.
+ *
+ * `inRow` je pre tlačidlo, ktoré stojí VEDĽA textu. Bez neho si vezme
+ * `width: 100%` zo základného štýlu, susedovi nezostane nič a react-native-web
+ * mu zalomí text po jednom písmene pod seba — presne to sa stalo boxu burzy
+ * pod hlavným tlačidlom na nákup a vyzeralo to ako rozbitá stránka.
  */
 export function Button({
   title, onPress, variant = 'primary', loading, disabled, style, icon, compact, full, large,
+  inRow,
 }: {
   title: string;
   onPress?: () => void;
@@ -173,6 +179,14 @@ export function Button({
   full?: boolean;
   /** The 56px screen-bottom CTA. */
   large?: boolean;
+  /**
+   * Stojí vedľa textu, nie nad ním.
+   *
+   * Šírka sa riadi obsahom a tlačidlo sa nesmie zmršťovať — susedný text má
+   * dostať zvyšok riadku. Zvislý okraj tiež nie: v riadku rozhoduje o medzerách
+   * rodič.
+   */
+  inRow?: boolean;
 }) {
   const isDisabled = disabled || loading;
   // The one colour Premium repaints. Read here rather than baked into the
@@ -190,6 +204,7 @@ export function Button({
         styles.button,
         large && styles.buttonLarge,
         compact && styles.buttonCompact,
+        inRow && styles.buttonInRow,
         full && styles.buttonFull,
         variant === 'primary' && styles.buttonPrimary,
         variant === 'primary' && { backgroundColor: accent.accent },
@@ -834,7 +849,15 @@ const styles = StyleSheet.create({
   buttonFull: { alignSelf: 'stretch', maxWidth: undefined },
   // In a row the parent decides the gaps; the vertical margin would only push
   // the row apart from its neighbours.
-  buttonInRow: { marginVertical: 0, width: 'auto', maxWidth: undefined, alignSelf: 'auto' },
+  buttonInRow: {
+    marginVertical: 0,
+    width: 'auto',
+    maxWidth: undefined,
+    alignSelf: 'auto',
+    // Bez tohto sa tlačidlo v úzkom riadku zmrští a text vedľa neho aj tak
+    // nedostane nič — flex rozdelí priestor na dve nuly.
+    flexShrink: 0,
+  },
   buttonPrimary: { backgroundColor: colors.accent, ...shadow.cta },
   buttonSecondary: { backgroundColor: colors.surfaceElevated2 },
   buttonGhost: { backgroundColor: 'transparent' },

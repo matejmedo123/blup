@@ -363,10 +363,20 @@ export default function HomeScreen() {
 
       <View style={styles.header}>
         <View style={styles.flex}>
-          {/* Once the events are on screen, "Zisťujem polohu" is no longer true
-              — the position is known, only its name is not. */}
+          {/*
+            Hlavička hovorí to, čo sa naozaj deje.
+
+            „Zisťujem polohu" svietilo vždy, keď sme polohu nemali — teda aj
+            vtedy, keď ju človek nepovolil a hneď pod tým mu banner ponúkal, nech
+            ju zapne. Dva riadky si protirečili: jeden tvrdil, že sa pracuje, a
+            druhý, že sa čaká na neho. Zisťovanie je stav `requesting` a nič iné;
+            keď polohu nemáme a ani sa o ňu práve nepokúšame, povie sa to rovno.
+          */}
           <Text style={styles.city}>
-            ◎ {(location.city ?? (coords ? 'V tvojom okolí' : 'Zisťujem polohu')).toUpperCase()}
+            ◎ {(location.city
+              ?? (coords ? 'V tvojom okolí'
+                : location.status === 'requesting' ? 'Zisťujem polohu'
+                  : 'Bez polohy')).toUpperCase()}
           </Text>
           <Text style={styles.title}>Dnes okolo teba</Text>
         </View>

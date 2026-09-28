@@ -42,6 +42,7 @@ import {
 } from '@/lib/format';
 import { EventMap } from '@/components/EventMap';
 import { GradientCover } from '@/components/GradientCover';
+import { useLayout, CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 import {
   Avatar, Badge, Body, Button, Caption, Chip, Divider, ErrorState, IconButton, InfoBox, Input,
   LoadingState, Mono, Notice, SectionHeader,
@@ -430,6 +431,15 @@ export default function EventDetailScreen() {
     queryClient.invalidateQueries({ queryKey: ['events'] }),
   ]);
 
+  /**
+   * Nad skorými návratmi, nie pod nimi.
+   *
+   * `useLayout` je hook a hook za `if (…) return` je React error #310 — build
+   * ním prejde, typová kontrola tiež, a obrazovka spadne až v prehliadači.
+   * Presne tak sa tu už raz stalo, že celá stránka eventu bola biela.
+   */
+  const layout = useLayout();
+
   const data = event.data;
 
   const handleRsvp = (status: 'going' | 'interested') =>
@@ -685,6 +695,123 @@ export default function EventDetailScreen() {
     }
   };
 
+  const onSale = data.ticket_types.filter((t) => t.quantity_sold < t.quantity_total);
+  const allSoldOut = hasTickets && onSale.length === 0;
+  // Najlacnejší lístok aj s vlastnou menou — mena patrí lístku, nie eventu,
+  // a brať ju odinakiaľ je cesta, ako raz napísať eurá nad korunovou cenou.
+  const cheapest = onSale.length > 0
+    ? onSale.reduce((low, t) => (t.price_cents < low.price_cents ? t : low), onSale[0])
+    : null;
+  const sellsTickets = hasTickets && !isPast && data.status !== 'cancelled';
+
+  /**
+   * Jedna cesta ku kúpe, nie dve.
+   *
+   * Pri každom lístku bolo „Pridať" a pod tým ešte veľké „Kúpiť — vybrať
+   * miesto". Nebolo z čoho uhádnuť, aký je medzi nimi rozdiel a či sa niekde
+   * naozaj vyberá miesto. Rozhoduje preto typ lístka: kde je plán sály, tam sa
+   * miesto vyberá a „Pridať" tam nemá čo robiť; kde nie je, tam sa pridáva do
+   * košíka a tlačidlo dole je už len „Do košíka".
+   */
+  const ticketPanel = sellsTickets ? (
+    <View style={styles.ticketPanel}>
+      <View style={styles.ticketPanelHead}>
+        <Text style={styles.ticketPanelTitle}>Vstupenky</Text>
+        {cheapest ? (
+          <Text style={styles.ticketPanelFrom}>
+            od {formatPrice(cheapest.price_cents, cheapest.currency)}
+          </Text>
+        ) : null}
+      </View>
+
+      {data.ticket_types.map((ticket) => {
+        const remaining = ticket.quantity_total - ticket.quantity_sold;
+        const soldOut = remaining <= 0;
+        const numbered = numberedTypes.has(ticket.id);
+
+        return (
+          <View key={ticket.id} style={styles.ticketRow}>
+            <View style={styles.flex}>
+              <Text style={styles.ticketName}>{ticket.name}</Text>
+              {ticket.description ? <Caption>{ticket.description}</Caption> : null}
+              <Caption style={soldOut ? styles.soldOut : undefined}>
+                {soldOut ? 'Vypredané' : `zostáva ${remaining}`}
+                {inCart(ticket.id) > 0 ? ` · ${inCart(ticket.id)} v košíku` : ''}
+              </Caption>
+            </View>
+            <View style={styles.ticketPriceCell}>
+              <Text style={styles.ticketPrice}>
+                {formatPrice(ticket.price_cents, ticket.currency)}
+              </Text>
+              {vatLabel && ticket.price_cents > 0 ? (
+                <Caption style={styles.ticketVat}>({vatLabel})</Caption>
+              ) : null}
+            </View>
+            {soldOut ? (
+              <Button
+                title={waitingFor.has(ticket.id) ? 'Čakáš' : 'Daj mi vedieť'}
+                variant={waitingFor.has(ticket.id) ? 'ghost' : 'secondary'}
+                compact
+                disabled={busy}
+                onPress={() => void toggleWaitlist(ticket.id, waitingFor.has(ticket.id))}
+              />
+            ) : numbered ? (
+              <Button
+                title="Vybrať miesto"
+                variant="secondary"
+                compact
+                onPress={() => router.push(`/event/seats/${data.id}`)}
+              />
+            ) : HAS_CART ? (
+              <Button
+                title="Pridať"
+                variant="secondary"
+                compact
+                disabled={busy}
+                onPress={() => void addTicket(ticket.id)}
+              />
+            ) : null}
+          </View>
+        );
+      })}
+
+      {/* Tlačidlo dole len vtedy, keď má čo spraviť. Pri sále s plánom sa
+          miesto vyberá pri konkrétnom lístku a druhé tlačidlo, ktoré vedie
+          na to isté, je len otázka navyše. */}
+      {allSoldOut ? (
+        <Notice
+          tone="warning"
+          title="Vypredané"
+          body="Skús burzu nižšie — vstupenky tam ponúkajú ľudia, ktorí nemôžu ísť."
+        />
+      ) : cartCount > 0 ? (
+        <Button
+          title={`Do košíka (${cartCount})`}
+          loading={busy}
+          onPress={() => void buy()}
+          full
+          style={styles.ticketButton}
+        />
+      ) : sellsFromPlan ? (
+        <Button
+          title="Vybrať miesto"
+          loading={busy}
+          onPress={() => router.push(`/event/seats/${data.id}`)}
+          full
+          style={styles.ticketButton}
+        />
+      ) : !HAS_CART ? (
+        <Button
+          title="Kúpiť"
+          loading={busy}
+          onPress={() => void buy()}
+          full
+          style={styles.ticketButton}
+        />
+      ) : null}
+    </View>
+  ) : null;
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       {/* --- hero ----------------------------------------------------------- */}
@@ -703,25 +830,39 @@ export default function EventDetailScreen() {
         </Pressable>
       </View>
 
-      <GradientCover
-        uri={data.cover_image_url}
-        category={data.category}
-        height={300}
-        whole
-        wholeMinRatio={0.66}
-        backdrop="blur"
-        showPlaceholderLabel={false}
-      />
-
-      {/* Under the poster, not over it. The title used to sit on the picture
-          with a dark gradient behind it, which on a phone covered the bottom
-          third — the part with the line-up and the date on it. */}
-      <View style={styles.heroBottom}>
-        <View style={styles.heroChips}>
-          <Chip label={categoryFamilies[familyFor(data.category)].label} />
-          {data.attendee_count > 20 ? <Chip label="Frčí" /> : null}
+      {/* --- hlavička: plagát, názov a vstupenky vedľa seba -------------------
+          Plagát cez celú šírku a v plnej výške tlačil cenu tak hlboko, že sa
+          k nej človek dostal až cez organizátora, tlačidlá a tváre — a dovtedy
+          netušil, či sú vstupenky za dvadsať eur alebo za dvesto. Je preto
+          o polovicu nižší a na širokej obrazovke stojí vedľa neho to, kvôli
+          čomu sem ľudia prišli. */}
+      <View style={[styles.hero, layout.isWide && styles.heroWide]}>
+        <View style={[styles.heroArt, layout.isWide && styles.heroArtWide]}>
+          <GradientCover
+            uri={data.cover_image_url}
+            category={data.category}
+            height={layout.isWide ? 260 : 170}
+            whole
+            wholeMinRatio={0.66}
+            backdrop="blur"
+            showPlaceholderLabel={false}
+          />
         </View>
-        <Text style={styles.heroTitle}>{data.title}</Text>
+
+        <View style={[styles.heroMain, layout.isWide && styles.heroMainWide]}>
+          <View style={styles.heroChips}>
+            <Chip label={categoryFamilies[familyFor(data.category)].label} />
+            {data.attendee_count > 20 ? <Chip label="Frčí" /> : null}
+          </View>
+          <Text style={styles.heroTitle}>{data.title}</Text>
+
+          <View style={styles.infoRow}>
+            <InfoBox label="Kedy" value={formatEventDate(data.start_at)} />
+            <InfoBox label="Kde" value={data.venue_name ?? data.city ?? 'Podľa mapy'} />
+          </View>
+
+          {ticketPanel}
+        </View>
       </View>
 
       <View style={styles.body}>
@@ -749,10 +890,11 @@ export default function EventDetailScreen() {
           />
         ) : null}
 
-        <View style={styles.infoRow}>
-          <InfoBox label="Kedy" value={formatEventDate(data.start_at)} />
-          <InfoBox label="Kde" value={data.venue_name ?? data.city ?? 'Podľa mapy'} />
-        </View>
+        {/* --- burza -------------------------------------------------------
+            Hneď pod vstupenkami: kto sem prišiel kúpiť a oficiálne je
+            vypredané, musí sa o burze dozvedieť skôr, než začne čítať, o čom
+            event je. */}
+        <SwapOnEvent eventId={data.id} eventSlug={data.slug} canSell={hasMyTicket} />
 
         {/* --- host --------------------------------------------------------- */}
         {/* An event belongs to an organization, not to a person. Where one hosts,
@@ -872,134 +1014,6 @@ export default function EventDetailScreen() {
           </Pressable>
         ) : null}
 
-        {/* --- who is going ------------------------------------------------- */}
-        {/* Directly under the header, above the tickets. "Is anybody I know
-            going" is the question people open an event to answer, and it was
-            four sections down — past the price, the description and the map. */}
-        <SectionHeader
-          title={`Kto ide · ${formatCount(data.attendee_count)}`}
-          action={attendees.data && attendees.data.length > 6 ? 'Zobraziť všetkých' : undefined}
-          onAction={() => router.push(`/event/attendees/${data.id}`)}
-        />
-
-        {(followedGoing.data ?? []).length > 0 ? (
-          <Notice
-            tone="accent"
-            title={`${followedGoing.data!.length} z tvojich kruhov ide`}
-            body={followedGoing
-              .data!.slice(0, 3)
-              .map((attendee) => attendee.profile?.display_name ?? 'Niekto')
-              .join(', ')}
-          />
-        ) : null}
-
-        {(attendees.data ?? []).length === 0 ? (
-          <Body muted>Zatiaľ nikto — buď prvý, kto povie, že ide.</Body>
-        ) : (
-          <FlatList
-            horizontal
-            data={attendees.data ?? []}
-            keyExtractor={(item) => item.user_id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.avatarRail}
-            renderItem={({ item }) => (
-              <Pressable
-                style={styles.attendee}
-                onPress={() => router.push(`/user/${item.user_id}`)}
-              >
-                <Avatar
-                  url={item.profile?.avatar_url}
-                  name={item.profile?.display_name}
-                  size={52}
-                  userId={item.profile?.id}
-                />
-                <Caption numberOfLines={1} style={styles.attendeeName}>
-                  {item.profile?.display_name?.split(' ')[0] ?? '—'}
-                </Caption>
-              </Pressable>
-            )}
-          />
-        )}
-
-        {/* --- tickets ------------------------------------------------------ */}
-        {hasTickets && !isPast ? (
-          <>
-            <SectionHeader title="Vstupenky" />
-            {data.ticket_types.map((ticket) => {
-              const remaining = ticket.quantity_total - ticket.quantity_sold;
-              const soldOut = remaining <= 0;
-
-              return (
-                <View key={ticket.id} style={styles.ticketRow}>
-                  <View style={styles.flex}>
-                    <Text style={styles.ticketName}>{ticket.name}</Text>
-                    {ticket.description ? <Caption>{ticket.description}</Caption> : null}
-                    <Caption style={soldOut ? styles.soldOut : undefined}>
-                      {soldOut ? 'Vypredané' : `zostáva ${remaining}`}
-                      {inCart(ticket.id) > 0 ? ` · ${inCart(ticket.id)} v košíku` : ''}
-                    </Caption>
-                  </View>
-                  <View style={styles.ticketPriceCell}>
-                    <Text style={styles.ticketPrice}>
-                      {formatPrice(ticket.price_cents, ticket.currency)}
-                    </Text>
-                    {vatLabel && ticket.price_cents > 0 ? (
-                      <Caption style={styles.ticketVat}>({vatLabel})</Caption>
-                    ) : null}
-                  </View>
-                  {soldOut ? (
-                    <Button
-                      title={waitingFor.has(ticket.id) ? 'Čakáš' : 'Daj mi vedieť'}
-                      variant={waitingFor.has(ticket.id) ? 'ghost' : 'secondary'}
-                      compact
-                      disabled={busy}
-                      onPress={() => void toggleWaitlist(ticket.id, waitingFor.has(ticket.id))}
-                    />
-                  ) : numberedTypes.has(ticket.id) && !soldOut ? (
-                    <Button
-                      title="Vybrať miesto"
-                      variant="secondary"
-                      compact
-                      onPress={() => router.push(`/event/seats/${data.id}`)}
-                    />
-                  ) : HAS_CART && !soldOut ? (
-                    <Button
-                      title="Pridať"
-                      variant="secondary"
-                      compact
-                      disabled={busy}
-                      onPress={() => void addTicket(ticket.id)}
-                    />
-                  ) : null}
-                </View>
-              );
-            })}
-
-            <Button
-              title={
-                cartCount > 0 ? `Do košíka (${cartCount})`
-                  : sellsFromPlan ? 'Kúpiť — vybrať miesto'
-                    : 'Kúpiť'
-              }
-              loading={busy}
-              onPress={() => {
-                if (cartCount === 0 && sellsFromPlan) {
-                  router.push(`/event/seats/${data.id}`);
-                  return;
-                }
-                void buy();
-              }}
-              disabled={data.ticket_types.every((t) => t.quantity_sold >= t.quantity_total)}
-              style={styles.ticketButton}
-            />
-          </>
-        ) : null}
-
-        {/* --- burza --------------------------------------------------------
-            Pod vstupenkami a nad popisom zámerne: kto sem prišiel kúpiť a
-            oficiálne sú vypredané, musí sa o burze dozvedieť skôr, než začne
-            čítať, o čom event je. */}
-        <SwapOnEvent eventId={data.id} eventSlug={data.slug} canSell={hasMyTicket} />
 
         {/* --- about -------------------------------------------------------- */}
         {data.description ? (
@@ -1042,6 +1056,58 @@ export default function EventDetailScreen() {
             )}
           </>
         ) : null}
+
+        {/* --- kto ide -------------------------------------------------------
+            Nad mapou, nie nad cenou. „Ide niekto, koho poznám?" je dobrá
+            otázka, ale nie prvá — kto prišiel kúpiť lístok, musel sa predtým
+            preškrabať cez organizátora, tlačidlá a rad tvárí, než sa dostal
+            k cene. Teraz je cena hore a tváre tam, kde sa človek rozhoduje,
+            či a s kým tam pôjde. */}
+        <SectionHeader
+          title={`Kto ide · ${formatCount(data.attendee_count)}`}
+          action={attendees.data && attendees.data.length > 6 ? 'Zobraziť všetkých' : undefined}
+          onAction={() => router.push(`/event/attendees/${data.id}`)}
+        />
+
+        {(followedGoing.data ?? []).length > 0 ? (
+          <Notice
+            tone="accent"
+            title={`${followedGoing.data!.length} z tvojich kruhov ide`}
+            body={followedGoing
+              .data!.slice(0, 3)
+              .map((attendee) => attendee.profile?.display_name ?? 'Niekto')
+              .join(', ')}
+          />
+        ) : null}
+
+        {(attendees.data ?? []).length === 0 ? (
+          <Body muted>Zatiaľ nikto — buď prvý, kto povie, že ide.</Body>
+        ) : (
+          <FlatList
+            horizontal
+            data={attendees.data ?? []}
+            keyExtractor={(item) => item.user_id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.avatarRail}
+            style={styles.rail}
+            renderItem={({ item }) => (
+              <Pressable
+                style={styles.attendee}
+                onPress={() => router.push(`/user/${item.user_id}`)}
+              >
+                <Avatar
+                  url={item.profile?.avatar_url}
+                  name={item.profile?.display_name}
+                  size={52}
+                  userId={item.profile?.id}
+                />
+                <Caption numberOfLines={1} style={styles.attendeeName}>
+                  {item.profile?.display_name?.split(' ')[0] ?? '—'}
+                </Caption>
+              </Pressable>
+            )}
+          />
+        )}
 
         {/* --- location ----------------------------------------------------- */}
         <SectionHeader title="Kde to je" />
@@ -1472,13 +1538,53 @@ const styles = StyleSheet.create({
   },
   savePillActive: { backgroundColor: colors.accent },
   savePillLabel: { ...typography.chip, color: colors.text },
-  heroBottom: {
+  /**
+   * Plagát a to, kvôli čomu sem ľudia prišli, vedľa seba.
+   *
+   * Na širokej obrazovke dve stĺpce: vľavo plagát, vpravo názov, kedy, kde a
+   * vstupenky. Na telefóne pod sebou, ale plagát o polovicu nižší — cez celú
+   * výšku tlačil cenu pod ohyb a človek sa k nej dostal až po troch palcoch
+   * scrollovania.
+   */
+  hero: {
     paddingHorizontal: spacing.gutter,
-    paddingTop: spacing.lg,
-    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    gap: spacing.lg,
+    maxWidth: CONTENT_MAX_WIDE,
+    width: '100%',
+    alignSelf: 'center',
   },
+  heroWide: { flexDirection: 'row', alignItems: 'flex-start' },
+  heroArt: { borderRadius: radius.lg, overflow: 'hidden' },
+  // Plagát si vezme menšiu polovicu; vstupenky potrebujú viac miesta než
+  // obrázok, lebo sa v nich čítajú ceny a názvy.
+  heroArtWide: { flex: 5, minWidth: 0 },
+  heroMain: { gap: spacing.sm },
+  heroMainWide: { flex: 6, minWidth: 320 },
   heroChips: { flexDirection: 'row', gap: spacing.sm },
   heroTitle: { ...typography.eventTitle, color: colors.text },
+
+  ticketPanel: {
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  ticketPanelHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  ticketPanelTitle: { ...typography.subheading, color: colors.text },
+  ticketPanelFrom: { ...typography.bodyStrong, color: colors.accentText },
+
+  // Vodorovný rad potrebuje vlastný štýl, inak si vezme celú zvyšnú výšku
+  // stránky. Stráži to `npm run check:rails`.
+  rail: { flexGrow: 0 },
 
   body: {
     padding: spacing.gutter,

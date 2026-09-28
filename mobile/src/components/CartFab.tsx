@@ -39,8 +39,19 @@ export function CartFab() {
 
   const quantity = cart.data?.quantity ?? 0;
 
+  /**
+   * Kde bublina prekáža viac, než pomôže.
+   *
+   * Okrem košíka a pokladne aj samotná stránka eventu: vstupenky sú tam hore
+   * a tlačidlo „Do košíka (N)" je priamo v nich, takže bublina nemá čo dodať —
+   * zato zakrývala tlačidlo „Pridať" pri poslednom lístku a jej rozbalený
+   * panel prekryl riadok „1 v košíku". Zhoda `^/event/<čokoľvek>$` je úzka
+   * zámerne: výber miesta (`/event/seats/…`) je vlastná obrazovka a tam sa
+   * bublina hodí.
+   */
   const onCartScreen =
     pathname === '/cart' ||
+    /^\/event\/[^/]+$/.test(pathname) ||
     pathname.startsWith('/event/checkout') ||
     pathname.startsWith('/order');
 
@@ -59,6 +70,10 @@ export function CartFab() {
   if (!HAS_CART || quantity === 0 || onCartScreen || outsideTheApp) return null;
 
   const total = cart.data?.total_cents ?? 0;
+  /** To, čo stoja samotné lístky — teda číslo, ktoré je aj pri lístku. */
+  const subtotal = (cart.data?.subtotal_cents ?? 0) - (cart.data?.discount_cents ?? 0);
+  const fee = (cart.data?.archive_fee_cents ?? 0) + (cart.data?.commission_cents ?? 0);
+  const currency = cart.data?.currency ?? 'EUR';
 
   // Whatever the screen has already put in this corner — the create-event
   // button, the map's event card — the bubble goes above it.
@@ -74,10 +89,26 @@ export function CartFab() {
     >
       {open ? (
         <View style={styles.panel}>
+          {/* Cena lístkov, nie súčet s poplatkom.
+              Predtým tu stálo „1 vstupenka · 45,00 €“ pri lístku za 44 € —
+              číslo, ktoré nikde inde na stránke nie je, a človek si prirodzene
+              myslí, že sa mu niečo prirátalo za chrbtom. Poplatok má vlastný
+              riadok a súčet tretí; nič sa neskrýva a nič si neprotirečí. */}
           <Text style={styles.panelTitle}>
             {quantity} {quantity === 1 ? 'vstupenka' : quantity < 5 ? 'vstupenky' : 'vstupeniek'}
-            {total > 0 ? ` · ${formatMoney(total, cart.data?.currency ?? 'EUR')}` : ''}
+            {subtotal > 0 ? ` · ${formatMoney(subtotal, currency)}` : ''}
           </Text>
+
+          {fee > 0 ? (
+            <>
+              <Text style={styles.panelLine}>
+                + {formatMoney(fee, currency)} archívny poplatok
+              </Text>
+              <Text style={styles.panelTotal}>
+                Spolu {formatMoney(total, currency)}
+              </Text>
+            </>
+          ) : null}
 
           <Pressable
             accessibilityRole="button"
@@ -163,7 +194,16 @@ const styles = StyleSheet.create({
     minWidth: 240,
     ...shadow.cta,
   },
-  panelTitle: { ...typography.captionStrong, color: colors.text, marginBottom: spacing.xs },
+  panelTitle: { ...typography.captionStrong, color: colors.text },
+  panelLine: { ...typography.caption, color: colors.textSecondary },
+  panelTotal: {
+    ...typography.captionStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
 
   action: {
     height: 44,
