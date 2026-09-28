@@ -118,7 +118,10 @@ export async function deleteStory(storyId: string): Promise<void> {
  * mid-story with a red banner about it.
  */
 export async function markStorySeen(storyId: string): Promise<void> {
-  await supabase.rpc('mark_story_seen', { p_story: storyId });
+  const { error } = await supabase.rpc('mark_story_seen', { p_story: storyId });
+  // Chyba sa tu zahadzovala. Keď zápis neprešiel, krúžok zostal farebný a
+  // nikde sa nedalo zistiť prečo — appka vyzerala, že si príbeh nepozrel.
+  if (error) throw error;
 }
 
 /** Who watched one of mine. The server refuses this for anybody else's story. */

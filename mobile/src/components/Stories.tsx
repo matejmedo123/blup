@@ -10,9 +10,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  deleteStory, getStoriesOf, getStoryRings, getStoryViewers, markStorySeen,
+  deleteStory, getStoriesOf, getStoryViewers, markStorySeen,
   type Story, type StoryRing,
 } from '@/api/stories';
+import { useStoryList } from '@/components/storyRings';
 import { StoryText } from '@/components/StoryText';
 import { storyFrame } from '@/components/storyFormat';
 import { useAuth } from '@/auth/AuthProvider';
@@ -43,16 +44,15 @@ export function StoryRow({
   /** Who is being watched — the whole ring, so the viewer can name them. */
   const [open, setOpen] = useState<StoryRing | null>(null);
 
-  const rings = useQuery({
-    queryKey: ['stories', 'rings'],
-    queryFn: () => getStoryRings(30),
-    enabled: !isGuest,
-    // A story is a 24-hour object; a minute of staleness is not worth a
-    // request on every remount.
-    staleTime: 60_000,
-  });
-
-  const list = rings.data ?? [];
+  /**
+   * Krúžky z jedného spoločného miesta, nie z vlastného dotazu.
+   *
+   * Predtým si tento rad pýtal `story_rings(30)` a `StoryRingsProvider`
+   * `story_rings(60)` — pod tým istým kľúčom vyrovnávacej pamäte. Dve
+   * odpovede na tú istú otázku sa vždy raz rozídu a človek potom vidí krúžok
+   * nad feedom a pri tej istej tvári v zozname ľudí už nie.
+   */
+  const list = useStoryList();
   const mine = list.find((ring) => ring.is_mine) ?? null;
   const others = list.filter((ring) => !ring.is_mine);
 
@@ -84,7 +84,7 @@ export function StoryRow({
                 the story went out. Before that it is a plain circle with a
                 plus on it, which is the only state where the plus means
                 anything. Adding a second one lives inside your own story. */}
-            {mine ? (
+            {mine && mine.unseen_count > 0 ? (
               <LinearGradient
                 colors={[colors.accent, colors.pink]}
                 start={{ x: 0, y: 0 }}
@@ -95,6 +95,13 @@ export function StoryRow({
                   <Avatar url={profile?.avatar_url} name={profile?.display_name} size={50} />
                 </View>
               </LinearGradient>
+            ) : mine ? (
+              // Pozretý vlastný príbeh: žiadny krúžok, rovnako ako u ostatných.
+              // Svietiaci krúžok nad vlastnou tvárou až do vypršania príbehu
+              // hovoril „tu je niečo nové" o niečom, čo si práve pozeral.
+              <View style={styles.seenRing}>
+                <Avatar url={profile?.avatar_url} name={profile?.display_name} size={RING - 6} />
+              </View>
             ) : (
               <View style={styles.plainRing}>
                 <View style={styles.inner}>
@@ -105,7 +112,10 @@ export function StoryRow({
                 </View>
               </View>
             )}
-            <Text style={styles.name} numberOfLines={1}>
+            <Text
+              style={[styles.name, mine && mine.unseen_count === 0 && styles.nameSeen]}
+              numberOfLines={1}
+            >
               {mine ? 'Tvoj príbeh' : 'Pridať'}
             </Text>
           </Pressable>
@@ -248,13 +258,31 @@ export function StoryViewer({
   // Each story gets its own verdict; one that failed says nothing about the next.
   useEffect(() => { setBrokenImage(false); }, [index]);
 
-  // Watching is recorded per story, when it is actually on screen.
+  /**
+   * Pozretie sa zapisuje pri každom príbehu, keď je naozaj na obrazovke.
+   *
+   * AJ pri vlastnom. Predtým sa vlastný preskakoval a krúžok okolo vlastnej
+   * tváre preto svietil až do vypršania príbehu — všade, kde tá tvár bola.
+   * Že sa vlastné pozretie nemá rátať medzi divákov, rieši server; tu je to
+   * odpoveď na inú otázku, totiž „videl som to už".
+   *
+   * Zneplatňuje sa aj zoznam príbehov autora, nielen krúžky: bez toho by
+   * `seen_by_me` zostalo v pamäti `false` a pri ďalšom otvorení by sa zápis
+   * poslal znova.
+   */
   useEffect(() => {
-    if (!current || current.seen_by_me || isMine) return;
-    void markStorySeen(current.id).then(() => {
-      void queryClient.invalidateQueries({ queryKey: ['stories', 'rings'] });
-    });
-  }, [current, isMine, queryClient]);
+    if (!current || current.seen_by_me) return;
+    void markStorySeen(current.id)
+      .then(() => Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['stories', 'rings'] }),
+        queryClient.invalidateQueries({ queryKey: ['stories', 'of', current.author_id] }),
+      ]))
+      .catch(() => {
+        // Nepodarilo sa zapísať pozretie. Nie je to chyba, ktorú má zmysel
+        // ukazovať uprostred príbehu — krúžok zostane farebný a pri ďalšom
+        // otvorení sa to skúsi znova.
+      });
+  }, [current, queryClient]);
 
   const next = useCallback(() => {
     setIndex((value) => {

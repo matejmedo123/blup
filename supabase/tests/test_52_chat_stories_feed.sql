@@ -168,6 +168,41 @@ begin
   select count(*) into v_rings from public.story_viewers(v_story, 100);
   assert v_rings = 1, 'autor nevidí, kto mu príbeh pozrel';
 
+  -- ------------------------------------------------------------------------
+  -- Vlastný krúžok tiež zhasne
+  -- ------------------------------------------------------------------------
+  -- Krúžok okolo tváre znamená jedinú vec: „tu je niečo, čo si nevidel". Pri
+  -- cudzom príbehu to platilo, pri vlastnom nie — ten svietil až do vypršania.
+  -- A keďže to isté číslo kreslí krúžok všade, kde je tvoja tvár, svietila ti
+  -- všade.
+  select coalesce(max(unseen_count), 0) into v_unseen
+  from public.story_rings(30) where author_id = v_bob;
+  assert v_unseen = 1, 'vlastný nepozretý príbeh sa tvári ako pozretý';
+
+  perform public.mark_story_seen(v_story);
+
+  select coalesce(max(unseen_count), 0) into v_unseen
+  from public.story_rings(30) where author_id = v_bob;
+  assert v_unseen = 0, 'po pozretí vlastného príbehu krúžok stále svieti';
+
+  assert (select seen_by_me from public.stories_of(v_bob) limit 1),
+    'vlastný pozretý príbeh sa tvári ako nepozretý';
+
+  -- A to všetko BEZ toho, aby sa autor pripočítal k divákom. Zápis o pozretí
+  -- odpovedá na „videl som to už ja", nie na „koľkí to videli".
+  select view_count into v_views from public.stories_of(v_bob) limit 1;
+  assert v_views = 1,
+    format('vlastné pozretie sa pripočítalo k divákom: %s', v_views);
+
+  select count(*) into v_rings from public.story_viewers(v_story, 100);
+  assert v_rings = 1,
+    format('autor sa objavil vo vlastnom zozname divákov (%s namiesto 1)', v_rings);
+
+  -- Druhé pozretie nič nemení.
+  perform public.mark_story_seen(v_story);
+  select view_count into v_views from public.stories_of(v_bob) limit 1;
+  assert v_views = 1, 'opakované pozretie nafúklo počítadlo';
+
   -- Odkaz na obrázok musí smerovať do nášho úložiska.
   begin
     perform public.create_story('https://zle.example.com/hack.jpg', null, null, null);

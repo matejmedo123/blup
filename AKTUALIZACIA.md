@@ -170,6 +170,24 @@ verziou `x` nemajú a kreslia sa na stred, ako doteraz.
 
 Aj toto je len migrácia a nový web.
 
+### Farebný krúžok zhasne aj na tvojom vlastnom príbehu
+
+Krúžok okolo tváre znamená jedinú vec: *tu je niečo, čo si nevidel*. Pri cudzom
+príbehu to fungovalo, pri vlastnom nie — ten svietil až do vypršania, nech si ho
+pozrel koľkokrát chcel. A keďže to isté číslo kreslí krúžok všade, kde je tvoja
+tvár, svietila ti všade.
+
+Príčina bola v tom, že sa jednou tabuľkou odpovedalo na dve rôzne otázky.
+„Koľkí to videli" autora rátať nesmie — a to zostáva. „Videl som to už ja"
+autora rátať musí, inak krúžok nikdy nezhasne. Zápis o pozretí teraz vzniká aj
+pre autora, ale počítadlo divákov sa dvíha len pri cudzom a autor sa zo zoznamu
+divákov vynecháva; nikto sa teda nedozvie nič nové o tom, kto sa na čo pozeral.
+
+Popri tom sa spojili dva dotazy, ktoré sa pýtali na to isté pod tým istým
+kľúčom (rad nad feedom si pýtal 30 krúžkov, zvyšok appky 60). Dve odpovede na
+tú istú otázku sa vždy raz rozídu — a vtedy vidíš krúžok nad feedom a pri tej
+istej tvári v zozname ľudí už nie.
+
 ---
 
 ## Čo bolo nové v balíku predtým

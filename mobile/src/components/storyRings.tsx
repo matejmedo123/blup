@@ -22,6 +22,8 @@ import { useAuth } from '@/auth/AuthProvider';
  */
 
 interface StoryRingsValue {
+  /** Všetky živé krúžky, v poradí zo servera. Pre rad nad feedom. */
+  all: StoryRing[];
   /** Živý príbeh toho človeka, alebo nič. */
   ringFor: (userId?: string | null) => StoryRing | null;
   /** Otvorí ho na celú obrazovku. */
@@ -32,6 +34,7 @@ interface StoryRingsValue {
 }
 
 const Ctx = createContext<StoryRingsValue>({
+  all: [],
   ringFor: () => null,
   open: () => {},
   opened: null,
@@ -64,9 +67,11 @@ export function StoryRingsProvider({ children }: { children: React.ReactNode }) 
     [byId],
   );
 
+  const all = useMemo(() => rings.data ?? [], [rings.data]);
+
   const value = useMemo<StoryRingsValue>(
-    () => ({ ringFor, open: setOpened, opened, close: () => setOpened(null) }),
-    [ringFor, opened],
+    () => ({ all, ringFor, open: setOpened, opened, close: () => setOpened(null) }),
+    [all, ringFor, opened],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -74,6 +79,17 @@ export function StoryRingsProvider({ children }: { children: React.ReactNode }) 
 
 export function useStoryRings(): StoryRingsValue {
   return useContext(Ctx);
+}
+
+/**
+ * Celý zoznam krúžkov — pre rad nad feedom.
+ *
+ * Ten istý zoznam, z ktorého berie krúžok každý avatar v appke. Keď si ho rad
+ * pýtal sám, boli to dve odpovede na tú istú otázku a raz sa rozišli: krúžok
+ * nad feedom zhasol a pri tej istej tvári v zozname ľudí svietil ďalej.
+ */
+export function useStoryList(): StoryRing[] {
+  return useStoryRings().all;
 }
 
 /**
