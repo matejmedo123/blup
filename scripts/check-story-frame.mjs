@@ -21,6 +21,9 @@
 import { storyFrame, STORY_ASPECT, STORY_WIDTH, STORY_HEIGHT }
   from '../mobile/src/components/storyShape.ts';
 import { cropRect } from '../mobile/src/components/imageCropMath.ts';
+import {
+  clampSpot, overlayType, overlayWidthAt, OVERLAY_BOUNDS, OVERLAY_MAX_WIDTH,
+} from '../mobile/src/components/storyOverlayMath.ts';
 
 const near = (a, b, tolerance = 1e-6) => Math.abs(a - b) <= tolerance;
 
@@ -105,6 +108,62 @@ for (const [name, iw, ih] of photos) {
   console.log(`  OK  ${name.padEnd(20)} ${String(iw).padStart(4)}×${String(ih).padStart(4)} — `
     + 'každý výrez je 9:16 a leží vnútri fotky');
 }
+
+// ---------------------------------------------------------------------------
+// 3. Text pristane tam, kam ho človek dal
+// ---------------------------------------------------------------------------
+//
+// Toto je ten bug, ktorý sa nedal nájsť čítaním: editor kreslil text na 42 %
+// výšky, uložil 50 % a prehrávač nakreslil 50 %. Rozdiel bolo vidieť, príčinu
+// nie. Odkedy majú všetky tri obrazovky jednu matematiku, dá sa na ňu pýtať
+// číslom — a to je jediný spôsob, ako tvrdenie „uvidia to tam, kde si to dal"
+// overiť bez toho, aby sa na to niekto pozeral.
+console.log('\nText cez príbeh');
+
+// Poloha je ZLOMOK, takže rovnaké čísla musia dať rovnaké miesto v rámčeku
+// ľubovoľnej veľkosti. Malý je editor na mobile, veľký prehrávač na desktope.
+for (const [fw, fh] of [[320, 569], [405, 720], [1080, 1920]]) {
+  const spot = clampSpot({ x: 0.3, y: 0.7 });
+  const width = overlayWidthAt(spot.x);
+  const left = fw * (spot.x - width / 2);
+  const right = left + fw * width;
+  check(
+    left >= -0.001 && right <= fw + 0.001,
+    `rámček ${fw}×${fh}: text od ${left.toFixed(1)} do ${right.toFixed(1)} `
+    + `je celý vnútri (0…${fw})`,
+  );
+  // Stred textu je presne tam, kam ukazuje zlomok — na ňom celé „čo vidíš, to
+  // dostaneš" stojí.
+  check(near((left + right) / 2 / fw, spot.x, 1e-9), `rámček ${fw}×${fh}: stred sedí na x`);
+}
+
+// Písmo je tiež zlomok šírky, takže text zaberá v každom rámčeku ten istý
+// podiel obrazu. Pevná veľkosť by pristála správne, ale vyzerala by inak.
+{
+  const small = overlayType('m', 320);
+  const big = overlayType('m', 1080);
+  check(
+    near(big.fontSize / 1080, small.fontSize / 320, 0.002),
+    `písmo rastie s rámčekom: ${small.fontSize} bodov pri 320, ${big.fontSize} pri 1080`,
+  );
+  check(overlayType('s', 320).fontSize < overlayType('l', 320).fontSize, 'S je menšie než L');
+  check(overlayType('m', 0).fontSize >= 8, 'neodmeraný rámček nedá písmo nula');
+}
+
+// Žiadne ťahanie nesmie dostať text mimo. Vrátane nezmyslov, ktoré by mohli
+// doraziť zo staršej verzie appky alebo z ručne upraveného dotazu.
+for (const bad of [
+  { x: -5, y: -5 }, { x: 9, y: 9 }, { x: NaN, y: 0.5 }, {}, null,
+]) {
+  const spot = clampSpot(bad);
+  const inside = spot.x >= OVERLAY_BOUNDS.minX && spot.x <= OVERLAY_BOUNDS.maxX
+    && spot.y >= OVERLAY_BOUNDS.minY && spot.y <= OVERLAY_BOUNDS.maxY;
+  check(inside, `poloha ${JSON.stringify(bad)} sa zrovnala na ${spot.x}, ${spot.y}`);
+}
+
+// Na strede je text najširší; ku kraju sa zužuje, aby nepretiekol.
+check(near(overlayWidthAt(0.5), OVERLAY_MAX_WIDTH), 'na strede je text najširší');
+check(overlayWidthAt(0.2) < overlayWidthAt(0.5), 'pri kraji sa text zúži');
 
 if (failed > 0) {
   console.error(`\n${failed} zlyhaní.`);

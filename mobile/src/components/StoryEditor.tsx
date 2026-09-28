@@ -10,7 +10,13 @@ import { Button, Caption, Notice } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import { cropRect } from '@/components/imageCropMath';
 import { cropToStory, storyFrame, STORY_WIDTH, STORY_HEIGHT } from '@/components/storyFormat';
-import type { OverlayColor, OverlaySize, StoryDraft } from '@/components/StoryCamera';
+import type { StoryDraft } from '@/components/StoryCamera';
+import {
+  OVERLAY_COLORS, StoryOverlayText, type OverlayColor,
+} from '@/components/StoryOverlayText';
+import {
+  clampSpot, overlayType, type OverlaySpot, type OverlayTextSize,
+} from '@/components/storyOverlayMath';
 
 /**
  * Úprava fotky z galérie, kým sa z nej stane príbeh.
@@ -25,14 +31,6 @@ import type { OverlayColor, OverlaySize, StoryDraft } from '@/components/StoryCa
  * sa nedá vytiahnuť mimo — najmenšie priblíženie je presne to, pri ktorom
  * fotka rámček ešte celý vyplní, takže prázdny roh nemôže vzniknúť.
  */
-
-const OVERLAY_COLORS: Record<OverlayColor, string> = {
-  white:  '#FFFFFF',
-  black:  '#0A0D12',
-  accent: colors.accent,
-  pink:   colors.pink,
-  amber:  '#FBBF24',
-};
 
 const MAX_SCALE = 5;
 
@@ -51,8 +49,21 @@ export function StoryEditor({
 
   const [text, setText] = useState('');
   const [colour, setColour] = useState<OverlayColor>('white');
-  const [size, setSize] = useState<OverlaySize>('m');
+  const [size, setSize] = useState<OverlayTextSize>('m');
   const [writing, setWriting] = useState(false);
+  /**
+   * Kde text sedí. Stred textu ako zlomok rámčeka, presne v tom tvare, v akom
+   * sa uloží — takže to, čo je tu vidno, je to, čo uvidia ostatní.
+   */
+  const [spot, setSpot] = useState<OverlaySpot>({ x: 0.5, y: 0.5 });
+  /**
+   * Čo ťahá prst.
+   *
+   * Príbeh má dve vrstvy a doteraz sa dala posúvať len jedna. Prepínač je
+   * lepší než hádanie podľa toho, kde človek začal ťahať: pri texte cez pol
+   * obrazovky by sa fotka nedala posunúť takmer nikde.
+   */
+  const [layer, setLayer] = useState<'photo' | 'text'>('photo');
 
   const [stage, setStage] = useState({ width: 0, height: 0 });
   const onStageLayout = useCallback((event: LayoutChangeEvent) => {
@@ -79,9 +90,24 @@ export function StoryEditor({
   // PanResponder, nie gesture-handler: toto je jediné gesto na obrazovke a
   // funguje rovnako na telefóne aj v prehliadači, kde sa dvoma prstami
   // neštipká, ale ťahá myšou a približuje tlačidlami pod rámčekom.
-  const start = useRef({ x: 0, y: 0, scale: 1, spread: 0 });
-  const live = useRef({ scale: 1, offset: { x: 0, y: 0 } });
-  live.current = { scale, offset: rect.view };
+  const start = useRef({ x: 0, y: 0, scale: 1, spread: 0, spot: { x: 0.5, y: 0.5 } });
+  const live = useRef({
+    scale: 1,
+    offset: { x: 0, y: 0 },
+    spot: { x: 0.5, y: 0.5 },
+    layer: 'photo' as 'photo' | 'text',
+    frame: { width: 1, height: 1 },
+  });
+  // Cez `ref`, nie cez závislosti: `PanResponder` sa vytvára raz a zachytil by
+  // si hodnoty z prvého vykreslenia. Prepnutá vrstva by sa k nemu nedostala a
+  // prst by ďalej ťahal fotku.
+  live.current = {
+    scale,
+    offset: rect.view,
+    spot,
+    layer,
+    frame: { width: frame.width || 1, height: frame.height || 1 },
+  };
 
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -93,11 +119,15 @@ export function StoryEditor({
         y: live.current.offset.y,
         scale: live.current.scale,
         spread: touches.length >= 2 ? distance(touches) : 0,
+        spot: live.current.spot,
       };
     },
     onPanResponderMove: (event, gesture) => {
       const touches = event.nativeEvent.touches;
       if (touches.length >= 2) {
+        // Štipnutie patrí vždy fotke. Text sa zväčšuje tlačidlami S/M/L —
+        // dve veci na tom istom gestte by znamenali, že človek nikdy netuší,
+        // čo sa práve zväčšilo.
         const spread = distance(touches);
         if (start.current.spread > 0 && spread > 0) {
           const next = start.current.scale * (spread / start.current.spread);
@@ -105,6 +135,17 @@ export function StoryEditor({
         }
         return;
       }
+
+      if (live.current.layer === 'text') {
+        // Posun v bodoch sa prepočíta na zlomok rámčeka — v tom sa poloha aj
+        // ukladá, takže na telefóne pri pozeraní pristane text tam, kde tu.
+        setSpot(clampSpot({
+          x: start.current.spot.x + gesture.dx / live.current.frame.width,
+          y: start.current.spot.y + gesture.dy / live.current.frame.height,
+        }));
+        return;
+      }
+
       // Jeden prst posúva. Hodnota sa neklampuje tu — robí to `cropRect`, a
       // robí to na jednom mieste pre kreslenie aj pre rezanie.
       setOffset({ x: start.current.x + gesture.dx, y: start.current.y + gesture.dy });
@@ -135,7 +176,12 @@ export function StoryEditor({
       onDone({
         uri,
         kind: 'image',
-        ...(written ? { overlay: { text: written, y: 0.5, color: colour, size } } : {}),
+        // Poloha sa ukladá TÁ, ktorú je vidno. Predtým sa tu natvrdo posielalo
+        // `y: 0.5`, hoci editor kreslil text na 42 % výšky — text teda pristál
+        // inde, než kam ho človek dal, a nedalo sa zistiť prečo.
+        ...(written
+          ? { overlay: { text: written, x: spot.x, y: spot.y, color: colour, size } }
+          : {}),
       });
     } catch (caught) {
       setError(messageFor(caught));
@@ -178,23 +224,41 @@ export function StoryEditor({
                 contentFit="fill"
               />
 
+              {/* Ten istý komponent, aký text nakreslí divákovi. Nie kópia:
+                  kópia sa raz rozíde a človek zistí až po odoslaní, že text
+                  je inde, než ho dával. */}
               {text.trim() && !writing ? (
-                <Pressable style={styles.overlayHit} onPress={() => setWriting(true)}>
-                  <Text
-                    style={[
-                      styles.overlayText,
-                      { color: OVERLAY_COLORS[colour] },
-                      size === 's' && styles.overlayS,
-                      size === 'l' && styles.overlayL,
-                    ]}
-                  >
-                    {text.trim()}
-                  </Text>
-                </Pressable>
+                <StoryOverlayText
+                  text={text}
+                  spot={spot}
+                  color={colour}
+                  size={size}
+                  frame={frame}
+                />
               ) : null}
             </View>
           </View>
         )}
+
+        {/* Prepínač vrstiev, hneď pod fotkou. Ukáže sa až keď je čo prepínať —
+            dve tlačidlá nad fotkou bez textu by boli otázka bez odpovede.
+            Príbeh má dve vrstvy a doteraz sa dala posúvať len jedna. */}
+        {!writing && text.trim() ? (
+          <View style={styles.layers}>
+            <Text style={styles.layersLead}>Posúvam</Text>
+            {([['photo', 'fotku'], ['text', 'text']] as const).map(([key, label]) => (
+              <Pressable
+                key={key}
+                onPress={() => setLayer(key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: layer === key }}
+                style={[styles.layer, layer === key && styles.layerOn]}
+              >
+                <Text style={styles.layerLabel}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         {writing ? (
           <View style={styles.writing}>
@@ -208,9 +272,8 @@ export function StoryEditor({
               maxLength={200}
               style={[
                 styles.input,
+                overlayType(size, frame.width || 320),
                 { color: OVERLAY_COLORS[colour] },
-                size === 's' && styles.overlayS,
-                size === 'l' && styles.overlayL,
               ]}
             />
             <View style={styles.tools}>
@@ -226,7 +289,7 @@ export function StoryEditor({
                   ]}
                 />
               ))}
-              {(['s', 'm', 'l'] as OverlaySize[]).map((key) => (
+              {(['s', 'm', 'l'] as OverlayTextSize[]).map((key) => (
                 <Pressable
                   key={key}
                   onPress={() => setSize(key)}
@@ -253,7 +316,7 @@ export function StoryEditor({
             </Pressable>
 
             <Pressable
-              onPress={() => setWriting(true)}
+              onPress={() => { setLayer('text'); setWriting(true); }}
               style={styles.ghost}
               accessibilityRole="button"
             >
@@ -281,7 +344,11 @@ export function StoryEditor({
 
         {!writing ? (
           <Caption style={styles.hint}>
-            Ťahaj fotku, kam ju chceš — uloží sa {STORY_WIDTH} × {STORY_HEIGHT}
+            {text.trim()
+              ? layer === 'text'
+                ? 'Ťahaj text, kam ho chceš — presne tam ho ostatní uvidia'
+                : `Ťahaj fotku, kam ju chceš — uloží sa ${STORY_WIDTH} × ${STORY_HEIGHT}`
+              : `Ťahaj fotku, kam ju chceš — uloží sa ${STORY_WIDTH} × ${STORY_HEIGHT}`}
           </Caption>
         ) : null}
       </View>
@@ -309,13 +376,18 @@ const styles = StyleSheet.create({
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   frame: { position: 'relative', overflow: 'hidden', backgroundColor: '#000000' },
 
-  overlayHit: { position: 'absolute', left: 0, right: 0, top: '42%', paddingHorizontal: spacing.lg },
-  overlayText: {
-    ...typography.subheading, fontSize: 26, lineHeight: 32, textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
+  layers: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.xs, paddingHorizontal: spacing.lg, paddingTop: spacing.md,
   },
-  overlayS: { fontSize: 18, lineHeight: 24 },
-  overlayL: { fontSize: 36, lineHeight: 42 },
+  layersLead: { ...typography.metaSm, color: 'rgba(255,255,255,0.6)', marginRight: 2 },
+  layer: {
+    paddingHorizontal: spacing.md, paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
+  },
+  layerOn: { backgroundColor: 'rgba(255,255,255,0.22)', borderColor: '#FFFFFF' },
+  layerLabel: { ...typography.metaSm, color: '#FFFFFF' },
 
   bar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
@@ -345,10 +417,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(4,6,10,0.72)',
     justifyContent: 'center', padding: spacing.lg, gap: spacing.lg,
   },
-  input: {
-    ...typography.subheading, fontSize: 26, lineHeight: 32, textAlign: 'center',
-    minHeight: 60,
-  },
+  input: { ...typography.subheading, textAlign: 'center', minHeight: 60 },
   tools: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   swatch: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'transparent' },
   swatchOn: { borderColor: '#FFFFFF' },

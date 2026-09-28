@@ -152,6 +152,24 @@ cron. Bucket `resale-tickets` už existuje, len dostal ďalšie dve politiky.
 stránku, takže odkaz, ktorý si niekto pred mesiacom hodil do chatu, funguje
 ďalej. Aj toto je len migrácia a nový web.
 
+### Príbeh má dve vrstvy a text pristane tam, kam ho dáš
+
+Dva problémy, ktoré vyzerali ako jeden.
+
+**Text sa objavoval inde, než kde si ho nechal.** Editor ho kreslil na 42 %
+výšky, uložil 50 % a prehrávač nakreslil 50 %. Rozdiel bolo vidieť, príčinu
+nie — každá z troch obrazoviek si text kreslila vlastným kódom. Teraz ho kreslí
+jeden komponent a poloha aj veľkosť písma sú zlomky rámčeka, nie body; rámček
+má pri písaní inú veľkosť než pri pozeraní, takže v bodoch by to isté číslo
+znamenalo iné miesto.
+
+**Posúvať sa dala len fotka.** Pribudol prepínač *Posúvam: fotku / text* —
+príbeh má dve vrstvy a teraz sa dá vybrať, ktorú prst ťahá. Text sa ťahá aj do
+strán, nielen hore-dole; ukladá sa preto `x` aj `y`. Príbehy napísané staršou
+verziou `x` nemajú a kreslia sa na stred, ako doteraz.
+
+Aj toto je len migrácia a nový web.
+
 ---
 
 ## Čo bolo nové v balíku predtým

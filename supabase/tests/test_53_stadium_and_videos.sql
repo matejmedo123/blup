@@ -221,15 +221,44 @@ begin
   end;
   assert v_failed, 'príbeh prijal farbu mimo palety';
 
-  -- A poloha mimo obrazovky sa oreže, nie uloží.
+  -- A poloha mimo obrazovky sa oreže, nie uloží. V oboch osiach: odkedy sa
+  -- text dá ťahať aj do strán, je `x` rovnako útočná plocha ako `y`.
   v_story := public.create_story(
     'https://tchvgzbxddqdneylkqvi.supabase.co/storage/v1/object/public/stories/a/v.jpg',
     null, null, null, 'image',
-    jsonb_build_object('text', 'hore', 'y', 9)
+    jsonb_build_object('text', 'hore', 'x', -4, 'y', 9)
   );
   select overlay into v_over from public.stories_of(v_me) where id = v_story;
   assert (v_over ->> 'y')::numeric <= 1,
-    format('poloha sa neorezala, je %s', v_over ->> 'y');
+    format('zvislá poloha sa neorezala, je %s', v_over ->> 'y');
+  assert (v_over ->> 'x')::numeric >= 0,
+    format('vodorovná poloha sa neorezala, je %s', v_over ->> 'x');
+
+  -- Celá poloha prežije cestu tam aj späť. Toto je to tvrdenie, na ktorom
+  -- stojí „uvidia text tam, kde si ho dal": keby sa `x` po ceste stratilo,
+  -- príbeh by sa nakreslil na stred a nikto by nevedel prečo.
+  v_story := public.create_story(
+    'https://tchvgzbxddqdneylkqvi.supabase.co/storage/v1/object/public/stories/a/x.jpg',
+    null, null, null, 'image',
+    jsonb_build_object('text', 'vľavo dole', 'x', 0.27, 'y', 0.81,
+                       'color', 'pink', 'size', 's')
+  );
+  select overlay into v_over from public.stories_of(v_me) where id = v_story;
+  assert (v_over ->> 'x')::numeric = 0.27,
+    format('vodorovná poloha sa stratila, je %s', coalesce(v_over ->> 'x', 'NULL'));
+  assert (v_over ->> 'y')::numeric = 0.81, 'zvislá poloha sa stratila';
+  assert v_over ->> 'size' = 's', 'veľkosť textu sa stratila';
+
+  -- Príbeh bez `x` (napísaný staršou verziou appky) zostáva bez neho —
+  -- dopočítať mu niečo by bolo hádanie a appka ho kreslí na stred.
+  v_story := public.create_story(
+    'https://tchvgzbxddqdneylkqvi.supabase.co/storage/v1/object/public/stories/a/y.jpg',
+    null, null, null, 'image',
+    jsonb_build_object('text', 'starý', 'y', 0.4)
+  );
+  select overlay into v_over from public.stories_of(v_me) where id = v_story;
+  assert v_over -> 'x' is null, 'chýbajúcemu x sa niečo dopočítalo';
+  assert (v_over ->> 'y')::numeric = 0.4, 'starému príbehu sa pokazila výška';
 
   -- Prázdny text nie je text.
   v_story := public.create_story(

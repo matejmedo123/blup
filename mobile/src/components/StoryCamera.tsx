@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated, Easing, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View,
+  Animated, Easing, Modal, PanResponder, Platform, Pressable, StyleSheet, Text,
+  TextInput, View,
   type LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -11,6 +12,12 @@ import { messageFor } from '@/lib/errors';
 import { Button, Caption, Notice } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import { centreCropToStory, storyFrame } from '@/components/storyFormat';
+import {
+  OVERLAY_COLORS, StoryOverlayText, type OverlayColor,
+} from '@/components/StoryOverlayText';
+import {
+  clampSpot, overlayType, type OverlaySpot, type OverlayTextSize,
+} from '@/components/storyOverlayMath';
 
 /**
  * Natáčanie príbehu.
@@ -38,21 +45,25 @@ export const STORY_SECONDS = 15;
  */
 const MAX_BYTES = 12 * 1024 * 1024;
 
-const OVERLAY_COLORS = {
-  white:  '#FFFFFF',
-  black:  '#0A0D12',
-  accent: colors.accent,
-  pink:   colors.pink,
-  amber:  '#FBBF24',
-} as const;
-
-export type OverlayColor = keyof typeof OVERLAY_COLORS;
-export type OverlaySize = 's' | 'm' | 'l';
+/**
+ * Farby a veľkosti textu žijú pri komponente, ktorý text kreslí
+ * (`StoryOverlayText`). Tu sa len prevezmú ďalej, nech sa staré importy
+ * nemusia prepisovať naraz všade.
+ */
+export type { OverlayColor };
+export type OverlaySize = OverlayTextSize;
 
 export interface StoryDraft {
   uri: string;
   kind: 'image' | 'video';
-  overlay?: { text: string; y: number; color: OverlayColor; size: OverlaySize };
+  overlay?: {
+    text: string;
+    /** Stred textu ako zlomok rámčeka — viď `storyOverlayMath`. */
+    x: number;
+    y: number;
+    color: OverlayColor;
+    size: OverlayTextSize;
+  };
 }
 
 export function StoryCamera({
@@ -101,6 +112,32 @@ export function StoryCamera({
   const [colour, setColour] = useState<OverlayColor>('white');
   const [size, setSize] = useState<OverlaySize>('m');
   const [writing, setWriting] = useState(false);
+  /** Stred textu ako zlomok rámčeka — v tom sa aj ukladá. */
+  const [spot, setSpot] = useState<OverlaySpot>({ x: 0.5, y: 0.5 });
+
+  /**
+   * Ťahanie textu.
+   *
+   * Tu netreba prepínač vrstiev ako v editore: odfotená fotka je už orezaná
+   * na tvar príbehu a posúvať sa nedá, takže prst môže patriť textu vždy.
+   */
+  const dragFrom = useRef({ x: 0.5, y: 0.5 });
+  const dragLive = useRef({ spot: { x: 0.5, y: 0.5 }, frame: { width: 1, height: 1 } });
+  dragLive.current = {
+    spot,
+    frame: { width: frame.width || 1, height: frame.height || 1 },
+  };
+  const textPan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { dragFrom.current = dragLive.current.spot; },
+    onPanResponderMove: (_event, gesture) => {
+      setSpot(clampSpot({
+        x: dragFrom.current.x + gesture.dx / dragLive.current.frame.width,
+        y: dragFrom.current.y + gesture.dy / dragLive.current.frame.height,
+      }));
+    },
+  }), []);
 
   /** 0 → 1 over STORY_SECONDS, drawn as the ring around the shutter. */
   const ring = useRef(new Animated.Value(0)).current;
@@ -181,7 +218,10 @@ export function StoryCamera({
     onDone({
       uri: shot.uri,
       kind: shot.kind,
-      ...(written ? { overlay: { text: written, y: 0.5, color: colour, size } } : {}),
+      // Poloha sa ukladá tá, ktorú je vidno — nie natvrdo stred, ako predtým.
+      ...(written
+        ? { overlay: { text: written, x: spot.x, y: spot.y, color: colour, size } }
+        : {}),
     });
   };
 
@@ -214,20 +254,31 @@ export function StoryCamera({
               // pásy, ktoré ostatní neuvidia.
               <Image source={{ uri: shot.uri }} style={styles.fill} contentFit="cover" />
             )}
+
+            {/* Text patrí DNU do rámčeka, nie vedľa neho. Predtým bol
+                súrodencom rámčeka a jeho poloha sa tak merala voči celej
+                obrazovke — už to samo znamenalo, že pristál inde, než kde ho
+                bolo vidno. */}
+            {text.trim() && !writing ? (
+              <View style={StyleSheet.absoluteFill} {...textPan.panHandlers}>
+                <StoryOverlayText
+                  text={text}
+                  spot={spot}
+                  color={colour}
+                  size={size}
+                  frame={frame}
+                />
+              </View>
+            ) : null}
           </View>
 
           {text.trim() && !writing ? (
-            <Pressable style={styles.overlayHit} onPress={() => setWriting(true)}>
-              <Text
-                style={[
-                  styles.overlayText,
-                  { color: OVERLAY_COLORS[colour] },
-                  size === 's' && styles.overlayS,
-                  size === 'l' && styles.overlayL,
-                ]}
-              >
-                {text.trim()}
-              </Text>
+            <Pressable
+              onPress={() => setWriting(true)}
+              accessibilityRole="button"
+              style={styles.editText}
+            >
+              <Text style={styles.editTextLabel}>Upraviť text</Text>
             </Pressable>
           ) : null}
 
@@ -243,9 +294,8 @@ export function StoryCamera({
                 maxLength={200}
                 style={[
                   styles.input,
+                  overlayType(size, frame.width || 320),
                   { color: OVERLAY_COLORS[colour] },
-                  size === 's' && styles.overlayS,
-                  size === 'l' && styles.overlayL,
                 ]}
               />
 
@@ -444,23 +494,20 @@ const styles = StyleSheet.create({
     textAlign: 'center', color: 'rgba(255,255,255,0.75)',
   },
 
-  overlayHit: { position: 'absolute', left: 0, right: 0, top: '42%', paddingHorizontal: spacing.lg },
-  overlayText: {
-    ...typography.subheading, fontSize: 26, lineHeight: 32, textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
+  editText: {
+    alignSelf: 'center', marginTop: spacing.sm,
+    paddingHorizontal: spacing.md, paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
   },
-  overlayS: { fontSize: 18, lineHeight: 24 },
-  overlayL: { fontSize: 36, lineHeight: 42 },
+  editTextLabel: { ...typography.metaSm, color: '#FFFFFF' },
 
   writing: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(4,6,10,0.72)',
     justifyContent: 'center', padding: spacing.lg, gap: spacing.lg,
   },
-  input: {
-    ...typography.subheading, fontSize: 26, lineHeight: 32, textAlign: 'center',
-    minHeight: 60,
-  },
+  input: { ...typography.subheading, textAlign: 'center', minHeight: 60 },
   tools: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   swatch: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'transparent' },
   swatchOn: { borderColor: '#FFFFFF' },

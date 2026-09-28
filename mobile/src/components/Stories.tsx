@@ -440,7 +440,7 @@ export function StoryViewer({
               {/* The text the author wrote over it. Above the picture and
                   below the tap targets, so reading it never eats a tap. */}
               {current.overlay?.text ? (
-                <StoryText overlay={current.overlay} />
+                <StoryText overlay={current.overlay} frame={frame} />
               ) : null}
               </View>
 

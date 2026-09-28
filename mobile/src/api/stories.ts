@@ -23,7 +23,14 @@ export interface StoryRing {
 
 export interface StoryOverlay {
   text: string;
-  /** 0 = top, 1 = bottom. */
+  /**
+   * Stred textu, ako zlomok rámčeka: 0 = vľavo/hore, 1 = vpravo/dole.
+   *
+   * Zlomok a nie body, lebo rámček má pri písaní inú veľkosť než pri
+   * pozeraní. `x` môže chýbať — príbehy napísané predtým, než sa dal text
+   * ťahať do strán, ho nemajú a kreslia sa na stred.
+   */
+  x?: number;
   y?: number;
   color?: 'white' | 'black' | 'accent' | 'pink' | 'amber';
   size?: 's' | 'm' | 'l';
