@@ -228,7 +228,8 @@ begin
     p_section => 'C', p_row_label => '2',
     p_external_provider => 'Ticketportal',
     p_face_value_cents => 2500,
-    p_note => 'Dve vedľa seba, PDF pošlem hneď po platbe.'
+    p_ticket_file_path => 'sellers/' || v_miro || '/prv-c2.pdf',
+    p_note => 'Dve vedľa seba, PDF dostaneš hneď po platbe.'
   );
 
   perform set_config('request.jwt.claim.sub', v_eva::text, true);
@@ -276,7 +277,8 @@ begin
     v_event, 'external', 2400, null,
     p_delivery_method => 'file',
     p_ticket_label => 'Tribúna Sever',
-    p_external_provider => 'Ticketportal'
+    p_external_provider => 'Ticketportal',
+    p_ticket_file_path => 'sellers/' || v_me || '/prv-sever.pdf'
   );
 
   perform set_config('request.jwt.claim.sub', v_buyer::text, true);
@@ -305,21 +307,25 @@ begin
   perform public.create_resale_listing(
     v_event, 'external', 1600, null,
     p_delivery_method => 'file', p_ticket_label => 'Státie',
-    p_external_provider => 'Predpredaj.sk');
+    p_external_provider => 'Predpredaj.sk',
+    p_ticket_file_path => 'sellers/' || v_eva || '/trh-statie.pdf');
   perform public.create_resale_listing(
     v_event, 'external', 2600, null,
     p_delivery_method => 'file', p_ticket_label => 'Tribúna Juh',
-    p_external_provider => 'Ticketportal');
+    p_external_provider => 'Ticketportal',
+    p_ticket_file_path => 'sellers/' || v_eva || '/trh-juh.pdf');
 
   perform set_config('request.jwt.claim.sub', v_miro::text, true);
   perform public.create_resale_listing(
     v_event, 'external', 3400, null,
     p_delivery_method => 'file', p_ticket_label => 'VIP',
-    p_external_provider => 'Ticketmaster');
+    p_external_provider => 'Ticketmaster',
+    p_ticket_file_path => 'sellers/' || v_miro || '/trh-vip.pdf');
   v_l := public.create_resale_listing(
     v_event, 'external', 2200, null,
     p_delivery_method => 'file', p_ticket_label => 'Státie',
-    p_external_provider => 'Predpredaj.sk');
+    p_external_provider => 'Predpredaj.sk',
+    p_ticket_file_path => 'sellers/' || v_miro || '/trh-statie2.pdf');
 
   reset role;
   perform set_config('request.jwt.claim.sub', '', true);
@@ -376,11 +382,13 @@ begin
     perform set_config('request.jwt.claim.sub', v_eva::text, true);
     perform public.create_resale_listing(v_ev, 'external', 1800 + r.days * 40, null,
       p_delivery_method => 'file', p_ticket_label => 'Státie',
-      p_external_provider => 'Predpredaj.sk');
+      p_external_provider => 'Predpredaj.sk',
+      p_ticket_file_path => 'sellers/' || v_eva || '/' || v_ev || '-statie.pdf');
     perform set_config('request.jwt.claim.sub', v_miro::text, true);
     perform public.create_resale_listing(v_ev, 'external', 2600 + r.days * 40, null,
       p_delivery_method => 'file', p_ticket_label => 'Sedenie',
-      p_external_provider => 'Ticketportal');
+      p_external_provider => 'Ticketportal',
+      p_ticket_file_path => 'sellers/' || v_miro || '/' || v_ev || '-sedenie.pdf');
     reset role;
     perform set_config('request.jwt.claim.sub', '', true);
   end loop;
@@ -423,7 +431,8 @@ begin
     perform set_config('request.jwt.claim.sub', r.seller::text, true);
     perform public.create_resale_listing(v_event, 'external', r.price, null,
       p_delivery_method => 'file', p_ticket_label => r.label,
-      p_external_provider => 'Ticketportal');
+      p_external_provider => 'Ticketportal',
+      p_ticket_file_path => 'sellers/' || r.seller || '/sektor-' || r.price || '.pdf');
   end loop;
   reset role;
   perform set_config('request.jwt.claim.sub', '', true);

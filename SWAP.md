@@ -32,6 +32,23 @@ falzifikát, alebo pravé, ale už predané trom ďalším ľuďom.
 Čo vieme ponúknuť je ochrana peňazí: držíme ich, kým kupujúci nepotvrdí, že
 vstupenka funguje. Ak nefunguje, vrátia sa mu.
 
+**Inzerát nesie vstupenku od začiatku.** PDF sa nahráva pri vypisovaní ponuky,
+nie až po predaji, a kupujúci ho dostane v sekunde po zaplatení — rovnako rýchlo
+ako našu vstupenku, len namiesto prevodu vlastníctva sa mu sprístupní súbor.
+Ponuka so spôsobom doručenia `file` bez súboru vôbec nevznikne
+(`TICKET_FILE_REQUIRED`), lebo inak by sľubovala niečo, čo neexistuje.
+
+Súbor leží v súkromnom buckete `resale-tickets`, v priečinku predajcu
+(`sellers/<uid>/…`) — objednávka pri nahrávaní ešte neexistuje, takže sa nedá
+deliť po objednávkach. Kým sa ponuka nepredá, vidí ho len predajca a admin; po
+zaplatení pribudne kupujúci tej objednávky. Ten istý súbor sa nedá prilepiť na
+dve živé ponuky (`TICKET_FILE_IN_USE`) a po predaji ho predajca nevymení ani
+nezmaže.
+
+Prevod v appke pôvodnej platformy (`mobile_transfer`) zostáva ako bol: súbor
+nemá, doručenie je ručný krok predajcu a v ponuke je to napísané, aby si
+kupujúci vedel vybrať.
+
 > **Toto sa nesmie stratiť v texte ani v dizajne.** „Overená" je zelená a
 > platí len pre prvý druh. Všetko ostatné je modrá „Chránená platba", čo je
 > poctivejšie a menej. Rozhoduje o tom server (`authenticity` vo funkciách),
@@ -93,8 +110,9 @@ platba                    resale-checkout / web-checkout
         ↓
 zaplatené                 stripe-webhook → mark_resale_order_paid()
         ↓
-  BLUP vstupenka: prevedená hneď, je medzi ostatnými
-  externá:        predajca ju doručí, kupujúci potvrdí
+  BLUP vstupenka:  prevedená hneď, je medzi ostatnými
+  externá so súborom: sprístupnená hneď (`instant_delivery`)
+  externá s prevodom: predajca ju doručí, kupujúci potvrdí
         ↓
 hotovo                    confirm_resale_ticket()
 ```
@@ -115,8 +133,9 @@ niekto platí              status = 'reserved'   ← drží to rezervácia
         ↓
 predané                   status = 'sold'
         ↓
-  BLUP vstupenka: hotovo, prevod prebehol sám
-  externá:        doruč ju        deliver_resale_ticket()
+  BLUP vstupenka:  hotovo, prevod prebehol sám
+  externá so súborom: hotovo, PDF odišlo pri platbe
+  externá s prevodom: doruč ju    deliver_resale_ticket()
         ↓
 po evente vzniká nárok    settle_resale_orders()   ← cron
         ↓
@@ -167,6 +186,15 @@ raz rozíde so skutočnosťou a nikto nezistí kedy.
 | externá | po evente + odklad, **a až keď kupujúci potvrdil** |
 
 Otvorený spor nárok zadrží. Zrušený event zadrží všetko.
+
+**Keď kupujúci nikdy neklikne.** Odkedy externá vstupenka chodí hneď po
+zaplatení, kupujúci nemá dôvod sa do appky vracať — a predajcove peniaze by
+ležali donekonečna. `auto_complete_resale_orders()` preto objednávku uzavrie
+sama, ale až keď platia všetky štyri veci naraz: event prebehol, od jeho konca
+ubehlo `resale_settlement_days`, doručenie je zapísané a nikto neotvoril spor.
+Volá sa z `settle_resale_orders()`, takže cron zostáva jeden. Kupujúci tým
+neprichádza o nič: vstupenku mal pred eventom, spor sa dá otvoriť aj po
+uzavretí objednávky a otvorený spor výplatu zablokuje.
 
 ---
 

@@ -145,7 +145,8 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', v_seller::text, true);
   v_l := public.create_resale_listing(v_event, 'external', 6000, null,
-    p_delivery_method => 'file', p_external_provider => 'Ticketportal');
+    p_delivery_method => 'file', p_external_provider => 'Ticketportal',
+    p_ticket_file_path => 'sellers/' || v_seller || '/listok.pdf');
 
   perform set_config('request.jwt.claim.sub', v_buyer::text, true);
   v_res := public.reserve_resale_listing(v_l.id, 1);
@@ -155,11 +156,12 @@ begin
     format('aj pri cudzej vstupenke je provízia 15 %%, je %s', v_ord.seller_fee_cents);
 
   reset role;
-  perform public.mark_resale_order_paid(v_ord.id, 'pi_63_b');
-  -- Externá sa doručí a kupujúci potvrdí — inak sa nevyrovnáva vôbec.
+  v_ord := public.mark_resale_order_paid(v_ord.id, 'pi_63_b');
+  -- Súbor visel na inzeráte, takže doručenie prebehlo pri platbe. Potvrdiť
+  -- ho musí aj tak kupujúci — inak sa nevyrovnáva vôbec.
+  assert v_ord.order_status = 'ticket_delivered',
+    'ponuka so súborom sa nedoručila hneď po zaplatení';
   set local role authenticated;
-  perform set_config('request.jwt.claim.sub', v_seller::text, true);
-  perform public.deliver_resale_ticket(v_ord.id, null, 'PDF poslané');
   perform set_config('request.jwt.claim.sub', v_buyer::text, true);
   perform public.confirm_resale_ticket(v_ord.id);
 

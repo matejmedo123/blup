@@ -93,8 +93,9 @@ function SellerScreen() {
           </View>
 
           <Caption style={styles.moneyNote}>
-            Peniaze sa uvoľnia po evente. Pri vstupenke z inej platformy až keď
-            kupujúci potvrdí, že fungovala.
+            Peniaze sa uvoľnia po evente. Pri vstupenke z inej platformy keď
+            kupujúci potvrdí, že fungovala — alebo pár dní po evente, ak sa
+            neozve.
           </Caption>
 
           {b.available_cents > 0 ? (

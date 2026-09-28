@@ -4,9 +4,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  createResaleListing, getResalePriceHint, getSwapFees, type ResaleSource,
+  createResaleListing, getResalePriceHint, getSwapFees,
+  type ResaleDeliveryMethod, type ResaleSource,
 } from '@/api/resale';
-import { getEvent } from '@/api/events';
+import { getEvent, searchEvents } from '@/api/events';
+import {
+  pickTicketFile, removeListingTicketFile, uploadListingTicketFile,
+} from '@/storage/uploads';
 import { PriceAdvice } from '@/swap/PriceAdvice';
 import { getMyTickets } from '@/api/tickets';
 import type { TicketWithEvent } from '@/types/models';
@@ -49,6 +53,19 @@ function SellTicketScreen() {
 
   const [source, setSource] = useState<ResaleSource>('blup');
   const [ticketId, setTicketId] = useState<string | null>(null);
+  /**
+   * Ako sa vstupenka dostane ku kupujúcemu. `file` je východzí, lebo tak
+   * chodia vstupenky odinakiaľ e-mailom a lebo len pri ňom vieme sľúbiť
+   * doručenie v sekunde po zaplatení.
+   */
+  const [delivery, setDelivery] = useState<ResaleDeliveryMethod>('file');
+  const [file, setFile] = useState<{ path: string; name: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  /** Event vybraný tu na obrazovke, keď sa sem neprišlo z konkrétneho eventu. */
+  const [pickedEvent, setPickedEvent] = useState<
+    { id: string; title: string; start_at: string } | null
+  >(null);
+  const [eventQuery, setEventQuery] = useState('');
   const [price, setPrice] = useState('');
   const [section, setSection] = useState('');
   const [rowLabel, setRowLabel] = useState('');
@@ -112,14 +129,36 @@ function SellTicketScreen() {
 
   const chosen: TicketWithEvent | undefined = sellable.find((t) => t.id === ticketId);
 
-  /** Event, ku ktorému ponuka patrí — z vybranej vstupenky alebo z URL. */
-  const eventId = source === 'blup' ? chosen?.event_id ?? null : eventParam;
+  /**
+   * Event, ku ktorému ponuka patrí.
+   *
+   * Pri našej vstupenke vyplýva z nej samej. Pri cudzej sa berie z URL (prišlo
+   * sa z tlačidla „Predať“ na evente) — a keď v URL nie je, z vyhľadávania
+   * priamo tu. Predtým sa bez URL nedalo vypísať nič a človek, ktorý prišiel
+   * na SWAP s lístkom v ruke, narazil na vetu „otvor event a daj Predať“ bez
+   * toho, aby vedel, kde ten event hľadať.
+   */
+  const eventId = source === 'blup'
+    ? chosen?.event_id ?? null
+    : eventParam ?? pickedEvent?.id ?? null;
 
   const externalEvent = useQuery({
     queryKey: ['event', eventParam],
     queryFn: () => getEvent(eventParam!),
     enabled: source === 'external' && !!eventParam,
   });
+
+  /** Hľadanie eventu, keď sa sem neprišlo z konkrétneho. */
+  const eventHits = useQuery({
+    queryKey: ['swap', 'sell', 'events', eventQuery.trim()],
+    queryFn: () => searchEvents({ query: eventQuery.trim(), limit: 8 }),
+    enabled: source === 'external' && !eventParam && eventQuery.trim().length >= 2,
+    staleTime: 30_000,
+  });
+
+  /** Názov a dátum eventu, nech už prišiel z URL alebo z výberu. */
+  const externalTitle = externalEvent.data?.title ?? pickedEvent?.title ?? null;
+  const externalStart = externalEvent.data?.start_at ?? pickedEvent?.start_at ?? null;
 
   /**
    * Rada k cene. Pýta sa až vtedy, keď je jasné, na ktorý event — inak by to
@@ -158,6 +197,45 @@ function SellTicketScreen() {
   const tooLow = Number.isFinite(cents) && cents > 0 && cents < minPrice;
   const currency = chosen?.currency ?? externalEvent.data?.currency ?? 'EUR';
 
+  /** Sľub „dostaneš ju hneď“ sa dá dať len vtedy, keď je čo odovzdať. */
+  const needsFile = source === 'external' && delivery === 'file';
+
+  /**
+   * Nahratie vstupenky k inzerátu.
+   *
+   * Nahráva sa TERAZ, nie po predaji. Kupujúci tak dostane súbor v sekunde po
+   * zaplatení a predajca nemusí nič robiť — to je celý rozdiel oproti
+   * pôvodnému modelu, v ktorom objednávka visela v stave „čaká sa na
+   * predajcu“ a kupujúci mal v ruke len účtenku.
+   */
+  const attachFile = async () => {
+    setError(null);
+    setUploading(true);
+    try {
+      const picked = await pickTicketFile();
+      if (!picked) return;
+      const path = await uploadListingTicketFile({
+        uri: picked.uri,
+        mimeType: picked.mimeType,
+      });
+      // Predchádzajúci pokus po sebe upratať — inak by v priečinku predajcu
+      // zostávali súbory, ktoré už nikam nepatria.
+      if (file) await removeListingTicketFile(file.path).catch(() => undefined);
+      setFile({ path, name: picked.name });
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const dropFile = async () => {
+    if (!file) return;
+    const gone = file;
+    setFile(null);
+    await removeListingTicketFile(gone.path).catch(() => undefined);
+  };
+
   const submit = async () => {
     setError(null);
     if (!Number.isFinite(cents) || cents <= 0) {
@@ -183,8 +261,8 @@ function SellTicketScreen() {
           note: note || null,
         });
       } else {
-        if (!eventParam) {
-          setError('Otvor event, na ktorý vstupenku máš, a daj tam Predať.');
+        if (!eventId) {
+          setError('Najprv vyber event, na ktorý vstupenka platí.');
           setBusy(false);
           return;
         }
@@ -193,12 +271,20 @@ function SellTicketScreen() {
           setBusy(false);
           return;
         }
+        // Server to odmietne tiež (`TICKET_FILE_REQUIRED`), ale povedať to tu
+        // je rozdiel medzi vetou, ktorá poradí, a chybou z databázy.
+        if (needsFile && !file) {
+          setError('Nahraj vstupenku — bez nej sľub „dostaneš ju hneď“ neplatí.');
+          setBusy(false);
+          return;
+        }
         await createResaleListing({
-          eventId: eventParam,
+          eventId,
           source: 'external',
           priceCents: cents,
           quantity: qty,
-          deliveryMethod: 'file',
+          deliveryMethod: delivery,
+          ticketFilePath: needsFile ? file?.path ?? null : null,
           externalProvider: provider || null,
           externalReference: reference || null,
           faceValueCents: Number.isFinite(faceCents) && faceCents > 0 ? faceCents : null,
@@ -235,7 +321,7 @@ function SellTicketScreen() {
           active={source === 'external'}
           onPress={() => setSource('external')}
           title="Mám ju odinakiaľ"
-          body="Pravosť overiť nevieme a kupujúcemu to povieme. Peniaze dostaneš, až keď potvrdí, že fungovala."
+          body="Nahráš PDF a kupujúci ho má hneď po zaplatení. Pravosť overiť nevieme, tak ti peniaze pošleme až po evente."
           authenticity="protected"
         />
       </View>
@@ -274,52 +360,148 @@ function SellTicketScreen() {
             ))
           )}
         </>
-      ) : eventParam ? (
+      ) : (
         <>
           <SectionHeader title="Na ktorý event" />
-          <View style={styles.eventBox}>
-            <Text style={styles.ticketTitle} numberOfLines={2}>
-              {externalEvent.data?.title ?? 'Načítavam…'}
-            </Text>
-            {externalEvent.data ? (
-              <Caption>{formatEventDate(externalEvent.data.start_at)}</Caption>
-            ) : null}
-          </View>
+          {externalTitle ? (
+            <View style={styles.eventBox}>
+              <View style={styles.ticketMain}>
+                <Text style={styles.ticketTitle} numberOfLines={2}>{externalTitle}</Text>
+                {externalStart ? <Caption>{formatEventDate(externalStart)}</Caption> : null}
+              </View>
+              {/* Z URL sa event zmeniť nedá — prišlo sa sem z jeho stránky.
+                  Vybraný tu sa prepnúť dá, inak by preklep znamenal začať odznova. */}
+              {!eventParam ? (
+                <Pressable
+                  onPress={() => { setPickedEvent(null); setEventQuery(''); }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.link}>Zmeniť</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            <>
+              <Input
+                label="Nájdi event"
+                value={eventQuery}
+                onChangeText={setEventQuery}
+                placeholder="Napíš názov — napríklad Hypeland"
+              />
+              {eventQuery.trim().length < 2 ? (
+                <Caption>
+                  Vstupenka musí patriť ku konkrétnemu eventu — podľa neho ju
+                  kupujúci nájde. Ak tu event ešte nie je, napíš nám.
+                </Caption>
+              ) : eventHits.isLoading ? (
+                <Caption>Hľadám…</Caption>
+              ) : (eventHits.data ?? []).length === 0 ? (
+                <Caption>Nič také sme nenašli. Skús kratší názov.</Caption>
+              ) : (
+                (eventHits.data ?? []).map((hit) => (
+                  <Pressable
+                    key={hit.id}
+                    onPress={() => setPickedEvent({
+                      id: hit.id, title: hit.title, start_at: hit.start_at,
+                    })}
+                    style={styles.ticket}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.ticketMain}>
+                      <Text style={styles.ticketTitle} numberOfLines={1}>{hit.title}</Text>
+                      <Caption>
+                        {formatEventDate(hit.start_at)}
+                        {hit.city ? ` · ${hit.city}` : ''}
+                      </Caption>
+                    </View>
+                  </Pressable>
+                ))
+              )}
+            </>
+          )}
 
-          <SectionHeader title="Odkiaľ ju máš" />
-          <Input
-            label="Predajca (nepovinné)"
-            value={provider}
-            onChangeText={setProvider}
-            placeholder="Ticketportal, Predpredaj…"
-          />
-          <Input
-            label="Číslo objednávky (nepovinné)"
-            value={reference}
-            onChangeText={setReference}
-            placeholder="Kupujúci ho neuvidí, slúži pri spore."
-          />
-          <Input
-            label="Pôvodná cena (nepovinné)"
-            value={faceValue}
-            onChangeText={setFaceValue}
-            keyboardType="decimal-pad"
-            placeholder="0,00"
-          />
-          <Input
-            label="Počet vstupeniek"
-            value={quantity}
-            onChangeText={setQuantity}
-            keyboardType="number-pad"
-            placeholder="1"
-          />
+          {externalTitle ? (
+            <>
+              <SectionHeader title="Ako sa dostane ku kupujúcemu" />
+              <View style={styles.sources}>
+                <SourceOption
+                  active={delivery === 'file'}
+                  onPress={() => setDelivery('file')}
+                  title="Mám ju ako súbor"
+                  body="PDF alebo fotka. Nahráš ju teraz a kupujúci ju dostane v sekunde po zaplatení."
+                />
+                <SourceOption
+                  active={delivery === 'mobile_transfer'}
+                  onPress={() => setDelivery('mobile_transfer')}
+                  title="Prevádzam ju v inej appke"
+                  body="Prevod spravíš ty po predaji. Kupujúci na teba čaká, tak to bude aj v ponuke napísané."
+                />
+              </View>
+
+              {needsFile ? (
+                <>
+                  {file ? (
+                    <View style={styles.file}>
+                      <View style={styles.ticketMain}>
+                        <Text style={styles.ticketTitle} numberOfLines={1}>{file.name}</Text>
+                        <Caption>
+                          Uložené súkromne. Kupujúci ju uvidí až keď zaplatí.
+                        </Caption>
+                      </View>
+                      <Pressable onPress={() => void dropFile()} accessibilityRole="button">
+                        <Text style={styles.link}>Vymeniť</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Button
+                      title={uploading ? 'Nahrávam…' : 'Nahrať vstupenku'}
+                      variant="secondary"
+                      onPress={() => void attachFile()}
+                      disabled={uploading}
+                    />
+                  )}
+                  <Caption style={styles.hint}>
+                    PDF alebo fotka, najviac 15 MB. Uloží sa do súkromného
+                    úložiska — verejná adresa na ňu neexistuje a pred zaplatením
+                    sa k nej nedostane nikto okrem teba.
+                  </Caption>
+                </>
+              ) : null}
+            </>
+          ) : null}
+
+          {externalTitle ? <SectionHeader title="Odkiaľ ju máš" /> : null}
+          {externalTitle ? (
+            <>
+              <Input
+                label="Predajca (nepovinné)"
+                value={provider}
+                onChangeText={setProvider}
+                placeholder="Ticketportal, Predpredaj…"
+              />
+              <Input
+                label="Číslo objednávky (nepovinné)"
+                value={reference}
+                onChangeText={setReference}
+                placeholder="Kupujúci ho neuvidí, slúži pri spore."
+              />
+              <Input
+                label="Pôvodná cena (nepovinné)"
+                value={faceValue}
+                onChangeText={setFaceValue}
+                keyboardType="decimal-pad"
+                placeholder="0,00"
+              />
+              <Input
+                label="Počet vstupeniek"
+                value={quantity}
+                onChangeText={setQuantity}
+                keyboardType="number-pad"
+                placeholder="1"
+              />
+            </>
+          ) : null}
         </>
-      ) : (
-        <Notice
-          tone="accent"
-          title="Otvor event a daj Predať"
-          body="Vstupenku odinakiaľ vypisuješ priamo na evente, ku ktorému patrí — inak by nebolo kam ju pripnúť."
-        />
       )}
 
       {eventId ? (
@@ -420,7 +602,8 @@ function SourceOption({
   onPress: () => void;
   title: string;
   body: string;
-  authenticity: 'verified' | 'protected';
+  /** Štítok pravosti. Chýba tam, kde sa nevyberá pôvod, ale spôsob doručenia. */
+  authenticity?: 'verified' | 'protected';
 }) {
   return (
     <Pressable
@@ -430,7 +613,7 @@ function SourceOption({
     >
       <View style={styles.sourceHead}>
         <Text style={styles.sourceTitle}>{title}</Text>
-        <AuthenticityBadge authenticity={authenticity} size="s" />
+        {authenticity ? <AuthenticityBadge authenticity={authenticity} size="s" /> : null}
       </View>
       <Caption style={styles.sourceBody}>{body}</Caption>
     </Pressable>
@@ -465,12 +648,23 @@ const styles = StyleSheet.create({
   },
   ticketOn: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   eventBox: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     padding: spacing.md,
     borderRadius: radius.card,
     borderWidth: 1, borderColor: colors.border,
     backgroundColor: colors.surface,
     marginBottom: spacing.xs,
   },
+  file: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1, borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+    marginBottom: spacing.xs,
+  },
+  link: { ...typography.bodyStrong, color: colors.accent },
+  hint: { marginTop: spacing.xs, lineHeight: 18 },
   ticketMain: { flex: 1 },
   ticketTitle: { ...typography.bodyStrong, color: colors.text },
   ticketPrice: { ...typography.body, color: colors.textSecondary },

@@ -51,6 +51,18 @@ export interface ResaleListing {
   face_value_cents: number | null;
   currency: string;
   delivery_method: ResaleDeliveryMethod;
+  /**
+   * Dostane kupujúci vstupenku v sekunde po zaplatení?
+   *
+   * Platí to pre naše vstupenky (prevod je zápis v databáze) a pre tie
+   * odinakiaľ, ktoré majú súbor nahratý už na inzeráte. Ostatné čakajú na
+   * predajcu, a kupujúci to má vedieť PRED platbou — dve ponuky za rovnakú
+   * cenu nie sú to isté, keď jedna príde hneď a druhá o tri dni.
+   *
+   * Cesta k súboru sa sem zámerne nevracia. Bucket je súkromný a kupujúci ju
+   * dostane až po zaplatení, ako podpísanú adresu s krátkou platnosťou.
+   */
+  instant_delivery: boolean;
   note: string | null;
   status: ResaleListingStatus;
   created_at: string;
@@ -78,6 +90,9 @@ export interface ResaleQuote {
   event_id: string;
   source: ResaleSource;
   authenticity: Authenticity;
+  delivery_method: ResaleDeliveryMethod;
+  /** Viď `ResaleListing.instant_delivery`. */
+  instant_delivery: boolean;
   quantity: number;
   unit_price_cents: number;
   ticket_price_cents: number;
@@ -264,6 +279,14 @@ export interface NewListing {
   externalReference?: string | null;
   faceValueCents?: number | null;
   note?: string | null;
+  /**
+   * Cesta k nahratému súboru so vstupenkou, v tvare `sellers/<moje id>/…`.
+   *
+   * Pri vstupenke odinakiaľ so spôsobom doručenia „súbor" je POVINNÁ: bez nej
+   * by inzerát sľuboval okamžité doručenie niečoho, čo ešte neexistuje.
+   * Server to odmietne ako `TICKET_FILE_REQUIRED`.
+   */
+  ticketFilePath?: string | null;
 }
 
 export async function createResaleListing(listing: NewListing) {
@@ -282,6 +305,7 @@ export async function createResaleListing(listing: NewListing) {
     p_external_reference: listing.externalReference ?? null,
     p_face_value_cents: listing.faceValueCents ?? null,
     p_note: listing.note ?? null,
+    p_ticket_file_path: listing.ticketFilePath ?? null,
   });
   if (error) throw error;
   return data;

@@ -307,7 +307,15 @@ function ListingRow({ listing }: { listing: ResaleListing }) {
       accessibilityRole="button"
     >
       <View style={styles.cardTop}>
-        <AuthenticityBadge authenticity={listing.authenticity} size="s" />
+        <View style={styles.badges}>
+          <AuthenticityBadge authenticity={listing.authenticity} size="s" />
+          {/* Kedy ju dostanem. Dve ponuky za rovnakú cenu nie sú to isté, keď
+              jedna príde v sekunde a druhá až keď sa predajca ozve — a to sa
+              musí dať porovnať tu, nie až v pokladni. */}
+          <Text style={listing.instant_delivery ? styles.fast : styles.slow}>
+            {listing.instant_delivery ? 'hneď po zaplatení' : 'pošle predajca'}
+          </Text>
+        </View>
         <View style={styles.priceBlock}>
           <Text style={styles.price}>
             {formatMoney(listing.price_cents, listing.currency)}
@@ -352,6 +360,9 @@ function ListingRow({ listing }: { listing: ResaleListing }) {
 }
 
 const styles = StyleSheet.create({
+  badges: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap', flex: 1 },
+  fast: { ...typography.caption, color: colors.success },
+  slow: { ...typography.caption, color: colors.textSecondary },
   header: {
     paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 2,
     maxWidth: CONTENT_MAX_WIDE, alignSelf: 'center', width: '100%',

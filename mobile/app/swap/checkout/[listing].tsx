@@ -161,6 +161,20 @@ export default function ResaleCheckoutScreen() {
       <View style={styles.badgeBlock}>
         <AuthenticityBadge authenticity={q.authenticity} />
         <Caption style={styles.explainer}>{authenticityExplainer(q.authenticity)}</Caption>
+        {/* Kedy vstupenku dostanem — to je vec, ktorú sa človek pýta hneď po
+            cene, a dá sa na ňu odpovedať pravdivo len zo servera. Ponuka so
+            súborom nahratým na inzeráte ju vydá v sekunde po platbe; prevod v
+            cudzej appke musí spraviť predajca, tak sa to aj napíše. */}
+        <Caption style={styles.explainer}>
+          {q.instant_delivery
+            ? q.source === 'blup'
+              ? 'Dostaneš ju hneď: po zaplatení sa prepíše na tvoje meno a '
+                + 'predajcov QR kód prestane platiť.'
+              : 'Dostaneš ju hneď: predajca ju nahral už do ponuky, takže ti ju '
+                + 'odovzdáme v sekunde po zaplatení.'
+            : 'Vstupenku ti predajca pošle po zaplatení — prevádza ju v appke, '
+              + 'v ktorej ju kúpil. Kým nedorazí, peniaze držíme my.'}
+        </Caption>
       </View>
 
       <View style={styles.bill}>
@@ -252,8 +266,11 @@ export default function ResaleCheckoutScreen() {
           {q.source === 'blup'
             ? 'Vstupenka sa prepíše na teba hneď po zaplatení. Predajca dostane '
               + 'peniaze až po evente.'
-            : 'Predajca dostane peniaze až po evente a až keď potvrdíš, že '
-              + 'vstupenka fungovala. Ak nefungovala, vrátime ti ich.'}
+            : q.instant_delivery
+              ? 'Vstupenku máš hneď, ale predajca peniaze nie: držíme ich až do '
+                + 'eventu. Ak by nefungovala, nahlás to a vrátime ti ich.'
+              : 'Predajca dostane peniaze až po evente a až keď potvrdíš, že '
+                + 'vstupenka fungovala. Ak nefungovala, vrátime ti ich.'}
         </Caption>
       </View>
     </Screen>

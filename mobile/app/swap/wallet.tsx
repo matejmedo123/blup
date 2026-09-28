@@ -115,9 +115,9 @@ function SwapWalletScreen() {
           </View>
 
           <Caption style={styles.note}>
-            Peniaze sa uvoľnia po evente. Pri vstupenke z inej platformy až keď
-            kupujúci potvrdí, že fungovala — dovtedy nikto nevie, či sa naozaj
-            dostal dnu.
+            Peniaze sa uvoľnia po evente. Pri vstupenke z inej platformy keď
+            kupujúci potvrdí, že fungovala — a keď sa neozve, uzavrieme to za
+            neho pár dní po evente, aby ti tu nič neležalo navždy.
           </Caption>
 
           {!b.payouts_enabled ? (

@@ -51,7 +51,7 @@ function literal(v) {
 
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const PORT = Number(process.env.BLUP_PREVIEW_PORT ?? 4310);
@@ -61,6 +61,8 @@ const SOCKET = process.env.BLUP_PG_SOCKET ?? '/tmp/blup-preview/socket';
 // the whole thing to TCP, which nothing cleans up.
 const PG_PORT = process.env.BLUP_PG_PORT ? ['-p', process.env.BLUP_PG_PORT] : [];
 const DB = process.env.BLUP_PREVIEW_DB ?? 'blup_preview';
+/** Kam náhľad odkladá nahraté súbory. Prežije reštart backendu, nie stroj. */
+const STORAGE_DIR = process.env.BLUP_PREVIEW_STORAGE ?? '/tmp/blup-preview/storage';
 const PG_USER = process.env.BLUP_PG_USER ?? 'postgres';
 
 /** Runs SQL and returns rows as JSON, through psql so no driver is needed. */
@@ -272,11 +274,15 @@ createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return json(res, {});
 
   const url = new URL(req.url, 'http://localhost');
-  const body = await new Promise((resolve) => {
-    let raw = '';
-    req.on('data', (chunk) => { raw += chunk; });
-    req.on('end', () => { try { resolve(JSON.parse(raw || '{}')); } catch { resolve({}); } });
+  // Telo sa drží aj ako bajty, nie len ako JSON: do úložiska chodia PDF-ká a
+  // obrázky, a tie cez `JSON.parse` neprejdú.
+  const raw = await new Promise((resolve) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
   });
+  let body = {};
+  try { body = JSON.parse(raw.toString('utf8') || '{}'); } catch { body = {}; }
 
   try {
     // --- auth: one fixed signed-in account ---------------------------------
@@ -341,6 +347,41 @@ createServer(async (req, res) => {
         return json(res, rows[0]);
       }
       return json(res, rows);
+    }
+
+    // --- úložisko ----------------------------------------------------------
+    //
+    // Nie je to Supabase Storage a netvári sa tak: žiadne politiky, žiadne
+    // podpisy. Je to najmenšie, čo treba na to, aby sa dalo POZRIEŤ, ako
+    // vyzerá nahratie vstupenky k inzerátu a jej otvorenie kupujúcim. Kto
+    // smie na ktorý súbor rozhodujú politiky v migrácii a tie sa overujú
+    // proti Supabase, nie tu.
+    if (url.pathname.startsWith('/storage/v1/')) {
+      const rest = url.pathname.slice('/storage/v1/'.length);
+
+      // Podpísaná adresa: vracia sa cesta späť na tento server.
+      if (rest.startsWith('object/sign/')) {
+        const key = rest.slice('object/sign/'.length);
+        return json(res, { signedURL: `/storage/v1/object/preview/${key}` });
+      }
+
+      const key = rest.replace(/^object\/(preview\/|authenticated\/|public\/)?/, '');
+      const file = join(STORAGE_DIR, key.replace(/\.\./g, ''));
+
+      if (req.method === 'POST' || req.method === 'PUT') {
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, raw);
+        return json(res, { Id: key, Key: key, path: key });
+      }
+      if (req.method === 'DELETE') {
+        try { unlinkSync(file); } catch { /* už tam nie je */ }
+        return json(res, [{ name: key }]);
+      }
+      if (req.method === 'GET') {
+        if (!existsSync(file)) return json(res, { message: 'not found' }, 404);
+        res.writeHead(200, { 'content-type': 'application/octet-stream' });
+        return res.end(readFileSync(file));
+      }
     }
 
     return json(res, { error: 'not a preview route' }, 404);

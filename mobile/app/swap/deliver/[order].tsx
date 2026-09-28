@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { deliverResaleTicket, type ResaleOrder } from '@/api/resale';
-import { pickImage, uploadResaleTicket } from '@/storage/uploads';
+import { pickTicketFile, uploadResaleTicket } from '@/storage/uploads';
 import { supabase } from '@/lib/supabase';
 import {
   Button, Caption, Input, LoadingState, Notice, Screen, SectionHeader, Title,
@@ -85,11 +85,37 @@ function DeliverTicketScreen() {
     );
   }
 
+  /**
+   * Ponuka mala súbor už v inzeráte, takže kupujúci ho dostal v sekunde po
+   * zaplatení. Ukázať tu formulár na nahratie by znamenalo pýtať si druhé
+   * PDF k vstupenke, ktorú si už niekto kúpil — a server to aj odmietne
+   * (`ALREADY_DELIVERED`).
+   */
+  if (o.order_status !== 'waiting_for_ticket') {
+    return (
+      <Screen scroll>
+        <Title>Nič doručovať netreba</Title>
+        <Notice
+          tone="success"
+          title="Vstupenka je už u kupujúceho"
+          body="Nahral si ju už do ponuky, tak sme mu ju odovzdali hneď po zaplatení. Peniaze dostaneš po evente."
+        />
+        <Button
+          title="Späť na prehľad"
+          variant="secondary"
+          onPress={() => router.replace('/swap/selling')}
+        />
+      </Screen>
+    );
+  }
+
   const sendFile = async () => {
     setError(null);
     setBusy(true);
     try {
-      const picked = await pickImage({ source: 'library' });
+      // Nie `pickImage`: ten otvára galériu fotiek a PDF v nej nie je,
+      // hoci práve tak vstupenky odinakiaľ chodia.
+      const picked = await pickTicketFile();
       if (!picked) { setBusy(false); return; }
       const path = await uploadResaleTicket(o.id, {
         uri: picked.uri,
@@ -152,6 +178,8 @@ function DeliverTicketScreen() {
       <SectionHeader title="Mám ju ako súbor" />
       <Caption style={styles.hint}>
         PDF alebo fotka. Uloží sa súkromne — dostane sa k nej len tento kupujúci.
+        Nabudúce ju nahraj rovno do ponuky: kupujúci ju potom má hneď po
+        zaplatení a ty nemusíš robiť nič.
       </Caption>
       <Button
         title={busy ? 'Nahrávam…' : 'Vybrať súbor'}

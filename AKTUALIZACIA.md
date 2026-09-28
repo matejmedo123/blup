@@ -126,6 +126,26 @@ Strop však z databázy nezmizol: v niektorých krajinách je limit prirážky n
 nominálnu hodnotu zákonná povinnosť. Keď ho budeš potrebovať, zapneš ho
 v `platform_settings` a nemusí sa dopisovať kód.
 
+**Vstupenka odinakiaľ je teraz inzerát so vstupenkou, nie sľub.** PDF sa nahráva
+pri vypisovaní ponuky a kupujúci ho dostane v sekunde po zaplatení — rovnako
+rýchlo ako našu vstupenku. Predajca peniaze aj tak dostane až po evente, takže
+ochrana kupujúceho sa nemení; mení sa len to, že už nečaká, kým sa predajca
+ozve. Ponuka so spôsobom doručenia „súbor" bez súboru nevznikne.
+
+Vypísať ju už netreba z eventu: na obrazovke *Predať vstupenku* si event
+vyhľadáš. Dovtedy tam bola veta „otvor event a daj Predať" a človek, ktorý
+prišiel na SWAP s lístkom v ruke, nemal kam ísť.
+
+K tomu pribudla poistka na druhej strane: keď sa kupujúci po evente neozve,
+objednávku uzavrieme za neho (`auto_complete_resale_orders`, po uplynutí
+`resale_settlement_days`) a predajcovi vznikne nárok. Bez toho by peniaze za
+vstupenku, ktorá dorazila hneď a fungovala, ležali navždy — kupujúci nemá
+dôvod sa do appky vrátiť. Spor sa dá otvoriť aj potom a zablokuje výplatu.
+
+Na nasadenie z toho **nevyplýva nič navyše**: je to jedna migrácia, ktorú
+zachytí `npx supabase db push` v kroku 1, a žiadna nová serverová funkcia ani
+cron. Bucket `resale-tickets` už existuje, len dostal ďalšie dve politiky.
+
 ---
 
 ## Čo bolo nové v balíku predtým

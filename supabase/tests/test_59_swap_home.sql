@@ -88,13 +88,16 @@ begin
   -- Dve ponuky na koncert, jedna na futbal.
   perform public.create_resale_listing(
     'e5959595-0000-0000-0000-000000000001'::uuid, 'external', 4500, null,
-    p_delivery_method => 'file', p_quantity => 2, p_external_provider => 'Test');
+    p_delivery_method => 'file', p_quantity => 2, p_external_provider => 'Test',
+    p_ticket_file_path => 'sellers/' || v_seller || '/a.pdf');
   perform public.create_resale_listing(
     'e5959595-0000-0000-0000-000000000001'::uuid, 'external', 3800, null,
-    p_delivery_method => 'file', p_external_provider => 'Test');
+    p_delivery_method => 'file', p_external_provider => 'Test',
+    p_ticket_file_path => 'sellers/' || v_seller || '/b.pdf');
   perform public.create_resale_listing(
     'e5959595-0000-0000-0000-000000000002'::uuid, 'external', 2500, null,
-    p_delivery_method => 'file', p_external_provider => 'Test');
+    p_delivery_method => 'file', p_external_provider => 'Test',
+    p_ticket_file_path => 'sellers/' || v_seller || '/c.pdf');
 
   v_home := public.swap_home(8);
   v_fams := v_home->'families';

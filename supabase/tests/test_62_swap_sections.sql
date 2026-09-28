@@ -59,19 +59,23 @@ begin
     'c6262626-0000-0000-0000-000000000001'::uuid,
     p_section => 'A', p_row_label => '4', p_seat_label => '12');
   perform public.create_resale_listing(v_ev, 'external', 1800, null,
-    p_delivery_method => 'file', p_ticket_label => 'Tribúna Juh');
+    p_delivery_method => 'file', p_ticket_label => 'Tribúna Juh',
+    p_ticket_file_path => 'sellers/a6262626-0000-0000-0000-000000000002/juh1.pdf');
   perform public.create_resale_listing(v_ev, 'external', 2200, null,
-    p_delivery_method => 'file', p_ticket_label => 'Tribúna Juh');
+    p_delivery_method => 'file', p_ticket_label => 'Tribúna Juh',
+    p_ticket_file_path => 'sellers/a6262626-0000-0000-0000-000000000002/juh2.pdf');
 
   perform set_config('request.jwt.claim.sub', 'a6262626-0000-0000-0000-000000000003', true);
   perform public.create_resale_listing(v_ev, 'blup', 3000,
     'c6262626-0000-0000-0000-000000000002'::uuid,
     p_section => 'A', p_row_label => '11', p_seat_label => '3');
   perform public.create_resale_listing(v_ev, 'external', 4500, null,
-    p_delivery_method => 'file', p_ticket_label => 'VIP lóža');
+    p_delivery_method => 'file', p_ticket_label => 'VIP lóža',
+    p_ticket_file_path => 'sellers/a6262626-0000-0000-0000-000000000003/vip.pdf');
   -- Ponuka bez akéhokoľvek označenia miesta.
   perform public.create_resale_listing(v_ev, 'external', 1600, null,
-    p_delivery_method => 'file');
+    p_delivery_method => 'file',
+    p_ticket_file_path => 'sellers/a6262626-0000-0000-0000-000000000003/bez.pdf');
 
   reset role;
 end $$;

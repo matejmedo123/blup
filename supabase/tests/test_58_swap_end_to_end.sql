@@ -208,11 +208,14 @@ begin
 
   set local role authenticated;
 
-  -- 1. Boris ponúka vstupenku, o ktorej nevieme nič.
+  -- 1. Boris ponúka vstupenku, o ktorej nevieme nič, a prevádza ju v appke
+  --    pôvodnej platformy — takže žiadny súbor dopredu nahrať nemôže a
+  --    doručenie zostáva ručný krok. (Cesta so súborom z inzerátu má vlastný
+  --    test, `test_64`.)
   perform set_config('request.jwt.claim.sub', v_boris::text, true);
   v_listing := public.create_resale_listing(
     v_event, 'external', 6000, null,
-    p_delivery_method => 'file',
+    p_delivery_method => 'mobile_transfer',
     p_external_provider => 'Ticketportal',
     p_ticket_label => 'Tribúna'
   );
@@ -316,7 +319,7 @@ begin
   perform set_config('request.jwt.claim.sub', v_boris::text, true);
   v_listing := public.create_resale_listing(
     v_event, 'external', 5500, null,
-    p_delivery_method => 'file', p_external_provider => 'Predpredaj.sk'
+    p_delivery_method => 'mobile_transfer', p_external_provider => 'Predpredaj.sk'
   );
 
   perform set_config('request.jwt.claim.sub', v_anna::text, true);
@@ -409,7 +412,7 @@ begin
     perform set_config('request.jwt.claim.sub', v_boris::text, true);
     v_listing := public.create_resale_listing(
       v_event, 'external', v_price, null,
-      p_delivery_method => 'file', p_external_provider => 'Test'
+      p_delivery_method => 'mobile_transfer', p_external_provider => 'Test'
     );
 
     perform set_config('request.jwt.claim.sub', v_anna::text, true);

@@ -1,3 +1,4 @@
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform } from 'react-native';
@@ -579,6 +580,101 @@ export async function uploadResaleTicket(
   // Vracia sa CESTA, nie adresa. Verejná adresa na tento bucket neexistuje a
   // ani by nemala — kupujúci dostane podpísanú, keď si vstupenku otvorí.
   return path;
+}
+
+/**
+ * Výber súboru so vstupenkou — PDF alebo obrázok.
+ *
+ * Nie `pickImage`. Ten otvára galériu fotiek a v nej PDF nie je, takže
+ * obrazovka, ktorá písala „PDF alebo fotka", v skutočnosti PDF vybrať
+ * nedovolila. Vstupenky odinakiaľ pritom chodia e-mailom práve ako PDF.
+ *
+ * Typy sú zúžené na to, čo bucket naozaj prijme (`allowed_mime_types`):
+ * keby picker pustil ďalej .docx, nahrávanie by spadlo až v úložisku a človek
+ * by videl cudziu chybu namiesto vety, ktorá mu povie, čo má spraviť.
+ */
+export interface PickedTicketFile {
+  uri: string;
+  name: string;
+  mimeType: string;
+  size: number | null;
+}
+
+export async function pickTicketFile(): Promise<PickedTicketFile | null> {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+    multiple: false,
+    copyToCacheDirectory: true,
+  });
+
+  if (result.canceled || !result.assets?.[0]) return null;
+
+  const asset = result.assets[0];
+  return {
+    uri: asset.uri,
+    name: asset.name ?? 'vstupenka',
+    mimeType: asset.mimeType ?? 'application/pdf',
+    size: asset.size ?? null,
+  };
+}
+
+/**
+ * Vstupenka prikladaná k inzerátu, ešte pred akoukoľvek objednávkou.
+ *
+ * Toto je tá cesta, ktorou vstupenka odinakiaľ dorazí kupujúcemu v sekunde po
+ * zaplatení: predajca ju nahrá už pri vypisovaní ponuky a `create_resale_listing`
+ * si ju na ponuku pripne.
+ *
+ * Objednávka v tej chvíli ešte neexistuje, takže delenie po objednávkach
+ * (`<order_id>/…`) použiť nejde — súbor ide do priečinka PREDAJCU. Že tam
+ * patrí, kontroluje politika úložiska aj server pri vypisovaní ponuky; bez
+ * toho by sa dal na inzerát prilepiť cudzí súbor.
+ *
+ * Bucket je ten istý súkromný. Kým sa ponuka nepredá, súbor vidí len predajca
+ * a admin; po zaplatení sa pridá kupujúci tej objednávky — a nikto iný, ani s
+ * adresou v ruke.
+ */
+export async function uploadListingTicketFile(
+  file: { uri: string; mimeType?: string },
+): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const me = userData?.user?.id;
+  if (!me) throw new Error('UNAUTHENTICATED');
+
+  const response = await fetch(file.uri);
+  const arrayBuffer = await response.arrayBuffer();
+
+  if (arrayBuffer.byteLength > RESALE_TICKET_MAX_BYTES) {
+    const mb = Math.round(arrayBuffer.byteLength / (1024 * 1024));
+    throw new Error(`Súbor má ${mb} MB, a viac než 15 MB sa nahrať nedá.`);
+  }
+
+  const type = file.mimeType && /^(application\/pdf|image\/(jpeg|png|webp))$/.test(file.mimeType)
+    ? file.mimeType
+    : /\.pdf($|\?)/i.test(file.uri) ? 'application/pdf' : 'image/jpeg';
+  const extension = type === 'application/pdf' ? 'pdf'
+    : type === 'image/png' ? 'png'
+      : type === 'image/webp' ? 'webp' : 'jpg';
+
+  const path = `sellers/${me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+
+  const { error } = await supabase.storage
+    .from('resale-tickets')
+    .upload(path, arrayBuffer, { contentType: type, upsert: false });
+  if (error) throw error;
+
+  return path;
+}
+
+/**
+ * Zmazanie prílohy, ktorú si predajca rozmyslel.
+ *
+ * Len kým na nej nevisí zaplatená objednávka — to stráži politika úložiska.
+ * Po predaji už súbor patrí aj kupujúcemu a zmiznúť mu spod rúk nesmie.
+ */
+export async function removeListingTicketFile(path: string): Promise<void> {
+  const { error } = await supabase.storage.from('resale-tickets').remove([path]);
+  if (error) throw error;
 }
 
 /**
