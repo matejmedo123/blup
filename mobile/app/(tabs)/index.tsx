@@ -382,6 +382,28 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.headerActions}>
+          {/*
+            Cesta na burzu pre prihláseného na telefóne.
+
+            Spodná lišta má päť miest a cieľov je šesť. Neprihlásenému sa preto
+            na mieste Feedu ponúka SWAP — Feed je o ľuďoch, ktorých sleduje, a
+            bez účtu nemá koho. Lenže prihlásenému tam Feed naozaj patrí, a tým
+            sa SWAP z telefónu stratil úplne: v lište nie je a bočné menu je len
+            na monitore. Burza bola dostupná iba tomu, kto nebol prihlásený.
+
+            Tlačidlo je preto tam a len tam, kde tá cesta chýba: na telefóne,
+            prihlásenému. Neprihlásený ho v hlavičke nemá, lebo SWAP má v lište,
+            a dve cesty na to isté sú zbytočná otázka navyše.
+          */}
+          {!isGuest && !layout.isWide ? (
+            <Button
+              title="SWAP"
+              variant="secondary"
+              compact
+              onPress={() => router.push('/swap')}
+            />
+          ) : null}
+
           {isGuest ? (
             // The only thing a guest is nudged towards, once, in the corner —
             // not a banner over the events they came to look at.
@@ -880,7 +902,10 @@ const styles = StyleSheet.create({
   },
   city: { ...typography.mono, color: colors.accent },
   title: { ...typography.screenTitle, color: colors.text, marginTop: 4 },
-  headerActions: { flexDirection: 'row', gap: spacing.md },
+  // `alignItems: center`, aby nižšie tlačidlo „SWAP" nestálo na tej istej
+  // čiare hore ako okrúhle ikony vedľa neho; `flexShrink: 0`, aby sa pri
+  // dlhom názve mesta rad ikon nezmrštil namiesto toho, aby sa zalomil nadpis.
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 0 },
 
   switchRow: {
     flexDirection: 'row',
