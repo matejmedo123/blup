@@ -143,51 +143,64 @@ export default function EventResaleScreen() {
           správnom evente — meno koncertu sa dá pomýliť, plagát nie. Fotka je
           tá istá 16:9, ktorá sa nahráva k eventu, a keď chýba, kreslí sa
           gradient podľa kategórie, rovnako ako na karte v BLUPe. */}
-      {event.data ? (
-        <View style={styles.hero}>
-          <GradientCover
-            uri={event.data.cover_image_url}
-            category={event.data.category}
-            height={168}
-            whole
-            overlay
-          >
-            <View style={styles.heroText}>
-              <Text style={styles.eventName} numberOfLines={2}>{event.data.title}</Text>
-              <Text style={styles.heroMeta} numberOfLines={1}>
-                {[
-                  formatEventDate(event.data.start_at),
-                  event.data.venue_name,
-                  event.data.city,
-                ].filter(Boolean).join(' · ')}
-              </Text>
-            </View>
-          </GradientCover>
-        </View>
-      ) : null}
+      {/* Dva stĺpce ako na stránke eventu v BLUPe: vľavo plagát a pod ním
+          názov s dátumom, vpravo to, kvôli čomu sem človek prišiel — koľko
+          vstupeniek je v ponuke a od koľkých eur.
 
-      {stats && stats.listings > 0 ? (
-        <View style={styles.summary}>
-          <View style={styles.summaryCell}>
-            <Text style={styles.summaryBig}>{stats.tickets}</Text>
-            <Caption>
-              {stats.tickets === 1 ? 'vstupenka' : stats.tickets < 5 ? 'vstupenky' : 'vstupeniek'}
-            </Caption>
-          </View>
-          <View style={styles.summaryCell}>
-            <Text style={styles.summaryBig}>
-              {stats.from_cents != null
-                ? formatMoney(stats.from_cents, stats.currency ?? 'EUR')
-                : '—'}
+          Plagát sa tým hlavne ZMENŠÍ. `whole` drží celý obrázok, takže si
+          berie výšku podľa svojho pomeru strán — cez celú šírku stránky to
+          na monitore znamenalo 568 px, teda pol obrazovky na obrázok, kým sa
+          človek dostal k prvej ponuke. V užšom stĺpci je z toho tretina. */}
+      <View style={[styles.hero, layout.isWide && styles.heroWide]}>
+        {event.data ? (
+          <View style={[styles.heroMain, layout.isWide && styles.heroMainWide]}>
+            <View style={styles.heroArt}>
+              <GradientCover
+                uri={event.data.cover_image_url}
+                category={event.data.category}
+                height={layout.isWide ? 260 : 170}
+                whole
+                wholeMinRatio={0.66}
+                backdrop="blur"
+                showPlaceholderLabel={false}
+              />
+            </View>
+            <Text style={styles.eventName} numberOfLines={2}>{event.data.title}</Text>
+            <Text style={styles.heroMeta} numberOfLines={2}>
+              {[
+                formatEventDate(event.data.start_at),
+                event.data.venue_name,
+                event.data.city,
+              ].filter(Boolean).join(' · ')}
             </Text>
-            <Caption>od</Caption>
           </View>
-          <View style={styles.summaryCell}>
-            <Text style={styles.summaryBig}>{stats.verified_count}</Text>
-            <Caption>overených</Caption>
+        ) : null}
+
+        {stats && stats.listings > 0 ? (
+          <View style={[styles.heroSide, layout.isWide && styles.heroSideWide]}>
+            <View style={styles.summary}>
+              <View style={styles.summaryCell}>
+                <Text style={styles.summaryBig}>{stats.tickets}</Text>
+                <Caption>
+                  {stats.tickets === 1 ? 'vstupenka' : stats.tickets < 5 ? 'vstupenky' : 'vstupeniek'}
+                </Caption>
+              </View>
+              <View style={styles.summaryCell}>
+                <Text style={styles.summaryBig}>
+                  {stats.from_cents != null
+                    ? formatMoney(stats.from_cents, stats.currency ?? 'EUR')
+                    : '—'}
+                </Text>
+                <Caption>od</Caption>
+              </View>
+              <View style={styles.summaryCell}>
+                <Text style={styles.summaryBig}>{stats.verified_count}</Text>
+                <Caption>overených</Caption>
+              </View>
+            </View>
           </View>
-        </View>
-      ) : null}
+        ) : null}
+      </View>
 
       {/* --- kde chcem sedieť ------------------------------------------- */}
       <View style={styles.place}>
@@ -418,20 +431,24 @@ const styles = StyleSheet.create({
     maxWidth: CONTENT_MAX_WIDE, width: '100%', alignSelf: 'center',
     paddingHorizontal: spacing.lg, paddingTop: spacing.xs,
     marginBottom: spacing.md,
+    gap: spacing.lg,
   },
-  heroText: {
-    marginTop: 'auto',
-    padding: spacing.md,
-    gap: 2,
-  },
-  heroMeta: { ...typography.metaSm, color: 'rgba(255,255,255,0.86)' },
-  eventName: { ...typography.subheading, color: "#FFFFFF" },
+  heroWide: { flexDirection: 'row', alignItems: 'flex-start' },
+  heroArt: { borderRadius: radius.lg, overflow: 'hidden' },
+  heroMain: { gap: spacing.xs },
+  heroMainWide: { flex: 6, minWidth: 0 },
+  heroSide: {},
+  // `alignSelf: 'flex-start'`, aby sa škatuľka s číslami nenaťahovala na výšku
+  // plagáta a nemala pod poslednou číslicou dlaň prázdna.
+  heroSideWide: { flex: 5, minWidth: 260, alignSelf: 'flex-start' },
+  // Názov a dátum sú teraz POD plagátom, nie v ňom — takže v normálnej farbe
+  // textu, nie v bielej na obrázku.
+  heroMeta: { ...typography.metaSm, color: colors.textSecondary },
+  eventName: { ...typography.subheading, color: colors.text },
 
   summary: {
     flexDirection: 'row',
-    marginHorizontal: spacing.lg,
-    maxWidth: CONTENT_MAX_WIDE, alignSelf: 'center', width: '100%',
-    marginBottom: spacing.md,
+    width: '100%',
     padding: spacing.md,
     borderRadius: radius.card,
     backgroundColor: colors.surface,
