@@ -115,6 +115,48 @@ const usable = await page.evaluate(() => {
 });
 check(usable, 'lišta nezakrýva stránku — dá sa pod ňou klikať');
 
+/**
+ * A nezakrýva ani spodnú navigáciu.
+ *
+ * Toto je tu preto, že sa to raz stalo: lišta sadla na spodný okraj, na
+ * telefóne je tam lišta s kartami a „Zamietnuť" skončilo presne na tlačidle
+ * SWAP. Kým človek neodpovedal, nedal sa otvoriť — a nič na tom nevyzeralo
+ * rozbito, len to nereagovalo.
+ */
+{
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await phone.addInitScript(() => {
+    try { localStorage.setItem('blup.welcome.v1.seen', '1'); } catch { /* private */ }
+  });
+  const small = await phone.newPage();
+  await small.goto(`${base}/`, { waitUntil: 'networkidle' });
+  await small.waitForTimeout(2500);
+
+  const covered = await small.evaluate(() => {
+    const tabs = ['Domov', 'Objav', 'SWAP', 'Chat'];
+    const bad = [];
+    for (const label of tabs) {
+      // Nápis sa v DOM-e vyskytuje viackrát (ikona a text, bočné menu).
+      // Zaujíma nás ten najnižší — spodná lišta je dole.
+      const leaf = [...document.querySelectorAll('*')]
+        .filter((el) => !el.children.length && (el.textContent || '').trim() === label)
+        .sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top)[0];
+      if (!leaf) { bad.push(`${label}: v lište nie je`); continue; }
+      const r = leaf.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      // Porovnáva sa text, nie totožnosť uzla: `elementFromPoint` vráti
+      // najvrchnejší prvok a pri react-native-web to býva iný uzol toho istého
+      // tlačidla. Keby tam ležala lišta so súhlasom, text by bol jej.
+      if (!top || !(top.textContent || '').includes(label)) {
+        bad.push(`${label}: prekryté „${(top?.textContent || '').trim().slice(0, 24)}"`);
+      }
+    }
+    return bad;
+  });
+  check(covered.length === 0, `lišta nezakrýva spodnú navigáciu (${covered.join(', ') || 'nič neprekryté'})`);
+  await phone.close();
+}
+
 check(
   !(await scripts()).some((src) => /facebook/.test(src)),
   'Meta pixel sa pred súhlasom nenačíta',

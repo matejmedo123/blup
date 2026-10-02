@@ -6,6 +6,7 @@ import { usePathname } from 'expo-router';
 
 import { supabase } from '@/lib/supabase';
 import { useBottomInset } from '@/components/BottomInset';
+import { useLayout } from '@/hooks/useLayout';
 import { isConfigured } from '@/lib/env';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -483,6 +484,7 @@ export function MarketingTags(): React.ReactElement | null {
   /** Podrobné nastavenie. Lišta dole je to prvé, toto až na vyžiadanie. */
   const [panel, setPanel] = useState(false);
   const bottomInset = useBottomInset();
+  const layout = useLayout();
   const pathname = usePathname();
   const lastPath = useRef<string | null>(null);
   /** Až keď vieme, čo je nakonfigurované, má zmysel čokoľvek posielať. */
@@ -597,10 +599,23 @@ export function MarketingTags(): React.ReactElement | null {
         accessibilityRole="alert"
         style={[
           styles.bar,
-          // Nad spodnou lištou s kartami, nie cez ňu. Na telefóne je dole
-          // navigácia a lišta položená na nej by zakryla polovicu tlačidiel —
-          // presne ten istý prípad, aký rieši bublina košíka.
-          { bottom: spacing.lg + bottomInset },
+          /**
+           * Nad spodnou navigáciou, nie cez ňu.
+           *
+           * `useBottomInset()` na to nestačí a stálo to jednu nahlásenú chybu:
+           * vracia nulu na obrazovkách, ktoré si žiadnu rezervu nepýtajú, takže
+           * lišta sadla rovno na spodný okraj — a tam je na telefóne lišta
+           * s kartami. „Zamietnuť" skončilo presne na tlačidle SWAP a kým
+           * človek neodpovedal, nedal sa otvoriť.
+           *
+           * 92 px je výška tej lišty aj s medzerou, rovnaké číslo ako používa
+           * bublina košíka; `bottomInset` sa pripočítava navyše tam, kde si
+           * obrazovka pýta vlastnú rezervu.
+           */
+          {
+            bottom: (layout.isDesktop ? spacing.lg : 92)
+              + (bottomInset > 0 ? bottomInset + spacing.md : 0),
+          },
           {
             opacity: slide,
             transform: [{
