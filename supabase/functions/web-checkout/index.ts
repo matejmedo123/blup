@@ -50,6 +50,20 @@ interface Guest {
 
 interface Body {
   kind?: Kind;
+  /**
+   * Zaplatiť priamo na BLUPe namiesto presmerovania na hostovaný Checkout.
+   *
+   * Vracia sa `payment_intent_client_secret` a prehliadač ho potvrdí cez
+   * Stripe Payment Element. Mení sa tým jedine to, kde sa vypĺňa karta:
+   * cenu naďalej počíta databáza a zaplatené je to až vtedy, keď to povie
+   * overený webhook. Číslo karty aj tak nejde cez našu doménu — Payment
+   * Element je Stripe v iframe.
+   *
+   * Platí iba pre `ticket` a `cart`. Predplatné, boost a portál ostávajú na
+   * hostovanej stránke, lebo tam sa riešia proration, dunning a daňové
+   * zobrazenie — to sa neoplatí prerábať.
+   */
+  inline?: boolean;
   // resale
   reservation_id?: string;
   guest?: Guest;
@@ -305,6 +319,48 @@ Deno.serve(async (req) => {
         .from('organizations').select('stripe_account_id, charges_enabled')
         .eq('id', order.organization_id).single();
 
+      // Platba priamo na BLUPe. Rovnaká cena, rovnaké metadata, rovnaký
+      // webhook — iná je len obrazovka, na ktorej sa vypĺňa karta.
+      if (body.inline) {
+        const intent = await stripe.createWebPaymentIntent({
+          amountCents: order.total_cents,
+          currency: order.currency,
+          reference: { orderId: order.id },
+          buyerId: user?.id ?? null,
+          guestEmail: guest?.email ?? null,
+          eventId: order.event_id,
+          applicationFeeCents: order.blup_revenue_cents,
+          connectedAccountId: org?.charges_enabled ? org.stripe_account_id : null,
+          customerId: user ? await customerFor(db, user) : null,
+          descriptor: event?.title ?? null,
+          idempotencyKey: `pi_web_order_${order.id}`,
+        });
+
+        await db.from('orders').update({
+          provider: 'stripe',
+          provider_reference: intent.id,
+          payment_status: 'processing',
+        }).eq('id', order.id);
+
+        return json({
+          kind, order_id: order.id, status: 'requires_payment', requires_payment: true,
+          payment_intent_client_secret: intent.client_secret,
+          // Kam sa má prehliadač vrátiť, keď platba potrebuje 3-D Secure
+          // a odskočí do banky. Bez toho by sa človek po overení vrátil
+          // na prázdnu stránku.
+          return_url: safeReturn(
+            order.claim_token
+              ? `/checkout/return?order=${order.id}&token=${order.claim_token}`
+              : `/checkout/return?order=${order.id}`,
+            '/tickets',
+          ),
+          amount_cents: order.total_cents,
+          archive_fee_cents: order.archive_fee_cents,
+          currency: order.currency,
+          claim_token: order.claim_token ?? null,
+        });
+      }
+
       const session = await stripe.createCheckoutSession({
         mode: 'payment',
         amountCents: order.total_cents,
@@ -408,6 +464,38 @@ Deno.serve(async (req) => {
       const { data: org } = await db
         .from('organizations').select('stripe_account_id, charges_enabled')
         .eq('id', checkout.organization_id).single();
+
+      if (body.inline) {
+        const intent = await stripe.createWebPaymentIntent({
+          amountCents: checkout.total_cents,
+          currency: checkout.currency,
+          reference: { checkoutId: checkout.id },
+          buyerId: user.id,
+          eventId: checkout.event_id,
+          applicationFeeCents: checkout.commission_cents + checkout.archive_fee_cents,
+          connectedAccountId: org?.charges_enabled ? org.stripe_account_id : null,
+          customerId: await customerFor(db, user),
+          descriptor: event?.title ?? null,
+          idempotencyKey: `pi_web_checkout_${checkout.id}`,
+        });
+
+        await db.from('checkouts').update({
+          provider: 'stripe',
+          provider_reference: intent.id,
+        }).eq('id', checkout.id);
+
+        await db.from('orders').update({ payment_status: 'processing' })
+          .eq('checkout_id', checkout.id);
+
+        return json({
+          kind, checkout_id: checkout.id, status: 'requires_payment', requires_payment: true,
+          payment_intent_client_secret: intent.client_secret,
+          return_url: safeReturn(`/checkout/return?checkout=${checkout.id}`, '/tickets'),
+          amount_cents: checkout.total_cents,
+          archive_fee_cents: checkout.archive_fee_cents,
+          currency: checkout.currency,
+        });
+      }
 
       const archivePerTicket = checkout.quantity > 0
         ? Math.round(checkout.archive_fee_cents / checkout.quantity)

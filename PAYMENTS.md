@@ -392,6 +392,43 @@ Details worth knowing:
 
 ---
 
+## Paying on BLUP (web)
+
+The browser used to leave for Stripe's hosted page. It still can — that is the
+fallback — but with a publishable key in the build the card is filled in on
+BLUP, in Stripe's Payment Element.
+
+```
+"Zaplatiť"  ->  elements.submit()          the form says it is filled in
+            ->  web-checkout { inline: true }   create_order / create_checkout
+            ->  PaymentIntent + client_secret   amounts from the database
+            ->  confirmPayment(redirect:'if_required')
+            ->  /checkout/return               waits for the webhook
+```
+
+What did **not** change is the part that matters:
+
+* **The database still prices it.** `inline: true` picks a different Stripe
+  object; it does not touch `create_order` or `create_checkout`.
+* **The webhook is still the only thing that issues a ticket.** A successful
+  `confirmPayment` is a promise, not a receipt — the return page waits for the
+  rows `fulfill_order()` writes, exactly as the hosted path does.
+* **The card never reaches our origin.** The Payment Element is Stripe in an
+  iframe; the page sees whether it succeeded and nothing else.
+* **Metadata is unchanged**, so one webhook handles both paths: `order_id` for
+  a single ticket, `checkout_id` for a basket. Resale keeps its own key.
+* **`on_behalf_of` is still sent** with a connected account, so a dispute comes
+  out of the organizer's balance and not BLUP's — inline payment must not move
+  that risk quietly.
+
+The order is created on the button press, not on arriving at the step, so
+nobody's stock is held while a buyer is still deciding. Without a publishable
+key the screen keeps the redirect button rather than rendering an empty frame;
+premium, boosts and the billing portal stay on the hosted page, where
+proration, dunning and tax display are Stripe's problem.
+
+---
+
 ## Resale (BLUP SWAP)
 
 The secondary market is a **separate money flow**, not a variant of the primary

@@ -49,11 +49,39 @@ interface WebCheckoutResponse {
   checkout_id?: string;
   boost_id?: string;
   redirect_url?: string;
+  payment_intent_client_secret?: string;
+  return_url?: string;
   requires_payment?: boolean;
   status?: string;
 }
 
+/**
+ * Platba, ktorá sa odohrá na BLUPe.
+ *
+ * `needs_card` znamená, že objednávka je založená a čaká na potvrdenie karty
+ * cez Payment Element. `succeeded` je stav, keď nakoniec nebolo čo platiť —
+ * napríklad zľavový kód zrazil sumu na nulu medzi tým, čo si človek pozrel
+ * cenu, a tým, čo stlačil „Zaplatiť". Vstupenka je vtedy už vydaná.
+ */
+export type InlineStart =
+  | {
+      status: 'needs_card';
+      clientSecret: string;
+      returnUrl: string;
+      orderId?: string;
+      claimToken?: string | null;
+    }
+  | { status: 'succeeded'; orderId?: string; claimToken?: string | null };
+
 export const canTakePayment = (): boolean => true;
+
+/**
+ * Inline platba potrebuje publishable key v prehliadači.
+ *
+ * Je to verejný kľúč — je v každom skripte na stránke a nič sa ním nedá
+ * minúť. Tajný kľúč ostáva iba na serveri, kde aj bol.
+ */
+export const supportsInlinePayment = true;
 
 /** Hosted Checkout is a server-issued URL; the browser needs no Stripe key. */
 export const requiresPublishableKey = false;
@@ -94,6 +122,67 @@ export async function payForTickets(
 
   go(session.redirect_url);
   return { status: 'redirecting', orderId: session.order_id, claimToken: session.claim_token };
+}
+
+/**
+ * Založí objednávku na vstupenku a vráti tajomstvo platby.
+ *
+ * Volá sa až po stlačení „Zaplatiť": dovtedy nie je čo rezervovať a nikomu sa
+ * neblokujú lístky. Cenu počíta `create_order` v databáze rovnako ako pri
+ * hostovanom Checkoute — toto je iná obrazovka, nie iná cena.
+ */
+export async function startInlineTicketPayment(
+  ticketTypeId: string,
+  quantity: number,
+  promoCode: string | null,
+  guest?: GuestDetails | null,
+): Promise<InlineStart> {
+  const session = await callFunction<WebCheckoutResponse>('web-checkout', {
+    kind: 'ticket',
+    inline: true,
+    ticket_type_id: ticketTypeId,
+    quantity,
+    promo_code: promoCode,
+    guest: guest ?? undefined,
+  });
+
+  if (session.requires_payment === false) {
+    return { status: 'succeeded', orderId: session.order_id, claimToken: session.claim_token };
+  }
+  if (!session.payment_intent_client_secret || !session.return_url) {
+    throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+  }
+
+  return {
+    status: 'needs_card',
+    clientSecret: session.payment_intent_client_secret,
+    returnUrl: session.return_url,
+    orderId: session.order_id,
+    claimToken: session.claim_token,
+  };
+}
+
+/** To isté pre celý košík. Čo je v ňom a čo to stojí, vie server sám. */
+export async function startInlineCartPayment(promoCode: string | null): Promise<InlineStart> {
+  const session = await callFunction<WebCheckoutResponse>('web-checkout', {
+    kind: 'cart',
+    inline: true,
+    promo_code: promoCode,
+  });
+
+  if (session.requires_payment === false) {
+    return { status: 'succeeded', orderId: session.checkout_id };
+  }
+  if (!session.payment_intent_client_secret || !session.return_url) {
+    throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
+  }
+
+  return {
+    status: 'needs_card',
+    clientSecret: session.payment_intent_client_secret,
+    returnUrl: session.return_url,
+    orderId: session.checkout_id,
+  };
 }
 
 /**

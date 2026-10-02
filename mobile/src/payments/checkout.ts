@@ -55,6 +55,44 @@ export const canTakePayment = (): boolean => isStripeModuleAvailable;
  */
 export const requiresPublishableKey = true;
 
+/**
+ * Na telefóne sa karta nevypĺňa v stránke.
+ *
+ * Otvorí sa Stripe PaymentSheet — natívny hárok, ktorý prinesie Apple Pay aj
+ * Google Pay a ktorý ľudia z iných appiek poznajú. Vlepiť doňho webový
+ * formulár by znamenalo obe platby spraviť horšie naraz.
+ */
+export const supportsInlinePayment = false;
+
+/**
+ * Tieto dve existujú iba preto, aby sa spoločná obrazovka pokladne preložila.
+ * Volať sa nemajú: `supportsInlinePayment` je `false`, takže natívna vetva ide
+ * cez PaymentSheet. Keby sa sem predsa niekto dostal, nech to padne hlasno a
+ * hneď — tichý `undefined` by skončil ako platobný formulár, ktorý nič nerobí.
+ */
+export type InlineStart =
+  | {
+      status: 'needs_card';
+      clientSecret: string;
+      returnUrl: string;
+      orderId?: string;
+      claimToken?: string | null;
+    }
+  | { status: 'succeeded'; orderId?: string; claimToken?: string | null };
+
+export async function startInlineTicketPayment(
+  _ticketTypeId: string,
+  _quantity: number,
+  _promoCode: string | null,
+  _guest?: GuestDetails | null,
+): Promise<InlineStart> {
+  throw new Error('INLINE_PAYMENT_IS_WEB_ONLY');
+}
+
+export async function startInlineCartPayment(_promoCode: string | null): Promise<InlineStart> {
+  throw new Error('INLINE_PAYMENT_IS_WEB_ONLY');
+}
+
 export const unavailableMessage = STRIPE_UNAVAILABLE_MESSAGE;
 
 /** Buys tickets. On native this resolves once the webhook has issued them. */

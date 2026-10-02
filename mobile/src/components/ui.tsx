@@ -846,7 +846,11 @@ const styles = StyleSheet.create({
   },
   /** The full-width primary CTA from the handoff: 56 tall, radius 18. */
   buttonLarge: { height: 56, borderRadius: 18 },
-  buttonFull: { alignSelf: 'stretch', maxWidth: undefined },
+  // `maxWidth: '100%'`, nie `undefined`: react-native-web pri skladaní štýlov
+  // kľúč s hodnotou undefined zahodí, takže strop 360 px z `button` prežil a
+  // „full" tlačidlo iba prestalo byť v strede — ostalo 360 px široké a odrazu
+  // zarovnané doľava. Vyzeralo to ako chyba zarovnania a bola to chyba šírky.
+  buttonFull: { alignSelf: 'stretch', maxWidth: '100%' },
   // In a row the parent decides the gaps; the vertical margin would only push
   // the row apart from its neighbours.
   buttonInRow: {

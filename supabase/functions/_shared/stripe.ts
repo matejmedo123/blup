@@ -172,6 +172,63 @@ export const stripe = {
     }, `pi_${params.orderId}`),
 
   /**
+   * PaymentIntent pre platbu priamo na BLUPe (web, Payment Element).
+   *
+   * Prečo vlastná funkcia a nie `createPaymentIntent`: tá skladá metadata sama
+   * a vie iba `order_id`. Košík je ale jedna platba za viac objednávok a
+   * webhook ho pozná podľa `checkout_id` — s `order_id` by sa vyplnila jedna
+   * objednávka a zvyšok koša by ostal nezaplatený. Metadata sú preto parameter
+   * a volajúci povie, čo to je; `resale_order_id` sem nepatrí a má vlastnú
+   * funkciu, lebo `fulfill_order` by na burzovú objednávku vydal novú
+   * vstupenku.
+   *
+   * Cena sem chodí hotová z databázy. Táto funkcia nič nepočíta a ani nesmie —
+   * je to iba obálka na Stripe.
+   */
+  createWebPaymentIntent: (params: {
+    amountCents: number;
+    currency: string;
+    /** Kľúč, podľa ktorého webhook nájde, čo vyplniť. Práve jeden z dvoch. */
+    reference: { orderId: string } | { checkoutId: string };
+    buyerId: string | null;
+    guestEmail?: string | null;
+    eventId: string;
+    applicationFeeCents?: number;
+    connectedAccountId?: string | null;
+    customerId?: string | null;
+    descriptor?: string | null;
+    idempotencyKey: string;
+  }) =>
+    stripeRequest<StripePaymentIntent>('/payment_intents', 'POST', {
+      amount: params.amountCents,
+      currency: params.currency.toLowerCase(),
+      'automatic_payment_methods[enabled]': 'true',
+      receipt_email: params.guestEmail ?? undefined,
+      customer: params.customerId ?? undefined,
+      statement_descriptor: statementDescriptor(params.descriptor),
+      metadata: {
+        ...('orderId' in params.reference
+          ? { order_id: params.reference.orderId }
+          : { checkout_id: params.reference.checkoutId }),
+        buyer_id: params.buyerId ?? '',
+        guest_email: params.guestEmail ?? '',
+        event_id: params.eventId,
+        platform: 'blup_web',
+      },
+      ...(params.connectedAccountId
+        ? {
+            application_fee_amount: params.applicationFeeCents ?? 0,
+            transfer_data: { destination: params.connectedAccountId },
+            // Kto platí spor z karty. S `on_behalf_of` je predávajúcim
+            // organizátor a spor ide z jeho zostatku; bez toho platí BLUP.
+            // Rovnaké pravidlo ako pri hostovanom Checkoute — inline platba
+            // nesmie ticho presunúť riziko na nás.
+            on_behalf_of: params.connectedAccountId,
+          }
+        : {}),
+    }, params.idempotencyKey),
+
+  /**
    * PaymentIntent pre nákup NA BURZE.
    *
    * Vlastná funkcia a nie parameter pri `createPaymentIntent` kvôli jedinému,

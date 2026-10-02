@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,7 +8,11 @@ import {
   clearCart, getCart, removeFromCart, setCartQuantity, type CartLine,
 } from '@/api/cart';
 import { getEventVatInfo } from '@/api/events';
-import { payForCart } from '@/payments/checkout';
+import { isConfigured } from '@/lib/env';
+import { PaymentForm } from '@/payments/PaymentForm';
+import {
+  payForCart, startInlineCartPayment, supportsInlinePayment,
+} from '@/payments/checkout';
 import { track } from '@/marketing/tags';
 import { messageFor } from '@/lib/errors';
 import { formatMoney, vatIncludedLabel } from '@/lib/format';
@@ -36,6 +40,9 @@ export default function CartScreen() {
   const { isGuest } = useAuth();
   const layout = useLayout();
   const queryClient = useQueryClient();
+
+  /** Pokladňa založená pri stlačení „Zaplatiť" — kam sa potom vrátiť. */
+  const checkoutRef = useRef<string | null>(null);
 
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<string | null>(null);
@@ -134,6 +141,39 @@ export default function CartScreen() {
     }
   }, [promo, refetch]);
 
+  /**
+   * Platba priamo v košíku.
+   *
+   * Objednávka vzniká až po stlačení „Zaplatiť" — dovtedy je v hre iba
+   * rezervácia, ktorá má vlastné hodiny. Čo sa kupuje a čo to stojí, rozhoduje
+   * `create_checkout` v databáze; tu sa iba vypĺňa karta.
+   */
+  const createInlineIntent = useCallback(async () => {
+    track('begin_checkout', {
+      valueCents: data?.total_cents ?? 0,
+      currency: data?.currency,
+      contentName: data?.event?.title,
+      items: (data?.lines ?? []).map((line) => ({
+        id: line.ticket_type_id, name: line.name, quantity: line.quantity,
+      })),
+    });
+
+    const started = await startInlineCartPayment(promo);
+    if (started.status === 'succeeded') {
+      router.replace('/tickets');
+      throw new Error('Vstupenky sú vybavené — otváram ich.');
+    }
+    checkoutRef.current = started.orderId ?? null;
+    return { clientSecret: started.clientSecret, returnUrl: started.returnUrl };
+  }, [data, promo]);
+
+  const onAuthorized = useCallback(() => {
+    // Nie „hotovo": vstupenku vydá až webhook. Návratová stránka na ňu počká
+    // a povie, keď naozaj existuje.
+    const checkout = checkoutRef.current;
+    router.replace(checkout ? `/checkout/return?checkout=${checkout}` : '/tickets');
+  }, []);
+
   if (isGuest) {
     return (
       <Screen>
@@ -180,6 +220,13 @@ export default function CartScreen() {
   const urgent = secondsLeft > 0 && secondsLeft <= 120;
 
 
+  // Kartu vieme vypýtať priamo tu iba v prehliadači a iba s verejným kľúčom.
+  // Bez neho zostáva stará cesta cez hostovanú stránku — nefunkčný rámček by
+  // bol horší než presmerovanie.
+  const inlineReady = supportsInlinePayment
+    && isConfigured.stripe
+    && (data?.total_cents ?? 0) > 0;
+
   // On a desktop the basket is a two-column page: what you are buying on the
   // left, what it costs and the button on the right, where it stays in view
   // instead of sitting a scroll below the last ticket type.
@@ -211,13 +258,24 @@ export default function CartScreen() {
         strháva organizátorovi — teba sa netýka.
       </Caption>
 
-      <Button
-        title={`Zaplatiť ${formatMoney(data?.total_cents ?? 0, data?.currency)}`}
-        onPress={() => void pay()}
-        loading={paying}
-        large
-        full
-      />
+      {inlineReady ? (
+        <PaymentForm
+          amountCents={data?.total_cents ?? 0}
+          currency={data?.currency ?? 'EUR'}
+          payLabel={`Zaplatiť ${formatMoney(data?.total_cents ?? 0, data?.currency)}`}
+          createIntent={createInlineIntent}
+          onAuthorized={onAuthorized}
+          onError={setError}
+        />
+      ) : (
+        <Button
+          title={`Zaplatiť ${formatMoney(data?.total_cents ?? 0, data?.currency)}`}
+          onPress={() => void pay()}
+          loading={paying}
+          large
+          full
+        />
+      )}
 
       <Button
         title="Vyprázdniť"
@@ -231,7 +289,9 @@ export default function CartScreen() {
         }}
       />
 
-      {Platform.OS === 'web' ? (
+      {/* Pri inline formulári to isté stojí priamo pod tlačidlom „Zaplatiť" —
+          dvakrát tá istá veta je len šum. */}
+      {Platform.OS === 'web' && !inlineReady ? (
         <Caption style={styles.note}>
           Platbu spracúva Stripe. Číslo karty sa na BLUP nikdy nedostane.
         </Caption>
