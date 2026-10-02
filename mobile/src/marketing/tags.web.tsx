@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View,
+} from 'react-native';
 import { usePathname } from 'expo-router';
 
 import { supabase } from '@/lib/supabase';
+import { useBottomInset } from '@/components/BottomInset';
 import { isConfigured } from '@/lib/env';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -477,14 +480,38 @@ export function MarketingTags(): React.ReactElement | null {
   const [ask, setAsk] = useState(false);
   const [tab, setTab] = useState<Tab>('consent');
   const [draft, setDraft] = useState<Consent>(NONE);
+  /** Podrobné nastavenie. Lišta dole je to prvé, toto až na vyžiadanie. */
+  const [panel, setPanel] = useState(false);
+  const bottomInset = useBottomInset();
   const pathname = usePathname();
   const lastPath = useRef<string | null>(null);
   /** Až keď vieme, čo je nakonfigurované, má zmysel čokoľvek posielať. */
   const [tagsReady, setTagsReady] = useState(false);
 
+  /**
+   * Vysunutie lišty zdola.
+   *
+   * Nie ozdoba: keď sa niečo zjaví na stránke bez pohybu, oko to prehliadne.
+   * Krátky pohyb zdola povie, že to prišlo a že to niečo chce — a zároveň to
+   * nie je skok, ktorý by posunul obsah pod prstom.
+   */
+  const slide = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!ask || panel) return;
+    Animated.timing(slide, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [ask, panel, slide]);
+
+  // Z pätičky sa otvára rovno podrobné nastavenie — kto naň klikol, nehľadá
+  // lištu s „prijať/zamietnuť", ale chce prepnúť konkrétnu kategóriu.
   useEffect(() => onCookieSettingsOpen(() => {
     setDraft(current);
     setTab('consent');
+    setPanel(true);
     setAsk(true);
   }), []);
 
@@ -544,6 +571,7 @@ export function MarketingTags(): React.ReactElement | null {
   const save = useCallback((next: Consent) => {
     setConsent(next);
     if (loaded) injectAllowed(loaded);
+    setPanel(false);
     setAsk(false);
   }, []);
 
@@ -552,22 +580,88 @@ export function MarketingTags(): React.ReactElement | null {
   const toggle = (key: keyof Consent) =>
     setDraft((value) => ({ ...value, [key]: !value[key] }));
 
+  /**
+   * Lišta dole — prvé, čo človek uvidí.
+   *
+   * Nezakrýva stránku a nečaká na odpoveď, aby sa dalo pozerať na eventy;
+   * okno cez celú obrazovku v tej chvíli iba stojí v ceste. Prijatie je
+   * hlavné tlačidlo, lebo väčšina ľudí povolí a nemá dôvod hľadať ako.
+   *
+   * „Zamietnuť" je napriek tomu plnohodnotné tlačidlo rovnakej veľkosti hneď
+   * vedľa. Keby bolo menšie, šedšie alebo schované za odkazom, nebol by to
+   * súhlas — a to nie je názor, to je dôvod, prečo sa takéto lišty pokutujú.
+   */
+  if (!panel) {
+    return (
+      <Animated.View
+        accessibilityRole="alert"
+        style={[
+          styles.bar,
+          // Nad spodnou lištou s kartami, nie cez ňu. Na telefóne je dole
+          // navigácia a lišta položená na nej by zakryla polovicu tlačidiel —
+          // presne ten istý prípad, aký rieši bublina košíka.
+          { bottom: spacing.lg + bottomInset },
+          {
+            opacity: slide,
+            transform: [{
+              translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }),
+            }],
+          },
+        ]}
+      >
+        <View style={styles.barText}>
+          <Text style={styles.barTitle}>🍪 Pomôž nám BLUP zlepšovať</Text>
+          <Text style={styles.barBody}>
+            Nevyhnutné cookies — prihlásenie a košík — bežia vždy. S tými ostatnými vidíme,
+            čo ľudia na BLUPe hľadajú a ktoré eventy im unikli, takže ti vieme lepšie radiť.
+            Zmeniť sa to dá kedykoľvek v pätičke.
+          </Text>
+        </View>
+
+        <View style={styles.barActions}>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.barButton, styles.primary, pressed && styles.pressed]}
+            onPress={() => save(ALL)}
+          >
+            <Text style={styles.primaryLabel}>Prijať všetky</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.barButton, styles.secondary, pressed && styles.pressed]}
+            onPress={() => save(NONE)}
+          >
+            <Text style={styles.secondaryLabel}>Zamietnuť</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={styles.barLink}
+            onPress={() => { setDraft(current); setTab('consent'); setPanel(true); }}
+          >
+            <Text style={styles.barLinkLabel}>Nastaviť</Text>
+          </Pressable>
+        </View>
+      </Animated.View>
+    );
+  }
+
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={() => setAsk(false)}>
+    <Modal transparent animationType="fade" visible onRequestClose={() => setPanel(false)}>
       <View style={styles.backdrop}>
         <View style={styles.sheet} accessibilityRole="alert">
           <View style={styles.head}>
             <Text style={styles.title}>Nastavenie cookies</Text>
-            {consentAnswered() ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Zavrieť"
-                onPress={() => setAsk(false)}
-                style={styles.close}
-              >
-                <Text style={styles.closeGlyph}>✕</Text>
-              </Pressable>
-            ) : null}
+            {/* Zavrieť vedie späť na lištu, keď človek ešte neodpovedal, a
+                celkom preč, keď už odpovedal. Zavretie nie je odpoveď a nič
+                sa ním neukladá. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Zavrieť"
+              onPress={() => { setPanel(false); if (consentAnswered()) setAsk(false); }}
+              style={styles.close}
+            >
+              <Text style={styles.closeGlyph}>✕</Text>
+            </Pressable>
           </View>
 
           <View style={styles.tabs}>
@@ -708,6 +802,52 @@ export function MarketingTags(): React.ReactElement | null {
 }
 
 const styles = StyleSheet.create({
+  /**
+   * Lišta dole.
+   *
+   * `position: fixed`, nie `absolute`: appka scrolluje vo vlastnom kontajneri a
+   * absolútne umiestnená lišta by s ním odišla hore. `zIndex` vyššie než má
+   * bublina košíka (40), aby sa neprekrývali.
+   */
+  bar: {
+    position: 'fixed' as 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    maxWidth: 760,
+    marginHorizontal: 'auto',
+    zIndex: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  // minWidth 0, aby sa text pri úzkom okne zalomil v sebe a nevytlačil
+  // tlačidlá mimo lišty.
+  barText: { flex: 1, minWidth: 240, gap: 4 },
+  barTitle: { ...typography.bodyStrong, color: colors.text },
+  barBody: { ...typography.metaSm, color: colors.textSecondary },
+  barActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  barButton: {
+    height: 44,
+    minWidth: 128,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  barLink: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
+  barLinkLabel: { ...typography.captionStrong, color: colors.textSecondary },
+  pressed: { opacity: 0.9 },
+
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',

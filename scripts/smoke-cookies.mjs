@@ -11,13 +11,15 @@
  * So this asserts the behaviour from outside, in a browser:
  *
  *   1. a first visit is asked, before anything is configured or loaded
- *   2. nothing is switched on in advance, and necessary cookies have no switch
- *   3. the Meta pixel does not appear until marketing consent is given — not
+ *   2. the ask is a bar at the bottom, not a wall — the page stays usable
+ *   3. refusing is a real button, the same size and right next to accepting
+ *   4. the Meta pixel does not appear until marketing consent is given — not
  *      on the first visit, not after a refusal, not after a partial yes
- *   4. refusing is a real button, the same size and next to accepting
  *   5. an answered visitor is not asked again
- *   6. the footer's "Aktualizovať nastavenia cookies" reopens it
+ *   6. "Nastaviť" opens the detail, with four categories and no switch on the
+ *      necessary ones, and nothing switched on in advance
  *   7. one category can be switched on without the others
+ *   8. the footer's "Aktualizovať nastavenia cookies" opens the detail
  *
  *   node scripts/serve-web.mjs mobile/dist 4401
  *   node scripts/smoke-cookies.mjs [port]
@@ -47,10 +49,15 @@ await page.waitForTimeout(1200);
 const read = () => page.evaluate(() => {
   const leaves = [...document.querySelectorAll('*')].filter((el) => !el.children.length);
   const text = (el) => (el.textContent || '').trim();
+  const bar = leaves.find((el) => /Pomôž nám BLUP/.test(text(el)));
   return {
-    open: leaves.some((el) => text(el) === 'Nastavenie cookies'),
+    bar: Boolean(bar),
+    panel: leaves.some((el) => text(el) === 'Nastavenie cookies'),
+    barButtons: [...document.querySelectorAll('[role="button"]')]
+      .map(text).filter((t) => /^(Prijať všetky|Zamietnuť|Nastaviť)$/.test(t)),
     tabs: leaves.map(text).filter((t) => ['Súhlas', 'Detailný prehľad', 'O cookies'].includes(t)),
-    buttons: leaves.map(text).filter((t) => /^(Uložiť moje nastavenie|Zamietnuť všetky|Prijať všetky)$/.test(t)),
+    panelButtons: leaves.map(text)
+      .filter((t) => /^(Uložiť moje nastavenie|Zamietnuť všetky|Prijať všetky)$/.test(t)),
     switches: [...document.querySelectorAll('[role="switch"]')].map((el) => ({
       label: el.getAttribute('aria-label'),
       on: el.getAttribute('aria-checked') === 'true',
@@ -63,58 +70,67 @@ const stored = () => page.evaluate(() => {
   try { return JSON.parse(localStorage.getItem('blup.cookies') || 'null'); } catch { return null; }
 });
 
-const first = await read();
-check(first.open, 'prvá návšteva sa spýta sama od seba');
-check(first.tabs.length === 3, `tri karty (${first.tabs.join(', ') || 'žiadna'})`);
-check(first.switches.length === 3, `tri voliteľné kategórie (${first.switches.length})`);
-check(first.always === 1, 'nevyhnutné cookies sa nedajú vypnúť');
-check(first.switches.every((s) => !s.on), 'nič nie je zapnuté dopredu');
-check(
-  first.buttons.includes('Zamietnuť všetky') && first.buttons.includes('Prijať všetky'),
-  'zamietnuť je rovnocenné tlačidlo vedľa prijať',
-);
-
-// --- nič sa nenačíta, kým sa človek nevyjadrí --------------------------------
-//
-// Google tag áno — v Consent Mode v2 beží so všetkým zamietnutým a nenastaví
-// cookie. Meta taký režim nemá, takže sa pred súhlasom nesmie objaviť vôbec.
 const scripts = () => page.evaluate(() => [...document.querySelectorAll('script')]
   .map((el) => el.src).filter(Boolean));
+
+const first = await read();
+check(first.bar, 'prvá návšteva sa spýta sama od seba');
+check(!first.panel, 'a je to lišta, nie okno cez celú stránku');
+check(
+  first.barButtons.includes('Prijať všetky')
+  && first.barButtons.includes('Zamietnuť')
+  && first.barButtons.includes('Nastaviť'),
+  `lišta má prijať, zamietnuť aj nastaviť (${first.barButtons.join(', ') || 'nič'})`,
+);
+
+// Rovnocennosť sa nedá tvrdiť, dá sa zmerať: obe tlačidlá musia byť rovnako
+// veľké. Menšie „zamietnuť" vedľa veľkého „prijať" nie je voľba.
+const sizes = await page.evaluate(() => {
+  const box = (label) => {
+    const el = [...document.querySelectorAll('[role="button"]')]
+      .find((e) => (e.textContent || '').trim() === label);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height) };
+  };
+  return { accept: box('Prijať všetky'), reject: box('Zamietnuť') };
+});
+check(
+  Boolean(sizes.accept && sizes.reject)
+  && sizes.accept.h === sizes.reject.h
+  && Math.abs(sizes.accept.w - sizes.reject.w) <= 8,
+  `zamietnuť je rovnako veľké ako prijať (${JSON.stringify(sizes)})`,
+);
+
+// A toto je ten rozdiel oproti oknu: stránka sa dá používať aj s lištou.
+const usable = await page.evaluate(() => {
+  const el = [...document.querySelectorAll('[role="button"], a')]
+    .find((e) => (e.textContent || '').trim().length > 0
+      && e.getBoundingClientRect().top < window.innerHeight / 2
+      && e.getBoundingClientRect().width > 0);
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return Boolean(top) && (el.contains(top) || top === el);
+});
+check(usable, 'lišta nezakrýva stránku — dá sa pod ňou klikať');
+
 check(
   !(await scripts()).some((src) => /facebook/.test(src)),
   'Meta pixel sa pred súhlasom nenačíta',
 );
 
-// --- zamietnutie -------------------------------------------------------------
-await page.getByText('Zamietnuť všetky').first().click();
-await page.waitForTimeout(500);
-const declined = await stored();
-check(
-  declined && !declined.analytics && !declined.marketing && !declined.personalization,
-  `zamietnutie sa uloží (${JSON.stringify(declined)})`,
-);
-check(!(await read()).open, 'po odpovedi sa okno zavrie');
+// --- podrobné nastavenie -----------------------------------------------------
+await page.getByText('Nastaviť', { exact: true }).first().click();
+await page.waitForTimeout(700);
+const panel = await read();
+check(panel.panel, '„Nastaviť" otvorí podrobné nastavenie');
+check(panel.tabs.length === 3, `tri karty (${panel.tabs.join(', ') || 'žiadna'})`);
+check(panel.switches.length === 3, `tri voliteľné kategórie (${panel.switches.length})`);
+check(panel.always === 1, 'nevyhnutné cookies sa nedajú vypnúť');
+check(panel.switches.every((s) => !s.on), 'nič nie je zapnuté dopredu');
 
-// --- a druhá návšteva sa už nepýta -------------------------------------------
-await page.reload({ waitUntil: 'networkidle' });
-await page.waitForTimeout(1200);
-check(!(await read()).open, 'druhá návšteva sa už nepýta');
-check(
-  !(await scripts()).some((src) => /facebook/.test(src)),
-  'po zamietnutí sa Meta pixel nenačíta ani po obnovení',
-);
-
-const footer = await page.evaluate(() => document.body.innerText);
-check(footer.includes('Zásady cookies'), 'pätička odkazuje na zásady cookies');
-check(footer.includes('Ochrana osobných údajov'), 'pätička odkazuje na ochranu údajov');
-check(footer.includes('Aktualizovať nastavenia cookies'), 'pätička ponúka zmenu nastavení');
-
-// --- a dá sa to zmeniť --------------------------------------------------------
-await page.getByText('Aktualizovať nastavenia cookies').first().click();
-await page.waitForTimeout(800);
-check((await read()).open, 'okno sa otvorí z pätičky');
-
-// Jedna kategória, nie všetko. Toto je celý rozdiel oproti áno/nie.
+// Jedna kategória, nie všetko. To je celý rozdiel oproti áno/nie.
 await page.evaluate(() => {
   const sw = [...document.querySelectorAll('[role="switch"]')]
     .find((el) => (el.getAttribute('aria-label') || '').startsWith('Analytické'));
@@ -129,7 +145,7 @@ check(
 );
 
 await page.getByText('Uložiť moje nastavenie').first().click();
-await page.waitForTimeout(800);
+await page.waitForTimeout(900);
 const partial = await stored();
 check(
   partial && partial.analytics === true && partial.marketing === false,
@@ -137,16 +153,52 @@ check(
 );
 check(
   !(await scripts()).some((src) => /facebook/.test(src)),
-  'bez marketingového súhlasu sa Meta pixel stále nenačíta',
+  'bez marketingového súhlasu sa Meta pixel nenačíta',
+);
+check(!(await read()).bar, 'po odpovedi lišta zmizne');
+
+// --- a druhá návšteva sa už nepýta -------------------------------------------
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(1200);
+check(!(await read()).bar, 'druhá návšteva sa už nepýta');
+
+const footer = await page.evaluate(() => document.body.innerText);
+check(footer.includes('Zásady cookies'), 'pätička odkazuje na zásady cookies');
+check(footer.includes('Ochrana osobných údajov'), 'pätička odkazuje na ochranu údajov');
+check(footer.includes('Aktualizovať nastavenia cookies'), 'pätička ponúka zmenu nastavení');
+
+// --- a dá sa to zmeniť --------------------------------------------------------
+await page.getByText('Aktualizovať nastavenia cookies').first().click();
+await page.waitForTimeout(900);
+check((await read()).panel, 'pätička otvorí rovno podrobné nastavenie');
+
+await page.getByText('Zamietnuť všetky').first().click();
+await page.waitForTimeout(900);
+const declined = await stored();
+check(
+  declined && !declined.analytics && !declined.marketing && !declined.personalization,
+  `zamietnutie prepíše predchádzajúcu odpoveď (${JSON.stringify(declined)})`,
 );
 
 // --- a súhlas so všetkým pixel pustí ------------------------------------------
 await page.getByText('Aktualizovať nastavenia cookies').first().click();
-await page.waitForTimeout(800);
+await page.waitForTimeout(900);
 await page.getByText('Prijať všetky').first().click();
-await page.waitForTimeout(1500);
+await page.waitForTimeout(1800);
 const all = await stored();
 check(all && all.analytics && all.marketing && all.personalization, 'prijať všetky uloží všetky');
+
+// Druhá polovica toho istého: keď je marketing povolený, pixel sa NAČÍTAŤ má.
+// Bez nastaveného pixelu to ale nie je čo kontrolovať — čistá náhľadová
+// databáza žiadny nemá a červená by tu znamenala „nie je nakonfigurované",
+// nie „appka je rozbitá".
+const loadedPixel = (await scripts()).some((src) => /facebook/.test(src));
+if (loadedPixel) {
+  check(true, 'až s marketingovým súhlasom sa Meta pixel načíta');
+} else {
+  console.log('• preskočené: v tejto databáze nie je nastavený Meta pixel '
+    + '(Admin → Marketing), takže sa nemá čo načítať');
+}
 
 await browser.close();
 

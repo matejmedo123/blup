@@ -127,8 +127,17 @@ export default function EventResaleScreen() {
   const rows = listings.data ?? [];
   const stats = summary.data;
 
-  return (
-    <Screen scroll={false}>
+  /**
+   * Všetko nad zoznamom ponúk.
+   *
+   * Ide to do `ListHeaderComponent`, a nie vedľa zoznamu, lebo inak stránka
+   * nescrollovala: `Screen scroll={false}` je obyčajný `View`, ten vo
+   * react-native-web orezáva, čo sa doň nezmestí, a zoznam tak dostal okno
+   * vysoké pár sto pixelov kdesi pod plagátom. Plagát, čísla aj filtre sa
+   * posúvajú spolu s ponukami, tak ako na každej inej obrazovke.
+   */
+  const header = (
+    <>
       {/* Náhľad eventu, na ktorý sa kupuje.
           Predtým tu bol len nadpis a kupujúci nemal ako overiť, či je na
           správnom evente — meno koncertu sa dá pomýliť, plagát nie. Fotka je
@@ -262,11 +271,22 @@ export default function EventResaleScreen() {
         ))}
       </View>
 
+    </>
+  );
+
+  return (
+    <Screen scroll={false}>
       {/* Na monitore sa ponuky ukladajú do mriežky. Jeden stĺpec kariet cez
           celú šírku znamená, že na obrazovku sa zmestia tri ponuky a
           porovnávať ceny sa dá len rolovaním hore-dole — pri burze, kde je
-          porovnanie celý dôvod návštevy, je to to najhoršie rozloženie. */}
+          porovnanie celý dôvod návštevy, je to to najhoršie rozloženie.
+
+          `style={styles.list}` je to, čo zo zoznamu robí scrollovaciu plochu
+          celej obrazovky — bez `flex: 1` by si vzal výšku svojho obsahu a
+          vytiekol by z rodiča, ktorý ho oreže. */}
       <FlatList
+        style={styles.listFill}
+        ListHeaderComponent={header}
         data={rows}
         keyExtractor={(item) => item.id}
         numColumns={layout.columns}
@@ -450,6 +470,10 @@ const styles = StyleSheet.create({
   chipLabel: { ...typography.metaSm, color: colors.textSecondary },
   chipLabelOn: { color: '#FFFFFF', fontWeight: '700' },
 
+  // Zoznam je scrollovacia plocha celej obrazovky, nie blok v nej. Bez `flex: 1`
+  // si vezme výšku svojho obsahu, vytečie z rodiča a ten ho oreže — stránka
+  // potom nescrolluje a spodné ponuky sa nedajú dostať na obrazovku.
+  listFill: { flex: 1 },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.sm },
   columns: { gap: spacing.sm },
   cell: { flex: 1 },
