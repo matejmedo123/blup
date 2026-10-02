@@ -149,6 +149,30 @@ See WEB.md for the full web story.
 Generate once with `node scripts/generate-vapid-keys.mjs`. Rotating the public
 key invalidates every existing subscription.
 
+## Meta Conversions API
+
+Optional. Without it the purchase is reported only by the browser pixel, which
+is how it worked before — ad blockers and closed tabs cost you a share of the
+conversions, and nothing else breaks.
+
+| Variable | Where | What it is |
+|---|---|---|
+| `META_CAPI_ACCESS_TOKEN` | server only | Events Manager → Data sources → your pixel → Settings → *Generate access token*. A secret: it must never reach `marketing_settings`, because that table is read by the admin screen. |
+| `META_CAPI_TEST_EVENT_CODE` | server, temporary | From Events Manager → *Test events*. While it is set, events land in the test view instead of production data. Unset it when you are done. |
+
+The dataset id is the **pixel id** already stored in `Admin → Marketing`; it is
+public (it ships in the page), so it does not belong here.
+
+Two things make this correct rather than merely wired up:
+
+* The browser and the server send the same `event_id` (`purchase_<order id>`),
+  so Meta counts one purchase, not two. Without it the revenue in Ads Manager
+  doubles and every budget decision rests on a made-up number.
+* The server only reports a purchase whose order carries marketing consent —
+  the browser stores the answer on the order when it is created, because the
+  webhook runs later and has no way to ask. No consent, no report, no IP, no
+  hashed email.
+
 
 ## Scheduled jobs
 

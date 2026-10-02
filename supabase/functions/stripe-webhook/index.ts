@@ -12,6 +12,7 @@
  */
 import { adminClient, errorResponse, json } from '../_shared/http.ts';
 import { stripe, verifyStripeSignature } from '../_shared/stripe.ts';
+import { reportPurchase, type PurchasePayload } from '../_shared/capi.ts';
 import { env } from '../_shared/env.ts';
 
 /**
@@ -86,6 +87,52 @@ async function triggerTicketEmail(): Promise<void> {
   }
 }
 
+/**
+ * Nahlási nákup Mete zo servera.
+ *
+ * Až po tom, čo `fulfill_order`/`fulfill_checkout` naozaj vydali vstupenky —
+ * konverzia hlásená skôr by bola konverzia, ktorá sa nestala. Databáza
+ * rozhodne, či sa vôbec posiela: bez marketingového súhlasu vráti null a tu
+ * sa nestane nič.
+ *
+ * Zámerne sa nečaká a zámerne to nemá ako zhodiť webhook. Stripe musí dostať
+ * 200 aj vtedy, keď má Meta zlý deň; vstupenka je vydaná tak či tak a
+ * chýbajúca konverzia je nepríjemnosť, nie škoda.
+ */
+async function reportPurchaseToMeta(
+  db: ReturnType<typeof adminClient>,
+  reference: { orderId?: string; checkoutId?: string },
+): Promise<void> {
+  try {
+    const id = reference.orderId ?? reference.checkoutId;
+    if (!id) return;
+
+    const { data: payload, error } = await db.rpc('marketing_purchase_payload', {
+      p_order_id: reference.orderId ?? null,
+      p_checkout_id: reference.checkoutId ?? null,
+    });
+    if (error || !payload) return;
+
+    const { data: settings } = await db
+      .from('marketing_settings')
+      .select('meta_pixel_id, meta_enabled')
+      .limit(1)
+      .maybeSingle();
+    if (!settings?.meta_enabled) return;
+
+    const result = await reportPurchase(
+      settings.meta_pixel_id as string | null,
+      id,
+      payload as PurchasePayload,
+    );
+    if (result.status === 'failed') {
+      console.error('Meta CAPI purchase failed:', result.reason);
+    }
+  } catch (error) {
+    console.error('Meta CAPI purchase skipped:', error);
+  }
+}
+
 interface StripeEvent {
   id: string;
   type: string;
@@ -151,6 +198,7 @@ Deno.serve(async (req) => {
           if (error) throw error;
 
           void triggerTicketEmail();
+          void reportPurchaseToMeta(db, { checkoutId });
           break;
         }
 
@@ -181,6 +229,7 @@ Deno.serve(async (req) => {
         // its 200 even if the mail provider is having a bad afternoon, and the
         // queue survives either way.
         void triggerTicketEmail();
+        void reportPurchaseToMeta(db, { orderId });
         break;
       }
 

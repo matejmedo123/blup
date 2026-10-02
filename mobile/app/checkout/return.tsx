@@ -64,6 +64,8 @@ export default function CheckoutReturnScreen() {
             // meranie (každý kus by bol iný „produkt", takže by sa nedalo nič
             // spočítať), ani pre súkromie.
             track('purchase', {
+              // To isté id, aké použije webhook. Jeden nákup, nie dva.
+              eventId: `purchase_${order}`,
               valueCents: guest.order.total_cents,
               currency: guest.order.currency,
               items: [{
@@ -90,6 +92,10 @@ export default function CheckoutReturnScreen() {
           // optimalizujú, takže podhodnotená konverzia znamená horšie
           // nasadený rozpočet.
           track('purchase', {
+            // Košík hlási webhook pod id pokladne, jedna objednávka pod svojím
+            // — tu musí stáť presne to isté, inak deduplikácia nefunguje a je
+            // to horšie, než keby server nehlásil nič.
+            eventId: `purchase_${checkout ?? order}`,
             valueCents: result.totalCents,
             currency: result.currency,
             items: result.tickets.map((ticket) => ({

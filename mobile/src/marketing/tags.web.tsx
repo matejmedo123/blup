@@ -68,6 +68,15 @@ export interface TrackPayload {
   currency?: string;
   items?: TrackedItem[];
   contentName?: string;
+  /**
+   * Id tej istej udalosti, akú o nej hlási server.
+   *
+   * Nákup posiela Mete prehliadač aj webhook — pixel časť nákupov stráca na
+   * blokovačoch a zatvorených kartách. Bez spoločného id by ich Meta
+   * započítala dva, tržby v Ads Manageri by boli dvojnásobné a každé
+   * rozhodnutie o rozpočte by stálo na vymyslenom čísle.
+   */
+  eventId?: string;
 }
 
 export type TrackEvent =
@@ -323,13 +332,19 @@ export function track(event: TrackEvent, payload: TrackPayload = {}): void {
 
   const metaName = META[event];
   if (metaName) {
-    window.fbq?.('track', metaName, {
-      content_type: 'product',
-      content_ids: ids,
-      content_name: payload.contentName,
-      value,
-      currency,
-    });
+    window.fbq?.(
+      'track',
+      metaName,
+      {
+        content_type: 'product',
+        content_ids: ids,
+        content_name: payload.contentName,
+        value,
+        currency,
+      },
+      // Štvrtý parameter, nie súčasť dát — Meta deduplikuje práve podľa neho.
+      payload.eventId ? { eventID: payload.eventId } : undefined,
+    );
   }
 
   const GOOGLE: Record<TrackEvent, string> = {

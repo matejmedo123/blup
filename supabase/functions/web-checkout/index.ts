@@ -64,6 +64,13 @@ interface Body {
    * zobrazenie — to sa neoplatí prerábať.
    */
   inline?: boolean;
+  /**
+   * Čo prehliadač vie a server sa nemá ako opýtať: či človek povolil
+   * marketing, a ak áno, cookies `_fbp`/`_fbc`, podľa ktorých Meta pozná,
+   * z ktorej reklamy prišiel. Ukladá sa k objednávke, lebo webhook beží
+   * neskôr a vtedy už z toho nie je nič dostupné.
+   */
+  marketing?: { consent?: boolean; fbp?: string | null; fbc?: string | null };
   // resale
   reservation_id?: string;
   guest?: Guest;
@@ -95,6 +102,30 @@ function safeReturn(path: string | undefined, fallback: string): string {
   if (!path) return `${base}${fallback}`;
   if (!path.startsWith('/') || path.startsWith('//')) return `${base}${fallback}`;
   return `${base}${path}`;
+}
+
+/**
+ * Marketingový kontext, ako sa uloží k objednávke.
+ *
+ * Keď človek marketing odmietol, uloží sa jediná vec — že odmietol. Žiadna IP,
+ * žiadny prehliadač, žiadne cookies Mety. Nie je to len slušnosť: keby sme to
+ * ukladali „pre prípad", mali by sme o odmietajúcich presne tie údaje, ktoré
+ * odmietli dať.
+ */
+function marketingContext(req: Request, input: Body['marketing']): Record<string, unknown> {
+  if (input?.consent !== true) return { consent: false };
+
+  const forwarded = req.headers.get('x-forwarded-for') ?? '';
+  // Prvá adresa v reťazci je klient; zvyšok sú proxy po ceste.
+  const ip = forwarded.split(',')[0]?.trim() || null;
+
+  return {
+    consent: true,
+    fbp: typeof input.fbp === 'string' ? input.fbp.slice(0, 120) : null,
+    fbc: typeof input.fbc === 'string' ? input.fbc.slice(0, 200) : null,
+    ip,
+    ua: req.headers.get('user-agent')?.slice(0, 400) ?? null,
+  };
 }
 
 /** One Stripe customer per person, so cards and history stay together. */
@@ -289,6 +320,13 @@ Deno.serve(async (req) => {
       if (error || !created) throw new Error(error?.message ?? 'ORDER_CREATION_FAILED');
       const order = created as OrderRow;
 
+      // Odpoveď o súhlase sa ukladá hneď, ešte pred rozcestím na platenú a
+      // zadarmo — aj vstupenka zadarmo je konverzia a aj pri nej platí, že
+      // bez súhlasu sa Mete nepošle nič.
+      await db.from('orders')
+        .update({ marketing: marketingContext(req, body.marketing) })
+        .eq('id', order.id);
+
       // A fully discounted or free basket needs no payment provider at all.
       if (order.total_cents === 0) {
         const { error: fulfilError } = await db.rpc('fulfill_order', {
@@ -435,6 +473,10 @@ Deno.serve(async (req) => {
 
       if (error || !startedCheckout) throw new Error(error?.message ?? 'CHECKOUT_FAILED');
       const checkout = startedCheckout as CheckoutRow;
+
+      await db.from('checkouts')
+        .update({ marketing: marketingContext(req, body.marketing) })
+        .eq('id', checkout.id);
 
       const { data: orders } = await db
         .from('orders')

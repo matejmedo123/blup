@@ -1,4 +1,5 @@
 import { callFunction } from '@/lib/supabase';
+import { consent } from '@/marketing/tags';
 
 /**
  * Web payments.
@@ -89,6 +90,33 @@ export const requiresPublishableKey = false;
 export const unavailableMessage =
   'Platby cez web zatiaľ nie sú nakonfigurované. Doplň Stripe kľúče — pozri PAYMENTS.md.';
 
+/**
+ * Čo sa k objednávke odloží pre meranie zo servera.
+ *
+ * Nákup hlási Mete aj webhook — prehliadačový pixel ich časť stráca na
+ * blokovačoch a zatvorených kartách. Webhook ale beží neskôr a z iného miesta,
+ * takže nemá ako zistiť ani to, či človek marketing povolil, ani z ktorej
+ * reklamy prišiel. Oboje vie iba táto stránka, a preto to posiela so sebou.
+ *
+ * Keď je odpoveď nie, odchádza jediná informácia: nie.
+ */
+function marketingContext(): { consent: boolean; fbp?: string | null; fbc?: string | null } {
+  if (!consent().marketing) return { consent: false };
+
+  const cookie = (name: string): string | null => {
+    try {
+      const hit = globalThis.document?.cookie
+        ?.split('; ')
+        .find((entry) => entry.startsWith(`${name}=`));
+      return hit ? decodeURIComponent(hit.slice(name.length + 1)) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  return { consent: true, fbp: cookie('_fbp'), fbc: cookie('_fbc') };
+}
+
 function go(url: string): void {
   // A full navigation, not a new tab: pop-up blockers eat `window.open` when it
   // is not directly inside the click handler, and a blocked payment window
@@ -105,6 +133,7 @@ export async function payForTickets(
 ): Promise<PayResult> {
   const session = await callFunction<WebCheckoutResponse>('web-checkout', {
     kind: 'ticket',
+    marketing: marketingContext(),
     ticket_type_id: ticketTypeId,
     quantity,
     promo_code: promoCode,
@@ -140,6 +169,7 @@ export async function startInlineTicketPayment(
   const session = await callFunction<WebCheckoutResponse>('web-checkout', {
     kind: 'ticket',
     inline: true,
+    marketing: marketingContext(),
     ticket_type_id: ticketTypeId,
     quantity,
     promo_code: promoCode,
@@ -167,6 +197,7 @@ export async function startInlineCartPayment(promoCode: string | null): Promise<
   const session = await callFunction<WebCheckoutResponse>('web-checkout', {
     kind: 'cart',
     inline: true,
+    marketing: marketingContext(),
     promo_code: promoCode,
   });
 
@@ -194,6 +225,7 @@ export async function startInlineCartPayment(promoCode: string | null): Promise<
 export async function payForCart(promoCode: string | null): Promise<PayResult> {
   const session = await callFunction<WebCheckoutResponse>('web-checkout', {
     kind: 'cart',
+    marketing: marketingContext(),
     promo_code: promoCode,
   });
 

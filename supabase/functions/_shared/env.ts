@@ -69,6 +69,21 @@ export const env = {
   vapidPublicKey: () => requireEnv('VAPID_PUBLIC_KEY', 'WEB_PUSH_NOT_CONFIGURED'),
   vapidPrivateKey: () => requireEnv('VAPID_PRIVATE_KEY', 'WEB_PUSH_NOT_CONFIGURED'),
   vapidSubject: () => optionalEnv('VAPID_SUBJECT') ?? 'mailto:hello@blup.sk',
+
+  /**
+   * Meta Conversions API.
+   *
+   * Prístupový token je tajomstvo a patrí sem, nie do `marketing_settings`:
+   * tabuľku číta admin obrazovka a to, čo vidí admin obrazovka, raz uvidí aj
+   * prehliadač. Id datasetu je naopak verejné — je to to isté číslo ako pixel
+   * v stránke — a berie sa z `marketing_settings`.
+   *
+   * Nenastavené = funkcia mlčí. Nákup sa tým nepokazí; len sa oň Meta dozvie
+   * iba z prehliadača, tak ako doteraz.
+   */
+  metaCapiToken: () => optionalEnv('META_CAPI_ACCESS_TOKEN'),
+  /** Testovací kód z Meta Events Manageru. Bez neho ide udalosť do ostrých dát. */
+  metaCapiTestCode: () => optionalEnv('META_CAPI_TEST_EVENT_CODE'),
 };
 
 /** True when a provider has everything it needs — used for health reporting. */

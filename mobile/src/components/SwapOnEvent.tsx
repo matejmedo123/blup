@@ -1,128 +1,61 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
 
-import { getEventResaleSummary } from '@/api/resale';
 import { Button, Caption } from '@/components/ui';
-import { formatMoney } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 import { CONTENT_MAX_WIDE } from '@/hooks/useLayout';
 
 /**
- * Burza na stránke eventu.
+ * Cesta na burzu zo stránky eventu — a je jednosmerná.
  *
- * Dva stavy a oba sú užitočné:
+ * Ponúka iba to, čo sem patrí: človeku, ktorý na event má vstupenku a nemôže
+ * prísť, sa povie, že ju vie ponúknuť ďalej. Sám by si sekciu s predajom
+ * neotvoril; ponúknuť mu to treba tam, kde na event pozerá.
  *
- *   Niekto predáva — ukáže sa počet, najnižšia cena a koľko z toho sú overené
- *   BLUP vstupenky. Pri vypredanom evente je toto jediná cesta dnu.
+ * Čo tu NIE JE a zámerne:
  *
- *   Nikto nepredáva — ukáže sa len cesta VON: „nemôžeš ísť? predaj ju ďalej".
- *   Človek, ktorý má vstupenku a nemôže prísť, si sám od seba neotvorí sekciu
- *   s predajom; ponúknuť mu to treba tam, kde na event pozerá.
+ *   NÁKUP NA BURZE. Stránka eventu je miesto, kde organizátor predáva svoje
+ *   vstupenky. Vedľa jeho ceny svietila ponuka „to isté od fanúšikov od 15 €",
+ *   teda konkurencia v jeho vlastnom výklade — a človeka, ktorý prišiel kúpiť
+ *   lístok, to posielalo preč z nákupu. Burza je samostatný produkt a má
+ *   vlastné dvere.
  *
- * Keď nie je ani jedno — event je zadarmo, alebo už bol — nekreslí sa nič.
- * Prázdna sekcia „burza" pod každým eventom je len šum.
+ *   VSTUPENKA ODINAKIAĽ. Ponúkať na stránke eventu predaj lístka kúpeného inde
+ *   ide proti tomu, načo burza je. Predať sa taká vstupenka stále dá — v SWAPe,
+ *   kde je to vedomé rozhodnutie a kde je pri nej napísané, že pravosť overiť
+ *   nevieme. Nie ako ponuka, ktorá vyskočí každému, kto si otvorí event.
+ *
+ * Kto na event vstupenku nemá, nevidí tu nič. Prázdna sekcia „burza" pod
+ * každým eventom je len šum.
  */
 export function SwapOnEvent({
-  eventId, eventSlug, canSell,
+  eventId, canSell,
 }: {
-  /** Uuid. Tým sa pýtame servera a tým sa vypisuje ponuka. */
   eventId: string;
-  /**
-   * Čitateľná časť adresy. Do odkazu na SWAP ide ona, do dotazov nie —
-   * `/swap/hypeland` sa dá prečítať aj nadiktovať, uuid ani jedno.
-   */
-  eventSlug?: string | null;
   /** Mám na tento event vstupenku, ktorú by som mohol ponúknuť ďalej? */
   canSell: boolean;
 }) {
-  const summary = useQuery({
-    queryKey: ['resale', 'summary', eventId],
-    queryFn: () => getEventResaleSummary(eventId),
-    staleTime: 60_000,
-  });
-
-  const data = summary.data;
-  const has = Boolean(data && data.listings > 0);
-
-  // Predať sa dá vždy — aj vstupenku odinakiaľ. Sekcia sa preto nekreslí len
-  // vtedy, keď na evente naozaj nie je čo robiť: žiadna ponuka a event, na
-  // ktorý sa vstupenky nepredávajú.
-  const canSellExternal = Boolean(data);
-  if (!has && !canSell && !canSellExternal) return null;
+  if (!canSell) return null;
 
   return (
     <View style={styles.wrap}>
-      {has && data ? (
-        <>
-          <View style={styles.row}>
-            <View style={styles.text}>
-              <Text style={styles.title}>
-                {data.tickets === 1
-                  ? '1 vstupenka od fanúšikov'
-                  : `${data.tickets} vstupeniek od fanúšikov`}
-              </Text>
-              <Caption>
-                {data.from_cents != null
-                  ? `od ${formatMoney(data.from_cents, data.currency ?? 'EUR')}`
-                  : 'ceny určujú predajcovia'}
-                {data.verified_count > 0
-                  ? ` · ${data.verified_count} overených`
-                  : ''}
-              </Caption>
-            </View>
-            <Button
-              title="Na SWAP"
-              inRow
-              onPress={() => router.push(`/swap/${eventSlug || eventId}`)}
-              style={styles.button}
-            />
-          </View>
-
-          <Caption style={styles.note}>
-            Peniaze držíme, kým vstupenka nie je u kupujúceho.
+      <View style={styles.row}>
+        <View style={styles.text}>
+          <Text style={styles.title}>Nemôžeš ísť?</Text>
+          <Caption>
+            Ponúkni vstupenku ďalej za svoju cenu. Poradíme ti, za koľko ju
+            predávajú ostatní, a peniaze držíme, kým nie je u kupujúceho.
           </Caption>
-        </>
-      ) : null}
-
-      {canSell ? (
-        <View style={[styles.row, has && styles.rowSecond]}>
-          <View style={styles.text}>
-            <Text style={styles.title}>Nemôžeš ísť?</Text>
-            <Caption>
-              Ponúkni vstupenku ďalej za svoju cenu. Poradíme ti, za koľko ju
-              predávajú ostatní.
-            </Caption>
-          </View>
-          <Button
-            title="Predať"
-            variant="secondary"
-            inRow
-            onPress={() => router.push(`/swap/sell?event=${eventId}`)}
-            style={styles.button}
-          />
         </View>
-      ) : canSellExternal ? (
-        /* Vstupenku odinakiaľ tu vypisuje ten, kto v BLUPe žiadnu nemá.
-           Donedávna sa na túto cestu iba odkazovalo a nikam neviedla. */
-        <View style={[styles.row, has && styles.rowSecond]}>
-          <View style={styles.text}>
-            <Text style={styles.title}>Máš vstupenku odinakiaľ?</Text>
-            <Caption>
-              Ponúkni ju tu za svoju cenu. Kupujúci uvidí, že pravosť overiť
-              nevieme, a ty dostaneš peniaze, až keď potvrdí, že fungovala.
-            </Caption>
-          </View>
-          <Button
-            title="Predať"
-            variant="secondary"
-            inRow
-            onPress={() => router.push(`/swap/sell?event=${eventId}`)}
-            style={styles.button}
-          />
-        </View>
-      ) : null}
+        <Button
+          title="Predať"
+          variant="secondary"
+          inRow
+          onPress={() => router.push(`/swap/sell?event=${eventId}`)}
+          style={styles.button}
+        />
+      </View>
     </View>
   );
 }
@@ -141,12 +74,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  rowSecond: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.sm,
-    marginTop: spacing.xs,
-  },
   // `minWidth` je poistka, nie ozdoba: `flex: 1` sám osebe dovolí zmrštiť sa
   // až na nulu a vtedy sa text láme po jednom písmene pod seba. So zalomením
   // riadku vyššie to pri úzkej karte znamená, že tlačidlo spadne pod text —
@@ -154,5 +81,4 @@ const styles = StyleSheet.create({
   text: { flex: 1, minWidth: 180 },
   title: { ...typography.bodyStrong, color: colors.text },
   button: { minWidth: 120 },
-  note: { color: colors.textTertiary },
 });

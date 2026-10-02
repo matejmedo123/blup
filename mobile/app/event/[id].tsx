@@ -881,7 +881,11 @@ export default function EventDetailScreen() {
         <Notice
           tone="warning"
           title="Vypredané"
-          body="Skús burzu nižšie — vstupenky tam ponúkajú ľudia, ktorí nemôžu ísť."
+          // Pôvodne tu stálo „skús burzu nižšie". Burza sa zo stránky eventu
+          // vyhodila, takže by to bol odkaz na niečo, čo tam už nie je —
+          // a čakačka je aj tak to, čo tu vie pomôcť: keď sa miesto uvoľní,
+          // ozveme sa sami.
+          body="Daj si pri svojom type lístka „Daj mi vedieť“ — ozveme sa, keď sa niečo uvoľní."
         />
       ) : cartCount > 0 ? (
         <Button
@@ -994,11 +998,11 @@ export default function EventDetailScreen() {
           />
         ) : null}
 
-        {/* --- burza -------------------------------------------------------
-            Hneď pod vstupenkami: kto sem prišiel kúpiť a oficiálne je
-            vypredané, musí sa o burze dozvedieť skôr, než začne čítať, o čom
-            event je. */}
-        <SwapOnEvent eventId={data.id} eventSlug={data.slug} canSell={hasMyTicket} />
+        {/* --- ponúknuť vstupenku ďalej -------------------------------------
+            Iba cesta VON, nie dnu. Kto na event vstupenku nemá, nevidí tu nič:
+            nákup na burze zo stránky eventu je konkurencia organizátorovi v
+            jeho vlastnom výklade a človeka uprostred nákupu posiela preč. */}
+        <SwapOnEvent eventId={data.id} canSell={hasMyTicket} />
 
         {/* --- host --------------------------------------------------------- */}
         {/* An event belongs to an organization, not to a person. Where one hosts,

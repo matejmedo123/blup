@@ -24,6 +24,8 @@ export interface TrackPayload {
   currency?: string;
   items?: TrackedItem[];
   contentName?: string;
+  /** Deduplikácia s hlásením zo servera — na webe, tu nemá čo robiť. */
+  eventId?: string;
 }
 
 export type TrackEvent =
