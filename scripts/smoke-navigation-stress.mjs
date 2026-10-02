@@ -37,7 +37,16 @@ const ROUNDS = Number(process.argv[3] ?? 3);
  * and this walk is a guard against a deterministic blank returning — not proof
  * that the race is gone.
  */
-const NAV = ['Domov', 'Objav', 'Domov', 'Feed', 'Domov', 'Chat', 'Domov'];
+/**
+ * Na telefóne nie je „Feed".
+ *
+ * Spodná lišta má päť miest — Domov, Objav, SWAP, Chat, Ja — a Feed sa do nich
+ * nezmestil; na šírku je v bočnom menu. Zoznam preto nie je jeden pre obe
+ * rozloženia: predtým tu bol a test tri kolá hlásil „nenájdené", čo vyzeralo
+ * ako rozbitá navigácia a bola to nesprávna očakávaná položka.
+ */
+const NAV_WIDE = ['Domov', 'Objav', 'Domov', 'Feed', 'Domov', 'Chat', 'Domov'];
+const NAV_PHONE = ['Domov', 'Objav', 'Domov', 'SWAP', 'Domov', 'Chat', 'Domov'];
 
 const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
@@ -92,7 +101,7 @@ for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }],
   let missed = 0;
 
   for (let round = 0; round < ROUNDS; round++) {
-    for (const target of NAV) {
+    for (const target of (viewport.width >= 900 ? NAV_WIDE : NAV_PHONE)) {
       step++;
       if (!(await tap(page, target))) { missed++; continue; }
 

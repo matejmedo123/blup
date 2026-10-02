@@ -1,15 +1,18 @@
 /**
- * Odpoveď na cookies, aby ostatné testy merali to svoje.
+ * Prvé spustenie odbavené, aby ostatné testy merali to svoje.
  *
- * Okno so súhlasom je modálne — zakrýva stránku, kým naň človek neodpovie.
- * Tak to je navrhnuté a `smoke-cookies.mjs` presne to kontroluje. Pre každý
- * ĎALŠÍ test je to ale len dvere, ktoré treba otvoriť, než sa dá merať mapa
- * alebo prihlásenie; bez tohto hlásia „tlačidlo sa nedá kliknúť" a merajú
+ * BLUP víta nového návštevníka dvoma vrstvami, ktoré zakryjú stránku, kým na
+ * ne neodpovie: krátkou prehliadkou („Čo sa deje okolo teba — Ďalej /
+ * Preskočiť") a oknom so súhlasom s cookies. Obe sú tak navrhnuté a obe majú
+ * vlastný test — prehliadku `smoke-navigation.mjs`, súhlas `smoke-cookies.mjs`.
+ *
+ * Pre každý ĎALŠÍ test sú to len dvere, ktoré treba otvoriť, než sa dá merať
+ * mapa alebo prihlásenie. Bez tohto hlásia „tlačidlo sa nedá kliknúť" a merajú
  * prekrytie namiesto svojej vlastnej veci.
  *
- * Odpovedá sa ZAMIETNUTÍM. Testy nemajú nič spúšťať u Mety ani Googlu a
- * zamietnutie je zároveň prísnejší stav — keď appka funguje s ním, s povolením
- * funguje tiež.
+ * Cookies sa odpovedajú ZAMIETNUTÍM. Testy nemajú nič spúšťať u Mety ani
+ * Googlu a zamietnutie je zároveň prísnejší stav: keď appka funguje s ním, s
+ * povolením funguje tiež.
  *
  *   import { answerCookies } from './_consent.mjs';
  *   const ctx = await browser.newContext({ viewport });
@@ -27,6 +30,9 @@ export async function answerCookies(context) {
       }));
       // Starý kľúč tiež — appka ho číta pri migrácii odpovede.
       globalThis.localStorage?.setItem('blup.marketing.consent', 'no');
+      // Úvodná prehliadka. Je to modálne okno cez celú stránku, takže bez
+      // tohto sa pod ním nedá kliknúť na nič.
+      globalThis.localStorage?.setItem('blup.welcome.v1.seen', '1');
     } catch {
       /* private mode */
     }

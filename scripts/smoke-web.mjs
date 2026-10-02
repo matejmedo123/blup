@@ -105,6 +105,32 @@ async function signIn(page, who) {
 }
 
 // ---------------------------------------------------------------------------
+// Najprv overiť, že je to vôbec tá databáza.
+//
+// Tento test chodí po konkrétnom nasiatom evente a po konkrétnych účtoch.
+// Keď beží proti náhľadovému stacku (`./scripts/preview.sh`), ktorý má vlastné
+// id-čka, nenájde nič — a hlási to ako tucet rôznych chýb typu „chýba tlačidlo
+// Pridať", čo vyzerá ako rozbitá appka. Lepšie je povedať rovno, že je to zlá
+// databáza, a skončiť.
+{
+  const { ctx, page } = await open();
+  await go(page, '/event/' + EVENT, 5000);
+  const seeded = (await textOf(page)).length > 400;
+  await ctx.close();
+  if (!seeded) {
+    console.error(
+      `\nEvent ${EVENT} na ${BASE} neexistuje.\n\n`
+      + 'Tento test potrebuje demo dáta z `node supabase/seed/seed.mjs` proti\n'
+      + 'skutočnému Supabase projektu. Náhľadový stack (./scripts/preview.sh) má\n'
+      + 'vlastné id-čka a tento test proti nemu nedáva zmysel — na ten sú\n'
+      + 'smoke-layout, smoke-map, smoke-navigation, smoke-cookies a ostatné.\n\n'
+      + 'Iný event sa dá zvoliť cez SMOKE_EVENT_ID.',
+    );
+    await browser.close();
+    process.exit(2);
+  }
+}
+
 heading('Návštevník bez účtu');
 {
   const { ctx, page } = await open();
