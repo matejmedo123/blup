@@ -15,6 +15,7 @@
  *   node scripts/smoke-map.mjs [port]
  */
 import { createRequire } from 'module';
+import { answerCookies } from './_consent.mjs';
 const require = createRequire(new URL('../mobile/', import.meta.url));
 const { chromium } = require('playwright');
 
@@ -35,6 +36,7 @@ const context = await browser.newContext({
   hasTouch: true,
   isMobile: true,
 });
+await answerCookies(context);
 const page = await context.newPage();
 
 await page.goto(`${base}/`, { waitUntil: 'networkidle' });

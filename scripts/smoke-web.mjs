@@ -23,6 +23,7 @@ import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { answerCookies } from './_consent.mjs';
 
 // Playwright lives in the app workspace, not next to this script, and Node
 // resolves imports relative to the file rather than the working directory.
@@ -82,6 +83,7 @@ async function open() {
     viewport: { width: 1440, height: 900 }, locale: 'sk-SK',
     geolocation: { latitude: 48.1486, longitude: 17.1077 }, permissions: ['geolocation'],
   });
+  await answerCookies(ctx);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => pageErrors.push(String(e).slice(0, 120)));
   return { ctx, page };

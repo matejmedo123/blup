@@ -15,6 +15,7 @@
  *   node scripts/smoke-layout.mjs [base-url]
  */
 import { createRequire } from 'module';
+import { answerCookies } from './_consent.mjs';
 const require = createRequire(new URL('../mobile/', import.meta.url));
 const { chromium } = require('playwright');
 
@@ -24,6 +25,7 @@ const b = await chromium.launch({ ...(process.env.CHROMIUM_PATH ? { executablePa
 const PATHS = ['/', '/search', '/discover', '/feed', '/community', '/organizer', '/organizer/create', '/cart', '/settings', '/badges', '/premium', '/organizer/profile', '/org/abc', '/connect/abc', '/legal/terms', '/legal/privacy', '/event/seats/abc', '/organizer/plan/abc', '/organizer/seating/abc', '/invite', '/settings/emails', '/organizer/announce/abc', '/pozvanka/ABC123', '/admin/venues', '/people', '/organizer/ads', '/organizer/ads/abc', '/admin/emails'];
 for (const [label, vp] of [['telefon',{width:390,height:844}], ['desktop',{width:1280,height:900}]]) {
   const ctx = await b.newContext({ viewport: vp });
+  await answerCookies(ctx);
   const p = await ctx.newPage();
   console.log(`\n--- ${label} (${vp.width}px) ---`);
   for (const path of PATHS) {

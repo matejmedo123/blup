@@ -17,6 +17,7 @@
  *   node scripts/smoke-navigation-stress.mjs [base-url] [rounds]
  */
 import { createRequire } from 'module';
+import { answerCookies } from './_consent.mjs';
 const require = createRequire(new URL('../mobile/', import.meta.url));
 const { chromium } = require('playwright');
 
@@ -67,6 +68,7 @@ async function tap(page, label) {
 for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }],
                                  ['telefon', { width: 390, height: 844 }]]) {
   const ctx = await browser.newContext({ viewport });
+  await answerCookies(ctx);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 120)));

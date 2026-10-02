@@ -42,6 +42,7 @@ const base = `http://127.0.0.1:${port}`;
 // --- the deterministic half -------------------------------------------------
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
+import { answerCookies } from './_consent.mjs';
 
 const roots = ['mobile/app', 'mobile/src'];
 const allowed = 'mobile/src/lib/realtime.ts';
@@ -79,7 +80,9 @@ let failures = offenders.length;
 const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
 });
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+await answerCookies(context);
+const page = await context.newPage();
 
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
