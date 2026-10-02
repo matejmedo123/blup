@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 're
 import { router } from 'expo-router';
 
 import { signUpWithEmail } from '@/auth/api';
+import { track } from '@/marketing/tags';
 import { messageFor } from '@/lib/errors';
 import { Body, Button, Caption, Input, Notice, Screen } from '@/components/ui';
 import { colors, spacing } from '@/theme';
@@ -40,6 +41,11 @@ export default function SignUpScreen() {
         password,
         displayName: displayName.trim(),
       });
+
+      // Registrácia je konverzia a doteraz sa nemerala: `sign_up` bolo v
+      // mapovaní pre Metu aj Google, ale nikto ho nikdy nezavolal. Posiela sa
+      // len to, že k nej došlo — žiadny e-mail, meno ani id.
+      track('sign_up');
 
       if (result.needsEmailConfirmation) {
         router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim() } });

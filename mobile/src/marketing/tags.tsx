@@ -41,9 +41,24 @@ export function MarketingTags(): null {
   return null;
 }
 
+/**
+ * Súhlas po kategóriách. Na telefóne nie je čo odsúhlasiť — žiadne cookies,
+ * žiadny pixel — ale tvar musí sedieť, aby sa spoločné obrazovky preložili.
+ */
+export interface Consent {
+  analytics: boolean;
+  marketing: boolean;
+  personalization: boolean;
+}
+
+export function consent(): Consent {
+  return { analytics: false, marketing: false, personalization: false };
+}
+
 export function hasConsent(): boolean { return false; }
-export function setConsent(_accepted: boolean): void { /* web only */ }
+export function setConsent(_next: Consent): void { /* web only */ }
 export function consentAnswered(): boolean { return true; }
+export function trackPageView(_path: string): void { /* web only */ }
 export function openCookieSettings(): void { /* web only — no browser storage here */ }
 export function onCookieSettingsOpen(_listener: () => void): () => void {
   return () => {};

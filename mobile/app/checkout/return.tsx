@@ -59,10 +59,17 @@ export default function CheckoutReturnScreen() {
             : guest.status === 'failed' ? 'failed' : 'pending');
 
           if (guest.status === 'succeeded' && guest.order) {
+            // `ticket_type_id`, nie `code`. Kód vstupenky je to, čo sa skenuje
+            // pri vstupe — posielať ho Mete a Googlu nemá čo robiť ani pre
+            // meranie (každý kus by bol iný „produkt", takže by sa nedalo nič
+            // spočítať), ani pre súkromie.
             track('purchase', {
               valueCents: guest.order.total_cents,
               currency: guest.order.currency,
-              items: guest.order.tickets.map((ticket) => ({ id: ticket.code, quantity: 1 })),
+              items: [{
+                id: guest.order.ticket_type_id ?? guest.order.event_id,
+                quantity: guest.order.quantity,
+              }],
             });
           }
           return;
@@ -78,11 +85,13 @@ export default function CheckoutReturnScreen() {
         // not when Stripe redirected the browser here. A redirect is not a
         // payment, and a conversion counted on one is a number nobody can trust.
         if (result.status === 'succeeded') {
+          // Hodnota je to, čo odišlo z karty. Súčet cien lístkov to nie je —
+          // chýba v ňom archívny poplatok, a reklamné systémy podľa hodnoty
+          // optimalizujú, takže podhodnotená konverzia znamená horšie
+          // nasadený rozpočet.
           track('purchase', {
-            valueCents: result.tickets.reduce(
-              (sum, ticket) => sum + (ticket.price_cents ?? 0), 0,
-            ),
-            currency: result.tickets[0]?.currency ?? 'EUR',
+            valueCents: result.totalCents,
+            currency: result.currency,
             items: result.tickets.map((ticket) => ({
               id: ticket.ticket_type_id ?? ticket.event_id,
               quantity: 1,

@@ -320,15 +320,32 @@ basket screen behind a button that cannot pay for it.
   `G-ABCD123456`, each validated by a CHECK constraint. A "custom code" box on a
   page that also holds session tokens is a stored-XSS hole, and the account that
   can write to it is exactly the one an attacker wants.
-* **Nothing loads before consent** when `consent_required` is on (the default).
-  Events fired before consent are dropped, not queued — a queue that flushes on
-  acceptance is consent-washing. Refusing takes exactly as many clicks as
-  accepting.
-* The events carry an event id, a quantity and a value. No email, no name, no
-  user id.
+* **Consent is per category**, not yes/no: analytics, marketing and
+  personalization are separate switches; necessary cookies (sign-in, basket,
+  security) have none, because without them the site does not work and they
+  track nobody. Refusing takes exactly as many clicks as accepting, and the two
+  buttons are the same size next to each other.
+* **Nothing is stored before consent.** The Google tag loads with Consent Mode
+  v2 and everything denied — it sets no cookie and identifies nobody, it only
+  sends the signal Google models conversions from, which is the difference
+  between "we lost everyone who said no" and a usable number. Meta has no such
+  mode, so the pixel does not load at all until marketing consent is given.
+  Events fired before that are dropped, not queued — a queue that flushes on
+  acceptance is consent-washing.
+* **`ad_user_data` and `ad_personalization`** are sent with every consent
+  signal. Google has required both from European advertisers since March 2024;
+  without them Google Ads stops modelling conversions.
+* The events carry a ticket-type id, a quantity and a value. No email, no name,
+  no user id — and **not the ticket code**, which is what gets scanned at the
+  door.
+* **`page_view` is sent on every in-app navigation.** BLUP is a single-page app:
+  without it Google and Meta would see one page per session, the one the visitor
+  landed on.
 * `purchase` fires when the **webhook** has issued the tickets, not when Stripe
   redirected the browser back. A conversion counted on a redirect is a number
-  nobody can trust.
+  nobody can trust. Its value is the order total — what actually left the card,
+  archive fee included — because the ad platforms optimise on that number.
+* `scripts/smoke-cookies.mjs` asserts all of this from outside, in a browser.
 
 ## The ticket PDF
 

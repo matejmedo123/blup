@@ -125,31 +125,53 @@ export async function previewPromoCode(
  * webhook creates. The webhook is the source of truth, so we wait for it rather
  * than trusting the client-side "success".
  */
+
+/**
+ * Výsledok čakania na vstupenky.
+ *
+ * `totalCents` je suma, ktorú kupujúci naozaj zaplatil — teda to, čo sa posiela
+ * reklamným systémom ako hodnota konverzie.
+ */
+export interface PurchaseWait {
+  status: 'succeeded' | 'pending' | 'failed';
+  tickets: Ticket[];
+  totalCents: number;
+  currency: string;
+}
 export async function waitForTickets(
   orderId: string,
   { attempts = 12, intervalMs = 1000 }: { attempts?: number; intervalMs?: number } = {},
-): Promise<{ status: 'succeeded' | 'pending' | 'failed'; tickets: Ticket[] }> {
+): Promise<PurchaseWait> {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const { data: order } = await supabase
       .from('orders')
-      .select('payment_status')
+      // `total_cents` je tu kvôli meraniu konverzie: hodnota nákupu musí byť
+      // to, čo kupujúci naozaj zaplatil, nie súčet cien lístkov. Tie dve čísla
+      // sa líšia o archívny poplatok a reklamné systémy podľa hodnoty
+      // optimalizujú — podhodnotená konverzia znamená horšie nasadenie rozpočtu.
+      .select('payment_status, total_cents, currency')
       .eq('id', orderId)
       .maybeSingle();
 
     if (order?.payment_status === 'succeeded') {
       const { data: tickets } = await supabase.from('tickets').select('*').eq('order_id', orderId);
-      return { status: 'succeeded', tickets: (tickets ?? []) as Ticket[] };
+      return {
+        status: 'succeeded',
+        tickets: (tickets ?? []) as Ticket[],
+        totalCents: (order.total_cents as number | null) ?? 0,
+        currency: (order.currency as string | null) ?? 'EUR',
+      };
     }
 
     if (order?.payment_status === 'failed' || order?.payment_status === 'cancelled') {
-      return { status: 'failed', tickets: [] };
+      return { status: 'failed', tickets: [], totalCents: 0, currency: 'EUR' };
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
   // Not an error: the webhook can lag. The ticket will appear in "My tickets".
-  return { status: 'pending', tickets: [] };
+  return { status: 'pending', tickets: [], totalCents: 0, currency: 'EUR' };
 }
 
 /**
@@ -159,11 +181,11 @@ export async function waitForTickets(
 export async function waitForCheckout(
   checkoutId: string,
   { attempts = 12, intervalMs = 1000 }: { attempts?: number; intervalMs?: number } = {},
-): Promise<{ status: 'succeeded' | 'pending' | 'failed'; tickets: Ticket[] }> {
+): Promise<PurchaseWait> {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const { data: checkout } = await supabase
       .from('checkouts')
-      .select('status')
+      .select('status, total_cents, currency')
       .eq('id', checkoutId)
       .maybeSingle();
 
@@ -176,18 +198,23 @@ export async function waitForCheckout(
         ? await supabase.from('tickets').select('*').in('order_id', ids)
         : { data: [] };
 
-      return { status: 'succeeded', tickets: (tickets ?? []) as Ticket[] };
+      return {
+        status: 'succeeded',
+        tickets: (tickets ?? []) as Ticket[],
+        totalCents: (checkout.total_cents as number | null) ?? 0,
+        currency: (checkout.currency as string | null) ?? 'EUR',
+      };
     }
 
     if (checkout?.status === 'failed' || checkout?.status === 'cancelled'
         || checkout?.status === 'expired') {
-      return { status: 'failed', tickets: [] };
+      return { status: 'failed', tickets: [], totalCents: 0, currency: 'EUR' };
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  return { status: 'pending', tickets: [] };
+  return { status: 'pending', tickets: [], totalCents: 0, currency: 'EUR' };
 }
 
 /**
@@ -425,6 +452,9 @@ export interface GuestOrderStatus {
   currency: string;
   guest_email: string | null;
   guest_name: string | null;
+  /** Čo sa kúpilo — identifikátor pre meranie, nie kód vstupenky. */
+  event_id: string;
+  ticket_type_id: string | null;
   event_title: string | null;
   event_start_at: string | null;
   venue_name: string | null;

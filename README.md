@@ -286,7 +286,8 @@ quietly are not the same power.
 **Marketing.** `Admin → Marketing` takes a Meta pixel id, a Google Ads id and
 conversion label, and a GA4 id. **Identifiers, not markup** — the loaders live
 in the app's code, so the worst a bad value can do is fail to load a pixel.
-Nothing loads before consent, and `purchase` is reported when the webhook has
+Consent is per category — analytics, marketing, personalization — with Google
+Consent Mode v2 wired to it, and `purchase` is reported when the webhook has
 issued the tickets, not when Stripe redirected the browser.
 
 **The ticket PDF** was redrawn: wordmark, event, a panel holding the QR, a
