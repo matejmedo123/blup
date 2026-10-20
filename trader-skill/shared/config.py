@@ -1,0 +1,162 @@
+"""Where state lives, what the defaults are, and whether we are offline.
+
+Every skill keeps its state in a ``trader/`` folder of the user's project
+(``$TRADER_HOME`` overrides it) so each skill can pick up what the previous
+one wrote.
+"""
+from __future__ import annotations
+
+import copy
+import json
+import os
+from pathlib import Path
+
+PACK_ROOT = Path(__file__).resolve().parent.parent
+
+DEFAULT_CONFIG = {
+    "sec_user_agent": "Your Name your.email@example.com",
+    "account_size": 25000,
+    "account_currency": "USD",
+    "risk_per_trade_pct": 0.5,
+    "fractional_shares": False,
+    "watchlists": {
+        "stocks": ["TSLA", "NVDA", "AAPL", "AMD", "META"],
+        "crypto": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        "meme": [],
+    },
+    "meme_chains": ["solana", "base"],
+    "quote_currency": "USDT",
+    "crypto_horizon": "4h",
+    "meme_horizon": "4h",
+    "paper": True,
+    "connector": "alpaca",
+    "costs": {
+        "stock": {"fee_bps": 0, "slippage_bps": 2},
+        "crypto": {"fee_bps": 10, "slippage_bps": 3},
+        "meme": {"fee_bps": 30, "slippage_bps": 100},
+    },
+    "scanner": {
+        "interval": "5m",
+        "max_symbols": 300,
+        "time_budget_sec": 240,
+        "min_price": 2.0,
+        "min_avg_volume": 300000,
+        "top_n_crypto": 30,
+        "gap_min_pct": 3.0,
+        "relvol_min": 2.0,
+    },
+}
+
+DEFAULT_LIMITS = {
+    "global": {"max_daily_loss_usd": 750, "max_daily_trades": 8, "max_open_positions": 4},
+    "stock": {
+        "max_risk_per_trade_usd": 250,
+        "max_daily_loss_usd": 500,
+        "max_open_positions": 3,
+        "max_position_pct": 25,
+        "max_daily_trades": 6,
+        "allow_shorts": False,
+        "allow_margin": False,
+        "allow_options": False,
+    },
+    "crypto": {
+        "max_risk_per_trade_usd": 200,
+        "max_daily_loss_usd": 400,
+        "max_open_positions": 2,
+        "max_position_pct": 15,
+        "max_total_exposure_pct": 30,
+        "max_daily_trades": 6,
+        "allow_shorts": False,
+        "allow_leverage": False,
+    },
+    "meme": {
+        "max_risk_per_trade_usd": 50,
+        "max_daily_loss_usd": 100,
+        "max_open_positions": 2,
+        "max_position_pct": 2,
+        "max_total_exposure_pct": 5,
+        "max_daily_trades": 4,
+        "min_liquidity_usd": 50000,
+        "max_slippage_pct": 3.0,
+        "max_pct_of_pool": 1.0,
+        "required_rugcheck_verdicts": ["SAFE"],
+        "rugcheck_max_age_minutes": 60,
+    },
+    "blocked_symbols": [],
+}
+
+SUBDIRS = ("cache", "reports", "rugcheck", "timemachine", "backtests")
+
+
+def trader_home() -> Path:
+    env = os.environ.get("TRADER_HOME")
+    if env:
+        return Path(env).expanduser().resolve()
+    return (Path.cwd() / "trader").resolve()
+
+
+def fixtures_dir() -> Path:
+    env = os.environ.get("TRADER_FIXTURES")
+    if env:
+        return Path(env).expanduser().resolve()
+    return PACK_ROOT / "tests" / "fixtures"
+
+
+def is_offline() -> bool:
+    return os.environ.get("TRADER_OFFLINE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def deep_merge(base: dict, override: dict) -> dict:
+    out = copy.deepcopy(base)
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], value)
+        else:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def _write_default(path: Path, obj: dict) -> None:
+    if path.exists():
+        return
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
+    os.replace(str(tmp), str(path))
+
+
+def ensure_home() -> Path:
+    home = trader_home()
+    home.mkdir(parents=True, exist_ok=True)
+    for sub in SUBDIRS:
+        (home / sub).mkdir(exist_ok=True)
+    _write_default(home / "config.json", DEFAULT_CONFIG)
+    _write_default(home / "limits.json", DEFAULT_LIMITS)
+    return home
+
+
+def _load(name: str, defaults: dict) -> dict:
+    path = ensure_home() / name
+    try:
+        user = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SystemExit("trader: cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
+    if not isinstance(user, dict):
+        raise SystemExit("trader: %s must contain a JSON object" % path)
+    return deep_merge(defaults, user)
+
+
+def load_config() -> dict:
+    return _load("config.json", DEFAULT_CONFIG)
+
+
+def load_limits() -> dict:
+    return _load("limits.json", DEFAULT_LIMITS)
+
+
+def sec_user_agent(cfg: dict = None) -> str:
+    """SEC asks for a real name + e-mail in the User-Agent; placeholders don't count."""
+    value = os.environ.get("SEC_USER_AGENT") or (cfg or {}).get("sec_user_agent") or ""
+    value = value.strip()
+    if "@" not in value or "example.com" in value:
+        return ""
+    return value

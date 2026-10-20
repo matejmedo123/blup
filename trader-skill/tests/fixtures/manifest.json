@@ -1,0 +1,47 @@
+{
+  "about": "Synthetic offline fixtures for the Trader skill pack \u2014 not real market data.",
+  "default_now": "2026-10-20T20:00:00Z",
+  "demos": {
+    "tsla": {
+      "symbol": "TSLA",
+      "now": "2026-10-20T14:15:00Z",
+      "after_close": "2026-10-20T20:05:00Z"
+    },
+    "btc": {
+      "symbol": "BTC-USD",
+      "now": "2026-10-20T14:40:00Z",
+      "later": "2026-10-20T18:45:00Z"
+    },
+    "meme": {
+      "symbol": "SOL:Fk6KsBpNNTxEMb4bovfUMjB4xZiZ8376ritJ6qzWpump",
+      "now": "2026-10-20T15:55:00Z",
+      "later": "2026-10-20T19:55:00Z"
+    }
+  },
+  "tokens": {
+    "PUPKIN": {
+      "chain": "solana",
+      "address": "Fk6KsBpNNTxEMb4bovfUMjB4xZiZ8376ritJ6qzWpump",
+      "pool": "cx4Gqainhrh293sp55P7MD1Lcb3HYURXyVhdWrwQ7Qar",
+      "name": "Pumpkin Pup"
+    },
+    "MLAMBO": {
+      "chain": "solana",
+      "address": "53VuAc6Uze1URYqnM8yrNKybq8qkXQ7Xk3N4comopump",
+      "pool": "zTSHUTg3bJdSXgY3EDvFUXNkqLUMcxoch8h9v9bSDrXg",
+      "name": "Moon Lambo"
+    },
+    "NEWT": {
+      "chain": "base",
+      "address": "0x121a169740236be88462defefcdad9de98ee0346",
+      "pool": "0xa7ee25f29f90fcc5267df0c3a7bc59a917c84301",
+      "name": "Newt Coin"
+    },
+    "OLDFROG": {
+      "chain": "ethereum",
+      "address": "0xa2718250bb0298bb0acc4692d2862bcbabeeaec2",
+      "pool": "0x511344226e46dcf65b67e6cffbce6381a5db9f42",
+      "name": "Old Frog"
+    }
+  }
+}

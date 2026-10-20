@@ -1,0 +1,4 @@
+ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol
+JPM|JPMorgan Chase & Co. Common Stock|N|JPM|N|100|N|JPM
+BRK.B|Berkshire Hathaway Class B|N|BRK.B|N|100|N|BRK=B
+File Creation Time: 1020202608:01|||||||

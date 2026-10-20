@@ -1,0 +1,7 @@
+# runtime state (positions, approvals, caches, reports) — never commit it
+trader/
+demo/
+__pycache__/
+*.pyc
+*.tmp
+.DS_Store
