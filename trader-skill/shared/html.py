@@ -162,6 +162,11 @@ def _spread_labels(ys, min_gap: float, top: float, bottom: float) -> list:
     return out
 
 
+def _anchor(k: int, ticks: int) -> str:
+    """First tick label hugs the left edge, last one the right edge, so neither is clipped."""
+    return "start" if k == 0 else ("end" if k == ticks - 1 else "middle")
+
+
 def _time_label(t: int, asset: str, multi_day: bool) -> str:
     if asset == "stock":
         e = market_clock.to_et(t)
@@ -231,8 +236,8 @@ def candle_chart(candles, lines=(), markers=(), shades=(), width: int = 960, hei
         ticks = max(2, min(8, int(plot_w // 110)))
         for k in range(ticks):
             i = int(round(k * (n - 1) / float(ticks - 1)))
-            out.append("<text x='%.1f' y='%d' text-anchor='middle'>%s</text>"
-                       % (x(i), height - 8, esc(_time_label(candles[i].t, asset, multi))))
+            out.append("<text x='%.1f' y='%d' text-anchor='%s'>%s</text>"
+                       % (x(i), height - 8, _anchor(k, ticks), esc(_time_label(candles[i].t, asset, multi))))
     label_ys = []
     for ln in lines:
         yy = y(ln["price"])
@@ -262,8 +267,13 @@ def candle_chart(candles, lines=(), markers=(), shades=(), width: int = 960, hei
         if pts:
             out.append("<polygon points='%s' fill='%s'/>" % (pts, col))
         if m.get("label") and not compact:
-            out.append("<text x='%.1f' y='%.1f' text-anchor='middle' style='fill:%s;font-weight:600'>%s</text>"
-                       % (xx, yy + (28 if m.get("shape", "up") == "up" else -20), col, esc(m["label"])))
+            bar = candles[i]
+            up = m.get("shape", "up") == "up"
+            ly = max(yy + 28, y(bar.l) + 26) if up else min(yy - 20, y(bar.h) - 18)
+            ly = min(max(ly, pad_t + 10), pad_t + plot_h - 2)
+            anchor = "end" if xx > width - pad_r - 40 else ("start" if xx < pad_l + 40 else "middle")
+            out.append("<text x='%.1f' y='%.1f' text-anchor='%s' style='fill:%s;font-weight:600'>%s</text>"
+                       % (xx, ly, anchor, col, esc(m["label"])))
     out.append("</svg>")
     return "".join(out)
 
@@ -373,7 +383,8 @@ def fan_chart(paths, lines=(), x_labels=(), width: int = 960, height: int = 380,
         ticks = max(2, min(7, int(pw // 120)))
         for k in range(ticks):
             i = int(round(k * (len(labels) - 1) / float(ticks - 1)))
-            out.append("<text x='%.1f' y='%d' text-anchor='middle'>%s</text>" % (x(i), height - 8, esc(labels[i])))
+            out.append("<text x='%.1f' y='%d' text-anchor='%s'>%s</text>"
+                       % (x(i), height - 8, _anchor(k, ticks), esc(labels[i])))
     out.append("</svg>")
     if counter_total:
         # progressive enhancement: without JS every path is visible and the counter shows the total
@@ -424,6 +435,7 @@ def line_chart(values, width: int = 960, height: int = 220, color: str = "blue",
         ticks = max(2, min(7, int(pw // 120), len(labels)))
         for k in range(ticks):
             i = int(round(k * (len(labels) - 1) / float(max(ticks - 1, 1))))
-            out.append("<text x='%.1f' y='%d' text-anchor='middle'>%s</text>" % (x(i), height - 8, esc(labels[i])))
+            out.append("<text x='%.1f' y='%d' text-anchor='%s'>%s</text>"
+                       % (x(i), height - 8, _anchor(k, ticks), esc(labels[i])))
     out.append("</svg>")
     return "".join(out)

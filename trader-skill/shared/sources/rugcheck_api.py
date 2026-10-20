@@ -30,9 +30,15 @@ def summarize(rep: dict, pair_address: str = "") -> dict:
     markets = rep.get("markets") or []
     pool_accounts = {pair_address} if pair_address else set()
     for m in markets:
-        for k in ("pubkey", "liquidityAAccount", "liquidityBAccount"):
-            if m.get(k):
-                pool_accounts.add(m[k])
+        # live reports give the reserve accounts as objects ({"mint", "owner", ...}), fixtures as strings
+        for k in ("pubkey", "liquidityA", "liquidityB", "liquidityAAccount", "liquidityBAccount"):
+            v = m.get(k)
+            if isinstance(v, str) and v:
+                pool_accounts.add(v)
+            elif isinstance(v, dict):
+                for sub in ("owner", "pubkey", "address"):
+                    if isinstance(v.get(sub), str) and v[sub]:
+                        pool_accounts.add(v[sub])
 
     def is_pool_or_locker(h):
         for key in (h.get("owner"), h.get("address")):

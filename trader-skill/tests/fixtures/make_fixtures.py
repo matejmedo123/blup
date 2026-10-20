@@ -466,14 +466,18 @@ def build_crypto_misc(btc):
     write("coinbase/product_BTC-USD.json", {"id": "BTC-USD", "base_currency": "BTC", "quote_currency": "USD",
                                             "quote_increment": "0.01", "base_increment": "0.00000001",
                                             "min_market_funds": "1", "status": "online"})
-    write("coinbase/ticker_BTC-USD.json", {"price": "%.2f" % now_bar[4], "volume": "8123.4", "time": "2026-10-20T14:40:00Z"})
+    # venue prices differ a little, like they do in real life (used by the arbitrage gap monitor)
+    write("coinbase/ticker_BTC-USD.json", {"price": "%.2f" % (now_bar[4] * 1.0007), "volume": "8123.4",
+                                           "time": "2026-10-20T14:40:00Z"})
     write("coinbase/stats_BTC-USD.json", {"open": "66980.10", "high": "67600.00", "low": "66500.00",
                                           "last": "%.2f" % now_bar[4], "volume": "8123.4"})
     kr = [[b[0], "%.1f" % b[1], "%.1f" % b[2], "%.1f" % b[3], "%.1f" % b[4], "%.1f" % b[4], "%.8f" % (b[5] * 0.2), 120]
           for b in btc[-720:]]
     write("kraken/ohlc_XBTUSDT_5.json", {"error": [], "result": {"XBTUSDT": kr, "last": btc[-1][0]}})
     write("kraken/ticker_XBTUSDT.json", {"error": [], "result": {"XBTUSDT": {
-        "c": ["%.1f" % now_bar[4], "0.01"], "o": "66980.1", "v": ["1200.1", "3100.4"]}}})
+        "c": ["%.1f" % (now_bar[4] * 0.99955), "0.01"], "o": "66980.1", "v": ["1200.1", "3100.4"]}}})
+    write("kraken/ticker_USDTUSD.json", {"error": [], "result": {"USDTZUSD": {
+        "c": ["0.99970", "120.0"], "o": "0.99980", "v": ["9100000.0", "21000000.0"]}}})
     coins = [("tether", "usdt", "Tether", 1.0, 183e9, 51e9), ("bitcoin", "btc", "Bitcoin", now_bar[4], 1.33e12, 38e9),
              ("ethereum", "eth", "Ethereum", 2412.55, 290e9, 21e9), ("usd-coin", "usdc", "USDC", 1.0, 74e9, 9e9),
              ("solana", "sol", "Solana", 152.31, 82e9, 6.1e9), ("ripple", "xrp", "XRP", 2.1844, 128e9, 4.4e9),

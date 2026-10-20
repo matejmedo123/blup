@@ -90,6 +90,13 @@ class Parsers(unittest.TestCase):
                 "AAA|A|Q|N|N|100|N|N\nQQQ|Q|G|N|N|100|Y|N\nZZZ|Z|Q|Y|N|100|N|N\nFile Creation Time: x|||||||\n")
         self.assertEqual([r["ticker"] for r in nasdaq.parse(text, "nasdaq")], ["AAA"])
 
+    def test_rugcheck_summary_handles_live_account_objects(self):
+        rep = {"topHolders": [{"address": "r", "owner": "VAULT", "pct": 20.0}, {"address": "w", "owner": "w", "pct": 3.0}],
+               "markets": [{"pubkey": "POOL", "liquidityAAccount": {"mint": "M", "owner": "VAULT", "amount": 1},
+                            "liquidityBAccount": {"mint": "S", "owner": "VAULT"}, "lp": {"lpLockedPct": 100}}],
+               "token": {"supply": 100}}
+        self.assertEqual(rugcheck_api.summarize(rep, "")["top_holder_pct"], 3.0)
+
     def test_rugcheck_summary_excludes_pool(self):
         rep = {"topHolders": [{"address": "v", "owner": "POOL", "pct": 30.0}, {"address": "w", "owner": "w", "pct": 12.0}],
                "markets": [{"pubkey": "POOL", "lp": {"lpLockedPct": 100}}], "mintAuthority": None,

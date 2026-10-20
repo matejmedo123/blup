@@ -26,6 +26,9 @@ trader-skill/
   trader-journal/     SKILL.md  journal.py
   trader-backtest/    SKILL.md  backtest.py
   trader-rugcheck/    SKILL.md  rugcheck.py
+  trader-desk/        SKILL.md  desk.py        (add-on: four-role AI desk)
+  trader-arb/         SKILL.md  arb.py         (add-on: read-only arbitrage gap monitor)
+  agents/             trader-researcher.md  trader-skeptic.md  trader-lead.md
   shared/
     __init__.py
     config.py         TRADER_HOME, config.json / limits.json defaults, offline flag
@@ -284,6 +287,27 @@ Meme orders: `qty_unit: "usd"`, `qty` = USD amount, plus `liquidity_usd`, `est_s
              "buys_h1": 1300, "sells_h1": 700, "volume_h24": 3100000, "vol_liq_ratio": 7.5},
  "sources": {"dexscreener": "ok", "rugcheck": "ok", "honeypot": "n/a"}, "warnings": [],
  "report": "reports/rugcheck-solana-<addr8>.html"}
+```
+
+### `desk/{id}/` — written by trader-desk
+`case.json` (everything the roles work from: plan, entry, setup, news, rugcheck, backtest, timemachine,
+order, `missing` steps with the exact command to run), `research.md`, `skeptic.md` (objections as
+`O1 [critical|major|minor] … — evidence: …`), `lead.md` (`O1: rebutted|mitigated|accepted — …` and
+`DECISION: GO|NO-GO|WAIT`), `log.jsonl`, and `desk.json`:
+```json
+{"id": "TSLA-20261020-orb15", "status": "GO|NO-GO|WAIT|BLOCKED|INCOMPLETE", "decision": "NO-GO",
+ "headline": "...", "objections": [{"id": "O1", "severity": "critical", "text": "...", "response": "mitigated"}],
+ "issues": [], "blockers": [], "gates": [{"name": "exit plan", "ok": true, "hard": true, "detail": "..."}],
+ "trader_next": [], "verified_at": "..."}
+```
+
+### `arb/{symbol_key}.json` and `arb_log.jsonl` — written by trader-arb
+```json
+{"symbol": "PUPKIN (solana)", "key": "solana-<mint>", "asset": "meme", "size_usd": 500,
+ "venues": [{"venue": "raydium cx4G…7Qar", "price": 0.004712, "fee_pct": 0.25, "slippage_pct": 0.24,
+             "network_pct": 0.0, "liquidity_usd": 412350, "stale": false, "too_thin": false, "note": "..."}],
+ "routes": [{"buy": "...", "sell": "...", "gross_pct": 0.15, "costs_pct": 6.27, "net_pct": -6.12, "stale_leg": false}],
+ "best": {}, "verdict": "no edge after costs", "summary": "...", "reality_check": "...", "assumptions": []}
 ```
 
 ### Other folders

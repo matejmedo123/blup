@@ -122,11 +122,17 @@ def entrypoint(fn):
         except (SymbolError, SetupError, ValueError) as exc:
             sys.stderr.write("trader: %s\n" % exc)
             return EXIT_INPUT
-        except DataUnavailable as exc:
+        except (DataUnavailable, http.SourceError) as exc:
             sys.stderr.write("trader: %s\n" % exc)
             return EXIT_DATA
         except KeyboardInterrupt:
             return 130
+        except Exception as exc:  # a crash should read like a message, not a stack dump
+            if os.environ.get("TRADER_DEBUG"):
+                raise
+            sys.stderr.write("trader: unexpected error: %s: %s (set TRADER_DEBUG=1 for the traceback)\n"
+                             % (type(exc).__name__, exc))
+            return 1
     wrapper.__name__ = getattr(fn, "__name__", "main")
     wrapper.__doc__ = getattr(fn, "__doc__", None)
     return wrapper
