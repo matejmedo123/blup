@@ -310,6 +310,32 @@ three-year windows):
 The typical year is about +20 %; the averages are pulled up by rare years like 2021. On BTC + ETH alone
 the typical year is +10 % (3 years: €1,545) with drops under −20 %.
 
+### The checks — six desks, "is it normal?", backtest vs reality
+
+`autopilot.py check` and the dashboard's **Checks** tab:
+
+* **Six desks per decision** — every signal the bot judged, laid out as Research (lab result, sample,
+  confidence) · News (filings, hacks, the feed) · Strategy (exit plan, the runner) · Execution (fresh
+  signal, leverage, buying power) · Risk (every `limits.json` check, what it learned) · Boss (desk verdict,
+  the optional AI veto) — each ✓ / ✗ with what it checked, and the call: BUY, WOULD BUY (dry run) or REJECT
+  with the desk that stopped it.
+* **Is it normal?** (`shared/health.py`, every cycle) — the bot's closed trades against the lab's
+  out-of-sample trades, replayed 2,000 times in blocks of 20 consecutive trades (trades cluster: a crash
+  stops several positions out the same week). Three checks — the longest losing streak and the sum of the
+  last 30 trades, and the deepest drawdown — each say how often a history was at least that bad. Worse
+  than 9 histories in 10 → **alarm**: new entries pause until you resume (exits keep running).
+  Calibrated on the bot's own simulated trade sequences 2018–2026 (5 positions, 10 signal orders): a false
+  alarm 0.2–0.7 % of the time (about once in 5–8 years); a strategy that loses (20 % winners) caught 10 of
+  10 times after ~16 trades; one with no edge left caught only 3 of 10 times within 40 trades. **Results
+  alone are slow to prove anything** — with ~40 trades a year, telling "no edge" from "a normal bad
+  stretch" takes years, which is why the lab's eight years of walk-forward tests come first and this check
+  is a safety net for clear breakage (a bug, a market that changed).
+* **Backtest vs reality** (`shared/shadow.py`, once a day) — the daily rules recomputed for the last 30
+  days on every validated coin and ETF, matched with what the bot recorded: taken (with the entry's
+  slippage against the signal), skipped (with the reason), **missed** (no record — the bot was down or data
+  failed) or **extra** (a trade the rules don't explain). Missed, extra, errors or slippage above twice
+  the assumed cost → "check" and a phone notification.
+
 ### Bear markets — what was tested, what the bot does
 
 The crypto strategies only buy while Bitcoin is above its 200-day average, so in a bear market they sit in

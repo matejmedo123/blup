@@ -450,6 +450,81 @@ def decisions_view(limit: int = 200) -> dict:
     return {"decisions": rows, "counts": counts}
 
 
+# the six desks of a decision, the way the trade went through them
+BOARD = (
+    ("research", "Research", ("backtest", "confidence sizing", "playbook", "lab")),
+    ("news", "News", ("news",)),
+    ("strategy", "Strategy", ("exit plan", "time machine", "let winners ride")),
+    ("execution", "Execution", ("idea still fresh", "fresh trigger", "leverage", "buying power", "order")),
+    ("risk", "Risk", ("risk", "learned", "limit")),
+    ("boss", "Boss", ("desk", "ai desk")),
+)
+
+
+def _board_key(name: str) -> str:
+    low = (name or "").lower()
+    for key, _, words in BOARD:
+        if any(low.startswith(w) or w in low for w in words):
+            return key
+    return "strategy"
+
+
+def board_view(d: dict) -> dict:
+    """One decision as six desks — each ✓ / ✗ / — with what it checked — and the final call."""
+    cols = {key: {"key": key, "label": label, "items": []} for key, label, _ in BOARD}
+    for g in d.get("gates") or []:
+        cols[_board_key(g.get("name"))]["items"].append({"name": g.get("name"), "ok": bool(g.get("ok")),
+                                                        "detail": g.get("detail")})
+    reasons = d.get("reasons") or []
+    desk = d.get("desk") or {}
+    if desk.get("status"):
+        cols["boss"]["items"].insert(0, {"name": "desk verdict", "ok": desk.get("status") == "GO",
+                                         "detail": "%s · %s objection(s)" % (desk.get("status"), desk.get("objections", 0))})
+    blocked_at = None
+    for r in reasons:
+        low = str(r).lower()
+        if d.get("action") == "taken":
+            break
+        if low.startswith("risk block"):
+            blocked_at = "risk"
+        elif low.startswith("desk") or low.startswith("ai desk"):
+            blocked_at = "boss"
+        elif "buying power" in low or "dry run" in low:
+            blocked_at = "execution"
+        elif "learned" in low or "drawdown" in low or "open/pending" in low or "daily cap" in low:
+            blocked_at = "risk"
+        elif "news" in low:
+            blocked_at = "news"
+        if blocked_at:
+            break
+    for c in cols.values():
+        items = c["items"]
+        c["state"] = "fail" if any(not i["ok"] for i in items) else ("pass" if items else "none")
+        if blocked_at == c["key"] and c["state"] != "fail":
+            c["state"] = "fail"
+            c["items"].append({"name": "stopped here", "ok": False, "detail": str(reasons[0])[:300] if reasons else ""})
+    if d.get("action") == "taken":
+        call = "BUY"
+    elif d.get("dry_run"):
+        call = "WOULD BUY"
+    elif d.get("action") == "error":
+        call = "ERROR"
+    else:
+        call = "REJECT"
+    return {"id": d.get("id"), "at": d.get("at"), "symbol": d.get("symbol"), "asset": d.get("asset"),
+            "setup": d.get("setup"), "call": call, "reason": reasons[0] if reasons else "",
+            "columns": [cols[k] for k, _, _ in BOARD], "entry": d.get("entry"), "stop": d.get("stop"),
+            "target": d.get("target"), "qty": d.get("qty")}
+
+
+def checks_view(limit: int = 12) -> dict:
+    rows = read_jsonl("autopilot/decisions.jsonl", tail=200)
+    rows.reverse()
+    judged = [r for r in rows if r.get("gates") or r.get("action") == "taken"][:limit]
+    return {"health": read_json("autopilot/health.json", {}) or {}, "shadow": read_json("autopilot/shadow.json", {}) or {},
+            "board": [board_view(d) for d in judged]}
+
+
 def news_view(asset: str = "", symbol: str = "", kind: str = "") -> dict:
     feed = read_json("news_feed.json", None)
     source = "news_feed.json"
@@ -1240,6 +1315,8 @@ def make_handler(app: DashboardApp):
                 return self._json(reports_view())
             if name == "desk":
                 return self._json(desk_view())
+            if name == "checks":
+                return self._json(checks_view())
             if name == "control":
                 return self._json(control_view())
             if name == "system":

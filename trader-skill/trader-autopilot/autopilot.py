@@ -22,6 +22,7 @@ Examples:
   python3 autopilot.py universe [--refresh] | learned | notify-test
   python3 autopilot.py pause | resume | kill --confirm KILL | check-live
   python3 autopilot.py profile --risk 2 --leverage 1.5 --capital 1000 [--write]   # the backtested daily-trend setup
+  python3 autopilot.py check                       # is it normal? did it do what the rules say?
   python3 autopilot.py replay --from 2026-10-20T13:35:00Z --to 2026-10-20T20:00:00Z --approve --offline
 """
 from __future__ import annotations
@@ -43,7 +44,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from shared import adapt, brokers, cli, config, data, fmt, market_clock, notify, setups, skills, state  # noqa: E402
-from shared import indicators, symbols, universe  # noqa: E402
+from shared import health, indicators, shadow, symbols, universe  # noqa: E402
 from shared.brokers import BrokerError, broker_symbol  # noqa: E402
 
 STATE = "autopilot/state.json"
@@ -1219,6 +1220,49 @@ def learn(cfg: dict, control: dict, now, actions: list) -> dict:
     return doc
 
 
+def check_health(cfg: dict, control: dict, now, actions: list) -> dict:
+    """Is the bot's record still what the backtest promised? A new alarm pauses new entries (exits keep running)."""
+    try:
+        doc = health.update(cfg, now, control)
+    except Exception as exc:  # a check, not an engine — never let it stop the cycle
+        actions.append("health check skipped: %s: %s" % (type(exc).__name__, exc))
+        return {}
+    if doc.get("new_alarm"):
+        actions.append("HEALTH ALARM: " + doc.get("text", ""))
+        if health.settings(cfg).get("pause_on_alarm", True):
+            actions.append("PAUSED by the health check — resume to trade again")
+            notify.send("paused", "Autopilot paused — results unlike the backtest",
+                        doc.get("text", "") + ". Exits keep running; look at autopilot.py check, then resume.", cfg,
+                        priority="high")
+            return dict(doc, pause=True)
+        notify.send("learned", "Health alarm", doc.get("text", ""), cfg)
+    return doc
+
+
+def run_checks(cfg: dict, now=None) -> dict:
+    """Both checks now: is it normal (health) and did it do what the rules say (shadow)."""
+    now = now or market_clock.now_utc()
+    out = {"health": health.update(cfg, now, read_control())}
+    try:
+        out["shadow"] = shadow.run(cfg, now)
+    except Exception as exc:
+        out["shadow"] = {"verdict": "error", "text": "%s: %s" % (type(exc).__name__, exc), "rows": [], "problems": []}
+    return out
+
+
+def _daily_shadow(cfg: dict) -> None:
+    """Background, once a UTC day after the daily close: backtest vs reality, with a notification on problems."""
+    try:
+        doc = shadow.run(cfg)
+    except Exception as exc:
+        state.append_jsonl("autopilot/housekeeping.jsonl", {"at": market_clock.iso(market_clock.now_utc()),
+                                                            "task": "shadow", "error": "%s: %s" % (type(exc).__name__, exc)})
+        return
+    if doc.get("problems"):
+        notify.send("error", "Backtest vs reality: %d problem(s)" % len(doc["problems"]),
+                    "; ".join(doc["problems"][:5]), cfg)
+
+
 def _summary_time(cfg: dict) -> tuple:
     raw = str((cfg.get("notify") or {}).get("daily_summary_et") or "16:10")
     try:
@@ -1331,6 +1375,9 @@ def _cycle(approved=None) -> dict:
         actions.append("PAUSED by the drawdown limit: " + why)
         notify.send("paused", "Autopilot paused — drawdown limit", why + ". Exits keep running; resume to trade again "
                     "(resuming resets the peak).", cfg, priority="high")
+    hdoc = check_health(cfg, control, now, actions)
+    if hdoc.get("pause") and not control["paused"] and not control["kill"]:
+        control = write_control(by="autopilot", paused=True, run_once=False)
 
     kill_reason = None
     if control["kill"]:
@@ -1602,6 +1649,8 @@ class Housekeeping:
         self.lab_thread = None
         self.last_compact = None
         self.lab_tried = None
+        self.shadow_thread = None
+        self.shadow_tried = None
 
     def tick(self, cfg: dict) -> None:
         now = market_clock.now_utc()
@@ -1626,6 +1675,13 @@ class Housekeeping:
                 self.lab_thread = threading.Thread(target=_refresh_lab, args=(cfg,), daemon=True,
                                                    name="trader-backtest-lab")
                 self.lab_thread.start()
+        sh = state.read_json(shadow.FILE, {}) or {}
+        shadow_busy = self.shadow_thread is not None and self.shadow_thread.is_alive()
+        if not shadow_busy and not config.is_offline() and now.hour >= 1 and \
+                (sh.get("updated_at") or "")[:10] != now.strftime("%Y-%m-%d") and self.shadow_tried != now.strftime("%Y-%m-%d"):
+            self.shadow_tried = now.strftime("%Y-%m-%d")
+            self.shadow_thread = threading.Thread(target=_daily_shadow, args=(cfg,), daemon=True, name="trader-shadow")
+            self.shadow_thread.start()
         day = _today(now)
         if self.last_compact != day:
             self.last_compact = day
@@ -1711,7 +1767,7 @@ def daemon(args, cfg) -> int:
 def build_parser():
     p = cli.parser("autopilot.py", __doc__)
     p.add_argument("action", choices=("status", "run", "loop", "daemon", "pause", "resume", "kill", "replay",
-                                      "check-live", "universe", "learned", "notify-test", "profile"))
+                                      "check-live", "universe", "learned", "notify-test", "profile", "check"))
     p.add_argument("--once", action="store_true", help="run: a single cycle (default)")
     p.add_argument("--refresh", action="store_true", help="universe: rebuild it now instead of showing the cached one")
     p.add_argument("--approve", action="store_true",
@@ -1869,6 +1925,12 @@ def status_text(cfg: dict) -> str:
         lines.append("Learned: risk × %s%s%s · drawdown %.1f%%" % (
             learned.get("risk_mult", 1), " · paused " + ", ".join(paused) if paused else "",
             " · cooling " + ", ".join(cooling) if cooling else "", learned.get("drawdown_pct") or 0))
+    hd = state.read_json(health.FILE, {}) or {}
+    if hd:
+        lines.append("Health: %s — %s" % (str(hd.get("status")).upper(), hd.get("text")))
+    sd = state.read_json(shadow.FILE, {}) or {}
+    if sd:
+        lines.append("Backtest vs reality: %s — %s" % (str(sd.get("verdict")).upper(), sd.get("text")))
     book = state.read_json(BOOK, {}) or {}
     held = [it for it in (book.get("items") or {}).values() if it.get("status") == "open"]
     if held:
@@ -1979,6 +2041,10 @@ def main(argv=None) -> int:
         text = "Live trading is %s." % ("READY — every opt-in step is in place" if ok else "OFF") + "".join(
             "\n  missing: %s" % m for m in missing)
         cli.emit(args, text, {"live_ready": ok, "missing": missing})
+        return 0
+    if args.action == "check":
+        res = run_checks(cfg)
+        cli.emit(args, health.text(res["health"]) + "\n\n" + shadow.text(res["shadow"]), res)
         return 0
     if args.action == "profile":
         capital = float(args.capital or cfg.get("account_size") or 0)

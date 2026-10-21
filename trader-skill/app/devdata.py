@@ -123,9 +123,73 @@ def generate(home, now_iso: str = "2026-10-20T19:30:00Z", seed: int = 3) -> Path
          "desk": {"status": "GO", "objections": 1}, "gates": gates_ok, "order_id": None,
          "entry": 162.30, "stop": 160.85, "target": 165.20},
     ]
+    # a daily trend trade the way the autopilot records it today: every desk's checks
+    trend_gates = [
+        _gate("exit plan", True, "entry $2,412.55 · stop $2,190.10 (3×ATR) · exit at the first daily close below the "
+                                 "10-day low"),
+        _gate("idea still fresh", True, "entry was 0.1 h ago (limit 12.0 h)"),
+        _gate("Time Machine", True, "not applicable — this plan exits on a rule; the backtest lab's walk-forward decides"),
+        _gate("backtest expectancy", True, "Backtest lab, unseen test periods (1d bars): 35 trades, win 49%, profit "
+                                           "chance 92% · expectancy +0.54R after costs"),
+        _gate("backtest sample size", True, "35 triggers (want ≥ 10)"),
+        _gate("news & filings", True, "0 item(s) in the last 12 h, nothing alarming"),
+        _gate("news refresh", True, "news for crypto:ETH fetched 3 min ago"),
+        _gate("confidence sizing", True, "risk × 1 — profit chance 92% over 35 unseen trades — capped at 2% per trade"),
+        _gate("let winners ride", True, "if the exit comes in profit while the coin is above its 200-day average: "
+                                        "sell a third, two thirds ride on until close < 50-day EMA"),
+        _gate("leverage", True, "1.5× (config 1.5×, limits.json max 1.5×, hard cap 2×)"),
+        _gate("risk · max_risk_per_trade_pct", True, "$20.00 = 2.00% of account (max 2.00%)"),
+        _gate("risk · max_position_pct", True, "$217.13 = 21.71% of account (max 38% with 1.5× leverage)"),
+        _gate("risk · max_open_positions", True, "2 open crypto position(s), max 5"),
+        _gate("risk · max_daily_loss_pct", True, "lost $0.00 today, limit $100.00 (crypto)"),
+    ]
+    decisions.append({"at": at(0, 2), "id": "ETHUSDT-%sT0000-trend_breakout" % (today - timedelta(days=1)).strftime("%Y%m%d"),
+                      "symbol": "ETH/USDT", "asset": "crypto", "setup": "trend_breakout", "action": "taken",
+                      "reasons": ["desk GO, risk PASS — BUY 0.09 ETH/USD, limit $2,413.04, stop $2,190.10 — SIMULATOR"],
+                      "desk": {"status": "GO", "objections": 0}, "gates": trend_gates, "order_id": "ord-ETH-sample-9",
+                      "entry": 2412.55, "stop": 2190.10, "target": 4637.05, "qty": 0.09})
+    decisions.append({"at": at(0, 3), "id": "XRPUSDT-%sT0000-trend_breakout" % (today - timedelta(days=1)).strftime("%Y%m%d"),
+                      "symbol": "XRP/USDT", "asset": "crypto", "setup": "trend_breakout", "action": "skipped",
+                      "reasons": ["risk BLOCK: max_open_positions: 5 open crypto position(s), max 5"],
+                      "desk": {"status": "GO", "objections": 0},
+                      "gates": trend_gates[:10] + [_gate("risk · max_open_positions", False, "5 open crypto position(s), max 5")],
+                      "order_id": None, "entry": 2.41, "stop": 2.19, "target": 4.61})
+    decisions.sort(key=lambda d: d["at"])
     for d in decisions:
         d["sample"] = True
     _write_jsonl(home / "autopilot" / "decisions.jsonl", decisions)
+    _write(home / "autopilot" / "health.json", {
+        "updated_at": _iso(now), "enabled": True, "status": "normal", "trades": 24, "window": 24,
+        "text": "results look like the backtest (24 trades): 6 losses in a row (longest of the last 24 trades) — 41% "
+                "of backtest histories of the same 24 trades were at least this bad: normal",
+        "checks": [
+            {"name": "losing streak", "value": 6, "p": 0.41, "verdict": "normal",
+             "text": "6 losses in a row (longest of the last 24 trades) — 41% of backtest histories of the same 24 "
+                     "trades were at least this bad: normal"},
+            {"name": "recent result", "value": 7.4, "p": 0.47, "verdict": "normal",
+             "text": "+7.4R over the last 24 trades — 47% of backtest histories of the same 24 trades were at least "
+                     "this bad: normal"},
+            {"name": "drawdown", "value": 4.1, "p": 0.38, "verdict": "normal",
+             "text": "4.1R below the best point — 38% of backtest histories of the same 24 trades were at least this "
+                     "bad: normal"}]})
+    _write(home / "autopilot" / "shadow.json", {
+        "updated_at": _iso(now), "days": 30, "verdict": "ok", "counts": {"taken": 3, "skipped": 2},
+        "avg_slippage_bps": 3.1, "problems": [], "notes": [],
+        "text": "5 signal(s) in 30 days: 2 skipped, 3 taken · average entry +3.1 bps from the signal — the bot did "
+                "what the rules say",
+        "rows": [
+            {"id": "a", "symbol": "SOL/USDT", "asset": "crypto", "setup": "trend_ema",
+             "signal_at": _iso(now - timedelta(days=21)), "outcome": "taken", "slippage_bps": 2.4, "status": "closed"},
+            {"id": "b", "symbol": "BNB/USDT", "asset": "crypto", "setup": "trend_breakout",
+             "signal_at": _iso(now - timedelta(days=12)), "outcome": "taken", "slippage_bps": 4.0, "status": "open"},
+            {"id": "c", "symbol": "LINK/USDT", "asset": "crypto", "setup": "trend_breakout",
+             "signal_at": _iso(now - timedelta(days=9)), "outcome": "skipped",
+             "reason": "learned: LINKUSDT sits out until " + _iso(now + timedelta(days=2))[:10] + " — 5 losing trades in a row"},
+            {"id": "d", "symbol": "ETH/USDT", "asset": "crypto", "setup": "trend_breakout",
+             "signal_at": _iso(now - timedelta(days=1)), "outcome": "taken", "slippage_bps": 2.9, "status": "open"},
+            {"id": "e", "symbol": "XRP/USDT", "asset": "crypto", "setup": "trend_breakout",
+             "signal_at": _iso(now - timedelta(days=1)), "outcome": "skipped",
+             "reason": "risk BLOCK: max_open_positions: 5 open crypto position(s), max 5"}]})
 
     rows = []
     eq = 25000.0

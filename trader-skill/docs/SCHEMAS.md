@@ -763,3 +763,35 @@ book item carries `"swing": true`, and the rule exit is only checked while the U
 ### Simulator
 `_charge_interest` also credits idle cash at `cash_yield_pct` (`book.interest_earned`, `account()["interest_earned"]`,
 `broker/equity.jsonl` `interest_earned` when not zero).
+
+## v3.5 — the checks: six desks per decision, "is it normal?", backtest vs reality
+
+### Lab families gain `test_trades`
+`[[exit time, R], …]` of every out-of-sample trade in time order (and `runner.test_trades` with the part that rode
+on); `rule_trades(..., exits={})` records when each trade (and its ride) ended.
+
+### `config.json` → `autopilot.health`
+`{"enabled": true, "min_trades": 10, "window": 30, "alarm_pct": 10, "watch_pct": 25, "pause_on_alarm": true,
+"paths": 2000, "block": 20, "cap_r": 3, "alarm_checks": ["losing streak", "recent result", "drawdown"]}`
+
+### `autopilot/health.json` — written every cycle by `shared/health.update`
+`{"updated_at", "enabled", "status": "early|normal|watch|alarm|unknown|off", "trades", "window", "text",
+"checks": [{"name": "losing streak|recent result|drawdown", "value", "p" (share of histories at least this bad),
+"verdict", "text"}], "since" (control.dd_reset_at — resume starts the record over), "alarm_since", "history"}`.
+Live trades come from the journal (autopilot, closed); a runner split (`sold` + `<id>-ride`) counts once, as the
+summed P&L over the original risk. Wins count up to `cap_r`. A new alarm pauses new entries
+(`autopilot.check_health`) and notifies.
+
+### `autopilot/shadow.json` — once a UTC day (housekeeping thread) and on `autopilot.py check`
+`{"updated_at", "days": 30, "verdict": "ok|check", "counts", "avg_slippage_bps", "problems": [...], "text",
+"rows": [{"id", "symbol", "asset", "setup", "signal_at", "signal_price", "outcome":
+"taken|ordered|skipped|error|missed|extra|pending|not expected", "fill", "slippage_bps", "status", "reason"}]}`.
+Signals are recomputed with `setups.series_signals` on every daily playbook entry (crypto + ETF) and matched to
+decisions/book items by id; ETF signals while crypto is in a bull market (or with the ETF trend off) are
+"not expected".
+
+### Dashboard
+`GET /api/checks` → `{"health", "shadow", "board": [board_view(decision)]}` for the last 12 decisions that went
+through the desks; `board_view` sorts each gate into research / news / strategy / execution / risk / boss
+(`pass|fail|none`), adds the desk verdict, marks the desk that stopped a rejected trade, and sets
+`call`: BUY / WOULD BUY / REJECT / ERROR. The **Checks** tab renders it.

@@ -67,6 +67,9 @@ DEFAULT_CONFIG = {
         # let part of a winner ride (setups with a runner rule): off unless you turn it on; by default only while
         # the latest lab run found that it paid on periods nobody tuned on
         "runner": {"enabled": False, "require_lab": True, "keep": None},
+        # is it normal? the bot's own trades against the lab's unseen-data trades (shared/health.py)
+        "health": {"enabled": True, "min_trades": 10, "window": 30, "alarm_pct": 10.0, "watch_pct": 25.0,
+                   "pause_on_alarm": True, "paths": 2000, "block": 20, "cap_r": 3.0},
         # while crypto is in a bear market (Bitcoin below its 200-day average), the daily trend rule on ETFs that
         # move unlike crypto; held for days; only what the ETF lab validated (trader-backtest/lab.py --etf)
         "etf_trend": {"enabled": False, "when": "crypto_bear", "required_lab": True,

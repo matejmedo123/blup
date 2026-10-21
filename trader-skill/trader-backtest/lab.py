@@ -333,7 +333,7 @@ def setup_fits(setup: str, interval: str) -> bool:
     return interval in (spec.get("intervals") or ("1h", "4h"))
 
 
-def rule_trades(candles, setup: str, interval: str, cost: float, context: dict = None) -> list:
+def rule_trades(candles, setup: str, interval: str, cost: float, context: dict = None, exits: dict = None) -> list:
     """Trades of a rule-exit setup, one at a time per coin: [(entry_ts, {RULE_KEY: net R})].
 
     Entry at the signal close; exit at the first close that meets the rule, at the protective stop
@@ -377,15 +377,21 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
         if px is None:
             break  # the last trade has not finished yet
         res = {RULE_KEY: trade_sim.net_r(entry, px, entry - stop, cost)}
+        ride_end = candles[j].t + step
         if ride:
-            res[RUNNER_KEY] = res[RULE_KEY] if how == "stop" else \
-                _with_runner(ride, candles, closes, cache, trend, j, entry, stop, res[RULE_KEY], cost)
+            if how == "stop":
+                res[RUNNER_KEY] = res[RULE_KEY]
+            else:
+                res[RUNNER_KEY], ride_end = _with_runner(ride, candles, closes, cache, trend, j, entry, stop,
+                                                         res[RULE_KEY], cost, step)
+        if exits is not None:  # when each trade ended — the health check orders trades the way the bot closes them
+            exits[candles[i].t + step] = (candles[j].t + step, ride_end)
         out.append((candles[i].t + step, res))
         busy = j
     return out
 
 
-def _with_runner(ride, candles, closes, cache, trend, j, entry, stop, r_main, cost):
+def _with_runner(ride, candles, closes, cache, trend, j, entry, stop, r_main, cost, step=86400):
     """Net R of the whole trade when part of it rides on after the exit rule fired at bar j (price px).
 
     Only a winner rides, and only while the coin is above its long average; the part left in leaves at
@@ -393,7 +399,7 @@ def _with_runner(ride, candles, closes, cache, trend, j, entry, stop, r_main, co
     max_bars. A ride that has not finished yet is valued at the last close.
     """
     if r_main <= 0 or j < int(ride.get("min_sma") or 200) - 1 or closes[j] <= trend[j]:
-        return r_main
+        return r_main, candles[j].t + step
     rule, keep = ride["exit_rule"], float(ride["keep"])
     be = max(stop, entry)
     rpx, k = None, j
@@ -410,7 +416,7 @@ def _with_runner(ride, candles, closes, cache, trend, j, entry, stop, r_main, co
             break
     if rpx is None:
         rpx = candles[k].c
-    return (1 - keep) * r_main + keep * trade_sim.net_r(entry, rpx, entry - stop, cost)
+    return (1 - keep) * r_main + keep * trade_sim.net_r(entry, rpx, entry - stop, cost), candles[k].t + step
 
 
 def runner_verdict(setup: str, without: dict, ride_rs: list, folds: list) -> dict:
@@ -451,10 +457,11 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     rule = setups.exit_rule(setup)
     # a rule-exit setup has nothing to choose, so the training data only has to show it made money at all
     min_n = max(20, args.min_pooled // 4) if rule else args.min_pooled
-    per_coin = []
+    per_coin, ends = [], {}
     for sym, candles, tick in coins:
         if rule:
-            per_coin.append((sym, rule_trades(candles, setup, interval, cost, context)))
+            ends[sym.key] = {}
+            per_coin.append((sym, rule_trades(candles, setup, interval, cost, context, ends[sym.key])))
         else:
             per_coin.append((sym, [(t["entry_ts"], grid_outcomes(candles, t, interval, exit_mod, tick, cost))
                                    for t in triggers(candles, setup, interval, now_ts)]))
@@ -472,9 +479,18 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
 
     folds, oos, oos_coin, best = [], [], {sym.key: [] for sym, _ in per_coin}, None
     ride_oos, ride_coin, ride_folds = [], {sym.key: [] for sym, _ in per_coin}, []
+    timed, ride_timed = [], []  # [entry time, R] of every out-of-sample trade, for shared/health.py
     for i in range(k):
         train, test = pool(start_ts, bounds[i]), pool(bounds[i], bounds[i + 1])
         b = choose(train, args.objective, min_n, args.min_edge, args.min_target_r)
+        if b is not None:
+            for sym, trades in per_coin:
+                for ts, res in trades:
+                    if bounds[i] <= ts < bounds[i + 1] and b in res:
+                        end, ride_end = ends.get(sym.key, {}).get(ts, (ts, ts))
+                        timed.append([int(end), round(res[b], 4)])
+                        if RUNNER_KEY in res and b == RULE_KEY:
+                            ride_timed.append([int(ride_end), round(res[RUNNER_KEY], 4)])
         if b == RULE_KEY and RUNNER_KEY in test:
             ride_oos += test[RUNNER_KEY]
             ride_folds.append((stats(test.get(RULE_KEY, []))["expectancy_r"], stats(test[RUNNER_KEY])["expectancy_r"]))
@@ -547,6 +563,11 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
                          "why": "; ".join(why) or "made money out of sample, including the latest period"})
     fam["validated_coins"] = [r["display"] for r in rows if r["validated"]]
     fam["runner"] = runner_verdict(setup, oos_s, ride_oos, ride_folds) if (best == RULE_KEY and ride_oos) else None
+    # every out-of-sample trade as [exit time, R] in time order, so the autopilot can tell whether its own results
+    # look like these
+    fam["test_trades"] = sorted(timed)
+    if fam["runner"]:
+        fam["runner"]["test_trades"] = sorted(ride_timed)
     for r in rows:
         if fam["runner"] and ride_coin.get(r["symbol"]):
             r["runner"] = stats(ride_coin[r["symbol"]])

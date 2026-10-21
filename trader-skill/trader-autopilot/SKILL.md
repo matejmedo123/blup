@@ -93,6 +93,7 @@ python3 "${CLAUDE_SKILL_DIR}/autopilot.py" pause | resume
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" kill --confirm KILL   # cancel everything, close everything
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" check-live
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" profile --risk 2 --leverage 1.5 --capital 1000 [--write]
+python3 "${CLAUDE_SKILL_DIR}/autopilot.py" check                 # is it normal? did it do what the rules say?
 # offline: replay the fixture day in the simulator (NVDA taken, TSLA/BTC skipped with reasons)
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" replay --from 2026-10-20T13:35:00Z --to 2026-10-20T20:00:00Z --approve --offline
 ```
@@ -195,6 +196,16 @@ is sold in full. It only happens while this week's lab run found that it paid on
 (`runner.require_lab`). `status` and the dashboard describe every open position in plain words — what was bought,
 where the stop is, what makes it sell and whether part of it is riding. When you present results, use those
 sentences; say that the sold third and the riding two thirds are two journal trades.
+
+## The checks
+
+`autopilot.py check` prints both: **health** (the bot's closed trades against the lab's out-of-sample trades,
+block-bootstrapped; NORMAL / WATCH / ALARM — an alarm pauses new entries until a resume) and **backtest vs
+reality** (the last 30 days' daily signals recomputed and matched with what the bot did: taken, skipped with
+its reason, MISSED, EXTRA, slippage). The dashboard's Checks tab shows them plus every decision as six desks
+(research, news, strategy, execution, risk, boss). When the user asks "is this losing streak normal?", run
+`check` and quote the share of histories that were at least as bad — and say plainly that results alone need
+many trades to prove anything.
 
 ## Bear markets
 

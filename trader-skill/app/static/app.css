@@ -416,3 +416,28 @@ details.gates summary { cursor: pointer; color: var(--muted); min-height: 28px; 
   .brand span:last-child { display: none; }
   #bot-pill .txt { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* checks: six desks per decision */
+.decisions { display: flex; flex-direction: column; gap: 14px; }
+.decision { border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.decision:first-child { border-top: 0; padding-top: 0; }
+.decision .dh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.decision .dh .sym { font-family: var(--mono); font-weight: 700; }
+.decision .dh .call { margin-left: auto; }
+.decision .reason { margin-top: 6px; overflow-wrap: anywhere; }
+.board { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.desk { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 9px; background: var(--panel-2); min-width: 0; }
+.desk.pass { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
+.desk.fail { border-color: color-mix(in srgb, var(--red) 55%, var(--line)); background: var(--red-bg); }
+.desk .dk { display: flex; align-items: center; gap: 6px; font-weight: 650; font-size: 13px; }
+.desk .mark { font-family: var(--mono); }
+.desk.pass .mark { color: var(--green); }
+.desk.fail .mark { color: var(--red); }
+.desk.none .mark { color: var(--faint); }
+.desk ul { margin: 6px 0 0; padding-left: 14px; font-size: 12px; color: var(--muted); }
+.desk li { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.desk li.bad { color: var(--red); }
+.desk details ul { -webkit-line-clamp: unset; }
+.desk details li { display: list-item; }
+@media (max-width: 860px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 440px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -4,7 +4,7 @@
   'use strict';
 
   var CSRF = (document.querySelector('meta[name="trader-csrf"]') || {}).content || '';
-  var TABS = ['overview', 'trades', 'bot', 'brain', 'news', 'setups', 'reports'];
+  var TABS = ['overview', 'trades', 'bot', 'checks', 'brain', 'news', 'setups', 'reports'];
   var SVGNS = 'http://www.w3.org/2000/svg';
   var ASSET_LABEL = { stock: 'Stocks', crypto: 'Crypto', meme: 'Meme coins' };
   var REFRESH_MS = 10000;
@@ -842,6 +842,68 @@
       h('p', { class: 'small muted', text: 'Walk-forward: for each of the last three periods the exit with the highest profit chance is picked on everything before it, all coins pooled, and traded unchanged in that period. A setup counts only if it made money in every period. The autopilot trades crypto only from the validated list, sizing up with certainty (never past trader/limits.json). ' + (pb.valid_until ? 'Valid until ' + localDT(pb.valid_until) + '.' : '') }),
       L.report ? reportLink(L.report, 'Open the full lab report') : null));
   }
+  // ---------------------------------------------------------------- checks: six desks per decision, is it normal, backtest vs reality
+  var VERDICT = { normal: ['NORMAL', 'green'], watch: ['WATCH', 'amber'], alarm: ['ALARM', 'red'], early: ['TOO EARLY', 'blue'],
+    unknown: ['NO LAB DATA', ''], off: ['OFF', ''], ok: ['OK', 'green'], check: ['CHECK', 'red'], error: ['ERROR', 'red'] };
+  var CALL = { BUY: 'green', 'WOULD BUY': 'blue', REJECT: 'red', ERROR: 'red' };
+  var OUTCOME = { taken: 'green', ordered: 'green', skipped: '', missed: 'red', extra: 'red', error: 'red', pending: 'blue', 'not expected': '' };
+  function verdictPill(v) { var x = VERDICT[v] || [String(v || '—').toUpperCase(), '']; return st(x[0], x[1]); }
+  function deskBox(c) {
+    var mark = c.state === 'pass' ? '✓' : (c.state === 'fail' ? '✗' : '–');
+    var items = c.items || [];
+    var shown = items.filter(function (i) { return !i.ok; }).concat(items.filter(function (i) { return i.ok; })).slice(0, 2);
+    return h('div', { class: 'desk ' + c.state },
+      h('div', { class: 'dk' }, h('span', { class: 'mark', text: mark }), h('span', { text: c.label })),
+      items.length ? h('ul', null, shown.map(function (i) {
+        return h('li', { class: i.ok ? '' : 'bad', title: i.detail || '', text: i.name + (i.detail ? ' — ' + i.detail : '') });
+      })) : h('div', { class: 'small muted', text: 'no check recorded' }),
+      items.length > 2 ? h('details', { class: 'gates' }, h('summary', { text: 'all ' + items.length }),
+        h('ul', null, items.map(function (i) { return h('li', { class: i.ok ? '' : 'bad', text: (i.ok ? '✓ ' : '✗ ') + i.name + (i.detail ? ' — ' + i.detail : '') }); }))) : null);
+  }
+  function boardRow(b) {
+    return h('div', { class: 'decision' },
+      h('div', { class: 'dh' }, h('span', { class: 'sym', text: b.symbol || '?' }), st(b.asset || '', 'blue'),
+        h('span', { class: 'muted', text: (b.setup || '') + (b.at ? ' · ' + ago(b.at) : '') }),
+        h('span', { class: 'call' }, st(b.call, CALL[b.call] || ''))),
+      h('div', { class: 'board' }, (b.columns || []).map(deskBox)),
+      b.reason ? h('div', { class: 'small muted reason', text: b.reason }) : null);
+  }
+  function renderChecks() {
+    return api('/api/checks').then(function (d) {
+      var hd = d.health || {}, sd = d.shadow || {}, board = d.board || [];
+      var frag = [head('Checks', 'Every decision through six desks · is it normal? · did the bot do what the rules say?')];
+      frag.push(h('div', { class: 'tiles' },
+        tile('Is it normal?', (VERDICT[hd.status] || [hd.status ? String(hd.status).toUpperCase() : '—'])[0], hd.trades !== undefined ? hd.trades + ' closed trades' : 'not checked yet',
+          hd.status === 'alarm' ? 'down' : (hd.status === 'normal' ? 'up' : '')),
+        tile('Backtest vs reality', (VERDICT[sd.verdict] || [sd.verdict ? String(sd.verdict).toUpperCase() : '—'])[0], sd.days ? 'last ' + sd.days + ' days' : 'checked once a day',
+          sd.verdict === 'check' ? 'down' : (sd.verdict === 'ok' ? 'up' : '')),
+        tile('Decisions shown', String(board.length), board.filter(function (b) { return b.call === 'BUY'; }).length + ' bought')));
+      var hBody = hd.status ? h('div', null, h('p', { text: hd.text || '' }),
+        (hd.checks || []).length ? h('ul', { class: 'reasons' }, hd.checks.map(function (c) {
+          return h('li', null, verdictPill(c.verdict), ' ', c.text);
+        })) : null,
+        h('p', { class: 'small muted', text: 'Your closed trades, replayed thousands of times with results the backtest lab saw on unseen data. ALARM = worse than 9 of 10 of those histories — the bot pauses new entries until you resume it. Calibrated on 2018–2026: a false alarm about once in 5–8 years; a clearly losing strategy is caught after ~16 trades.' }))
+        : empty('Checked every cycle once the bot has closed trades:', 'python3 trader-autopilot/autopilot.py check');
+      frag.push(card('Is it normal?', hd.updated_at ? ago(hd.updated_at) : null, hBody));
+      var rows = (sd.rows || []).slice(-25).reverse();
+      var sBody = sd.verdict ? h('div', null, h('p', { text: sd.text || '' }),
+        (sd.problems || []).length ? h('ul', { class: 'reasons warnlist' }, sd.problems.map(function (p) { return h('li', { class: 'warnc', text: p }); })) : null,
+        rows.length ? h('div', { class: 'rows' }, rows.map(function (r) {
+          return h('div', { class: 'row' },
+            h('div', { class: 'title' }, st(r.outcome, OUTCOME[r.outcome] || ''), h('span', { class: 'sym', text: r.symbol || '?' }), h('span', { class: 'muted', text: r.setup || '' })),
+            h('div', { class: 'right' }, h('div', { class: 'sm', text: (r.signal_at || '').slice(0, 10) }),
+              r.slippage_bps !== undefined && r.slippage_bps !== null ? h('div', { class: 'sm', text: (r.slippage_bps >= 0 ? '+' : '') + r.slippage_bps + ' bps' }) : null),
+            r.reason ? h('div', { class: 'detail', text: r.reason }) : null);
+        })) : null)
+        : empty('Runs once a day after the daily close, or now:', 'python3 trader-autopilot/autopilot.py check');
+      frag.push(card('Backtest vs reality', sd.updated_at ? ago(sd.updated_at) : null, sBody));
+      frag.push(card('Decisions — six desks', 'Research · News · Strategy · Execution · Risk · Boss',
+        board.length ? h('div', { class: 'decisions' }, board.map(boardRow))
+          : empty('No decisions yet — every signal the bot judges shows up here with all its checks.')));
+      return frag;
+    });
+  }
+
   function renderBrain() {
     return api('/api/system').then(function (d) {
       var u = d.universe || {}, a = d.adapt || {}, ai = d.ai || {}, n = d.notify || {};
@@ -1087,7 +1149,7 @@
     });
   }
 
-  var VIEWS = { overview: renderOverview, trades: renderTrades, bot: renderBot, brain: renderBrain, news: renderNews, setups: renderSetups, reports: renderReports };
+  var VIEWS = { overview: renderOverview, trades: renderTrades, bot: renderBot, checks: renderChecks, brain: renderBrain, news: renderNews, setups: renderSetups, reports: renderReports };
 
   // ---------------------------------------------------------------- routing + refresh
   function tabFromHash() {
