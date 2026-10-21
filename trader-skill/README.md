@@ -352,6 +352,38 @@ real bear year (2022: +12.5 %) and makes one-year results better, but it did not
 winter, cost a little in the last 12 months, and makes the worst three-year case worse. `profile` turns it
 on; `--no-etf` keeps the bot in cash and T-bills instead.
 
+### Why the last 12 months look weaker — and why it isn't the bots
+
+| Period | BTC | BTC volatility | Days BTC above its 200-day average | Big alts beating BTC | Coins moving together (corr.) |
+|---|---|---|---|---|---|
+| 2018 (after the Dec 2017 peak) | −73 % | 83 % | 2 % | — | 0.75 |
+| 2021 | +60 % | 81 % | 71 % | 8 of 9 | 0.50 |
+| 2022 (after the Nov 2021 peak) | −64 % | 64 % | 0 % | 5 of 9 | 0.72 |
+| 2024 | +121 % | 53 % | 80 % | 4 of 9 | 0.49 |
+| 2025 | +18 % | 42 % | 87 % | 2 of 9 | 0.67 |
+| **Last 12 months** (after the Oct 2025 peak) | **−25 %** | **44 %** | **20 %** | **1 of 9** | **0.72** |
+
+* **It is the year after a Bitcoin cycle peak**, like 2018 and 2022 (halvings 2016, 2020, 2024; peaks
+  17–18 months later: Dec 2017, Nov 2021, 6 Oct 2025 at $124,659, then a bear year). Bitcoin was above
+  its 200-day average on only 20 % of the days, so the bot was in cash most of the year: one trade from
+  November to August, then everything after Bitcoin crossed back above the line on 20 Aug 2026 — a profitable
+  burst, followed by a choppy September of small losses. In the same 12 months after the previous peak the
+  strategy lost 10 % (€905); this time it made 8 % (€1,084, €1,120 with T-bills) while holding Bitcoin
+  would have left €686.
+* **Altcoins stopped leading:** 1 of the 9 big alts beat Bitcoin (2025: 2 of 9; 2021: 8 of 9) and they
+  move together as tightly as in bear markets (0.72), so more coins don't mean more chances.
+* **Bitcoin got calmer** since the spot ETFs (2024): 42–53 % yearly volatility against 64–83 % before —
+  smaller trends, smaller wins (average winner +1.2R in the last 12 months, +3.8R in 2024).
+* **Not the bots:** daily trends did not get weaker — the 20-day variance ratio and the day-to-day
+  autocorrelation are in their usual range, and breakouts above the 20-day high followed through *better*
+  than usual (54 % higher after 10 days, +12 % after 20, the fewest false breakouts: 43 %). Automation does
+  show where you would expect it: in seconds-to-hours patterns — every one-day setup on 5-minute bars
+  lost after costs. Multi-week trends come from money moving (ETFs, the cycle, macro), which bots don't
+  remove.
+* Tested against it, not adopted: at most 1–3 new crypto entries a day (the coins move together) — better
+  before 2023, worse since and −4 % in the last 12 months; a slower switch (50-day above 200-day average)
+  — worse in every period.
+
 In short: a high *win chance* is easy and loses money; the edge that survives is the oldest one in
 crypto — follow Bitcoin's trend and let the few big winners run. 40 % of its trades win, but the
 average win is about 4× the average loss, so the chance of being up after 20 trades is ~80 % (~94 % on
