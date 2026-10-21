@@ -325,16 +325,30 @@ def _split_check(it: dict, p: dict, cfg: dict = None) -> str:
     return ""
 
 
-def _sell_own(broker, it: dict, held: float = None) -> dict:
-    """Sell this trade's quantity at market. The whole position is closed only when all of it is this trade's —
-    shares or coins you hold yourself on the same symbol are never sold."""
+WASH_LIMIT = 0.99  # after a wash-trade refusal: sell with a limit 1 % under the last price, a stop-limit 3 % under
+WASH_STOP_LIMIT = 0.97
+
+
+def _wash(exc) -> bool:
+    """Alpaca's wash-trade guard: your own open buy order on the symbol could trade with the bot's market sell."""
+    return "wash" in str(exc).lower()
+
+
+def _sell_own(broker, it: dict, held: float = None, limit_price: float = None) -> dict:
+    """Sell this trade's quantity at market (or, with limit_price, with a marketable limit). The whole position is
+    closed only when all of it is this trade's — shares or coins you hold yourself on the same symbol are never
+    sold."""
     room = CRYPTO_FEE_IN_COIN + 1e-4 if it["asset"] == "crypto" else 1e-6  # the fee left out of its quantity
-    if held is not None and float(held) <= float(it["qty"]) * (1 + room):
+    if limit_price is not None:
+        qty = float(it["qty"]) if held is None else min(float(it["qty"]), float(held))
+        o = broker.place_exit(it["symbol"], qty, "limit", limit_price=limit_price, asset=it["asset"],
+                              client_order_id="%s-x%d" % (it["order_id"], int(time.time() * 1000)))
+    elif held is not None and float(held) <= float(it["qty"]) * (1 + room):
         o = broker.close_position(it["symbol"])  # all ours — also clears crypto fee dust a sized sell would leave
     else:
         qty = float(it["qty"]) if held is None else min(float(it["qty"]), float(held))
         o = broker.place_exit(it["symbol"], qty, "market", asset=it["asset"],
-                              client_order_id="%s-x%d" % (it["order_id"], int(time.time())))
+                              client_order_id="%s-x%d" % (it["order_id"], int(time.time() * 1000)))
     it["exit_order_id"] = o.get("id")
     return o
 
@@ -384,9 +398,17 @@ def _cancel_own_sells(broker, it: dict, orders: list, live=None) -> str:
 def _restore_stop(broker, it: dict, held, now) -> list:
     """Put the protective stop back (after a refused sale, or when the broker lost it)."""
     it["stop_retry_at"] = market_clock.iso(now)
+    qty = min(float(it["qty"]), float(held or it["qty"]))
+    cid = "%s-s%d" % (it["order_id"], int(now.timestamp()))
     try:
-        so = broker.place_stop(it["symbol"], min(float(it["qty"]), float(held or it["qty"])), it["stop"],
-                               client_order_id="%s-s%d" % (it["order_id"], int(now.timestamp())), asset=it["asset"])
+        try:
+            so = broker.place_stop(it["symbol"], qty, it["stop"], client_order_id=cid, asset=it["asset"])
+        except BrokerError as exc:
+            if not _wash(exc):
+                raise
+            # your own buy order on the symbol: a stop-limit under it can't trade with it — Alpaca takes that
+            so = broker.place_stop(it["symbol"], qty, it["stop"], client_order_id=cid + "l", asset=it["asset"],
+                                   limit_price=float(it["stop"]) * WASH_STOP_LIMIT)
         it["stop_order_id"] = so.get("id")
         return ["protective stop %s for %s put back" % (fmt.price(it["stop"]), it["symbol"])]
     except BrokerError as exc:  # the old id stays: its own fill must still close the trade as a stop
@@ -404,10 +426,12 @@ def _sale_refused(broker, it: dict, p: dict, exc, now, cfg: dict = None) -> list
         it["symbol"], exc, EXIT_RETRY_SEC // 60)]
     out += _restore_stop(broker, it, p.get("qty") if p else None, now)
     if first:
+        hint = (" Cancel your own open buy order on %s — Alpaca refuses the bot's sale while it could trade with "
+                "yours." % it["symbol"]) if _wash(exc) else (" The day-trade rule refuses same-day sales under "
+                "$25,000 — the stop holds it until tomorrow." if "day trad" in str(exc).lower() else "")
         notify.send("error", "%s: the broker refused the bot's sale" % it["symbol"],
-                    "%s. The protective stop is back in place and the sale is retried every %d minutes. An open order "
-                    "of your own on %s (Alpaca's wash-trade guard) or the day-trade rule are the usual reasons." % (
-                        exc, EXIT_RETRY_SEC // 60, it["symbol"]), cfg, priority="high")
+                    "%s. The protective stop is back in place and the sale is retried every %d minutes.%s" % (
+                        exc, EXIT_RETRY_SEC // 60, hint), cfg, priority="high")
     return out
 
 
@@ -469,6 +493,36 @@ def forget_foreign(cfg: dict) -> dict:
     return {"forgotten": gone, "message": ("Forgot %d trade(s) of another broker or account: %s. Close them there "
                                            "if they are still open." % (len(gone), ", ".join(gone))) if gone else
             "Nothing to forget — every open trade in the book belongs to %s/%s." % (name, mode)}
+
+
+def bot_account(acct: dict, positions: list, book: dict, broker=None) -> dict:
+    """The account as the bot may count it: your own coins and shares at what they cost you, not at today's price.
+    Your BTC falling must not trip the bot's daily-loss kill, nor rising make it size its trades bigger — and buying
+    some yourself (cash into coins) must not look like a loss either, so only their open P&L is taken out.
+    ``account_equity`` keeps the broker's figure."""
+    if not acct or acct.get("equity") is None:
+        return acct
+    bot_qty = {}
+    for it in book["items"].values():  # a pending entry that filled since the last cycle is the bot's too
+        if it.get("status") in LIVE_ITEM and (broker is None or _here(it, broker)):
+            bot_qty[it["symbol"]] = bot_qty.get(it["symbol"], 0.0) + float(it.get("qty") or 0)
+    pl = 0.0
+    for p in positions or []:
+        try:
+            qty = float(p.get("qty") or 0)
+            extra = qty - bot_qty.get(p.get("symbol"), 0.0)
+            if extra <= 1e-9 or qty <= 0:
+                continue
+            if p.get("avg_entry") is not None and p.get("last") is not None:
+                pl += extra * (float(p["last"]) - float(p["avg_entry"]))
+            else:
+                pl += float(p.get("unrealized_pl") or 0) * extra / qty
+        except (TypeError, ValueError):
+            continue
+    if abs(pl) < 0.005:
+        return acct
+    return dict(acct, account_equity=acct["equity"], yours_pl_usd=round(pl, 2),
+                equity=round(float(acct["equity"]) - pl, 2))
 
 
 def _tracked(broker, book: dict, orders: list) -> list:
@@ -903,7 +957,7 @@ def position_story(it: dict) -> str:
     return " ".join(parts)
 
 
-def manage_exits(broker, book: dict, positions: list, orders: list, cfg: dict = None) -> list:
+def manage_exits(broker, book: dict, positions: list, orders: list, cfg: dict = None, persist: bool = False) -> list:
     """Time stops, exit rules, crypto targets (Alpaca has no crypto brackets) — and the stop itself whenever no
     working stop order protects the position (cancelled, failed, or a stop-limit the price fell through)."""
     actions = []
@@ -915,14 +969,16 @@ def manage_exits(broker, book: dict, positions: list, orders: list, cfg: dict = 
         if not _here(it, broker):  # never sell or protect another account's trade out of this one
             continue
         try:
-            actions += _exit_one(broker, it, pos_by, orders, cfg, now, now_ts, stocks_open)
+            actions += _exit_one(broker, it, pos_by, orders, cfg, now, now_ts, stocks_open,
+                                 (lambda: state.write_json(BOOK, book)) if persist else None)
         except Exception as exc:  # noqa: BLE001 — the next position's stop must still be checked
             it["error"] = "%s: %s" % (type(exc).__name__, exc)
             actions.append("could not check the exits of %s: %s" % (it.get("symbol"), it["error"]))
     return actions
 
 
-def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_ts: float, stocks_open: bool) -> list:
+def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_ts: float, stocks_open: bool,
+              persist=None) -> list:
     actions = []
     if it["status"] != "open" or (it.get("runner") or {}).get("status") == "selling":
         return actions
@@ -994,8 +1050,19 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
         return actions
     it["stop_order_id"] = None  # cancelled — if the close fails, the stop goes back at once
     it["exit_reason"] = reason
+    if persist is not None:  # a crash right after the sale must still journal it as time / stop / rule, not "manual"
+        try:
+            persist()
+        except OSError:
+            pass
     try:
-        _sell_own(broker, it, p.get("qty"))
+        try:
+            _sell_own(broker, it, p.get("qty"))
+        except BrokerError as exc:
+            if not (_wash(exc) and last):
+                raise
+            # a market sale could trade with your own buy order: a limit 1 % under the price can't — it still fills
+            _sell_own(broker, it, p.get("qty"), limit_price=last * WASH_LIMIT)
         actions.append("%s exit for %s" % (reason, it["symbol"]))
         it.pop("exit_refused_at", None)
     except BrokerError as exc:
@@ -1054,7 +1121,13 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
         elif p and float(p.get("qty") or 0) > 1e-9:
             it["stop_order_id"] = None
             try:
-                _sell_own(broker, it, p.get("qty"))
+                try:
+                    _sell_own(broker, it, p.get("qty"))
+                except BrokerError as exc:
+                    last = float(p.get("last") or 0)
+                    if not (_wash(exc) and last > 0):
+                        raise
+                    _sell_own(broker, it, p.get("qty"), limit_price=last * WASH_LIMIT)  # can't trade with yours
             except BrokerError as exc:  # refused: the stop goes back and the next cycle tries again
                 now = market_clock.now_utc()
                 problems.append("%s: %s" % (it["symbol"], exc))
@@ -1651,7 +1724,10 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     base.update(entry=plan["entry"]["price"], stop=plan["stop"]["price"], target=plan["target"]["price"])
     ensure_backtest(c, plan, cfg, limits)
     if not plan.get("exit_rule"):  # the replay models stop / target / time only — a rule exit is the lab's job
-        run_timemachine(plan, cfg, limits)
+        try:
+            run_timemachine(plan, cfg, limits)
+        except data.DataUnavailable as exc:  # a coin listed last week: too little history to replay — a skip
+            return _decision(reasons=["Time Machine: %s" % exc], **base)
     news_note = refresh_news(plan, cfg)
     desk = _mod("trader-desk", "desk").auto_review(plan["id"], cfg, limits, force=True, symbol=plan["symbol"])
     blocking = [o for o in desk.get("objections") or [] if o.get("severity") in ("critical", "major")]
@@ -1768,9 +1844,11 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         else:  # refused for sure: nothing at the broker, nothing in the book
             del book["items"][plan["id"]]
         state.write_json(BOOK, book)
-        _update_order(order["id"], status="error", error=str(exc))
-        return _decision(action="error", reasons=["broker refused: %s" % exc], desk=desk_info, gates=gates, ai=ai_info,
-                         **base)
+        unsure = UNSURE_ORDER in str(exc)
+        _update_order(order["id"], status="unsure" if unsure else "error", error=str(exc))
+        return _decision(action="error", reasons=[("the order may have reached the broker — it is looked up next "
+                                                   "cycle (%s)" if unsure else "broker refused: %s") % exc],
+                         desk=desk_info, gates=gates, ai=ai_info, **base)
     item.update(status="pending", broker_order_id=bo.get("id"))
     state.write_json(BOOK, book)  # on disk before anything else can fail — a lost book means a second order
     state.append_jsonl("approvals.jsonl", {
@@ -2007,8 +2085,12 @@ def _cycle(approved=None) -> dict:
         broker.sync()
         if getattr(broker, "save_error", None) and not any("not saved" in e for e in errors):
             errors.append("the simulator's book was not saved (%s) — exits go on, nothing new opens" % broker.save_error)
+        for sym_, why in sorted((getattr(broker, "sync_errors", None) or {}).items()):
+            note = "no prices for %s this cycle — its orders wait, nothing new opens: %s" % (sym_, why)
+            if note not in errors:
+                errors.append(note)
         acct, pos, ords = broker.account(), broker.positions(), broker.orders()
-        return acct, pos, ords + _tracked(broker, book, ords)
+        return bot_account(acct, pos, book, broker), pos, ords + _tracked(broker, book, ords)
 
     def best_effort(what, fn, fallback=None):
         """Bookkeeping (files, learning, health) that fails stops new entries — never the exits."""
@@ -2079,7 +2161,7 @@ def _cycle(approved=None) -> dict:
         # not done (the broker still holds cancelled legs, an entry filled in the race): the KILL stays on and the
         # next cycle tries again — it is never quietly dropped
         if not flatten:  # the positions keep their stops — and their targets, time stops and exit rules
-            actions += manage_exits(broker, book, positions, orders, cfg)
+            actions += manage_exits(broker, book, positions, orders, cfg, persist=True)
         write_control(by="autopilot", kill=not done, kill_tries=0 if done else tries + 1, paused=True, run_once=False)
         best_effort("saving the book", lambda: state.write_json(BOOK, book))
         line = best_effort("broker files", lambda: _write_broker_files(broker, acct, positions, orders, book,
@@ -2097,7 +2179,7 @@ def _cycle(approved=None) -> dict:
         _state(status="killed", message=msg, today=_today_summary(book, now, kill_reason), equity=line, **common)
         return {"status": "killed", "message": msg, "actions": actions, "errors": errors}
 
-    exits = manage_exits(broker, book, positions, orders, cfg)
+    exits = manage_exits(broker, book, positions, orders, cfg, persist=True)
     if exits:
         actions += exits
         best_effort("saving the book", lambda: state.write_json(BOOK, book))  # a partial sale is not asked twice
@@ -2160,7 +2242,7 @@ def _cycle(approved=None) -> dict:
             decisions.append(d)
             if d["action"] == "taken":
                 try:
-                    acct = broker.account()
+                    acct = bot_account(broker.account(), positions, book, broker)
                 except BrokerError as exc:  # the order is booked; the next candidates wait for the next cycle
                     errors.append("account after an order: %s" % exc)
                     break
@@ -2170,7 +2252,7 @@ def _cycle(approved=None) -> dict:
         acct, positions, orders = sync()
         if slow:  # judging took long: a stop, target or time stop may have come due meanwhile
             now = market_clock.now_utc()
-            late = manage_exits(broker, book, positions, orders, cfg)
+            late = manage_exits(broker, book, positions, orders, cfg, persist=True)
             if late:
                 actions += late
                 best_effort("saving the book", lambda: state.write_json(BOOK, book))

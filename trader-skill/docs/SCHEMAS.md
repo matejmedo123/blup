@@ -1046,3 +1046,61 @@ refuse logins for a while — logged-in browsers and the CLI keep working.
 dollar limits never round to 0; `nohup … daemon` survives a closed terminal; the watchdog times the cycle, not
 the wait for another process's lock; the lab runs under `nice -n 10`; the download cache is pruned in a
 background thread (and to its last hour when the disk is low).
+
+## v3.9 — round five: another account's trades, lost answers, your own orders and coins next to the bot's
+
+### Whose trade it is (`trader-autopilot/autopilot.py`)
+* Every book item carries `broker` and `mode`; exits, stops, the reconcile and the KILL act only on items of the
+  broker and account the bot talks to now (`_here`). A simulator or paper trade left in the book when you move
+  to Alpaca is never sold, given a stop or "killed" out of the new account: the cycle reports it, opens nothing
+  new, and `brokers.live_readiness` refuses the live switch until it is closed there and forgotten
+  (`autopilot.py forget --confirm FORGET` sets such items to `"left"`).
+* **Bot equity** (`bot_account`): the daily-loss kill, the drawdown pause and the sizing see the account with
+  the open P&L of your own coins and shares taken out (`account_equity` = the broker's figure, `yours_pl_usd`
+  = what was taken out). Your BTC falling is not the bot's loss; buying some yourself changes nothing (only
+  the P&L is taken out, not the value). An entry that filled since the last cycle counts as the bot's.
+
+### Exits next to your own orders
+* Alpaca refuses a market sale and a plain stop while you have your own buy order open on the symbol (the
+  wash-trade guard). The sale is sent again once as a **limit 1 % under the last price** (`WASH_LIMIT`), the
+  stop goes back as a **stop-limit 3 % under the stop** (`WASH_STOP_LIMIT`, client id `…l`); the KILL does the
+  same. `broker.place_stop(..., limit_price=None)` is new in all adapters.
+* The exit reason (`exit_reason`) is on disk before the sale goes out: a crash right after it still journals
+  the trade as time / stop / rule, not "manual".
+* A closed position whose answer was lost (timeout, 5xx) is "may or may not have been placed", never "refused" —
+  no stop is put back over a sale that may have gone through. An entry like that is `unsure` in `orders.json`
+  and looked up by its client id next cycle.
+* A cancel pending since the last cycle is still waited for; a stop that partly filled and was cancelled counts
+  as sold; a price through the stop sells even while a refused sale backs off; the back-off is forgotten after
+  the sale. A closed trade cancels its own leftover sell orders.
+* Exit client ids carry milliseconds (`ord-…-x<ms>`).
+
+### Simulator (`shared/brokers/simulator.py`)
+* One symbol without prices (`sync_errors`) no longer stops every other symbol's fills; the cycle says which
+  symbol waits and opens nothing new.
+* An order sent twice under one client id is one order (the first is the answer); an id whose order was
+  cancelled is refused, like Alpaca.
+* `close_position` sells the position and nothing else — like Alpaca's `DELETE /v2/positions/{symbol}`, other
+  open orders on the symbol stay (the autopilot cancels its own first).
+
+### State and files
+* `state.append_jsonl_rows` writes unbuffered (`os.write`) and on failure truncates back to where it began: a
+  full disk loses only the record that did not fit, and the next one lands on a clean line.
+* `state.write_json` writes files that keep a `.bak` under their lock (10 s), so two writers never leave the
+  copy and the file from different moments.
+* `keep`, `min_sma`, `max_bars`, `top_n`, `top` must be numbers in `config.json`, even without a default.
+
+### Judge and lab
+* A coin with too little history for the Time Machine is a skip ("Time Machine: …"), not a cycle error.
+* `lab.rule_trades`: a signal while the previous trade's two thirds still ride is counted only for "sell
+  everything" — with the runner on, the bot holds that coin and never takes it (one position per coin, as
+  live). On real data: 476 trades, 394 of them with the runner.
+
+### Manual tickets, symbols, deploy
+* A "yes" needs `--ticket <id>` when several tickets wait; a live ticket needs the full five-step live opt-in;
+  expiry runs on the real clock; the approval is checked and saved under `state.locked("tickets.json")`.
+  Manual crypto at Alpaca gets no leverage (sizer and risk check).
+* Meme coins in lot spellings (`1000PEPE`, `KPEPE`, `1MBABYDOGE`) are meme coins (`symbols.is_meme_base`); the
+  block list matches any spelling (`SOL/USD` blocks `SOLUSDT`) in risk, universe and the playbook step.
+* Deploy never ships a nested `trader/` folder or `.env`; a request carrying a credential follows no redirect;
+  an infinite limit in `limits.json` is refused; the risk of a daily entry is measured at its slack limit.

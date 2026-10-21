@@ -38,6 +38,7 @@ class SimBroker(Broker):
         self._candles = {}
         self._spans = {}  # (symbol, asset) → the oldest time the fetched series surely covers
         self.save_error = None
+        self.sync_errors = {}  # symbol → why its orders could not be checked this sync
         self.book = state.read_json(BOOK) or self._new_book()
         self._saved = copy.deepcopy(self.book)  # what is on disk — a refused order is rolled back to it
 
@@ -154,8 +155,12 @@ class SimBroker(Broker):
             asset = mine[0]["asset"]
             since = min(int(o.get("active_from") or market_clock.ts(o["submitted_at"])) for o in mine)
             done = int(walked.get(symbol) or 0)
-            bars = [c for c in self._series(symbol, asset, max(since, done)) if c.t >= since - step and c.t > done
-                    and c.t + step <= now_ts]
+            try:
+                series = self._series(symbol, asset, max(since, done))
+            except BrokerError as exc:  # one symbol without prices: its orders wait, every other symbol's still fill
+                self.sync_errors[symbol] = str(exc)
+                continue
+            bars = [c for c in series if c.t >= since - step and c.t > done and c.t + step <= now_ts]
             for bar in bars:
                 live = [o for o in mine if o["status"] == "new"]
                 if not live:
@@ -294,6 +299,16 @@ class SimBroker(Broker):
         return list(self.book.get("fills") or [])
 
     # -- writes ---------------------------------------------------------------------------------
+    def _same_client_id(self, cid):
+        """Sent twice under one client id (a crash between the broker and the book): like Alpaca, the first order is
+        the answer — never a second stop or a second sale."""
+        if not cid:
+            return None
+        o = next((o for o in self.book["orders"] if o.get("client_order_id") == cid), None)
+        if o and o["status"] in ("canceled", "expired", "rejected"):  # an old id reused: no answer to give back
+            raise BrokerError("client_order_id %s was already used (order %s, %s)" % (cid, o["id"], o["status"]))
+        return order_dict(**{k: v for k, v in o.items() if k != "active_from"}) if o else None
+
     def _new(self, **kw) -> dict:
         now = self._now()
         o = order_dict(id=self._next_id(), submitted_at=market_clock.iso(now), status="new", filled_qty=0, **kw)
@@ -341,7 +356,10 @@ class SimBroker(Broker):
         self._save()
         return order_dict(**{k: v for k, v in entry.items() if k != "active_from"})
 
-    def place_stop(self, symbol, qty, stop_price, client_order_id=None, asset="crypto") -> dict:
+    def place_stop(self, symbol, qty, stop_price, client_order_id=None, asset="crypto", limit_price=None) -> dict:
+        again = self._same_client_id(client_order_id)
+        if again:
+            return again
         o = self._new(client_order_id=client_order_id, symbol=symbol, asset=asset, side="sell", type="stop",
                       qty=float(qty), stop_price=float(stop_price), leg="stop", time_in_force="gtc")
         self.log("place_stop", symbol=symbol, qty=qty, stop_price=stop_price, order_id=o["id"])
@@ -349,6 +367,9 @@ class SimBroker(Broker):
         return order_dict(**{k: v for k, v in o.items() if k != "active_from"})
 
     def place_exit(self, symbol, qty, kind="market", limit_price=None, client_order_id=None, asset="stock") -> dict:
+        again = self._same_client_id(client_order_id)
+        if again:
+            return again
         if kind == "limit":
             o = self._new(client_order_id=client_order_id, symbol=symbol, asset=asset, side="sell", type="limit",
                           qty=float(qty), limit_price=float(limit_price), leg="exit", time_in_force="gtc")
@@ -377,11 +398,9 @@ class SimBroker(Broker):
         raise BrokerError("unknown order %s" % order_id)
 
     def close_position(self, symbol: str) -> dict:
+        """Sell the whole position — and nothing else: like Alpaca's DELETE /v2/positions/{symbol}, other open orders
+        on the symbol stay (yours included; the autopilot cancels its own before it sells)."""
         pos = self.book["positions"].get(symbol)
-        for o in self.book["orders"]:
-            if o["symbol"] == symbol and o["status"] in ("new", "held"):
-                o["status"] = "canceled"
-                o["canceled_at"] = market_clock.iso(self._now())
         if not pos:
             self._save()
             return {"symbol": symbol, "status": "flat"}

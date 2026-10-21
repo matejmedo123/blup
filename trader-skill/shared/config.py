@@ -277,10 +277,14 @@ MIN_INTERVAL_SEC = 5
 warnings = []   # settings that were fixed up on load (an explicit null limit → its default); the autopilot shows them
 
 
+# keys without a default value that still must be numbers (a typo like "two thirds" would fail mid-trade)
+_NUMBER_KEYS = ("keep", "min_sma", "max_bars", "top_n", "top")
+
+
 def _kind(key: str, default):
     if isinstance(default, bool) or key in ("enabled", "paper") or key.startswith("allow_") or key.endswith("_enabled"):
         return "bool"
-    if isinstance(default, (int, float)) or (default is None and key.endswith(_NUM_SUFFIXES)):
+    if isinstance(default, (int, float)) or (default is None and (key.endswith(_NUM_SUFFIXES) or key in _NUMBER_KEYS)):
         return "number"
     if isinstance(default, dict):
         return "object"

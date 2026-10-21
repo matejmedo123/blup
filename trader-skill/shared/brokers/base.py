@@ -82,7 +82,7 @@ class Broker:
         raise NotImplementedError
 
     def place_stop(self, symbol: str, qty: float, stop_price: float, client_order_id: str = None,
-                   asset: str = "crypto") -> dict:
+                   asset: str = "crypto", limit_price: float = None) -> dict:
         raise NotImplementedError
 
     def place_exit(self, symbol: str, qty: float, kind: str = "market", limit_price: float = None,

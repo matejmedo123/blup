@@ -381,14 +381,17 @@ class AlpacaBroker(Broker):
         out = self._order(res, leg="entry")
         return out
 
-    def place_stop(self, symbol, qty, stop_price, client_order_id=None, asset="crypto") -> dict:
+    def place_stop(self, symbol, qty, stop_price, client_order_id=None, asset="crypto", limit_price=None) -> dict:
+        """limit_price: make it a stop-limit at that limit (a plain stop is refused by Alpaca's wash-trade guard
+        while you have your own buy order open on the symbol; a stop-limit below your buy can't trade with it)."""
         tick = self._tick(symbol, asset)
         body = {"symbol": symbol, "qty": _fmt_qty(self._qty(symbol, qty, asset)), "side": "sell", "time_in_force": "gtc",
                 "client_order_id": client_order_id}
-        if asset == "crypto":
+        if asset == "crypto" or limit_price is not None:
             # crypto has no plain stop orders: a stop-limit a little below the stop keeps it fillable
             body.update(type="stop_limit", stop_price=_fmt_price(stop_price, asset, tick),
-                        limit_price=_fmt_price(float(stop_price) * 0.995, asset, tick))
+                        limit_price=_fmt_price(float(limit_price) if limit_price is not None else
+                                               float(stop_price) * 0.995, asset, tick))
         else:
             body.update(type="stop", stop_price=_fmt_price(stop_price, asset))
         res = self._post_order(body)

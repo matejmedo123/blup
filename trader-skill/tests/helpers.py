@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from shared import http, skills  # noqa: E402
+from shared import config, http, skills, state  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 MANIFEST = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
@@ -58,6 +58,7 @@ class TraderTestCase(unittest.TestCase):
         for k in _ENV_KEYS[4:]:  # never let a real key from the developer's shell leak into a test
             os.environ.pop(k, None)
         http.reset()
+        del state.recovered[:], config.warnings[:]  # notes about another test's files are not this test's
         self._urlopen = urllib.request.urlopen
         urllib.request.urlopen = _no_network
 

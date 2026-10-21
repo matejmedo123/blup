@@ -33,6 +33,8 @@ Examples:
 """
 from __future__ import annotations
 
+import bisect
+
 import math
 import os
 import random
@@ -464,11 +466,15 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
         rr = ride["exit_rule"]
         cache[("ema", int(rr["n"]))] = indicators.ema(closes, int(rr["n"]))
         trend = indicators.sma(closes, int(ride.get("min_sma") or 200))
-    out, busy = [], -1
+    out, busy, ride_busy = [], -1, -1
+    times = [c.t for c in candles]
     for r in setups.series_signals(setup, candles, interval, context=context):
         i = r["trigger"]["index"]
         if i <= busy:
             continue
+        # a signal while the previous trade's two thirds still ride: the bot holds that coin, so with the runner on
+        # this trade never happens — it counts only for "sell everything" (one position per coin, as live)
+        riding = bool(ride) and i <= ride_busy
         entry = candles[i].c
         stop = setups.rule_stop(setup, candles, i, r.get("levels") or {}, atrs[i])
         if stop <= 0 or stop >= entry:
@@ -492,12 +498,13 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
             break  # the last trade has not finished yet
         res = {RULE_KEY: trade_sim.net_r(entry, px, entry - stop, cost)}
         ride_end = candles[j].t + step
-        if ride:
+        if ride and not riding:
             if how == "stop":
                 res[RUNNER_KEY] = res[RULE_KEY]
             else:
                 res[RUNNER_KEY], ride_end = _with_runner(ride, candles, closes, cache, trend, j, entry, stop,
                                                          res[RULE_KEY], cost, step)
+            ride_busy = max(j, bisect.bisect_left(times, ride_end - step))
         if exits is not None:  # when each trade ended — the health check orders trades the way the bot closes them
             exits[candles[i].t + step] = (candles[j].t + step, ride_end)
         out.append((candles[i].t + step, res))

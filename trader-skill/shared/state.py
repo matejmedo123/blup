@@ -122,9 +122,19 @@ def write_json(name: str, obj) -> Path:
     # most cycles change nothing in most files: a write (and its fsync) is skipped when the bytes are the same
     if _same(p, data) and (not spare or _same(bak, data)):
         return p
-    config.atomic_write(p, text)
     if not spare:
+        config.atomic_write(p, text)
         return p
+    try:
+        # under the file's lock: a repair of a broken copy (read_json) never puts an older .bak over this write
+        with locked(name, timeout=10):
+            return _write_with_spare(p, bak, text)
+    except LockTimeout:  # never wait forever for a write — the file itself is replaced atomically either way
+        return _write_with_spare(p, bak, text)
+
+
+def _write_with_spare(p: Path, bak: Path, text: str) -> Path:
+    config.atomic_write(p, text)
     try:
         config.atomic_write(bak, text)
     except OSError:
@@ -232,26 +242,30 @@ def append_jsonl_rows(name: str, rows: list) -> Path:
     for _ in range(5):
         # created owner-only like every other state file (a plain open() would follow the umask: 0644)
         fd = os.open(str(p), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        with os.fdopen(fd, "ab") as fh:
+        try:
             if fcntl is not None:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                fcntl.flock(fd, fcntl.LOCK_EX)
                 try:
-                    if os.fstat(fh.fileno()).st_ino != os.stat(str(p)).st_ino:
+                    if os.fstat(fd).st_ino != os.stat(str(p)).st_ino:
                         continue  # rotated while this writer waited: append to the new file
                 except FileNotFoundError:
                     continue
-            size = os.fstat(fh.fileno()).st_size
+            size = os.fstat(fd).st_size
             try:
-                fh.write(line)
-                fh.flush()
+                done = 0
+                while done < len(line):  # unbuffered: nothing is left in a buffer to flush when cutting back
+                    done += os.write(fd, line[done:])
             except OSError:
                 # a full disk leaves half a line, and the next record would be glued onto it — both lost: cut it off
+                # (ftruncate needs no free space, unlike a buffered file that tries to flush first)
                 try:
-                    fh.truncate(size)
+                    os.ftruncate(fd, size)
                 except OSError:
                     pass
                 raise
             return p
+        finally:
+            os.close(fd)
     raise StateError("could not append to %s: it kept being replaced" % name)
 
 

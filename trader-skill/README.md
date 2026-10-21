@@ -720,7 +720,11 @@ format, so offline runs go through the same parsing code as live runs. `--now` p
   about 69 % in runs), the ETF trend is tested only on crypto-bear days (the days the bot trades it), daily
   entries may pay up to a quarter ATR above the close and keep working for an hour (an order at the close
   missed the strongest moves — 17–32 % of the lab's total R), and the runner rides after a time stop as in
-  the lab.
+  the lab. Since v3.9 a signal that comes while the previous trade's two thirds still ride counts only for
+  "sell everything" (the bot holds that coin and would not take it): 394 of 476 trades get the runner.
+* **Your own coins at the same broker:** the bot counts its equity with the open P&L of what you hold
+  yourself taken out, so your BTC falling doesn't trip its daily-loss limit. Cash can't be told apart: a
+  deposit, a withdrawal or a loss you realise yourself still moves the bot's equity.
 * **Small accounts can't hold most ETFs.** Alpaca brackets need whole shares and the stock cap is 25 % of
   the account: with €1,000, SPY, QQQ, IWM, DIA, GLD and SMH round to 0 shares and are skipped, and the rest
   risk 0.1–1.5 % instead of 2 %. The ETF projections above assume the full 2 %.
