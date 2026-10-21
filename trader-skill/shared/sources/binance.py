@@ -40,14 +40,16 @@ def klines(symbol: str, interval: str = "5m", days: float = 60, end_ts: int = No
     """Paginate 1000 bars at a time from ``end - days`` up to ``end``."""
     step = INTERVALS[interval]
     import time as _time
-    end_ts = int(end_ts or _time.time())
-    start_ms = (end_ts - int(days * 86400)) * 1000
+    # both ends on a bar boundary: the URL stays the same for a whole bar, so the cache answers repeats and holds
+    # one file per bar — not one per second (the bar still forming opens at end_ts, so it is still included)
+    end_ts = int(end_ts or _time.time()) // step * step
+    start_ms = (end_ts - int(days * 86400)) // step * step * 1000
     end_ms = end_ts * 1000
     out = []
     cursor = start_ms
     for _ in range(200):  # hard stop: 200k bars
         rows = _get("/api/v3/klines?symbol=%s&interval=%s&startTime=%d&endTime=%d&limit=1000"
-                    % (symbol, interval, cursor, end_ms), ttl=60)
+                    % (symbol, interval, cursor, end_ms), ttl=60 if step < 3600 else 300)
         batch = parse_klines(rows)
         if not batch:
             break

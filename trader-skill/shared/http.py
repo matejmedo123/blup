@@ -28,6 +28,7 @@ from .cache import FileCache
 USER_AGENT = "Mozilla/5.0 (compatible; trader-skill/1.0; educational research tool)"
 MAX_BYTES = 12 * 1024 * 1024
 STALE_MAX_AGE = 24 * 3600
+BLOCK_RETRY_SEC = 6 * 3600  # a geo-block is tried again after this — a daemon runs for months, a VPN can change
 
 # seconds between requests to the same host
 MIN_INTERVAL = {
@@ -168,8 +169,9 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
         return offline.fetch(url)
 
     host = host_of(url)
-    if host in _blocked_hosts:
-        raise GeoBlocked(url, "%s is blocked from this location (%s)" % (host, _blocked_hosts[host]), 451)
+    blocked = _blocked_hosts.get(host)
+    if blocked and time.monotonic() - blocked[1] < BLOCK_RETRY_SEC:
+        raise GeoBlocked(url, "%s is blocked from this location (%s)" % (host, blocked[0]), 451)
 
     cache = _get_cache()
     hit = cache.get(url, ttl) if ttl and ttl > 0 else None
@@ -195,7 +197,7 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
         except urllib.error.HTTPError as err:
             last_error = err
             if err.code == 451:
-                _blocked_hosts[host] = "HTTP 451"
+                _blocked_hosts[host] = ("HTTP 451", time.monotonic())
                 raise GeoBlocked(url, "%s refused this location (HTTP 451)" % host, 451)
             if err.code == 429 or err.code >= 500:
                 delay = _retry_after(err) or min(30.0, (2 ** attempt) + random.random())

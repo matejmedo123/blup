@@ -84,13 +84,6 @@ def _tickets() -> list:
     return (state.read_json("tickets.json", {}) or {}).get("tickets") or []
 
 
-def _order_by_id(oid: str):
-    for o in _orders():
-        if o.get("id") == oid:
-            return o
-    return None
-
-
 def open_book(now_iso: str) -> list:
     """Open positions: journal trades still open + tickets approved today that the journal has not seen."""
     trades = _trades()
@@ -102,10 +95,13 @@ def open_book(now_iso: str) -> list:
             entry = float((t.get("entry") or {}).get("price") or 0)
             notional = qty if t.get("asset") == "meme" else qty * entry
             book.append({"asset": t.get("asset"), "symbol": t.get("symbol"), "notional": notional, "source": t["id"]})
+    by_id = None
     for tk in _tickets():
         if tk.get("status") != "approved" or tk.get("order_id") in journaled:
             continue
-        o = _order_by_id(tk.get("order_id"))
+        if by_id is None:  # read once — not once per ticket
+            by_id = {o.get("id"): o for o in _orders()}
+        o = by_id.get(tk.get("order_id"))
         if not o or day_of(tk.get("approved_at") or tk.get("created_at"), o["asset"]) != day_of(now_iso, o["asset"]):
             continue
         book.append({"asset": o["asset"], "symbol": o.get("symbol"), "notional": float(o.get("notional_usd") or 0),
@@ -136,10 +132,17 @@ def realized_loss_today(now_iso: str, asset: str = None) -> float:
 
 def trades_today(now_iso: str, asset: str = None) -> int:
     n = 0
-    for a in state.read_jsonl("approvals.jsonl"):
+    by_id = None
+    since = market_clock.iso(market_clock.ts(now_iso) - 2 * 86400)  # today in any market's calendar, read from the end
+    for a in state.tail_jsonl("approvals.jsonl", stop=lambda a: bool(a.get("ts")) and str(a["ts"]) < since):
         if not a.get("approved"):
             continue
-        a_asset = a.get("asset") or (_order_by_id(a.get("order_id")) or {}).get("asset") or "stock"
+        a_asset = a.get("asset")
+        if not a_asset:  # lines from older versions name only the order: orders.json is read once, not per line
+            if by_id is None:
+                by_id = {o.get("id"): o for o in _orders()}
+            a_asset = (by_id.get(a.get("order_id")) or {}).get("asset")
+        a_asset = a_asset or "stock"
         if asset and a_asset != asset:
             continue
         if day_of(a.get("ts"), a_asset) == day_of(now_iso, a_asset):

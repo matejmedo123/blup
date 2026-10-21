@@ -26,7 +26,8 @@ def parse_ohlcv(obj) -> list:
 def ohlcv(network: str, pool: str, interval: str = "5m", days: float = 30, end_ts: int = None,
           max_pages: int = 10) -> list:
     tf, agg = TIMEFRAMES[interval]
-    end_ts = int(end_ts or _time.time())
+    step = {"minute": 60, "hour": 3600, "day": 86400}[tf] * agg
+    end_ts = int(end_ts or _time.time()) // step * step  # on a bar boundary: one cached URL per bar, not per second
     start_ts = end_ts - int(days * 86400)
     out = {}
     before = end_ts + 1

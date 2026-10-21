@@ -139,7 +139,8 @@ def build_case(idea_id: str, symbol: str = None) -> dict:
         tm = state.read_json(state.rel(tm_file))
         if tm and tm.get("id") not in (None, idea_id):
             tm = None
-    case["timemachine"] = tm
+    # the verdicts need the odds, not the hundreds of sample paths (they stay in the replay's own file)
+    case["timemachine"] = {k: v for k, v in tm.items() if k not in ("sample_paths", "path_times")} if tm else tm
     orders = [o for o in (state.read_json("orders.json", {}) or {}).get("orders") or [] if o.get("plan_id") == idea_id]
     case["order"] = orders[-1] if orders else None
     case["missing"] = missing_steps(case)

@@ -17,7 +17,10 @@ from .. import config, data, market_clock, state
 from .base import Broker, BrokerError, data_symbol, order_dict
 
 BOOK = "broker/sim.json"
+ARCHIVE = "broker/sim-archive.jsonl"
 INTERVAL = "5m"
+KEEP_DAYS = 30  # finished orders and fills older than this move to the archive: sync walks every order per bar
+FINAL = ("filled", "canceled", "expired", "rejected")
 
 
 def _r(x, nd=6):
@@ -31,6 +34,8 @@ class SimBroker(Broker):
     def __init__(self, cfg: dict = None):
         self.cfg = cfg or config.load_config()
         self._candles = {}
+        self._spans = {}  # (symbol, asset) → the oldest time the fetched series surely covers
+        self.save_error = None
         self.book = state.read_json(BOOK) or self._new_book()
 
     # -- book -----------------------------------------------------------------------------------
@@ -40,7 +45,13 @@ class SimBroker(Broker):
                 "fills": [], "created_at": market_clock.iso(market_clock.now_utc()), "last_sync": None}
 
     def _save(self) -> None:
-        state.write_json(BOOK, self.book)
+        try:
+            state.write_json(BOOK, self.book)
+            self.save_error = None
+        except OSError as exc:
+            # a full disk: this cycle goes on with the book in memory, so the stops and time stops still act —
+            # the autopilot reports it and opens nothing new until the book is on disk again
+            self.save_error = "%s: %s" % (type(exc).__name__, exc)
 
     def _next_id(self) -> str:
         self.book["seq"] = int(self.book.get("seq") or 0) + 1
@@ -55,8 +66,10 @@ class SimBroker(Broker):
 
     def _series(self, symbol: str, asset: str, since_ts: int = None):
         key = (symbol, asset)
-        if key not in self._candles:
-            now_ts = int(self._now().timestamp())
+        now_ts = int(self._now().timestamp())
+        # fetched again only when an older bar is needed than the series holds (a 2-day series first, then
+        # whatever the oldest unwalked order asks for)
+        if key not in self._candles or (since_ts and since_ts < self._spans.get(key, 0)):
             span_days = 2.0
             if since_ts:
                 span_days = max(span_days, (now_ts - since_ts) / 86400.0 + 1.0)
@@ -65,6 +78,7 @@ class SimBroker(Broker):
                 self._candles[key] = data.get_candles(data_symbol(symbol, asset), INTERVAL, days=days).candles
             except data.DataUnavailable as exc:
                 raise BrokerError("no prices for %s: %s" % (symbol, exc))
+            self._spans[key] = now_ts - int(span_days * 86400) + 86400
         return self._candles[key]
 
     def _last_close(self, symbol: str, asset: str) -> float:
@@ -117,17 +131,25 @@ class SimBroker(Broker):
                     sib["canceled_at"] = market_clock.iso(at_ts)
 
     def sync(self) -> None:
-        """Walk every bar since each open order was sent and fill what the bars say would have filled."""
+        """Walk every bar since each open order was sent and fill what the bars say would have filled. Each
+        symbol remembers the last bar it walked (``walked``), so a position held for months costs one new bar a
+        cycle, not every bar since its entry."""
         now_ts = int(self._now().timestamp())
         step = market_clock.interval_seconds(INTERVAL)
         open_orders = [o for o in self.book["orders"] if o["status"] in ("new", "held")]
+        walked = self.book.setdefault("walked", {})
+        for symbol in list(walked):
+            if not any(o["symbol"] == symbol for o in open_orders):
+                del walked[symbol]
         for symbol in sorted({o["symbol"] for o in open_orders}):
             mine = [o for o in open_orders if o["symbol"] == symbol]
             asset = mine[0]["asset"]
             since = min(int(o.get("active_from") or market_clock.ts(o["submitted_at"])) for o in mine)
-            bars = [c for c in self._series(symbol, asset, since) if c.t >= since - step and c.t + step <= now_ts]
+            done = int(walked.get(symbol) or 0)
+            bars = [c for c in self._series(symbol, asset, max(since, done)) if c.t >= since - step and c.t > done
+                    and c.t + step <= now_ts]
             for bar in bars:
-                live = [o for o in self.book["orders"] if o["symbol"] == symbol and o["status"] == "new"]
+                live = [o for o in mine if o["status"] == "new"]
                 if not live:
                     break
                 # entries first, then stop legs before take-profit legs (stop-first on a shared bar)
@@ -151,6 +173,8 @@ class SimBroker(Broker):
                     elif o["side"] == "sell" and o["type"] == "limit":
                         if bar.h >= o["limit_price"]:
                             self._fill(o, o["limit_price"], bar.t + step)
+            if bars:
+                walked[symbol] = bars[-1].t
             # day orders that never filled expire at the session close
             for o in mine:
                 if (o["status"] in ("new", "held") and o.get("expires_at")
@@ -158,8 +182,32 @@ class SimBroker(Broker):
                     o["status"] = "expired" if o.get("leg") == "entry" else "canceled"
         self._mark()
         self._charge_interest(now_ts)
+        self._archive(now_ts)
         self.book["last_sync"] = market_clock.iso(now_ts)
         self._save()
+
+    def _archive(self, now_ts: int) -> None:
+        """Finished orders and fills older than KEEP_DAYS go to broker/sim-archive.jsonl — a bracket stays whole
+        while any of its legs still works."""
+        cut = market_clock.iso(now_ts - KEEP_DAYS * 86400)
+        if self.book.get("archived_until", "") >= cut[:10]:
+            return  # once a day is enough
+        working = {o.get("parent_id") or o["id"] for o in self.book["orders"] if o["status"] not in FINAL}
+        keep, old = [], []
+        for o in self.book["orders"]:
+            done_at = o.get("filled_at") or o.get("canceled_at") or o.get("submitted_at") or ""
+            gone = o["status"] in FINAL and (o.get("parent_id") or o["id"]) not in working and done_at < cut
+            (old if gone else keep).append(o)
+        fills = [f for f in self.book.get("fills") or [] if (f.get("at") or "") >= cut]
+        stale = [f for f in self.book.get("fills") or [] if (f.get("at") or "") < cut]
+        if old or stale:
+            try:
+                state.append_jsonl_rows(ARCHIVE, [dict(r, kind="order") for r in old] +
+                                        [dict(r, kind="fill") for r in stale])
+            except OSError:
+                return  # kept in the book until the archive can be written
+            self.book["orders"], self.book["fills"] = keep, fills
+        self.book["archived_until"] = cut[:10]
 
     def _charge_interest(self, now_ts: int) -> None:
         """Borrowed cash costs borrow_rate_pct; idle cash earns cash_yield_pct (T-bills), both by the second."""

@@ -949,3 +949,32 @@ dashboard or the autopilot's news gate.
 
 ### Dashboard
 10 wrong passwords from one client within 10 minutes → `429` for the rest of those 10 minutes.
+
+### Months of running (v3.7)
+* **Download cache.** Kline URLs (Binance, Coinbase, GeckoTerminal) end on a bar boundary, so one bar is one URL
+  and repeats hit the cache; `cache/http/` entries older than 24 h (the stale-copy limit) and temp files older
+  than an hour are deleted every 6 hours (`FileCache.prune`). A geo-block (HTTP 451) is retried after 6 hours.
+* **Simulator.** `sim.json` gains `"walked": {symbol: bar time}` — each sync walks only the bars after the last
+  one it walked — and `"archived_until"`: finished orders and fills older than 30 days move (once a day) to
+  `broker/sim-archive.jsonl` (`"kind": "order" | "fill"`); a bracket stays whole while a leg still works. A book
+  that cannot be saved (full disk) sets `save_error`: the cycle goes on in memory and opens nothing new.
+* **Pruning (`autopilot.prune_state`, housekeeping every 6 h, also in `autopilot.py loop` and the dashboard's own
+  loop).** Finished book items, plans, entries and orders older than 45 days move to `archive/book.jsonl`,
+  `archive/plan.jsonl`, `archive/entries.jsonl`, `archive/orders.jsonl` (anything a live book item or
+  `alerts.json` points to stays). `desk/<id>/`, `timemachine/*.json` and `backtests/<sym>-<setup>.json`
+  untouched for 45 days are deleted (`lab-*` and `playbook*` never). Logs past a size are rotated into
+  `archive/<name>-<YYYYMMDD>.jsonl.gz` (decisions past 64 MB keep their newest 24 MB; the archive files
+  themselves are gzipped past 8 MB). `journal.json`, `approvals.jsonl` and `broker/equity.jsonl` are never cut.
+* **Equity compaction** keeps, before the last 7 days, each hour's highest line and its last — the drawdown
+  limit's peak survives it (`adapt` re-reads a compacted file without forgetting the peak; a replaced file, e.g.
+  a fresh simulator, starts over).
+* **Writes.** `state.write_json` skips a write when the bytes are unchanged; `desk/` and `timemachine/` get no
+  `.bak`; `cache/` files are written without indentation. `state.append_jsonl` cuts off a half-written line
+  when the disk is full; `state.append_jsonl_rows` appends many records in one write.
+* **Reads.** `state.tail_jsonl(name, n, stop)` reads a JSONL file backwards: the cycle's daily counts, the daily
+  summary, the shadow check, the dashboard's decisions and checks, and the risk check's trade count read only
+  what they need. `/api/desk` returns the newest 60 reviews. The health check's simulated histories are
+  computed once per record, not every cycle; the risk check reads `orders.json` once per call.
+* **Disk.** Under 200 MB free, the cycle opens nothing new (exits go on); under 1 GB, housekeeping empties the
+  download cache and notifies you (every 6 hours at most).
+* **Lab store.** 5-min bars older than the run's window plus 30 days are dropped from `cache/lab/`.

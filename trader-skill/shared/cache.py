@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -34,13 +35,34 @@ class FileCache:
 
     def set(self, key: str, body: str) -> None:
         f = self._file(key)
+        # a name of its own: two threads fetching the same URL never write into one temp file
+        tmp = f.with_name("%s.%d.%d.tmp" % (f.name, os.getpid(), threading.get_ident()))
         try:
             f.parent.mkdir(parents=True, exist_ok=True)
-            tmp = f.with_name(f.name + ".tmp")
             tmp.write_text(json.dumps({"url": key, "fetched_at": time.time(), "body": body}), encoding="utf-8")
             os.replace(str(tmp), str(f))
-        except OSError:
-            pass  # a cache that can't write is just a slower cache
+        except OSError:  # a cache that can't write is just a slower cache — but no half-written file stays behind
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+    def prune(self, max_age: float) -> dict:
+        """Delete entries older than ``max_age`` seconds (and temp files left by a crash): kline URLs change with
+        every bar, so without this the cache only grows — by gigabytes a week on a 24/7 bot."""
+        n = size = 0
+        cutoff = time.time() - max_age
+        if self.root.exists():
+            for f in self.root.rglob("*"):
+                try:
+                    st = f.stat()
+                    if f.is_file() and st.st_mtime < (cutoff if f.suffix == ".json" else time.time() - 3600):
+                        f.unlink()
+                        n += 1
+                        size += st.st_size
+                except OSError:
+                    pass
+        return {"files": n, "bytes": size}
 
     def clear(self) -> int:
         n = 0

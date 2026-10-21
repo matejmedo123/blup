@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import time
 from urllib.parse import urlencode
@@ -102,9 +101,7 @@ def _cache_set(key: str, items: list) -> None:
     f = _cache_file(key)
     try:
         f.parent.mkdir(parents=True, exist_ok=True)
-        tmp = f.with_name(f.name + ".tmp")
-        tmp.write_text(json.dumps({"fetched_at": time.time(), "items": items}), encoding="utf-8")
-        os.replace(str(tmp), str(f))
+        config.atomic_write(f, json.dumps({"fetched_at": time.time(), "items": items}))  # no temp file left behind
     except OSError:
         pass
 

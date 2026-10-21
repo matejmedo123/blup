@@ -30,8 +30,8 @@ def parse_candles(rows) -> list:
 
 def candles(product: str, interval: str = "5m", days: float = 30, end_ts: int = None) -> list:
     gran = GRANULARITY[interval]
-    end_ts = int(end_ts or _time.time())
-    start_ts = end_ts - int(min(days, MAX_DAYS) * 86400)
+    end_ts = int(end_ts or _time.time()) // gran * gran  # on a bar boundary: one cached URL per bar, not per second
+    start_ts = (end_ts - int(min(days, MAX_DAYS) * 86400)) // gran * gran
     out = {}
     cursor_end = end_ts
     while cursor_end > start_ts:

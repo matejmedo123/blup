@@ -102,11 +102,13 @@ def _btc_up(memo: dict, days: int, now_ts: int) -> dict:
     return setups.regime_map(memo[key])
 
 
-def _decisions() -> dict:
+def _decisions(since_ts: int = None) -> dict:
     """One decision per signal id: the first, which says why the signal was not taken while it was fresh (a later
-    look only finds it stale) — unless a later one placed or tried to place the order."""
+    look only finds it stale) — unless a later one placed or tried to place the order. Read from the end of the
+    file back to ``since_ts`` (a day of slack): years of decisions are never parsed for a 30-day window."""
     out = {}
-    for d in state.read_jsonl(DECISIONS):
+    cut = market_clock.iso(since_ts - 86400) if since_ts else None
+    for d in state.tail_jsonl(DECISIONS, stop=(lambda d: bool(d.get("at")) and d["at"] < cut) if cut else None):
         if not d.get("id"):
             continue
         prev = out.get(d["id"])
@@ -125,7 +127,7 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
     memo = {} if memo is None else memo
     ap = (cfg or {}).get("autopilot") or {}
     etf_on = bool((ap.get("etf_trend") or {}).get("enabled"))
-    decisions = _decisions()
+    decisions = _decisions(start)
     book = (state.read_json(BOOK, {}) or {}).get("items") or {}
     costs = (cfg or {}).get("costs") or {}
     hist = state.read_jsonl(HISTORY)

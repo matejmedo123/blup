@@ -23,6 +23,9 @@ setup, say) are listed as not judged. State lives in ``autopilot/health.json``.
 """
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
 import random
 
 from . import market_clock, state
@@ -133,8 +136,21 @@ def _stitch(ref: list, n: int, block: int, rng) -> list:
     return out[:n]
 
 
+_MEMO = {}
+
+
 def evaluate(trades: list, ref: list, cfg: dict = None, seed: int = 7) -> dict:
-    """Pure: the checks for these trades against this time-ordered reference (no files)."""
+    """Pure: the checks for these trades against this time-ordered reference (no files). Thousands of simulated
+    histories — remembered until a trade closes or the reference changes, not redone every minute."""
+    key = hashlib.sha1(json.dumps([[[t["r"], t["setup"]] for t in trades], ref, settings(cfg), seed],
+                                  sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    if key not in _MEMO:
+        _MEMO.clear()  # one entry: the bot's current record
+        _MEMO[key] = _evaluate(trades, ref, cfg, seed)
+    return copy.deepcopy(_MEMO[key])
+
+
+def _evaluate(trades: list, ref: list, cfg: dict = None, seed: int = 7) -> dict:
     s = settings(cfg)
     n = len(trades)
     base = {"trades": n, "min_trades": int(s["min_trades"]), "checks": [], "setups": sorted({t["setup"] for t in trades})}

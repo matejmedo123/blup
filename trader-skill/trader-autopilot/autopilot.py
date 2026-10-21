@@ -27,7 +27,6 @@ Examples:
 """
 from __future__ import annotations
 
-import argparse
 import copy
 import json
 import os
@@ -54,6 +53,7 @@ from shared import adapt, brokers, cli, config, data, fmt, market_clock, notify,
 from shared import health, http, indicators, shadow, symbols, universe  # noqa: E402
 from shared.brokers import BrokerError, broker_symbol  # noqa: E402
 from shared.brokers.base import OPEN_STATUSES  # noqa: E402
+from shared.cache import FileCache  # noqa: E402
 
 STATE = "autopilot/state.json"
 CONTROL = "autopilot/control.json"
@@ -1608,14 +1608,18 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
 def _state(**fields) -> dict:
     st = state.read_json(STATE, {}) or {}
     st.update(fields)
-    state.write_json(STATE, st)
+    try:
+        state.write_json(STATE, st)
+    except OSError as exc:  # a full disk: the cycle's exits are done — the status file is the least of it
+        _PROCESS["state_error"] = "%s: %s" % (type(exc).__name__, exc)
     return st
 
 
 def _today_summary(book: dict, now, kill_reason=None) -> dict:
     day = _today(now)
     taken = skipped = 0
-    for d in state.read_jsonl(DECISIONS):
+    # today's lines only, read from the end: the file holds years of decisions, the cycle needs today
+    for d in state.tail_jsonl(DECISIONS, stop=lambda d: bool(d.get("at")) and d["at"][:10] < day):
         if (d.get("at") or "")[:10] != day:
             continue
         if d.get("action") == "taken":
@@ -1707,7 +1711,8 @@ def daily_summary(cfg: dict, st: dict, learned: dict, now) -> None:
     trades = [t for t in (state.read_json("journal.json", {}) or {}).get("trades") or []
               if t.get("source") == "autopilot" and t.get("status") == "closed"
               and ((t.get("exit") or {}).get("time") or "")[:10] == utc_day]
-    looked = [d for d in state.read_jsonl(DECISIONS) if (d.get("at") or "")[:10] == utc_day]
+    looked = [d for d in state.tail_jsonl(DECISIONS, stop=lambda d: bool(d.get("at")) and d["at"][:10] < utc_day)
+              if (d.get("at") or "")[:10] == utc_day]
     why = {}
     for d in looked:
         if d.get("action") == "skipped" and d.get("reasons"):
@@ -1735,26 +1740,32 @@ def daily_summary(cfg: dict, st: dict, learned: dict, now) -> None:
 
 
 def compact_equity(keep_days: int = 7) -> int:
-    """equity.jsonl gets a line a minute around the clock: keep a week in full, one line per hour before that."""
+    """equity.jsonl gets a line a minute around the clock: keep a week in full; before that each hour's highest
+    line and its last — the drawdown limit measures from the peak, which must survive the compaction."""
     rows = state.read_jsonl("broker/equity.jsonl")
     cutoff = market_clock.now_utc().timestamp() - keep_days * 86400
     recent, hourly = [], {}
     for r in rows:
         try:
             t = market_clock.ts(r["at"])
+            value = float(r["equity"])
         except (KeyError, TypeError, ValueError):
             continue
         if t >= cutoff:
             recent.append(r)
-        else:
-            hourly[t // 3600] = r
-    out = [hourly[k] for k in sorted(hourly)] + recent
+            continue
+        top, _ = hourly.get(t // 3600, (None, None))
+        if top is None or value > float(top["equity"]):
+            top = r
+        hourly[t // 3600] = (top, r)
+    out = []
+    for k in sorted(hourly):
+        top, last = hourly[k]
+        out += [top] if top is last else sorted((top, last), key=lambda r: market_clock.ts(r["at"]))
+    out += recent
     removed = len(rows) - len(out)
     if removed > 0:
-        p = state.path("broker", "equity.jsonl")
-        tmp = p.with_suffix(".jsonl.tmp")
-        tmp.write_text("".join(json.dumps(r) + "\n" for r in out), encoding="utf-8")
-        os.replace(str(tmp), str(p))
+        config.atomic_write(state.path("broker", "equity.jsonl"), "".join(json.dumps(r) + "\n" for r in out))
     return removed
 
 
@@ -1801,6 +1812,8 @@ def _cycle(approved=None) -> dict:
 
     def sync():
         broker.sync()
+        if getattr(broker, "save_error", None) and not any("not saved" in e for e in errors):
+            errors.append("the simulator's book was not saved (%s) — exits go on, nothing new opens" % broker.save_error)
         acct, pos, ords = broker.account(), broker.positions(), broker.orders()
         return acct, pos, ords + _tracked(broker, book, ords)
 
@@ -1812,6 +1825,9 @@ def _cycle(approved=None) -> dict:
             errors.append("%s: %s: %s" % (what, type(exc).__name__, exc))
             return fallback
 
+    free = _free_mb()
+    if free is not None and free < MIN_FREE_MB:
+        errors.append("disk almost full: %d MB free (under %d MB) — exits go on, nothing new opens" % (free, MIN_FREE_MB))
     acct, positions, orders = sync()
     actions += reconcile(broker, book, positions, orders, cfg, limits)
     best_effort("saving the book", lambda: state.write_json(BOOK, book))  # what reached the broker, on disk first
@@ -2267,9 +2283,148 @@ def _guarded(task: str, fn, cfg: dict) -> None:
         _note_housekeeping(task, exc)
 
 
+KEEP_DAYS = 45        # finished records older than this move to trader/archive/ (the journal and equity stay whole)
+PRUNE_EVERY_SEC = 6 * 3600
+MIN_FREE_MB = 200     # below this nothing new opens (exits go on): every entry writes a dozen files
+LOW_DISK_MB = 1024    # below this housekeeping empties the download cache and tells you (every 6 h at most)
+# logs nobody reads in full: past MAX bytes the oldest part goes to archive/<name>-<date>.jsonl.gz
+ROTATE = (("autopilot/decisions.jsonl", 64, 24), ("broker/log.jsonl", 32, 4), ("notifications.jsonl", 16, 2),
+          ("risk_log.jsonl", 32, 4), ("autopilot/housekeeping.jsonl", 4, 1), ("autopilot/control_log.jsonl", 8, 2),
+          ("broker/sim-archive.jsonl", 8, 0), ("arb_log.jsonl", 32, 4), ("archive/book.jsonl", 8, 0),
+          ("archive/plan.jsonl", 8, 0), ("archive/entries.jsonl", 8, 0), ("archive/orders.jsonl", 8, 0))
+
+
+def _free_mb():
+    try:
+        import shutil
+        return shutil.disk_usage(str(config.ensure_home())).free // (1024 * 1024)
+    except (OSError, AttributeError):
+        return None
+
+
+def _older(at, cut: str) -> bool:
+    return bool(at) and str(at) < cut  # ISO times compare as text; no time → kept
+
+
+def rotate_log(name: str, max_mb: float, keep_mb: float, now=None) -> int:
+    """Move all but the newest ``keep_mb`` of a JSONL log into a gzipped archive once it passes ``max_mb``.
+    Returns the bytes moved. Lines appended while it runs are carried over."""
+    import gzip
+    p = state.home() / name
+    try:
+        size = p.stat().st_size
+    except OSError:
+        return 0
+    if size <= max_mb * 1024 * 1024:
+        return 0
+    with p.open("rb") as fh:
+        raw = fh.read(size)
+    cut = len(raw) - 1 if keep_mb <= 0 else raw.find(b"\n", max(0, len(raw) - int(keep_mb * 1024 * 1024)))
+    if cut < 0:
+        return 0
+    old, keep = raw[:cut + 1], raw[cut + 1:]
+    day = market_clock.iso(now or market_clock.now_utc())[:10].replace("-", "")
+    dest = state.path("archive", "%s-%s.jsonl.gz" % (name.replace("/", "-")[:-6], day))
+    with gzip.open(str(dest), "ab") as gz:  # a second rotation the same day adds to the same archive
+        gz.write(old)
+    with p.open("rb") as fh:  # whatever was appended meanwhile stays
+        fh.seek(size)
+        keep += fh.read()
+    config.atomic_write(p, keep.decode("utf-8", errors="replace"))
+    return len(old)
+
+
+def _newest_mtime(f) -> float:
+    if not f.is_dir():
+        return f.stat().st_mtime
+    return max([f.stat().st_mtime] + [g.stat().st_mtime for g in f.iterdir()])
+
+
+def _archive_doc(name: str, coll: str, when: tuple, cut: str, keep) -> int:
+    """Move finished records of plan.json / entries.json / orders.json older than ``cut`` to archive/<name>l —
+    appended under the file's lock before they leave it, so a full disk loses nothing."""
+    moved = []
+
+    def stale(key, v) -> bool:
+        return isinstance(v, dict) and not keep(key) and _older(next((v.get(w) for w in when if v.get(w)), None), cut)
+
+    def change(doc):
+        items = doc.get(coll)
+        if isinstance(items, dict):
+            gone = [k for k, v in items.items() if k != doc.get("latest") and stale(k, v)]
+            if gone:
+                state.append_jsonl_rows("archive/%sl" % name, [dict(items[k], id=items[k].get("id") or k)
+                                                               for k in gone])
+            for k in gone:
+                del items[k]
+            moved.extend(gone)
+        elif isinstance(items, list):
+            gone = [v for v in items if stale(v.get("id") if isinstance(v, dict) else None, v)]
+            if gone:
+                state.append_jsonl_rows("archive/%sl" % name, gone)
+            out = {id(v) for v in gone}
+            doc[coll] = [v for v in items if id(v) not in out]
+            moved.extend(v.get("id") for v in gone)
+    if (state.home() / name).exists():
+        state.update_json(name, change, {})
+    return len(moved)
+
+
+def prune_state(now=None, keep_days: int = KEEP_DAYS, cache_age: float = None) -> dict:
+    """Keep the folder the size of a few weeks, not of every day the bot ever ran: old downloads are deleted;
+    finished book items, plans, entries and orders move to trader/archive/*.jsonl; desk reviews, Time Machine
+    replays and per-symbol backtests nobody needs any more are deleted; big logs are rotated. Anything an open
+    position, a waiting entry or an alert still points to is kept."""
+    import shutil
+    now = market_clock.parse_iso(now) if now else market_clock.now_utc()
+    cut_ts = now.timestamp() - keep_days * 86400
+    cut = market_clock.iso(cut_ts)
+    out = {"cache": FileCache().prune(http.STALE_MAX_AGE if cache_age is None else cache_age)}
+    with state.locked("autopilot/cycle", timeout=60):  # the cycle reads the book at its start, writes it at its end
+        book = _book()
+        live = {k: it for k, it in book["items"].items() if it.get("status") in LIVE_ITEM}
+        ids = set(live) | {it.get("plan_id") for it in live.values()} | {it.get("order_id") for it in live.values()}
+        old = [k for k, it in book["items"].items() if k not in live
+               and _older(it.get("closed_at") or it.get("canceled_at") or it.get("placed_at"), cut)]
+        if old:
+            state.append_jsonl_rows("archive/book.jsonl", [dict(book["items"][k], id=k) for k in old])
+            for k in old:
+                del book["items"][k]
+            state.write_json(BOOK, book)
+        out["book"] = len(old)
+        for rel, max_mb, keep_mb in ROTATE:
+            out[rel] = rotate_log(rel, max_mb, keep_mb, now=now)
+    try:
+        alerts_text = (state.home() / "alerts.json").read_text(encoding="utf-8")
+    except OSError:
+        alerts_text = ""
+
+    def keep(key) -> bool:
+        return bool(key) and (key in ids or key in alerts_text)
+
+    out["plans"] = _archive_doc("plan.json", "plans", ("created_at",), cut, keep)
+    out["entries"] = _archive_doc("entries.json", "entries", ("checked_at", "watch_started"), cut, keep)
+    out["orders"] = _archive_doc("orders.json", "orders", ("created_at",), cut, keep)
+    gone = 0
+    for folder, pattern in (("desk", "*"), ("timemachine", "*"), ("backtests", "*-*.json*")):
+        d = state.home() / folder
+        for f in (d.glob(pattern) if d.exists() else []):
+            if f.name.split(".json")[0] in ids or f.name.startswith(("lab", "playbook")):
+                continue
+            try:
+                if _newest_mtime(f) >= cut_ts:
+                    continue
+                shutil.rmtree(str(f)) if f.is_dir() else f.unlink()
+                gone += 1
+            except OSError:
+                continue
+    out["files"] = gone
+    return out
+
+
 class Housekeeping:
     """Work between cycles that must never delay exits: news refresh and the weekly backtest lab (background
-    threads), daily compaction."""
+    threads), daily compaction, pruning old records and watching the free disk space."""
 
     def __init__(self):
         self.news_thread = None
@@ -2278,10 +2433,19 @@ class Housekeeping:
         self.lab_tried = None
         self.shadow_thread = None
         self.shadow_tried = None
+        self.last_prune = None
+        self.disk_warned = None
 
     def tick(self, cfg: dict) -> None:
+        self._run(cfg, (self._news, self._lab, self._shadow, self._compact, self._prune, self._disk))
+
+    def upkeep(self, cfg: dict) -> None:
+        """Only what keeps the folder small (the CLI loop and the dashboard's own loop): no news, lab or checks."""
+        self._run(cfg, (self._compact, self._prune, self._disk))
+
+    def _run(self, cfg: dict, jobs) -> None:
         # each job on its own: a broken news file must not also stop the lab, the checks and the compaction
-        for job in (self._news, self._lab, self._shadow, self._compact, self._prune):
+        for job in jobs:
             try:
                 job(cfg, market_clock.now_utc())
             except Exception as exc:  # noqa: BLE001
@@ -2333,7 +2497,20 @@ class Housekeeping:
                 compact_equity()
 
     def _prune(self, cfg: dict, now) -> None:
-        pass
+        if self.last_prune is None or time.monotonic() - self.last_prune >= PRUNE_EVERY_SEC:
+            self.last_prune = time.monotonic()
+            prune_state(now)
+
+    def _disk(self, cfg: dict, now) -> None:
+        free = _free_mb()
+        if free is None or free >= LOW_DISK_MB:
+            return
+        freed = FileCache().prune(0)  # downloads are fetched again; nothing else is touched
+        if self.disk_warned is None or time.monotonic() - self.disk_warned >= 6 * 3600:
+            self.disk_warned = time.monotonic()
+            notify.send("error", "Disk almost full", "%d MB free on the trader's disk (emptied the download cache: "
+                        "%d MB). Under %d MB the bot opens nothing new; exits go on." % (
+                            free, freed["bytes"] // (1024 * 1024), MIN_FREE_MB), cfg, priority="high")
 
 
 WATCHDOG_SEC = 1200  # a cycle running this long is stuck (a socket that never answers): restart the process
@@ -2840,9 +3017,12 @@ def main(argv=None) -> int:
     interval = max(config.MIN_INTERVAL_SEC,
                    int(args.interval or (cfg.get("autopilot") or {}).get("interval_sec") or 60))
     n = 0
+    house = Housekeeping()
     while True:
         res = run_cycle(approved=approved, runner="cli")
         n += 1
+        if not os.environ.get("TRADER_NOW"):
+            house.upkeep(cfg)  # a loop left running for months compacts and prunes like the daemon
         if not args.json:
             print("%s  %s" % (market_clock.iso(market_clock.now_utc()), res["message"]))
             for a in res["actions"]:

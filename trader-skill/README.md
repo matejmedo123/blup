@@ -482,6 +482,9 @@ refreshes the news feed in the background. It writes a heartbeat (the dashboard 
 *stale*), holds a lock so two copies can't trade one account, backs off and notifies you when cycles
 keep failing, and stops cleanly on SIGTERM. A cycle stuck for 20 minutes restarts the process (systemd /
 Docker bring it back); an order sent just before a crash is found again by its client id, never sent twice.
+It also keeps its folder small for years: old downloads are deleted, finished records move to
+`trader/archive/` after 45 days, big logs are gzipped, and under 1 GB of free disk it tells you (under 200 MB
+it opens nothing new, but keeps managing exits).
 
 **Phone notifications:** set `notify.enabled: true` and either an [ntfy](https://ntfy.sh) topic (free
 app, no account — use a long random topic name) or your own Telegram bot. You get trade opened/closed,

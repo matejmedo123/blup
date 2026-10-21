@@ -98,12 +98,12 @@ def read_json(rel: str, default=None):
 
 
 def read_jsonl(rel: str, tail: int = None) -> list:
+    if tail:  # read from the end: a poll every 10 s must not parse years of decisions for the last 200
+        return [r for r in state.tail_jsonl(rel, tail) if isinstance(r, dict)]
     try:
         lines = (home() / rel).read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
-    if tail:
-        lines = lines[-tail:]
     out = []
     for line in lines:
         line = line.strip()
@@ -454,7 +454,10 @@ def trade_view(trade_id: str) -> dict:
     except Exception as exc:  # the chart is a bonus — never fail the request over it
         res = {"candles": [], "candles_error": "%s: %s" % (type(exc).__name__, exc)}
     with _CANDLE_LOCK:
-        _CANDLE_CACHE[key] = (time.time(), res)
+        now_s = time.time()
+        for k in [k for k, v in _CANDLE_CACHE.items() if now_s - v[0] >= 120]:  # a server runs for months
+            del _CANDLE_CACHE[k]
+        _CANDLE_CACHE[key] = (now_s, res)
     out.update(res)
     return out
 
@@ -640,11 +643,21 @@ def reports_view() -> dict:
     return {"reports": rows}
 
 
+DESK_ROWS = 60  # the newest reviews; a year of ideas is thousands of folders — read on every Overview refresh
+
+
 def desk_view() -> dict:
     rows = []
     d = home() / "desk"
     if d.exists():
+        found = []
         for f in d.glob("*/desk.json"):
+            try:
+                found.append((f.stat().st_mtime, f))
+            except OSError:
+                continue
+        found.sort(key=lambda x: x[0], reverse=True)
+        for _, f in found[:DESK_ROWS]:
             doc = read_json(str(f.relative_to(home())), None)
             if not isinstance(doc, dict):
                 continue
@@ -1025,7 +1038,7 @@ class DashboardApp:
         self.csrf = _pysecrets.token_urlsafe(32)
         self.login_lock = threading.Lock()
         self.login_fails = {}  # client → recent wrong-password times
-        self._compacted = 0.0
+        self._house = None  # the autopilot module's Housekeeping, for the loop without a daemon
         self.password = password or ""
         self.sessions = {}
         self.lock = threading.Lock()
@@ -1140,10 +1153,10 @@ class DashboardApp:
                 try:
                     self._run_cycle(mod)
                     self.autopilot.update(last_run=_now_iso(), last_error=None, runs=self.autopilot["runs"] + 1)
-                    if hasattr(mod, "compact_equity") and time.time() - self._compacted > 6 * 3600:
-                        self._compacted = time.time()  # without a daemon, this loop keeps equity.jsonl small
-                        with state.locked("autopilot/cycle"):  # never while a CLI cycle appends to it
-                            mod.compact_equity()
+                    if hasattr(mod, "Housekeeping"):  # without a daemon, this loop keeps the folder small
+                        if self._house is None:
+                            self._house = mod.Housekeeping()
+                        self._house.upkeep(config.load_config())
                 except Exception as exc:  # keep the dashboard alive whatever the bot does
                     self.autopilot.update(last_run=_now_iso(), last_error="%s: %s" % (type(exc).__name__, exc))
                     _log_error("autopilot cycle", exc)

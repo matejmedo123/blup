@@ -86,6 +86,14 @@ def _day(iso: str) -> str:
     return (iso or "")[:10]
 
 
+def _first_at(path):
+    try:
+        with path.open("rb") as fh:
+            return json.loads(fh.readline().decode("utf-8")).get("at")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def _equity(prev: dict, now_ts: float) -> dict:
     """Incremental peak tracking over broker/equity.jsonl (it grows by one line per cycle)."""
     control = state.read_json(CONTROL, {}) or {}
@@ -99,9 +107,14 @@ def _equity(prev: dict, now_ts: float) -> dict:
     except OSError:
         return eq
     offset = int(eq.get("offset") or 0)
-    if offset > size:  # the file was replaced: start over
-        eq.update(offset=0, peak=None, last=None, last_at=None)
+    if offset > size:  # smaller than what was read: compacted, or replaced (a fresh simulator)
+        first = _first_at(path)
+        # compaction keeps the first hour: the same file, and the peak since the same basis still stands
+        same = bool(first and eq.get("first_at") and first[:13] == str(eq["first_at"])[:13])
+        eq.update(offset=0, last=None, last_at=None, **({} if same else {"peak": None}))
         offset = 0
+    if offset == 0:
+        eq["first_at"] = _first_at(path)
     basis_ts = market_clock.ts(basis) if basis else None
     with path.open("rb") as fh:
         fh.seek(offset)

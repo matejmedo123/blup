@@ -144,6 +144,9 @@ def _fetch(sym, interval: str, days: float, now_ts: int, asset: str) -> tuple:
     return data._clean(raw, step, now_ts, now_ts - int(days * 86400)), "Binance"
 
 
+STORE_SLACK_DAYS = 30
+
+
 def history(sym, interval: str, days: float, now_ts: int, asset: str = "crypto") -> tuple:
     """(candles, source) for the last ``days`` — reuses the local copy and fetches only the new tail."""
     step = market_clock.interval_seconds(interval)
@@ -172,8 +175,13 @@ def history(sym, interval: str, days: float, now_ts: int, asset: str = "crypto")
         rows = [[c.t, c.o, c.h, c.l, c.c, c.v] for c in candles]
         doc["source"], doc["from"] = source, start_ts
     rows = sorted((r for r in rows if r[0] + step <= now_ts), key=lambda r: r[0])
+    since = min(int(doc.get("from") or start_ts), start_ts)
+    if step < 86400 and since < start_ts - STORE_SLACK_DAYS * 86400:
+        # intraday bars older than any run asks for are dropped — a year of 5-min bars is rewritten every week
+        since = start_ts - STORE_SLACK_DAYS * 86400
+        rows = [r for r in rows if r[0] >= since]
     state.write_json(_store_name(sym, interval), {"symbol": sym.key, "interval": interval, "source": doc["source"],
-                                                  "from": min(int(doc.get("from") or start_ts), start_ts),
+                                                  "from": since,
                                                   "updated_at": market_clock.iso(now_ts), "candles": rows})
     return [Candle(*r) for r in rows if r[0] >= start_ts], doc["source"]
 
