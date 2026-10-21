@@ -20,7 +20,8 @@ KNOWN_COINS = {
     "1000PEPE", "1000BONK", "1000SHIB", "BOME", "POPCAT", "MEW", "PENGU", "FARTCOIN", "VIRTUAL",
 }
 STABLECOINS = {"USDT", "USDC", "BUSD", "FDUSD", "DAI", "TUSD", "USDE", "PYUSD", "USDD", "USDS", "EURC",
-               "USD1", "USDP", "GUSD", "FRAX", "LUSD", "RLUSD", "USDTB", "USDF"}
+               "USD1", "USDP", "GUSD", "FRAX", "LUSD", "RLUSD", "USDTB", "USDF", "USDG", "USD0", "AUSD",
+               "BFUSD", "USDX", "USDQ", "EURI"}
 WRAPPED = {"WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "RETH", "WBETH", "BTCB", "WSOL",
            "JITOSOL", "MSOL", "BSOL", "SUSDE", "LBTC", "SOLVBTC", "EZETH", "RSETH"}
 QUOTES = ("FDUSD", "USDT", "USDC", "BUSD", "USD", "EUR", "BTC", "ETH")

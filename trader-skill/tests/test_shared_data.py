@@ -57,6 +57,13 @@ class Parsers(unittest.TestCase):
     def test_coingecko_drops_stables_and_wrapped(self):
         rows = coingecko.parse_markets([{"symbol": "usdt"}, {"symbol": "btc", "name": "Bitcoin"}, {"symbol": "wbtc"}])
         self.assertEqual([r["symbol"] for r in rows], ["BTC"])
+        # a dollar stablecoin missing from the list is still caught: $1, flat, named like one
+        rows = coingecko.parse_markets([
+            {"symbol": "usdz", "name": "Zeta Dollar", "current_price": 0.9998, "price_change_percentage_24h": 0.01},
+            {"symbol": "usdg", "name": "Global Dollar", "current_price": 1.0, "price_change_percentage_24h": 0.0},
+            {"symbol": "abc", "name": "Abc", "current_price": 1.01, "price_change_percentage_24h": 0.2},
+            {"symbol": "usual", "name": "Usual", "current_price": 1.0, "price_change_percentage_24h": 6.5}])
+        self.assertEqual([r["symbol"] for r in rows], ["ABC", "USUAL"])
 
     def test_dexscreener_normalize(self):
         p = dexscreener.normalize_pair({"chainId": "solana", "pairAddress": "P", "priceUsd": "0.5",

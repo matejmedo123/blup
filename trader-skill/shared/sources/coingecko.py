@@ -8,11 +8,21 @@ NAME = "CoinGecko"
 BASE = "https://api.coingecko.com/api/v3"
 
 
+def _dollar_peg(r: dict, sym: str) -> bool:
+    """A dollar stablecoin the list does not know yet: priced at $1, barely moving, named like one."""
+    name = str(r.get("name") or "").lower()
+    try:
+        return (0.97 <= float(r.get("current_price")) <= 1.03 and abs(float(r.get("price_change_percentage_24h") or 0)) < 1.0
+                and ("usd" in sym.lower() or "usd" in name or "dollar" in name))
+    except (TypeError, ValueError):
+        return False
+
+
 def parse_markets(rows) -> list:
     out = []
     for r in rows or []:
         sym = str(r.get("symbol") or "").upper()
-        if not sym or sym in STABLECOINS or sym in WRAPPED:
+        if not sym or sym in STABLECOINS or sym in WRAPPED or _dollar_peg(r, sym):
             continue
         out.append({
             "id": r.get("id"), "symbol": sym, "name": r.get("name") or sym,
