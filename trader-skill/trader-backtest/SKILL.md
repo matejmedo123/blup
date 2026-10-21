@@ -67,6 +67,11 @@ python3 "${CLAUDE_SKILL_DIR}/lab.py" --fee-bps 25                     # e.g. Alp
 * The report also shows the highest *win chance* each setup can reach and what it earned — usually a
   lot of small wins and a loss overall — and an overfitting check: how many per-coin "best settings"
   survived the latest period.
+* **Letting winners ride:** for setups with a runner rule (trend breakout) the lab also trades every
+  out-of-sample period a second way — a winner above its 200-day average sells a third at the exit rule
+  and keeps two thirds until a daily close below the 50-day EMA, stop at the buy price — and reports
+  whether that paid ("✓ let winners ride: … added +0.44R per trade, profit chance 93 % → 92 %"). The
+  verdict goes into the playbook; the autopilot lets winners ride only while it says yes.
 * Validated combinations go to `trader/backtests/playbook.json` (valid 14 days). The autopilot trades
   crypto **only** from it, with those exits, and sizes by certainty: profit chance ≥ 90 % → risk × 2,
   ≥ 80 % → × 1.5, ≥ 70 % → × 1, lower → × 0.5 (a boost needs ≥ 30 unseen trades; `limits.json` caps

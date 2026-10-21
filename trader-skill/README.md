@@ -238,8 +238,8 @@ strategies on the 10 biggest coins, 5 positions, up to 25 % of equity in one coi
 after 7 losses in a row (at a 35 % win rate seven in a row happen by chance ≈ 5 % of the time, three
 ≈ 27 %), and the bot pauses at a
 −35 % drawdown — just past the worst drop of eight years of history. Dollar limits stay as a backstop at
-4× the account; the % limits grow with it. It never touches the broker, live mode, keys or
-`autopilot.enabled`.
+4× the account; the % limits grow with it. It also lets winners ride (below; `--no-runner` turns that
+off). It never touches the broker, live mode, keys or `autopilot.enabled`.
 
 **€1,000 with the bot's own rules** (2 % risk, BTC 200-day switch, 10 biggest coins, costs and 10 %/yr
 borrowing cost included — the past, not a forecast):
@@ -257,6 +257,58 @@ stocks stay at 1×; on BTC + ETH alone leverage adds nothing (+15 %/yr, −16 %)
 here only because a tight stop sometimes wants a bigger position than the cash allows. The 10 biggest
 coins are picked with today's knowledge, which flatters the past. Not modelled: the bot also trades
 only the coin + setup pairs the lab validated and halves the size where it is less sure.
+
+### Let winners ride — sell a third, keep two thirds while the coin keeps rising
+
+When a trend breakout's exit rule fires (a daily close below the 10-day low) **and the trade is in profit
+and the coin is still above its 200-day average**, the bot sells only a third. Two thirds stay in until the
+trend itself breaks — a daily close below the 50-day EMA — and their stop moves to the buy price, so that
+part can no longer turn into a loss. A loser, or a coin below its 200-day average, is sold in full as
+before. The bot says what it holds and what it will do next in plain words (`autopilot.py status`, the
+dashboard's position cards, the phone notification), and it books the sold third and the riding two
+thirds as two journal trades.
+
+How it was chosen: 10 ways to do it (a third / half / two thirds × until the 20-day EMA / 50-day EMA /
+100-day average, or not at all) were compared on the 10 biggest coins **from mid-2018 to the end of 2022
+only**, by growth per unit of worst drop. The winner was then checked where nobody looked while choosing:
+
+| Check (median of 30 random signal orders) | Sell everything | Two thirds ride |
+|---|---|---|
+| 10 biggest coins, 2023 → now | €2,375 · drop −29 % | €2,487 · drop −28 % |
+| 33 other coins, mid-2018 → now | €7,728 · drop −58 % | €9,351 · drop −50 % |
+| 33 other coins, 2023 → now | €3,372 · drop −55 % | €3,579 · drop −50 % |
+| BTC + ETH only, mid-2018 → now | €4,732 · drop −18 % | €4,924 · drop −18 % |
+| The lab's own walk-forward (top 10 by volume, 2018–2026) | +0.97R per trade, 93 % profit chance | +1.42R, 92 % — better in all 3 periods |
+
+Every week the lab re-checks it on unseen periods; when riding on stops paying (more R per trade without
+costing more than 3 points of profit chance), the bot goes back to selling everything by itself
+(`autopilot.runner.require_lab`).
+
+**€1,000, profile + two thirds ride** (10 biggest coins, 2 % risk, median of 30 signal orders — the order
+of same-day signals alone moves a result by ±20 %):
+
+| | Sell everything 1× | Two thirds ride 1× | Two thirds ride 1.5× | worst drop |
+|---|---|---|---|---|
+| Since 1 Jan 2020 | €12,092 | €38,444 (+71 %/yr) | €42,567 | −29 % → −47 % |
+| Since 1 Jan 2022 | €2,375 | €2,487 (+21 %/yr) | €2,803 | −29 % → −28 % |
+| Last 3 years | €1,699 | €1,773 (+21 %/yr) | €1,914 | −29 % → −28 % |
+| Last 12 months | €1,079 | €1,126 | €1,165 | −6 % → −7 % |
+
+Year by year (1×, median): 2019 +18 → +20 %, 2020 +95 → +106 %, **2021 +179 → +649 %**, 2022 −1 → −1 %,
+2023 +54 → +68 %, 2024 +45 → +33 %, 2025 −6 → 0 %, 2026 so far +4 → +5 %. Most of the extra money came
+from one euphoric year; it gives part of such a run back before the 50-day EMA breaks, which is why the
+worst drop since 2020 grows to −47 %. In quieter years it adds a little.
+
+**What to expect, start on any week since mid-2018** (two thirds ride, 1×; 382 one-year and 278
+three-year windows):
+
+| After | Typical | 1 year in 10 is worse than | 1 in 10 is better than | In profit |
+|---|---|---|---|---|
+| 1 year | €1,210 | €957 | €4,915 | 80 % of starts |
+| 3 years | €3,117 | €1,819 | €17,979 | 100 % of starts |
+
+The typical year is about +20 %; the averages are pulled up by rare years like 2021. On BTC + ETH alone
+the typical year is +10 % (3 years: €1,545) with drops under −20 %.
 
 In short: a high *win chance* is easy and loses money; the edge that survives is the oldest one in
 crypto — follow Bitcoin's trend and let the few big winners run. 40 % of its trades win, but the

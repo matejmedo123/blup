@@ -478,12 +478,13 @@
       var unit = p.qty_unit || (p.asset === 'stock' ? 'sh' : '');
       return h('div', { class: 'row' },
         h('div', { class: 'title' }, st(ASSET_LABEL[p.asset] ? p.asset : 'pos', p.asset === 'meme' ? 'purple' : 'blue'),
-          h('span', { class: 'sym', text: p.symbol || '?' })),
+          h('span', { class: 'sym', text: p.symbol || '?' }), p.riding ? st('riding the trend', 'green') : null),
         h('div', { class: 'right' }, h('div', { class: 'big ' + tone(p.unrealized_pl), text: money(p.unrealized_pl, true) }),
           h('div', { class: 'sm', text: 'last ' + price(p.last) })),
         h('div', { class: 'detail', text: qty(p.qty, unit === 'usd' ? 'usd' : unit) + ' @ ' + price(p.avg_entry) +
           (p.stop ? ' · stop ' + price(p.stop) : '') + (p.target ? ' · target ' + price(p.target) : '') +
-          (p.opened_at ? ' · since ' + hm(p.opened_at) : '') }));
+          (p.opened_at ? ' · since ' + hm(p.opened_at) : '') }),
+        p.story ? h('div', { class: 'detail', text: p.story }) : null);
     }));
   }
 

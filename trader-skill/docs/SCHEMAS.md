@@ -687,3 +687,42 @@ max_drawdown_pct: 35}`; limits — crypto `max_open_positions 5`, `max_position_
 `allow_leverage`/`max_leverage`, stock `allow_margin`/`max_leverage`, `max_risk_per_trade_pct = risk`,
 `max_daily_loss_pct = 5 × risk` (crypto, stock, global) and dollar backstops at 4× the account. Risk is 0–5 %,
 leverage 1–2. Never touches `broker`, `mode`, `paper`, `live_confirmation`, keys or `autopilot.enabled`.
+
+## v3.3 — let winners ride (sell a third, keep two thirds while the trend lasts)
+
+### Setup rule (`shared/setups.py`)
+`trend_breakout` carries `"runner": {"keep": 0.67, "min_sma": 200, "exit_rule": {"type": "close_below_ema", "n": 50,
+"max_bars": 250, "text", "short"}}`; `setups.runner(setup)` returns it, `setups.keep_text(0.67)` → "two thirds".
+
+### `config.json` additions
+```json
+"autopilot": {"runner": {
+  "enabled": false,      // let part of a winner ride (the trend profile turns it on; --no-runner keeps it off)
+  "require_lab": true,   // only while the latest lab run found that riding on paid on unseen periods
+  "keep": null           // share that stays in (default: the setup's 0.67)
+}}
+```
+
+### Lab (`trader-backtest/lab.py`)
+`rule_trades` adds `RUNNER_KEY` next to `RULE_KEY` for setups with a runner rule: the net R of the whole trade when,
+after the exit rule fired in profit above the `min_sma`-day average, `keep` of it stayed in until the runner's rule,
+its stop at the buy price (a stop-out or a losing trade is unchanged). `choose()` never picks it. Each family gains
+`"runner": {"keep", "min_sma", "exit_rule", "test" (stats with riding, the same out-of-sample periods),
+"test_without", "gain_r", "helps", "why", "folds": [{"without_r", "with_r"}]}` — `helps` = more R per trade and at
+most 3 points less profit chance. Per-coin rows gain `"runner"` stats; playbook entries gain
+`"runner": {"keep", "min_sma", "exit_rule", "helps", "why", "gain_r", "test"}`.
+
+### Plans, book items, journal
+Plans gain `"runner"` (`null` or `{"keep", "min_sma", "exit_rule" (+ "interval": "1d"), "status": "planned", "lab"}`)
+and `"runner_note"`; the decision gets a gate `"let winners ride"` saying why it will or will not. Book items carry
+`"runner"`, `"setup"` and `"entry_plan"`. When the exit rule fires: `ride_check` (in profit after round-trip costs,
+coin above its `min_sma`-day average, the position splits into lot-sized parts) → `sell_part` (cancel the
+protective stop, market-sell `1 − keep`) → `start_ride` on the fill: the journal trade is closed for the sold
+quantity (`"runner": {"part": "sold", "of_qty"}`) and a new open trade `<id>-ride` holds the rest
+(`"runner": {"part": "ride", "from"}`, stop at the buy price); the book item switches to the runner's exit rule,
+stop = buy price, target = entry + 100R, time stop = now + `max_bars` days, and a new protective stop for the rest.
+`runner.status`: `planned` → `selling` → `riding` (or `skipped` with the reason in the exit note, or `failed` →
+everything is sold next cycle). A sale that a real broker fills later is picked up by `reconcile`; one not seen
+within 30 minutes counts as failed. The ride's rule only looks at bars that closed after the ride started.
+`adapt` judges a ride together with the trade it came from (`part: "ride"` trades are not counted on their own).
+`broker/positions.json` rows gain `"story"` (plain words: what is held, what happens next) and `"riding"`.

@@ -63,6 +63,9 @@ DEFAULT_CONFIG = {
             "exclude": [],
         },
         "scan_time_budget_sec": 40,
+        # let part of a winner ride (setups with a runner rule): off unless you turn it on; by default only while
+        # the latest lab run found that it paid on periods nobody tuned on
+        "runner": {"enabled": False, "require_lab": True, "keep": None},
         "playbook": {"required_for_crypto": True, "max_age_days": 14, "auto_refresh_days": 7, "top": 25,
                      "min_target_r": 0, "confidence_sizing": True, "max_risk_mult": 2.0,
                      "max_risk_pct": None, "setups": None, "timeframes": None,

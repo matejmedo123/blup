@@ -121,6 +121,10 @@ def _write_broker_files(broker, acct, positions, orders, book, realized_today):
     by_symbol = {it["symbol"]: pid for pid, it in book["items"].items() if it["status"] in ("pending", "open")}
     for p in positions:
         p["plan_id"] = by_symbol.get(p["symbol"])
+        if p["plan_id"]:
+            it = book["items"][p["plan_id"]]
+            p["story"] = position_story(it)
+            p["riding"] = (it.get("runner") or {}).get("status") == "riding"
     state.write_json("broker/positions.json", positions)
     state.write_json("broker/orders.json", orders[-200:])
     unreal = sum(float(p.get("unrealized_pl") or 0) for p in positions)
@@ -235,6 +239,25 @@ def reconcile(broker, book: dict, positions: list, orders: list, cfg: dict, limi
                 actions.append("entry for %s not filled within %d min — cancelled so a late fill can't happen"
                                % (it["symbol"], STALE_ENTRY_BARS * step // 60))
         elif it["status"] == "open":
+            ride = it.get("runner") or {}
+            if ride.get("status") == "selling":
+                o = _find(orders, ride.get("sell_order_id"))
+                if o and o.get("status") == "filled":
+                    actions += start_ride(broker, it, o, cfg)
+                elif (o and o.get("status") in ("canceled", "expired", "rejected")) or (
+                        not o and now.timestamp() - market_clock.ts(ride.get("asked_at") or it["placed_at"]) > 6 * step):
+                    # its protective stop is already cancelled, so sell everything now rather than wait
+                    ride["status"] = "failed"
+                    what = o["status"] if o else "not seen at the broker after %d min" % (6 * step // 60)
+                    it["exit_note"] = (it.get("exit_note") or "exit rule") + " · the partial sale was %s" % what
+                    it["exit_reason"], it["stop_order_id"] = "rule", None
+                    try:
+                        broker.close_position(it["symbol"])
+                        actions.append("partial sale of %s %s — sold everything instead" % (it["symbol"], what))
+                    except BrokerError as exc:
+                        actions.append("partial sale of %s %s and closing failed (%s) — the bot watches the stop"
+                                       % (it["symbol"], what, exc))
+                continue
             p = pos_by.get(it["symbol"])
             if p and float(p.get("qty") or 0) > 1e-9:
                 continue
@@ -278,7 +301,8 @@ def rule_exit_due(it: dict) -> str:
         bars = data.get_candles(it["data_key"], interval, days=need * step / 86400.0, asset="crypto").candles
     except (data.DataUnavailable, ValueError, KeyError):
         return ""
-    if len(bars) <= n or bars[-1].t + step <= market_clock.ts(it.get("filled_at") or it["placed_at"]):
+    since = (it.get("runner") or {}).get("since") or it.get("filled_at") or it["placed_at"]
+    if len(bars) <= n or bars[-1].t + step <= market_clock.ts(since):
         return ""
     closes = [b.c for b in bars]
     if not setups.rule_says_exit(rule, closes, len(closes) - 1):
@@ -293,13 +317,153 @@ def rule_exit_due(it: dict) -> str:
         setups.bar_label(interval), fmt.price(closes[-1]), n, fmt.price(min(closes[-n - 1:-1])))
 
 
-def manage_exits(broker, book: dict, positions: list, orders: list) -> list:
+# --- letting part of a winner ride ----------------------------------------------------------------------
+
+def ride_check(it: dict, p: dict, cfg: dict = None) -> tuple:
+    """(ok, why not): may part of this position ride on now that its exit rule fired?"""
+    ride = it.get("runner") or {}
+    cfg = cfg or config.load_config()
+    c = (cfg.get("costs") or {}).get(it["asset"]) or {}
+    round_trip = 2 * (float(c.get("fee_bps") or 0) + float(c.get("slippage_bps") or 0)) / 10000.0
+    entry = float(it.get("entry_fill") or it.get("entry_plan") or 0)
+    last = float(p.get("last") or 0)
+    if not entry or last <= entry * (1 + round_trip):
+        return False, "not in profit after costs (%s vs entry %s)" % (fmt.price(last), fmt.price(entry))
+    n = int(ride.get("min_sma") or 200)
+    try:
+        bars = data.get_candles(it["data_key"], "1d", days=n + 20, asset=it["asset"]).candles
+    except (data.DataUnavailable, ValueError, KeyError) as exc:
+        return False, "no daily prices to check the %d-day average (%s)" % (n, exc)
+    closes = [b.c for b in bars]
+    if len(closes) < n:
+        return False, "only %d daily closes — the %d-day average needs %d" % (len(closes), n, n)
+    avg = sum(closes[-n:]) / float(n)
+    if closes[-1] <= avg:
+        return False, "the coin is below its %d-day average (%s ≤ %s) — no trend left to ride" % (
+            n, fmt.price(closes[-1]), fmt.price(avg))
+    step = data.lot_info(data.as_symbol(it["data_key"], it["asset"])).get("step") or 0.000001
+    floor_to = _mod("trader-sizer", "size").floor_to
+    sell = floor_to(float(it["qty"]) * (1 - float(ride["keep"])), step)
+    keep = round(float(it["qty"]) - sell, 10)
+    if sell <= 0 or keep <= 0:
+        return False, "the position is too small to split (%s)" % fmt.qty(it["qty"])
+    ride.update(sell_qty=sell, keep_qty=keep)
+    return True, None
+
+
+def sell_part(broker, it: dict, orders: list, cfg: dict = None) -> list:
+    """Sell the part that leaves now; the rest rides on with its stop at the buy price."""
+    ride = it["runner"]
+    for o in orders:  # the protective stop covers the whole position — a new one comes for the part that stays
+        if o.get("symbol") == it["symbol"] and o.get("status") in ("new", "held", "accepted", "pending_new"):
+            try:
+                broker.cancel(o["id"])
+            except BrokerError:
+                pass
+    try:
+        o = broker.place_exit(it["symbol"], ride["sell_qty"], "market", client_order_id=it["order_id"] + "-part",
+                              asset=it["asset"])
+    except BrokerError as exc:
+        ride["status"] = "failed"
+        it["exit_note"] = it.get("exit_note", "") + " · could not sell part (%s) — selling everything" % exc
+        return ["could not sell part of %s: %s — closing all of it" % (it["symbol"], exc)]
+    ride.update(status="selling", sell_order_id=o.get("id"), asked_at=market_clock.iso(market_clock.now_utc()))
+    if o.get("status") == "filled":
+        return start_ride(broker, it, o, cfg)
+    return ["%s: selling %s of %s — %s will ride on" % (it["symbol"], setups.keep_text(1 - ride["keep"]),
+                                                       fmt.qty(it["qty"]), setups.keep_text(ride["keep"]))]
+
+
+def start_ride(broker, it: dict, sold: dict, cfg: dict = None) -> list:
+    """The partial sale filled: book it as its own closed trade, keep the rest as a new open trade."""
+    cfg = cfg or config.load_config()
+    journal = _mod("trader-journal", "journal")
+    ride = it["runner"]
+    sold_qty = float(sold.get("filled_qty") or ride["sell_qty"])
+    keep_qty = round(float(it["qty"]) - sold_qty, 10)
+    price = float(sold.get("filled_avg_price") or 0)
+    at = sold.get("filled_at") or market_clock.iso(market_clock.now_utc())
+    entry = float(it.get("entry_fill") or it.get("entry_plan"))
+    first = journal.get_trade(it.get("trade_id"))
+    rest = None
+    if first:
+        rest = copy.deepcopy(first)
+        first["qty"] = sold_qty
+        journal.finalize(first, cfg, price, at, "rule")
+        first["exit"]["broker_order_id"] = sold.get("id")
+        first["runner"] = {"part": "sold", "of_qty": float(it["qty"])}
+        first["notes"] = (first.get("notes") or "") + " · " + (it.get("exit_note") or "exit rule") + \
+            " · sold %s; %s ride on as %s" % (setups.keep_text(1 - ride["keep"]), setups.keep_text(ride["keep"]),
+                                              first["id"] + "-ride")
+        journal.save_trade(first)
+        rest.update(id=first["id"] + "-ride", qty=keep_qty, stop=max(float(rest.get("stop") or 0), entry),
+                    runner={"part": "ride", "from": first["id"]},
+                    notes="the %s left riding the trend after %s; stop at the buy price" % (
+                        setups.keep_text(ride["keep"]), first["id"]))
+        journal.save_trade(rest)
+    rpu = float((first or {}).get("risk_per_unit") or 0) or (entry - float(it["stop"]))
+    days = int(ride["exit_rule"].get("max_bars") or 250)
+    now = market_clock.now_utc()
+    ride.update(status="riding", since=at, sold_qty=sold_qty, sold_price=price, sold_at=at,
+                sold_r=round((price - entry) / rpu, 2) if rpu > 0 else None, part_trade_id=(first or {}).get("id"))
+    it.update(qty=keep_qty, trade_id=(rest or {}).get("id", it.get("trade_id")), stop=max(float(it["stop"]), entry),
+              exit_rule=ride["exit_rule"], target=round(entry + RIDE_TARGET_R * rpu, 10) if rpu > 0 else it["target"],
+              time_stop=market_clock.iso(now.timestamp() + days * 86400))
+    it.pop("exit_note", None)
+    acts = ["%s: sold %s at %s (%s) — %s ride on until %s, stop moved to the buy price %s" % (
+        it["symbol"], fmt.qty(sold_qty), fmt.price(price), fmt.r(ride["sold_r"]), fmt.qty(keep_qty),
+        ride["exit_rule"]["short"], fmt.price(it["stop"]))]
+    if it["asset"] == "crypto":
+        try:
+            so = broker.place_stop(it["symbol"], keep_qty, it["stop"], client_order_id=it["order_id"] + "-ride-stop",
+                                   asset="crypto")
+            it["stop_order_id"] = so.get("id")
+        except BrokerError as exc:
+            it["stop_order_id"] = None  # the bot itself watches the stop until a new order goes in
+            acts.append("could not place the new stop for %s: %s — the bot watches it" % (it["symbol"], exc))
+    notify.send("trade_closed", "%s: sold %s %s, %s ride on" % (
+        it["symbol"], setups.keep_text(1 - ride["keep"]), fmt.r(ride["sold_r"]), setups.keep_text(ride["keep"])),
+        position_story(it), cfg)
+    return acts
+
+
+def position_story(it: dict) -> str:
+    """What the bot holds and what it will do next — in plain words."""
+    ride = it.get("runner") or {}
+    entry = it.get("entry_fill") or it.get("entry_plan")
+    head = "%s %s bought at %s (%s)." % (fmt.qty(it.get("qty")), it.get("symbol"), fmt.price(entry),
+                                         it.get("setup") or "setup")
+    if ride.get("status") == "riding":
+        return ("%s Sold %s at %s (%s) on %s. The rest rides the trend: it is sold at the %s, and the stop sits at "
+                "the buy price %s, so this part can no longer turn into a loss." % (
+                    "%s %s left of a trend trade bought at %s." % (fmt.qty(it.get("qty")), it.get("symbol"),
+                                                                    fmt.price(entry)),
+                    fmt.qty(ride.get("sold_qty")), fmt.price(ride.get("sold_price")), fmt.r(ride.get("sold_r")),
+                    str(ride.get("sold_at") or "")[:10], (ride.get("exit_rule") or {}).get("text"),
+                    fmt.price(it.get("stop"))))
+    rule = it.get("exit_rule") or {}
+    parts = [head, "Stop %s." % fmt.price(it.get("stop"))]
+    if rule:
+        parts.append("Sells at the %s." % rule.get("text"))
+    else:
+        parts.append("Target %s, time stop %s." % (fmt.price(it.get("target")), str(it.get("time_stop") or "")[:16]))
+    if ride.get("status") == "planned":
+        parts.append("If that comes in profit while the coin is above its %d-day average, it sells only %s and lets "
+                     "%s ride until the %s." % (int(ride.get("min_sma") or 200), setups.keep_text(1 - ride["keep"]),
+                                                setups.keep_text(ride["keep"]), (ride.get("exit_rule") or {}).get("text")))
+    if ride.get("status") == "selling":
+        parts.append("Selling %s now; %s will ride on." % (setups.keep_text(1 - ride["keep"]),
+                                                          setups.keep_text(ride["keep"])))
+    return " ".join(parts)
+
+
+def manage_exits(broker, book: dict, positions: list, orders: list, cfg: dict = None) -> list:
     """Time stops for everything; target/stop management for crypto (Alpaca has no crypto brackets); exit rules."""
     actions = []
     now_ts = market_clock.now_utc().timestamp()
     pos_by = {p["symbol"]: p for p in positions}
     for it in book["items"].values():
-        if it["status"] != "open":
+        if it["status"] != "open" or (it.get("runner") or {}).get("status") == "selling":
             continue
         p = pos_by.get(it["symbol"])
         if not p:
@@ -319,6 +483,15 @@ def manage_exits(broker, book: dict, positions: list, orders: list) -> list:
                 it["exit_note"] = "exit rule: " + why
         if not reason:
             continue
+        if reason == "rule" and (it.get("runner") or {}).get("status") == "planned":
+            ok, why_not = ride_check(it, p, cfg)
+            if ok:
+                actions += sell_part(broker, it, orders, cfg)
+                if (it.get("runner") or {}).get("status") != "failed":
+                    continue
+            else:
+                it["runner"]["status"] = "skipped"
+                it["exit_note"] += " · sold everything: " + why_not
         for o in orders:
             if o.get("symbol") == it["symbol"] and o.get("status") in ("new", "held", "accepted", "pending_new"):
                 try:
@@ -382,6 +555,7 @@ def watched(cfg: dict, broker=None, now=None) -> tuple:
 
 SERIES_HISTORY_DAYS = {"1h": 12, "4h": 45, "1d": 300}   # enough closed bars for the 200-bar averages
 RULE_TARGET_CAP_R = 10.0   # rule-exit plans still carry a target (brackets, gates); it is far away on purpose
+RIDE_TARGET_R = 100.0      # the part that rides on has no real target — the trend decides
 
 
 def add_playbook_coins(uni: dict, pbs: dict, cfg: dict, limits: dict, broker=None) -> list:
@@ -635,11 +809,37 @@ def make_plan(c: dict, cfg: dict) -> dict:
             "exit_rule": dict(rule, interval=interval) if rule else None}
     if rule:
         plan["target"]["note"] = "a far cap — the exit rule decides: %s" % rule.get("text")
+    plan["runner"], plan["runner_note"] = runner_plan(c, cfg)
     doc = state.read_json("plan.json", {}) or {}
     doc.setdefault("plans", {})[plan["id"]] = plan
     doc.setdefault("latest", plan["id"])
     state.write_json("plan.json", doc)
     return plan
+
+
+def runner_plan(c: dict, cfg: dict) -> tuple:
+    """(runner, note): whether this trade will let part of a winner ride on, and why (not).
+
+    Only for setups with a runner rule, only when you turned it on (autopilot.runner.enabled), and — unless
+    you say otherwise — only when this week's lab run found that riding on paid on periods nobody tuned on.
+    """
+    ride = setups.runner(c["setup"])
+    rc = (cfg.get("autopilot") or {}).get("runner") or {}
+    if not ride:
+        return None, None
+    if not rc.get("enabled"):
+        return None, "let winners ride is off (autopilot.runner.enabled) — sells everything at the exit rule"
+    verdict = (c.get("playbook") or {}).get("runner")
+    if rc.get("require_lab", True) and not (verdict and verdict.get("helps")):
+        return None, ("the lab %s — sells everything at the exit rule" % (
+            "has not checked riding on yet" if not verdict else "says: " + verdict.get("why", "it did not pay")))
+    keep = float(rc.get("keep") or ride["keep"])
+    out = {"keep": keep, "min_sma": int(ride.get("min_sma") or 200),
+           "exit_rule": dict(ride["exit_rule"], interval="1d"), "status": "planned",
+           "lab": (verdict or {}).get("why")}
+    return out, "if the exit comes in profit while the coin is above its %d-day average: sell %s, %s ride on " \
+                "until %s" % (out["min_sma"], setups.keep_text(1 - keep), setups.keep_text(keep),
+                              ride["exit_rule"]["short"])
 
 
 def _ctx(args, cfg, limits):
@@ -831,6 +1031,8 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
                       "detail": "risk × %g — %s%s" % (conf, conf_why, " (limits.json still caps it)" if conf > 1
                                                        else "")})
     mult *= conf
+    if plan.get("runner_note"):
+        gates.append({"name": "let winners ride", "ok": True, "detail": plan["runner_note"]})
     lev, lev_why = config.leverage(cfg, limits, asset, broker.name)
     if lev_why:
         gates.append({"name": "leverage", "ok": True, "detail": lev_why})
@@ -888,7 +1090,8 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         "mode": broker.mode, "symbol": bsym, "data_key": sym.key, "asset": asset, "qty": order["qty"],
         "qty_unit": order.get("qty_unit"), "stop": order["stop_price"], "target": order["target_price"],
         "time_stop": plan["time_stop"]["at"], "status": "pending", "placed_at": market_clock.iso(now),
-        "exit_rule": plan.get("exit_rule"), "interval": plan.get("interval"), "leverage": lev}
+        "exit_rule": plan.get("exit_rule"), "interval": plan.get("interval"), "leverage": lev,
+        "runner": plan.get("runner"), "setup": c["setup"], "entry_plan": plan["entry"]["price"]}
     notify.send("trade_opened", "BUY %s %s (%s)" % (fmt.qty(order["qty"]), bsym, c["setup"]),
                 "%s. Risk %s%s. Desk GO, risk PASS%s." % (
                     text, fmt.money(order.get("risk_usd")), " (risk × %g)" % mult if abs(mult - 1) > 1e-9 else "",
@@ -1080,7 +1283,7 @@ def _cycle(approved=None) -> dict:
         _state(status="killed", message=msg, today=_today_summary(book, now, kill_reason), equity=line, **common)
         return {"status": "killed", "message": msg, "actions": actions, "errors": errors}
 
-    exits = manage_exits(broker, book, positions, orders)
+    exits = manage_exits(broker, book, positions, orders, cfg)
     if exits:
         actions += exits
         acct, positions, orders = sync()
@@ -1439,6 +1642,8 @@ def build_parser():
     p.add_argument("--stock-leverage", type=float, default=1.0, help="profile: stock margin, 1–2 (default 1 = none)")
     p.add_argument("--capital", type=float, help="profile: account size (default: config account_size)")
     p.add_argument("--write", action="store_true", help="profile: save the changes (default: show them only)")
+    p.add_argument("--no-runner", action="store_true",
+                   help="profile: sell the whole trend breakout at its exit (default: let two thirds of a winner ride)")
     return p
 
 
@@ -1448,7 +1653,7 @@ TREND_SETUPS = ["trend_ema", "trend_breakout"]
 MAX_PROFILE_RISK = 5.0
 
 
-def trend_profile(risk: float, lev: float, stock_lev: float, capital: float) -> tuple:
+def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, runner: bool = True) -> tuple:
     """(config changes, limits changes) for daily trend following on the biggest coins.
 
     Every number is what the portfolio backtest used. The learning rules are loosened to fit a strategy that
@@ -1464,7 +1669,7 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float) -> 
     backstop = lambda pct: round(capital * pct / 100.0 * 4)  # dollar limits bind only after the account grew 4×
     cfg = {"risk_per_trade_pct": risk, "account_size": capital,
            "leverage": {"crypto": lev, "stock": stock_lev},
-           "autopilot": {"sim_starting_cash": capital,
+           "autopilot": {"sim_starting_cash": capital, "runner": {"enabled": bool(runner)},
                          "playbook": {"top": 10, "setups": TREND_SETUPS, "timeframes": ["1d"], "max_risk_pct": risk},
                          "universe": {"crypto": {"top_n": 10}},
                          "adapt": {"loss_streak": 7, "symbol_loss_streak": 5, "min_trades": 20,
@@ -1501,8 +1706,13 @@ def _get(d: dict, dotted: str):
 
 def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
     c_cfg, c_lim = changes
-    lines = ["PROFILE · daily trend following on the 10 biggest coins · %g%% risk · crypto %g× · stocks %g×" % (
-        c_cfg["risk_per_trade_pct"], c_cfg["leverage"]["crypto"], c_cfg["leverage"]["stock"])]
+    lines = ["PROFILE · daily trend following on the 10 biggest coins · %g%% risk · crypto %g× · stocks %g×%s" % (
+        c_cfg["risk_per_trade_pct"], c_cfg["leverage"]["crypto"], c_cfg["leverage"]["stock"],
+        " · winners ride" if c_cfg["autopilot"]["runner"]["enabled"] else "")]
+    if c_cfg["autopilot"]["runner"]["enabled"]:
+        lines.append("Let winners ride: when a trend breakout's exit comes in profit while the coin is above its "
+                     "200-day average, the bot sells a third and lets two thirds ride until a daily close below the "
+                     "50-day EMA, with the stop moved to the buy price — only while this week's lab run says it pays.")
     for name, cur, ch in (("config.json", cfg, c_cfg), ("limits.json", limits, c_lim)):
         lines.append(name + ":")
         for key, new in _flat(ch).items():
@@ -1560,6 +1770,11 @@ def status_text(cfg: dict) -> str:
         lines.append("Learned: risk × %s%s%s · drawdown %.1f%%" % (
             learned.get("risk_mult", 1), " · paused " + ", ".join(paused) if paused else "",
             " · cooling " + ", ".join(cooling) if cooling else "", learned.get("drawdown_pct") or 0))
+    book = state.read_json(BOOK, {}) or {}
+    held = [it for it in (book.get("items") or {}).values() if it.get("status") == "open"]
+    if held:
+        lines.append("Holding:")
+        lines += ["  " + position_story(it) for it in held]
     t = st.get("today") or {}
     if t:
         lines.append("Today %s: %d opened · %d skipped · realized %s" % (
@@ -1670,7 +1885,7 @@ def main(argv=None) -> int:
         capital = float(args.capital or cfg.get("account_size") or 0)
         if capital <= 0:
             raise ValueError("--capital must be positive")
-        changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital)
+        changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital, not args.no_runner)
         if args.write:
             config.update_file("config.json", changes[0])
             config.update_file("limits.json", changes[1])

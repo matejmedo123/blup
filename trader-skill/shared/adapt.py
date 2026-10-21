@@ -48,6 +48,8 @@ def _closed_trades(now_ts: float) -> list:
     for t in (state.read_json("journal.json", {}) or {}).get("trades") or []:
         if t.get("source") != "autopilot" or t.get("status") != "closed":
             continue
+        if (t.get("runner") or {}).get("part") == "ride":  # judged with the trade it rode on from, like the backtest
+            continue
         at = (t.get("exit") or {}).get("time")
         r = _r(t)
         if not at or r is None:

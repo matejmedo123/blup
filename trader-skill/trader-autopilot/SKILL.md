@@ -116,7 +116,8 @@ Config (`trader/config.json → autopilot`): `universe` (`mode` auto|watchlist, 
 (watchlist mode), `setups` per asset, `gates` (`min_backtest_triggers`, `min_backtest_expectancy_r`,
 `min_tm_ev_r`, `tm_paths`, `max_trigger_age_bars`), `scan_time_budget_sec`, `playbook`
 (`required_for_crypto`, `max_age_days`, `auto_refresh_days`, `top`, `min_target_r`, `confidence_sizing`,
-`risk_tiers`, `max_risk_mult`, `max_risk_pct`, `boost_min_test_trades`, `setups`, `timeframes`), `news_gate`
+`risk_tiers`, `max_risk_mult`, `max_risk_pct`, `boost_min_test_trades`, `setups`, `timeframes`), `runner`
+(`enabled`, `require_lab`, `keep`), `news_gate`
 (`lookback_hours`, `critical_tags`, `major_tags`, `min_credibility`, `refresh_before_trade`), `adapt`
 (`min_trades`, `disable_below_r`, `cooldown_days`, `symbol_loss_streak`, `loss_streak`,
 `loss_streak_risk_mult`, `max_drawdown_pct`), `max_new_trades_per_day`, `flatten_on_kill`,
@@ -183,6 +184,16 @@ WantedBy=multi-user.target
   `broker/positions.json`, `broker/orders.json`, `broker/equity.jsonl`, `broker/log.jsonl`,
   `broker/sim.json` (simulator), `entries.json`, `plan.json`, `backtests/`, `timemachine/`, `desk/`,
   `orders.json`, `approvals.jsonl`, `journal.json`
+
+## Let winners ride
+
+With `autopilot.runner.enabled` (the trend profile turns it on), a trend breakout whose exit rule fires **in
+profit while the coin is above its 200-day average** is only partly sold: a third goes, two thirds stay until a
+daily close below the 50-day EMA, with the stop moved to the buy price. A loser or a coin below its 200-day average
+is sold in full. It only happens while this week's lab run found that it paid on unseen periods
+(`runner.require_lab`). `status` and the dashboard describe every open position in plain words — what was bought,
+where the stop is, what makes it sell and whether part of it is riding. When you present results, use those
+sentences; say that the sold third and the riding two thirds are two journal trades.
 
 ## Leverage and the trend profile
 

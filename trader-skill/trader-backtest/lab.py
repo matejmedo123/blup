@@ -60,6 +60,8 @@ TIMEFRAMES = {
     "1d": {"kind": "series", "horizons_h": (240,)},   # rule-exit setups: the exit is part of the rule, no grid
 }
 RULE_KEY = ("rule", 0.0, 0)
+RUNNER_KEY = ("runner", 0.0, 0)  # the same trades when part of a winner rides on (setups with a runner rule)
+RUNNER_MIN_CHANCE_DROP = 0.03     # riding on may lower the profit chance by at most this much
 TARGETS_R = (0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0)
 STOPS = (("auto", 1.5), ("atr", 1.0), ("atr", 1.5), ("atr", 2.0), ("atr", 3.0))
 ATR_LOOKBACK_BARS = 300
@@ -286,7 +288,7 @@ def choose(by_key: dict, objective: str, min_n: int, min_edge: float, min_target
     """Best exit on the given (train) trades: highest win chance among exits with an edge, or highest profit chance."""
     best, best_score = None, None
     for key, rs in by_key.items():
-        if len(rs) < min_n or (key[1] < min_target_r and key[0] != "rule"):
+        if key[0] == "runner" or len(rs) < min_n or (key[1] < min_target_r and key[0] != "rule"):
             continue
         s = stats(rs)
         if s["expectancy_r"] < min_edge:
@@ -336,6 +338,11 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
     closes = [c.c for c in candles]
     atrs = indicators.atr(candles)
     cache = {("ema", int(rule["n"])): indicators.ema(closes, int(rule["n"]))} if rule["type"] == "close_below_ema" else {}
+    ride = setups.runner(setup)
+    if ride:
+        rr = ride["exit_rule"]
+        cache[("ema", int(rr["n"]))] = indicators.ema(closes, int(rr["n"]))
+        trend = indicators.sma(closes, int(ride.get("min_sma") or 200))
     out, busy = [], -1
     for r in setups.series_signals(setup, candles, interval, context=context):
         i = r["trigger"]["index"]
@@ -345,7 +352,7 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
         stop = setups.rule_stop(setup, candles, i, r.get("levels") or {}, atrs[i])
         if stop <= 0 or stop >= entry:
             continue
-        px, j = None, i
+        px, j, how = None, i, "stop"
         for j in range(i + 1, min(len(candles), i + 1 + int(rule["max_bars"]))):
             b = candles[j]
             if b.o <= stop:
@@ -355,16 +362,71 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
                 px = stop
                 break
             if setups.rule_says_exit(rule, closes, j, cache):
-                px = b.c
+                px, how = b.c, "rule"
                 break
         else:
             if j == i + int(rule["max_bars"]):
-                px = candles[j].c
+                px, how = candles[j].c, "time"
         if px is None:
             break  # the last trade has not finished yet
-        out.append((candles[i].t + step, {RULE_KEY: trade_sim.net_r(entry, px, entry - stop, cost)}))
+        res = {RULE_KEY: trade_sim.net_r(entry, px, entry - stop, cost)}
+        if ride:
+            res[RUNNER_KEY] = res[RULE_KEY] if how == "stop" else \
+                _with_runner(ride, candles, closes, cache, trend, j, entry, stop, res[RULE_KEY], cost)
+        out.append((candles[i].t + step, res))
         busy = j
     return out
+
+
+def _with_runner(ride, candles, closes, cache, trend, j, entry, stop, r_main, cost):
+    """Net R of the whole trade when part of it rides on after the exit rule fired at bar j (price px).
+
+    Only a winner rides, and only while the coin is above its long average; the part left in leaves at
+    the first close that meets the runner's rule, or at the buy price (its stop moves there), or after
+    max_bars. A ride that has not finished yet is valued at the last close.
+    """
+    if r_main <= 0 or j < int(ride.get("min_sma") or 200) - 1 or closes[j] <= trend[j]:
+        return r_main
+    rule, keep = ride["exit_rule"], float(ride["keep"])
+    be = max(stop, entry)
+    rpx, k = None, j
+    for k in range(j + 1, min(len(candles), j + 1 + int(rule["max_bars"]))):
+        b = candles[k]
+        if b.o <= be:
+            rpx = b.o
+            break
+        if b.l <= be:
+            rpx = be
+            break
+        if setups.rule_says_exit(rule, closes, k, cache):
+            rpx = b.c
+            break
+    if rpx is None:
+        rpx = candles[k].c
+    return (1 - keep) * r_main + keep * trade_sim.net_r(entry, rpx, entry - stop, cost)
+
+
+def runner_verdict(setup: str, without: dict, ride_rs: list, folds: list) -> dict:
+    """Does letting part of a winner ride beat selling it all — on the walk-forward periods nobody tuned on?"""
+    ride = setups.runner(setup)
+    with_ = final_stats(ride_rs)
+    gain = with_["expectancy_r"] - without["expectancy_r"]
+    drop = without["profit_chance"] - with_["profit_chance"]
+    helps = gain > 0 and drop <= RUNNER_MIN_CHANCE_DROP
+    words = setups.keep_text(float(ride["keep"]))
+    if helps:
+        why = "keeping %s in until %s added %s per trade on unseen periods (%s → %s), profit chance %s → %s" % (
+            words, ride["exit_rule"]["short"], fmt.r(gain), fmt.r(without["expectancy_r"]), fmt.r(with_["expectancy_r"]),
+            fmt.pct(100 * without["profit_chance"], 0), fmt.pct(100 * with_["profit_chance"], 0))
+    elif gain <= 0:
+        why = "keeping %s in did not pay on unseen periods (%s per trade) — the bot sells everything" % (
+            words, fmt.r(gain))
+    else:
+        why = "keeping %s in added %s per trade but cut the profit chance by %s — the bot sells everything" % (
+            words, fmt.r(gain), fmt.pct(100 * drop, 0))
+    return {"keep": float(ride["keep"]), "min_sma": int(ride.get("min_sma") or 200), "exit_rule": ride["exit_rule"],
+            "test": with_, "test_without": without, "gain_r": round(gain, 3), "helps": helps, "why": why,
+            "folds": [{"without_r": round(a, 3), "with_r": round(b, 3)} for a, b in folds]}
 
 
 def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit_mod, cost: float,
@@ -402,9 +464,16 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
         return out
 
     folds, oos, oos_coin, best = [], [], {sym.key: [] for sym, _ in per_coin}, None
+    ride_oos, ride_coin, ride_folds = [], {sym.key: [] for sym, _ in per_coin}, []
     for i in range(k):
         train, test = pool(start_ts, bounds[i]), pool(bounds[i], bounds[i + 1])
         b = choose(train, args.objective, min_n, args.min_edge, args.min_target_r)
+        if b == RULE_KEY and RUNNER_KEY in test:
+            ride_oos += test[RUNNER_KEY]
+            ride_folds.append((stats(test.get(RULE_KEY, []))["expectancy_r"], stats(test[RUNNER_KEY])["expectancy_r"]))
+            for sym, trades in per_coin:
+                ride_coin[sym.key] += [res[RUNNER_KEY] for ts, res in trades
+                                       if bounds[i] <= ts < bounds[i + 1] and RUNNER_KEY in res]
         f = {"train_until": market_clock.iso(bounds[i]), "test_until": market_clock.iso(bounds[i + 1]),
              "exit": exit_label(b, setup) if b else None, "train": stats(train[b]) if b else None,
              "test": stats(test.get(b, [])) if b else None}
@@ -470,6 +539,10 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
                          "validated": not why,
                          "why": "; ".join(why) or "made money out of sample, including the latest period"})
     fam["validated_coins"] = [r["display"] for r in rows if r["validated"]]
+    fam["runner"] = runner_verdict(setup, oos_s, ride_oos, ride_folds) if (best == RULE_KEY and ride_oos) else None
+    for r in rows:
+        if fam["runner"] and ride_coin.get(r["symbol"]):
+            r["runner"] = stats(ride_coin[r["symbol"]])
     # the tempting alternative: tune every coin on its own — how much of that survives?
     picks = []
     for sym, _ in ([] if rule else per_coin):
@@ -586,6 +659,14 @@ def write_playbook(doc: dict, now) -> dict:
             "exit_rule": e.get("exit_rule"), "exit_text": e["text"],
             "test": {k: r["test"][k] for k in ("n", "win_rate", "expectancy_r", "profit_chance", "profit_factor")},
             "train": {k: r["train"][k] for k in ("n", "win_rate", "expectancy_r")}}
+        fam = next((f for f in doc.get("families") or []
+                    if f["setup"] == r["setup"] and f["timeframe"] == r["timeframe"]), {})
+        ride = fam.get("runner")
+        if ride:
+            entries["%s:%s@%s" % (r["symbol"], r["setup"], r["timeframe"])]["runner"] = {
+                "keep": ride["keep"], "min_sma": ride["min_sma"], "exit_rule": ride["exit_rule"], "helps": ride["helps"],
+                "why": ride["why"], "gain_r": ride["gain_r"],
+                "test": {k: ride["test"][k] for k in ("n", "win_rate", "expectancy_r", "profit_chance")}}
     pb = {"generated_at": doc["generated_at"],
           "valid_until": market_clock.iso(market_clock.ts(now) + PLAYBOOK_DAYS * 86400),
           "objective": doc["objective"], "costs": doc["costs"], "days": doc["days"],
@@ -639,6 +720,11 @@ def text(doc: dict) -> str:
             "✓" if f["validated"] else "·", name, f["exit"]["text"], per, _pct(f["test"]["win_rate"]),
             fmt.r(f["test"]["expectancy_r"]), _pct(f["test"]["profit_chance"]),
             "" if f["validated"] else "  — " + f["verdict"]))
+        if f.get("runner"):
+            ride = f["runner"]
+            lines.append("      %s let winners ride: %s (per period %s)" % (
+                "✓" if ride["helps"] else "✗", ride["why"],
+                " / ".join("%s → %s" % (fmt.r(x["without_r"]), fmt.r(x["with_r"])) for x in ride["folds"])))
     hw = sorted([f for f in doc["families"] if f["highest_win"]],
                 key=lambda f: -(f["highest_win"]["test"]["win_rate"] or 0))[:6]
     if hw:
@@ -701,7 +787,8 @@ def write_report(doc: dict):
         rows.append(("✓ held" if f["validated"] else "—", f["label"], f["timeframe"],
                      f["exit"]["text"] if f["exit"] else "—", per, _pct(te.get("win_rate")),
                      fmt.r(te.get("expectancy_r")) if te else "—", _pct(te.get("profit_chance")), te.get("n", "—"),
-                     ", ".join(f["validated_coins"]) or "—", f["verdict"]))
+                     ", ".join(f["validated_coins"]) or "—",
+                     f["verdict"] + (" · let winners ride: " + f["runner"]["why"] if f.get("runner") else "")))
     body += html.card("Each setup on all coins — walk-forward, out of sample", html.table(
         ["", "Setup", "Bars", "Latest exit", "Edge per period", "Win", "Edge", "Profit chance", "Trades",
          "Validated coins", "Verdict"], rows))

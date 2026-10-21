@@ -50,7 +50,14 @@ SETUPS = {
                        "cooldown": 1, "stop_atr": 3.0,
                        "exit_rule": {"type": "close_below_low", "n": 10, "max_bars": 60,
                                      "text": "first daily close below the lowest close of the previous 10 days, at "
-                                             "most 60 days", "short": "close < 10-day low (≤ 60 d)"}},
+                                             "most 60 days", "short": "close < 10-day low (≤ 60 d)"},
+                       # when that exit comes in profit while the coin is still above its 200-day average, sell a
+                       # third and let two thirds ride until the trend itself breaks — chosen on 2018–2022, it did
+                       # better on 2023–2026, on 33 other coins and on BTC + ETH alone
+                       "runner": {"keep": 0.67, "min_sma": 200,
+                                  "exit_rule": {"type": "close_below_ema", "n": 50, "max_bars": 250,
+                                                "text": "first daily close below the 50-day EMA (the trend is broken)",
+                                                "short": "close < 50-day EMA"}}},
     # the two strategies from the user's cheat sheet that held up on crypto, as exact rules
     "trend_ema": {"label": "Trend following (20 EMA above the 50 EMA, higher highs and higher lows, BTC above its "
                            "200-day average)", "assets": ("crypto",), "kind": "series", "intervals": ("1d",),
@@ -456,6 +463,19 @@ def regime_map(candles, n: int = 200) -> dict:
 
 def exit_rule(setup: str):
     return (SETUPS.get(setup) or {}).get("exit_rule")
+
+
+def runner(setup: str):
+    """The 'let part of a winner ride' rule of a setup, or None."""
+    return (SETUPS.get(setup) or {}).get("runner")
+
+
+def keep_text(keep: float) -> str:
+    """0.67 → 'two thirds', 0.5 → 'half' — how people say it."""
+    for value, words in ((1 / 3.0, "a third"), (0.5, "half"), (2 / 3.0, "two thirds"), (0.75, "three quarters")):
+        if abs(keep - value) < 0.02:
+            return words
+    return "%d %%" % round(100 * keep)
 
 
 def rule_says_exit(rule: dict, closes: list, j: int, cache: dict = None) -> bool:
