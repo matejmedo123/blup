@@ -10,6 +10,9 @@ each signal is matched with what the bot recorded under the same id (``autopilot
 * **missed** — the rules fired and the bot has no record of it (it was down, data failed) — a problem;
 * **extra** — the bot holds a daily trade the rules do not explain — a problem.
 
+Signals from before the bot's first cycle here (``autopilot/state.json`` ``started_at``) are left out: nobody was
+watching yet, so they cannot have been missed.
+
 The verdict is "ok" when nothing was missed or extra, no decision ended in an error, and the average entry
 slippage is within twice the costs the backtests assume. State lives in ``autopilot/shadow.json``.
 """
@@ -53,6 +56,9 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
     now = now or market_clock.now_utc()
     now_ts = int(market_clock.ts(now))
     start = now_ts - days * BAR
+    started = (state.read_json("autopilot/state.json", {}) or {}).get("started_at")
+    # a signal counts once the bot was there to see its bar close (an hour of slack for the first cycle)
+    since = max(start, int(market_clock.ts(started)) - 3600) if started else start
     memo = {} if memo is None else memo
     ap = (cfg or {}).get("autopilot") or {}
     etf_on = bool((ap.get("etf_trend") or {}).get("enabled"))
@@ -79,6 +85,8 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
             context = {"btc_up": btc} if setups.SETUPS[setup].get("needs_btc") else None
             for r in setups.series_signals(setup, bars, "1d", start_ts=start, context=context):
                 trig = r["trigger"]
+                if trig["t"] + BAR < since:
+                    continue
                 sid = setups.setup_id(sym.key, r["window"], setup)
                 seen.add(sid)
                 expected, why_not = True, None
@@ -112,7 +120,7 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
     for pid, it in book.items():
         if it.get("interval") != "1d" or pid in seen or not it.get("placed_at"):
             continue
-        if market_clock.ts(it["placed_at"]) < start + BAR:
+        if market_clock.ts(it["placed_at"]) < max(start + BAR, since):
             continue
         rows.append({"id": pid, "symbol": it.get("symbol"), "asset": it.get("asset"), "setup": it.get("setup"),
                      "signal_at": it.get("placed_at"), "outcome": "extra",
@@ -132,11 +140,13 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
             problems.append("SLIPPAGE %s: filled %.0f bps above the signal (backtest assumes ≤ %.0f)" % (
                 r["symbol"], r["slippage_bps"], allowed[r["asset"]] / 2 - 2.5))
     verdict = "ok" if not problems else "check"
-    text = ("%d signal(s) in %d days: %s" % (len(rows), days, ", ".join("%d %s" % (v, k) for k, v in sorted(count.items())))
-            if rows else "no daily signals in the last %d days" % days)
+    span = "%d days" % days if since <= start else "%d days (since the bot started %s)" % (
+        days, market_clock.iso(since + 3600)[:10])
+    text = ("%d signal(s) in %s: %s" % (len(rows), span, ", ".join("%d %s" % (v, k) for k, v in sorted(count.items())))
+            if rows else "no daily signals in the last %s" % span)
     if avg_slip is not None:
         text += " · average entry %+.1f bps from the signal" % avg_slip
-    doc = {"updated_at": market_clock.iso(now), "days": days, "verdict": verdict, "counts": count,
+    doc = {"updated_at": market_clock.iso(now), "days": days, "since": market_clock.iso(since), "verdict": verdict, "counts": count,
            "avg_slippage_bps": avg_slip, "problems": problems, "rows": rows, "notes": notes,
            "text": text + (" — %d problem(s)" % len(problems) if problems else " — the bot did what the rules say")}
     state.write_json(FILE, doc)

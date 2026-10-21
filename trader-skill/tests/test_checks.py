@@ -125,6 +125,15 @@ class BacktestVsReality(TraderTestCase):
         self.assertEqual(doc["verdict"], "check")
         self.assertIn("MISSED ETH", doc["problems"][0])
 
+    def test_signals_before_the_bot_started_are_not_missed(self):
+        signal_close = mc.ts(NOW) - 1800 - 5 * DAY
+        self.write_state("autopilot/state.json", {"started_at": mc.iso(signal_close + 2 * DAY)})  # started 2 days later
+        doc = shadow.run(self.cfg)
+        self.assertEqual((doc["rows"], doc["verdict"]), ([], "ok"))
+        self.assertIn("since the bot started", doc["text"])
+        self.write_state("autopilot/state.json", {"started_at": mc.iso(signal_close + 300)})  # its first cycle saw it
+        self.assertEqual([r["outcome"] for r in shadow.run(self.cfg)["rows"]], ["missed"])
+
     def test_taken_with_its_slippage_and_skipped_with_its_reason(self):
         self.write_state("autopilot/book.json", {"items": {self.sid: {
             "plan_id": self.sid, "symbol": "ETH/USD", "asset": "crypto", "interval": "1d", "status": "open",

@@ -783,12 +783,13 @@ summed P&L over the original risk. Wins count up to `cap_r`. A new alarm pauses 
 (`autopilot.check_health`) and notifies.
 
 ### `autopilot/shadow.json` — once a UTC day (housekeeping thread) and on `autopilot.py check`
-`{"updated_at", "days": 30, "verdict": "ok|check", "counts", "avg_slippage_bps", "problems": [...], "text",
+`{"updated_at", "days": 30, "since", "verdict": "ok|check", "counts", "avg_slippage_bps", "problems": [...], "text",
 "rows": [{"id", "symbol", "asset", "setup", "signal_at", "signal_price", "outcome":
 "taken|ordered|skipped|error|missed|extra|pending|not expected", "fill", "slippage_bps", "status", "reason"}]}`.
 Signals are recomputed with `setups.series_signals` on every daily playbook entry (crypto + ETF) and matched to
-decisions/book items by id; ETF signals while crypto is in a bull market (or with the ETF trend off) are
-"not expected".
+decisions/book items by id (the first decision on an id, unless a later one placed the order); ETF signals while
+crypto is in a bull market (or with the ETF trend off) are "not expected". Signals whose bar closed before the
+bot's first cycle (`autopilot/state.json` `started_at`, an hour of slack) are left out — `since` says from when.
 
 ### Dashboard
 `GET /api/checks` → `{"health", "shadow", "board": [board_view(decision)]}` for the last 12 decisions that went
