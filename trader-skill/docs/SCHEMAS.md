@@ -886,3 +886,66 @@ non-API paths get an HTML 404 page (`/api/*` keeps JSON errors). `index.html` li
 `Referrer-Policy: same-origin` (with `no-referrer` a browser posts the login form with `Origin: null`);
 `_same_origin` honours `Sec-Fetch-Site` and accepts `Origin: null` only when the browser says `same-origin`.
 The **Help** tab (`renderHelp`) holds the FAQ, the privacy note and the terms of use; `document.title` follows the tab.
+
+## v3.7 — round three: wrong settings, orders lost in a crash, hangs, months of running
+
+### Settings (`shared/config.py`)
+`config.json` and `limits.json` are checked against the defaults' types: a number written as text (`"5%"`), a
+switch written as `"false"`, an object replaced by `null` or a list by a string is a `ConfigError` listing every
+problem — never a quiet "yes" or "no limit". An explicit `null` for a number that has a default keeps the default
+and is listed in `config.warnings`. `max_daily_loss_*`, `max_risk_per_trade_*`, `max_position_pct`,
+`max_total_exposure_pct`, `max_leverage`, `risk_per_trade_pct`, `account_size`, `max_risk_mult` and
+`interval_sec` must be above 0 (0 would not switch them off); `interval_sec` is at least 5. Switches
+(`enabled`, `allow_*`, `*_enabled`) count only when literally `true`; `paper` means real money only when
+literally `false`. The daemon keeps the last good settings of its own folder while a file is broken.
+
+### State files
+`state.locked(name, timeout=None, stop=None)` waits at most `timeout` seconds (then `state.LockTimeout`), gives
+up when `stop()` turns true, and writes `pid@host` into the lock file (shown when it times out). A broken file
+restored from its `.bak` is kept as `<name>.broken`, and the good copy is written back in its place.
+
+### Downloads (`shared/http.py`, Alpaca)
+The whole body must arrive within twice the socket timeout (a server trickling a byte a second can't hold a
+cycle), a body shorter than its `Content-Length` is a failed request, and one URL gets at most
+`timeout × 3 + 30` s including retries and back-off. Cut-off, garbled or gzip-broken answers are failed requests
+(the stale cache answers when it can). An Alpaca order whose answer is lost says "may or may not have been
+placed" and is looked up; `broker.find_client(client_order_id)` finds it later.
+
+### Autopilot
+* Book status `"submitting"`: the item is saved before the order is sent. The next cycles look for it by client
+  order id (`ord-<signal id>`), at the broker itself after 10 minutes; found → `"pending"`, never found after 30
+  minutes → `"canceled"`. A refused order (4xx) removes the item; an unclear failure keeps it with `submit_error`.
+  It counts as open for every cap, the kill switch and `risk.open_book`.
+* KILL stays on until nothing is left (`kill_tries` counts the cycles); the daily-loss kill fires once a day and
+  later cycles that day take no new entries.
+* `run_once` is used up after the cycle that saw it (one set during the cycle is kept for the next).
+* Exits, stops and the kill switch count and cancel only the bot's own orders (its bracket legs — remembered as
+  `leg_ids` at the fill — its stop and exits, and client ids starting with `ord-<plan id>`). A stop
+  re-placement the broker refuses keeps the old `stop_order_id`.
+* Splits: a held stock whose broker quantity and average price moved by a split ratio gets
+  its quantity, stop, target and fill scaled in the book (2-for-1 up to 50-for-1, and the reverse), the journal
+  trade with it, and a notification.
+* PDT: with Alpaca, under $25,000 equity and 3 day trades in 5 days, no same-day stock trade is sent.
+* No new stock entries in the last 30 minutes of the session (early closes included).
+* Alpaca crypto fills are booked net of the 0.25 % fee taken in the coin; sells keep that room.
+* The AI desk times out after `ai_desk.timeout_sec` (45 s, one retry); an AI review that fails is a NO-GO for that
+  trade (it can only veto, so failing closed costs nothing but the trade).
+* Time limits: a cycle waits at most 600 s for another process's cycle; after 240 s it judges no more ideas and
+  checks the exits again; the news refresh before a trade gets 45 s; on SIGTERM / SIGINT / SIGHUP it judges no
+  more ideas. A cycle running for 20 minutes makes the daemon exit with code 70 (`heartbeat.status: "hung"`).
+* `heartbeat.json` gains `last_ok_at` (the last cycle that worked); `deploy/healthcheck.py` fails once that is an
+  hour old while the status is `error` or `hung`.
+* Housekeeping runs each job on its own; a failure goes to `autopilot/housekeeping.jsonl`. The lab runs as a
+  `nice` subprocess (`python3 trader-backtest/lab.py …`, time limit), its last attempt is kept in
+  `autopilot/housekeeping_state.json` so a restart does not start it again.
+
+### Sizer
+Entry and stop must be finite numbers above 0, and the stop at least 0.1 % below the entry; the broker's equity is
+used even when it is 0 (then nothing is sized), never the configured size instead.
+
+### News
+The feed is fetched outside the lock and merged under it — a slow X / StockTwits request no longer blocks the
+dashboard or the autopilot's news gate.
+
+### Dashboard
+10 wrong passwords from one client within 10 minutes → `429` for the rest of those 10 minutes.

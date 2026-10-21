@@ -71,12 +71,14 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
   8. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever), and that
      includes meme coins listed on exchanges (DOGE, SHIB, PEPE, BONK, WIF, …).
 
-  It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries after 15:30 ET,
-  kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a KILL
-  button in the dashboard. Its exits and the kill switch sell only what the bot bought and cancel only its
+  It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries in the last
+  30 minutes of the session (15:30 ET, 12:30 on early-close days) or a 4th day trade under $25,000 at
+  Alpaca, kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a
+  KILL button in the dashboard — a KILL is retried every cycle until nothing is left. Its exits and the kill switch sell only what the bot bought and cancel only its
   own orders — shares or coins you hold yourself at the same broker are never touched. A broken file, a
   typo in `config.json`, a full disk or one failing position never stops the stops and time stops of the
-  others: the bot then takes no new trades and says why.
+  others: the bot then takes no new trades and says why. A setting of the wrong type (`"5%"` for a number,
+  `"false"` for a switch) is an error that names the line, never a quiet "yes" or "no limit".
 * **Leverage is off.** It needs both `leverage.<asset>` in `config.json` and `allow_leverage` /
   `allow_margin` + `max_leverage` in `limits.json`; no file can go past **2×**, meme coins never, and
   crypto at Alpaca never (there is no crypto margin there). Leverage only lets more positions be open at
@@ -478,7 +480,8 @@ stays on 127.0.0.1 — open it through an SSH tunnel, or behind Caddy with a pas
 closed 5-minute bar it scans its universe (crypto always, stocks 9:30–15:30 ET); between cycles it
 refreshes the news feed in the background. It writes a heartbeat (the dashboard shows *alive* /
 *stale*), holds a lock so two copies can't trade one account, backs off and notifies you when cycles
-keep failing, and stops cleanly on SIGTERM.
+keep failing, and stops cleanly on SIGTERM. A cycle stuck for 20 minutes restarts the process (systemd /
+Docker bring it back); an order sent just before a crash is found again by its client id, never sent twice.
 
 **Phone notifications:** set `notify.enabled: true` and either an [ntfy](https://ntfy.sh) topic (free
 app, no account — use a long random topic name) or your own Telegram bot. You get trade opened/closed,
