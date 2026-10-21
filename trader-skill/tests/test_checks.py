@@ -164,6 +164,18 @@ class BacktestVsReality(TraderTestCase):
         self.assertIsNotNone(self.read_state("autopilot/shadow.json"))
 
 
+class OnePositionPerCoin(TraderTestCase):
+    def test_a_second_setup_on_the_same_coin_is_skipped(self):
+        from shared import symbols
+        sym = data.as_symbol("BTCUSDT", "crypto")
+        book = {"handled": {}, "items": {"BTCUSDT-x-trend_ema": {"status": "pending", "data_key": "BTCUSDT",
+                                                                 "setup": "trend_ema"}}}
+        c = {"id": "BTCUSDT-x-trend_breakout", "sym": sym, "asset": "crypto", "setup": "trend_breakout"}
+        d = ap().judge(c, config.load_config(), config.load_limits(), None, book, True, {}, None)
+        self.assertEqual(d["action"], "skipped")
+        self.assertIn("already holding or waiting on BTC", d["reasons"][0])
+
+
 class SixDesks(TraderTestCase):
     def test_a_decision_as_six_desks(self):
         server = load("app", "server")

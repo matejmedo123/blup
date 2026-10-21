@@ -1057,6 +1057,12 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     base = {"id": c["id"], "symbol": sym.display, "asset": asset, "setup": c["setup"]}
     if c.get("skip"):
         return _decision(reasons=[c["skip"]], **base)
+    # one position per symbol: two setups firing on the same coin in one cycle must not both buy it — the broker
+    # holds one position, and the first exit rule would close the other trade too
+    held = [it for it in book["items"].values() if it["status"] in ("pending", "open") and it.get("data_key") == sym.key]
+    if held:
+        return _decision(reasons=["already holding or waiting on %s (%s)" % (sym.display, held[0].get("setup") or
+                                                                         held[0].get("plan_id"))], **base)
     if learned is not None:
         ok, why = adapt.check(learned, asset, c["setup"], sym.key)
         if not ok:
