@@ -1,0 +1,280 @@
+"""Local paper broker — no account, no keys, fills against real (or fixture) 5-min candles.
+
+The fill rules mirror shared.trade_sim.walk so simulated trades match backtests and the Time
+Machine: a buy limit fills on the first bar after it was sent whose low reaches the limit (at the
+better of limit and open); bracket children watch the bars after the fill; when one bar touches both
+the stop and the target the stop wins; a gap through the stop fills at the open; market orders fill
+at the last closed bar's close plus slippage. Positions are marked to the last close. The whole book
+lives in trader/broker/sim.json.
+"""
+from __future__ import annotations
+
+from .. import config, data, market_clock, state
+from .base import Broker, BrokerError, data_symbol, order_dict
+
+BOOK = "broker/sim.json"
+INTERVAL = "5m"
+
+
+def _r(x, nd=6):
+    return round(float(x), nd) if x is not None else None
+
+
+class SimBroker(Broker):
+    name = "simulator"
+    mode = "simulator"
+
+    def __init__(self, cfg: dict = None):
+        self.cfg = cfg or config.load_config()
+        self._candles = {}
+        self.book = state.read_json(BOOK) or self._new_book()
+
+    # -- book -----------------------------------------------------------------------------------
+    def _new_book(self) -> dict:
+        cash = float((self.cfg.get("autopilot") or {}).get("sim_starting_cash") or self.cfg.get("account_size") or 25000)
+        return {"cash": cash, "starting_cash": cash, "currency": "USD", "seq": 0, "orders": [], "positions": {},
+                "fills": [], "created_at": market_clock.iso(market_clock.now_utc()), "last_sync": None}
+
+    def _save(self) -> None:
+        state.write_json(BOOK, self.book)
+
+    def _next_id(self) -> str:
+        self.book["seq"] = int(self.book.get("seq") or 0) + 1
+        return "sim-%06d" % self.book["seq"]
+
+    def _costs(self, asset: str) -> tuple:
+        c = (self.cfg.get("costs") or {}).get(asset) or {}
+        return float(c.get("fee_bps") or 0) / 10000.0, float(c.get("slippage_bps") or 0) / 10000.0
+
+    def _now(self):
+        return market_clock.now_utc()
+
+    def _series(self, symbol: str, asset: str, since_ts: int = None):
+        key = (symbol, asset)
+        if key not in self._candles:
+            now_ts = int(self._now().timestamp())
+            span_days = 2.0
+            if since_ts:
+                span_days = max(span_days, (now_ts - since_ts) / 86400.0 + 1.0)
+            days = int(span_days) + 1 if asset == "stock" else span_days
+            try:
+                self._candles[key] = data.get_candles(data_symbol(symbol, asset), INTERVAL, days=days).candles
+            except data.DataUnavailable as exc:
+                raise BrokerError("no prices for %s: %s" % (symbol, exc))
+        return self._candles[key]
+
+    def _last_close(self, symbol: str, asset: str) -> float:
+        bars = self._series(symbol, asset)
+        if not bars:
+            raise BrokerError("no closed bar yet for %s" % symbol)
+        return bars[-1].c
+
+    # -- fills ----------------------------------------------------------------------------------
+    def _fill(self, o: dict, price: float, at_ts: int) -> None:
+        fee_rate, _ = self._costs(o["asset"])
+        qty = float(o["qty"])
+        price = round(float(price), 2) if (o["asset"] == "stock" and price >= 1) else _r(price)
+        fee = qty * price * fee_rate
+        pos = self.book["positions"].get(o["symbol"])
+        if o["side"] == "buy":
+            self.book["cash"] -= qty * price + fee
+            if pos:
+                total = pos["qty"] + qty
+                pos["avg_entry"] = _r((pos["avg_entry"] * pos["qty"] + price * qty) / total)
+                pos["qty"] = _r(total, 8)
+            else:
+                self.book["positions"][o["symbol"]] = {"symbol": o["symbol"], "asset": o["asset"], "qty": _r(qty, 8),
+                                                       "avg_entry": price, "opened_at": market_clock.iso(at_ts),
+                                                       "client_order_id": o.get("client_order_id")}
+        else:
+            if not pos or pos["qty"] < qty - 1e-9:
+                o["status"] = "rejected"
+                o["reject_reason"] = "no position to sell"
+                return
+            self.book["cash"] += qty * price - fee
+            pos["qty"] = _r(pos["qty"] - qty, 8)
+            if pos["qty"] <= 1e-9:
+                del self.book["positions"][o["symbol"]]
+        o.update(status="filled", filled_qty=qty, filled_avg_price=price, filled_at=market_clock.iso(at_ts),
+                 fee=_r(fee, 4))
+        self.book["fills"].append({"order_id": o["id"], "client_order_id": o.get("client_order_id"),
+                                   "symbol": o["symbol"], "side": o["side"], "qty": qty, "price": price, "fee": _r(fee, 4),
+                                   "at": market_clock.iso(at_ts), "leg": o.get("leg")})
+        if o["side"] == "buy":
+            for child in self.book["orders"]:
+                if child.get("parent_id") == o["id"] and child["status"] == "held":
+                    child["status"] = "new"
+                    child["active_from"] = at_ts  # watches the bars after the fill bar
+        else:
+            for sib in self.book["orders"]:  # one-cancels-other for the bracket legs
+                if (sib is not o and sib.get("parent_id") and sib.get("parent_id") == o.get("parent_id")
+                        and sib["status"] in ("new", "held")):
+                    sib["status"] = "canceled"
+                    sib["canceled_at"] = market_clock.iso(at_ts)
+
+    def sync(self) -> None:
+        """Walk every bar since each open order was sent and fill what the bars say would have filled."""
+        now_ts = int(self._now().timestamp())
+        step = market_clock.interval_seconds(INTERVAL)
+        open_orders = [o for o in self.book["orders"] if o["status"] in ("new", "held")]
+        for symbol in sorted({o["symbol"] for o in open_orders}):
+            mine = [o for o in open_orders if o["symbol"] == symbol]
+            asset = mine[0]["asset"]
+            since = min(int(o.get("active_from") or market_clock.ts(o["submitted_at"])) for o in mine)
+            bars = [c for c in self._series(symbol, asset, since) if c.t >= since - step and c.t + step <= now_ts]
+            for bar in bars:
+                live = [o for o in self.book["orders"] if o["symbol"] == symbol and o["status"] == "new"]
+                if not live:
+                    break
+                # entries first, then stop legs before take-profit legs (stop-first on a shared bar)
+                live.sort(key=lambda o: {"entry": 0, "stop": 1, "exit": 1, "target": 2}.get(o.get("leg") or "entry", 3))
+                for o in live:
+                    if o["status"] != "new" or bar.t < int(o.get("active_from") or 0):
+                        continue
+                    if (o.get("time_in_force") == "day" and o.get("expires_at")
+                            and bar.t >= market_clock.ts(o["expires_at"])):
+                        o["status"] = "expired"
+                        continue
+                    if o["side"] == "buy" and o["type"] == "limit":
+                        if bar.l <= o["limit_price"]:
+                            self._fill(o, min(o["limit_price"], bar.o), bar.t + step)
+                    elif o["side"] == "sell" and o["type"] in ("stop", "stop_limit"):
+                        _, slip = self._costs(o["asset"])
+                        if bar.o <= o["stop_price"]:
+                            self._fill(o, bar.o * (1 - slip), bar.t)
+                        elif bar.l <= o["stop_price"]:
+                            self._fill(o, o["stop_price"] * (1 - slip), bar.t + step)
+                    elif o["side"] == "sell" and o["type"] == "limit":
+                        if bar.h >= o["limit_price"]:
+                            self._fill(o, o["limit_price"], bar.t + step)
+            # day orders that never filled expire at the session close
+            for o in mine:
+                if (o["status"] in ("new", "held") and o.get("expires_at")
+                        and now_ts >= market_clock.ts(o["expires_at"])):
+                    o["status"] = "expired" if o.get("leg") == "entry" else "canceled"
+        self._mark()
+        self.book["last_sync"] = market_clock.iso(now_ts)
+        self._save()
+
+    def _mark(self) -> None:
+        for p in self.book["positions"].values():
+            try:
+                p["last"] = _r(self._last_close(p["symbol"], p["asset"]))
+            except BrokerError:
+                p.setdefault("last", p["avg_entry"])
+
+    # -- reads ----------------------------------------------------------------------------------
+    def account(self) -> dict:
+        mv = sum(p["qty"] * p.get("last", p["avg_entry"]) for p in self.book["positions"].values())
+        equity = self.book["cash"] + mv
+        return {"equity": _r(equity, 2), "cash": _r(self.book["cash"], 2), "buying_power": _r(self.book["cash"], 2),
+                "currency": "USD", "starting_cash": self.book.get("starting_cash"), "mode": self.mode}
+
+    def positions(self) -> list:
+        out = []
+        for p in self.book["positions"].values():
+            last = p.get("last", p["avg_entry"])
+            out.append({"symbol": p["symbol"], "asset": p["asset"], "qty": p["qty"], "avg_entry": p["avg_entry"],
+                        "last": last, "market_value": _r(p["qty"] * last, 2),
+                        "unrealized_pl": _r(p["qty"] * (last - p["avg_entry"]), 2), "opened_at": p.get("opened_at"),
+                        "client_order_id": p.get("client_order_id")})
+        return out
+
+    def orders(self, since: str = None) -> list:
+        out = []
+        for o in self.book["orders"]:
+            if since and o["submitted_at"] < since:
+                continue
+            out.append(order_dict(**{k: v for k, v in o.items() if k != "active_from"}))
+        return out
+
+    def open_orders(self) -> list:
+        return [o for o in self.orders() if o["status"] in ("new", "held")]
+
+    def fills(self) -> list:
+        return list(self.book.get("fills") or [])
+
+    # -- writes ---------------------------------------------------------------------------------
+    def _new(self, **kw) -> dict:
+        now = self._now()
+        o = order_dict(id=self._next_id(), submitted_at=market_clock.iso(now), status="new", filled_qty=0, **kw)
+        o["active_from"] = int(now.timestamp())
+        self.book["orders"].append(o)
+        return o
+
+    def _session_end(self, asset: str):
+        if asset != "stock":
+            return None
+        b = market_clock.session_bounds(market_clock.et_date(self._now()))
+        return market_clock.iso(b[1]) if b else None
+
+    def place_entry(self, order: dict) -> dict:
+        asset = order["asset"]
+        if asset == "meme":
+            raise BrokerError("meme coins are never auto-traded")
+        qty, limit = float(order["qty"]), float(order["limit_price"])
+        if qty <= 0 or limit <= 0:
+            raise BrokerError("qty and limit price must be positive")
+        if qty * limit > self.book["cash"] + 1e-6:
+            raise BrokerError("insufficient buying power: %.2f needed, %.2f cash" % (qty * limit, self.book["cash"]))
+        tif = "day" if asset == "stock" else "gtc"
+        entry = self._new(client_order_id=order.get("client_order_id"), symbol=order["symbol"], asset=asset,
+                          side="buy", type="limit", qty=qty, limit_price=limit, leg="entry", time_in_force=tif,
+                          order_class="bracket" if asset == "stock" else "simple",
+                          expires_at=self._session_end(asset))
+        if asset == "stock":
+            for leg, typ, field, price in (("stop", "stop", "stop_price", order["stop_price"]),
+                                           ("target", "limit", "limit_price", order["target_price"])):
+                child = self._new(client_order_id=None, symbol=order["symbol"], asset=asset, side="sell", type=typ,
+                                  qty=qty, leg=leg, parent_id=entry["id"], time_in_force="gtc", **{field: float(price)})
+                child["status"] = "held"
+        self.log("place_entry", symbol=order["symbol"], qty=qty, limit_price=limit, order_id=entry["id"],
+                 client_order_id=order.get("client_order_id"))
+        self._save()
+        return order_dict(**{k: v for k, v in entry.items() if k != "active_from"})
+
+    def place_stop(self, symbol, qty, stop_price, client_order_id=None, asset="crypto") -> dict:
+        o = self._new(client_order_id=client_order_id, symbol=symbol, asset=asset, side="sell", type="stop",
+                      qty=float(qty), stop_price=float(stop_price), leg="stop", time_in_force="gtc")
+        self.log("place_stop", symbol=symbol, qty=qty, stop_price=stop_price, order_id=o["id"])
+        self._save()
+        return order_dict(**{k: v for k, v in o.items() if k != "active_from"})
+
+    def place_exit(self, symbol, qty, kind="market", limit_price=None, client_order_id=None, asset="stock") -> dict:
+        if kind == "limit":
+            o = self._new(client_order_id=client_order_id, symbol=symbol, asset=asset, side="sell", type="limit",
+                          qty=float(qty), limit_price=float(limit_price), leg="exit", time_in_force="gtc")
+        else:
+            _, slip = self._costs(asset)
+            last = self._last_close(symbol, asset)
+            o = self._new(client_order_id=client_order_id, symbol=symbol, asset=asset, side="sell", type="market",
+                          qty=float(qty), leg="exit", time_in_force="gtc")
+            self._fill(o, last * (1 - slip), int(self._now().timestamp()))
+        self.log("place_exit", symbol=symbol, qty=qty, kind=kind, order_id=o["id"], status=o["status"])
+        self._save()
+        return order_dict(**{k: v for k, v in o.items() if k != "active_from"})
+
+    def cancel(self, order_id: str) -> dict:
+        for o in self.book["orders"]:
+            if o["id"] == order_id:
+                if o["status"] in ("new", "held"):
+                    o["status"] = "canceled"
+                    o["canceled_at"] = market_clock.iso(self._now())
+                    for child in self.book["orders"]:
+                        if child.get("parent_id") == order_id and child["status"] in ("new", "held"):
+                            child["status"] = "canceled"
+                    self.log("cancel", order_id=order_id)
+                    self._save()
+                return order_dict(**{k: v for k, v in o.items() if k != "active_from"})
+        raise BrokerError("unknown order %s" % order_id)
+
+    def close_position(self, symbol: str) -> dict:
+        pos = self.book["positions"].get(symbol)
+        for o in self.book["orders"]:
+            if o["symbol"] == symbol and o["status"] in ("new", "held"):
+                o["status"] = "canceled"
+                o["canceled_at"] = market_clock.iso(self._now())
+        if not pos:
+            self._save()
+            return {"symbol": symbol, "status": "flat"}
+        return self.place_exit(symbol, pos["qty"], "market", asset=pos["asset"])

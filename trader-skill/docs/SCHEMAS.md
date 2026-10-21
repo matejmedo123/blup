@@ -349,7 +349,7 @@ Read by `shared/secrets.py` from environment variables first, then from `trader/
   "watchlist": null,                // null = config watchlists
   "setups": {"stock": ["orb15", "orb30", "gap_and_go", "vwap_reclaim", "bull_flag"],
              "crypto": ["asia_range", "us_open_range", "vwap_reclaim", "momentum"]},
-  "gates": {"min_backtest_triggers": 10, "min_backtest_expectancy_r": 0.05, "min_tm_ev_r": 0.0,
+  "gates": {"min_backtest_triggers": 10, "min_backtest_expectancy_r": 0.05, "min_tm_ev_r": -0.05,
             "tm_paths": 2000, "max_trigger_age_bars": 1},
   "max_new_trades_per_day": 3,
   "flatten_on_kill": true,

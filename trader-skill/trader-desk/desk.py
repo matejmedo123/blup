@@ -303,6 +303,8 @@ def _desk_cfg(cfg: dict) -> dict:
     for k in ("min_backtest_triggers", "min_backtest_expectancy_r"):
         if k in gates_cfg:
             out[k] = gates_cfg[k]
+    if "min_tm_ev_r" in gates_cfg:  # one replay threshold for the desk and the autopilot
+        out["min_ev_r"] = gates_cfg["min_tm_ev_r"]
     out.update(cfg.get("desk") or {})
     return out
 

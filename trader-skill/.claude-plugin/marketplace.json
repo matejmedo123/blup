@@ -10,8 +10,8 @@
     {
       "name": "trader-skill",
       "source": "./",
-      "description": "12 day-trading skills (scanner, news, entry, exit, Time Machine, risk, sizer, alerts, broker tickets, journal, backtest, rug check) + an AI trading desk and an arbitrage gap monitor.",
-      "version": "1.0.0",
+      "description": "Day-trading skills + AI desk + opt-in autopilot (simulator/paper by default) + web dashboard + X/StockTwits news.",
+      "version": "2.0.0",
       "license": "MIT"
     }
   ]

@@ -25,17 +25,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("TRADER_DEMO_HOME") or (ROOT / "demo" / "trader")).resolve()
+AUTO_HOME = HOME.parent / "autopilot"   # the bot gets its own book, separate from the manual walkthroughs
 MAN = json.loads((ROOT / "tests" / "fixtures" / "manifest.json").read_text(encoding="utf-8"))
 PUP = "SOL:" + MAN["tokens"]["PUPKIN"]["address"]
 LAMBO = "SOL:" + MAN["tokens"]["MLAMBO"]["address"]
 DISCLAIMER = re.compile(r"^⚠ ")
 
 
-def run(skill, tool, args, now, quiet_disclaimer=True):
-    cmd = [sys.executable, str(ROOT / skill / tool)] + list(args) + ["--offline", "--home", str(HOME), "--now", now]
+def run(skill, tool, args, now, quiet_disclaimer=True, home=None, env=None):
+    cmd = [sys.executable, str(ROOT / skill / tool)] + list(args) + ["--offline", "--home", str(home or HOME),
+                                                                     "--now", now]
     shown = " ".join(a if " " not in a else '"%s"' % a for a in [skill + "/" + tool] + list(args))
     print("\n$ python3 %s   [now %s]" % (shown.replace(PUP, "SOL:<PUPKIN>").replace(LAMBO, "SOL:<MLAMBO>"), now))
-    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                         env=dict(os.environ, **(env or {})))
     out = res.stdout.rstrip()
     lines = [l for l in out.splitlines() if not (quiet_disclaimer and DISCLAIMER.match(l))]
     print("\n".join("  " + l for l in lines if l.strip() or l == ""))
@@ -142,7 +145,21 @@ def addons():
     run("trader-journal", "journal.py", ["stats"], MAN["demos"]["tsla"]["after_close"], quiet_disclaimer=False)
 
 
+def autopilot():
+    end = MAN["default_now"]
+    banner("5 · Autopilot — the bot trades the whole day by itself in the local simulator (paper money, no account)")
+    run("trader-autopilot", "autopilot.py", ["replay", "--from", "2026-10-20T13:35:00Z", "--to", end, "--step", "5m",
+                                             "--approve"], end, home=AUTO_HOME)
+    # the offline demo uses a placeholder token so the X fixtures show up; real use needs your own X_BEARER_TOKEN
+    run("trader-news", "news.py", ["--feed", "--symbols", "TSLA,NVDA,BTC"], end, home=AUTO_HOME,
+        env={"X_BEARER_TOKEN": "offline-demo-placeholder"})
+    run("trader-journal", "journal.py", ["stats"], end, home=AUTO_HOME)
+    print("\n  See it all in the dashboard:  python3 app/server.py --home %s --offline   →  http://127.0.0.1:8765"
+          % AUTO_HOME)
+
+
 def index():
+    (HOME / "reports").mkdir(parents=True, exist_ok=True)
     reports = sorted((HOME / "reports").glob("*.html"))
     items = "".join("<li><a href='%s'>%s</a></li>" % (html.escape(p.name), html.escape(p.stem)) for p in reports
                     if p.name != "index.html")
@@ -158,11 +175,14 @@ def index():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--open", action="store_true", help="open the report index when done")
-    ap.add_argument("--only", choices=("nvda", "tsla", "btc", "meme", "addons"), help="run one walkthrough")
+    ap.add_argument("--only", choices=("nvda", "tsla", "btc", "meme", "addons", "autopilot"),
+                    help="run one walkthrough")
     args = ap.parse_args()
-    if HOME.exists():
-        shutil.rmtree(str(HOME))
-    for name, fn in (("nvda", nvda), ("tsla", tsla), ("btc", btc), ("meme", meme), ("addons", addons)):
+    for h in (HOME, AUTO_HOME):
+        if h.exists():
+            shutil.rmtree(str(h))
+    for name, fn in (("nvda", nvda), ("tsla", tsla), ("btc", btc), ("meme", meme), ("addons", addons),
+                     ("autopilot", autopilot)):
         if not args.only or args.only == name:
             fn()
     idx = index()

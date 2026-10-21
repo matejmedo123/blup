@@ -1,366 +1,330 @@
-# Trader — a day-trading skill pack for Claude Code
+# Trader — a day-trading toolkit for Claude Code
 
-Twelve Claude Code skills for **intraday trading** across three asset classes, sharing one
-data layer and one state folder — plus two add-ons: a four-role AI trading desk and a read-only
-arbitrage gap monitor:
+Day-trading skills for **US stocks, crypto and DEX meme coins**, one shared data layer, a
+**web dashboard** that shows everything, an opt-in **autopilot** that can trade for you
+(simulator or paper by default), and a four-role **AI trading desk** that has to agree before any
+trade happens.
 
 | Asset class | Examples | Market clock |
 |---|---|---|
-| **US stocks** | `TSLA`, `NVDA`, `BRK.B` | NYSE regular session 9:30–16:00 ET, 2026–2027 holidays and 1:00 p.m. early closes |
+| **US stocks** | `TSLA`, `NVDA`, `BRK.B` | NYSE 9:30–16:00 ET, 2026–2027 holidays and 1:00 p.m. early closes |
 | **Crypto (CEX)** | `BTCUSDT`, `BTC-USD`, `ETH/USDT`, `SOL` | 24/7; a "session" is the UTC day or your horizon (1h / 4h / 24h) |
-| **Meme coins (DEX)** | `SOL:<mint>`, `base:0x…`, a bare Solana mint | 24/7, extreme volatility, rug-pull risk |
+| **Meme coins (DEX)** | `SOL:<mint>`, `base:0x…` | 24/7, extreme volatility, rug-pull risk — analysed, never auto-traded |
 
-The asset class is detected from the symbol, or set with `--asset stock|crypto|meme`.
+> **Educational tool, not financial advice.** Free data can be delayed or wrong. Most trading
+> strategies have no edge after costs — including most of the setups in this pack on the demo data.
+> **Meme coins:** most go to zero, liquidity can vanish in seconds and volume can be faked — only risk
+> what you can afford to lose entirely.
 
-The skills scan thousands of charts, watch the news, time entries and exits, size and
-risk-check every trade, and — the headline feature — **replay the rest of the trade 10,000 times
-before a single dollar is risked** (the Time Machine).
+## Quick start
 
-> **Educational tool, not financial advice.** Quotes from free public sources may be delayed or
-> wrong. **Meme coins:** most go to zero, liquidity can vanish in seconds and volume can be faked —
-> only risk what you can afford to lose entirely.
+Needs Python 3.8+ and nothing else.
 
-## What it never does
+```bash
+python3 scripts/demo.py                                    # every walkthrough below, offline, ~25 s
+python3 app/server.py --home demo/autopilot --offline      # the dashboard on the demo day → http://127.0.0.1:8765
+python3 app/server.py --autopilot                          # for real: dashboard + autopilot in the local simulator
+```
 
-1. **Never places an order by itself.** Paper trading is the default. A ticket is only handed to a
-   brokerage MCP connector (e.g. Alpaca's official MCP server — paper account by default) after you
-   type an explicit **yes** for that exact ticket; your reply is recorded verbatim in
-   `trader/approvals.jsonl`. No skill calls a broker or exchange trading API.
-2. **Never touches wallets or keys.** No private keys, seed phrases, signing or DEX swaps. For meme
-   coins it prepares a plan and a manual checklist; you execute in your own wallet.
-3. **No paid APIs, no API keys, no sign-up, nothing to `pip install`.** Python 3.8+ standard library only.
-4. **Free public data, used politely** — cached, rate-limited per host, back-off on HTTP 429,
-   automatic fallback to the next source (and a note when that happens).
+## What's in the box
+
+| Command | What it does |
+|---|---|
+| `/trader-scanner` | Scans ~5,000 US stocks, the top coins or DexScreener's trending meme coins on 5-min candles and ranks setups (opening-range breakout, VWAP reclaim, gap-and-go, bull flag, relative volume, range breakouts, funding extremes, rising open interest, buy pressure, first-hour launches) |
+| `/trader-news` | Only what's new, ranked by why it matters: Yahoo/Google headlines, **SEC 8-K filings**, CoinDesk/Cointelegraph/The Block, **X** (your token, daily budget) and **StockTwits** crowd mood — one deduplicated feed |
+| `/trader-entry` | Watches a setup candle by candle: "Status: Watching → TRIGGERED — the 10:10 candle just closed above the opening range. Get in $364.18." |
+| `/trader-exit` | Stop, R-multiple target, time stop, trailing stop; meme scale-outs and liquidity exit |
+| `/trader-timemachine` ⭐ | Replays the rest of the session 10,000 times from the symbol's own candles: odds of target vs stop, expected value, 90 % close range, fan chart |
+| `/trader-backtest` | "Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither." — with fees and slippage |
+| `/trader-desk` | Researcher → Skeptic → Lead: every objection must be answered; GO only through hard gates. AI subagents, or a rule-based mode (`desk.py auto`) |
+| `/trader-sizer` · `/trader-risk` | Position size from account × risk %; PASS/BLOCK against `limits.json` (per asset class, daily loss, exposure, rugcheck) |
+| `/trader-broker` | A plain ticket + the exact JSON for your brokerage MCP connector, sent only after you type **yes**; meme coins get a manual wallet checklist |
+| `/trader-autopilot` | Trades for you: scans your watchlist, runs every gate, places orders through the **local simulator** (default) or **Alpaca** (paper; live only through an explicit opt-in), manages exits, journals fills, kill switch |
+| `/trader-alerts` | Rings once on levels, stops/targets, % moves, the opening bell, liquidity pulled, dev selling |
+| `/trader-journal` | Every trade with its chart; win rate, expectancy (net of costs), best/worst setups per asset class |
+| `/trader-rugcheck` 🛡️ | Meme-coin safety gate: LP lock, mint/freeze authority, honeypot/taxes, holder concentration, dev share, age, fake-volume hints → SAFE / RISKY / DANGER |
+| `/trader-arb` | Read-only arbitrage gap monitor — shows why visible gaps don't survive fees and slippage |
+| **Dashboard** `app/server.py` | Equity, P&L today/total, positions, orders, every trade with its chart, the bot's decisions and reasons, news & social feed, reports, bot controls |
+
+## Safety model
+
+* **Manual mode (default).** Nothing is ever sent without your explicit "yes" for that exact ticket;
+  the reply is recorded verbatim in `trader/approvals.jsonl`.
+* **Autopilot is opt-in.** Starting it (`--autopilot` / `--approve`, or `autopilot.enabled: true`) is a
+  *standing approval* for orders that pass **every** gate:
+  1. a fresh trigger (the setup fired on the last closed bar),
+  2. **a real edge in the backtest** — ≥ 10 past triggers on that symbol and expectancy ≥ +0.05R after costs,
+  3. a Time Machine replay that doesn't reject the stop/target geometry (EV ≥ −0.05R),
+  4. desk verdict GO, then sizing and a risk PASS against `limits.json`,
+  5. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever).
+
+  It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries after 15:30 ET,
+  kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a KILL
+  button in the dashboard.
+* **Where it trades.** `simulator` (default) fills orders against real market data in a local paper book — no
+  account. `alpaca` + `paper` uses your free Alpaca paper account. **Live** requires *all* of: broker
+  `alpaca`, `autopilot.mode: "live"`, top-level `"paper": false`, live keys, and
+  `"live_confirmation": "I ACCEPT REAL MONEY RISK"` — set by you in your own files. There is
+  deliberately no button for it; anything missing and the autopilot refuses to start in live mode.
+* **Be honest with yourself.** On the demo data, almost every rule *lost* money in its backtest, so the
+  autopilot skipped 18 of 19 setups. A bot trading a strategy without an edge loses money faster than
+  you would by hand. Run it on paper for weeks and only consider live if the journal shows a positive
+  edge net of costs over a meaningful number of trades.
 
 ## Install
 
-Pick one:
-
-* **Paste the repo URL into Claude** and say "install skill".
-* **Plugin marketplace:**
-  ```
-  /plugin marketplace add <owner>/trader-skill
-  /plugin install trader-skill@trader-skill
-  ```
-  Skills then show up as `/trader-scanner` … (or namespaced, `/trader-skill:trader-scanner`).
-* **Copy the folders** — include `shared/`, every skill imports it from the folder next to it, and
-  copy the desk's three subagents:
+* **Plugin:** `/plugin marketplace add <owner>/trader-skill` then `/plugin install trader-skill@trader-skill`
+* **Copy the folders** (keep `shared/` next to the skills; the desk's subagents go to `~/.claude/agents/`):
   ```bash
   cp -r trader-* shared ~/.claude/skills/
   mkdir -p ~/.claude/agents && cp agents/*.md ~/.claude/agents/
   ```
-
-Requirements: Python 3.8 or newer (`python3 --version`). Nothing else.
+  The dashboard and scripts run straight from the repo folder.
 
 ## Configure
 
-The first run creates `trader/config.json` and `trader/limits.json` in your project (override the
-folder with `TRADER_HOME`). Edit them:
+The first run creates `trader/config.json` and `trader/limits.json` (override the folder with
+`TRADER_HOME`). The keys that matter most:
 
 ```json
 {
+  "account_size": 25000, "risk_per_trade_pct": 0.5, "paper": true,
+  "watchlists": {"stocks": ["TSLA", "NVDA", "AAPL"], "crypto": ["BTCUSDT", "ETHUSDT"], "meme": []},
   "sec_user_agent": "Jane Doe jane@example.org",
-  "account_size": 25000,
-  "risk_per_trade_pct": 0.5,
-  "watchlists": {"stocks": ["TSLA", "NVDA"], "crypto": ["BTCUSDT", "ETHUSDT"], "meme": ["SOL:<mint>"]},
-  "meme_chains": ["solana", "base"],
-  "quote_currency": "USDT",
-  "crypto_horizon": "4h",
-  "paper": true
+  "autopilot": {"enabled": false, "broker": "simulator", "mode": "paper", "max_new_trades_per_day": 3},
+  "news": {"x": {"enabled": true, "max_reads_per_day": 300, "poll_minutes": 15}}
 }
 ```
 
-* `sec_user_agent` — SEC EDGAR asks for a real name + e-mail (or set `SEC_USER_AGENT`). Without it the
-  8-K feed is skipped with a note.
-* `limits.json` — separate limits per asset class: max $ risk per trade, max daily loss, max open
-  positions, max position % of account, total exposure caps for crypto and meme coins (meme default
-  5 % of the account), blocked symbols, shorts/margin/leverage/options switches, meme minimum
-  liquidity, maximum slippage, % of pool, and which rugcheck verdicts are acceptable.
+Keys and passwords go in environment variables or `trader/secrets.env` (never in git; `chmod 600` it):
 
-## The 12 skills
+```bash
+ALPACA_PAPER_KEY_ID=...          # free paper account: alpaca.markets → Paper Trading → API keys
+ALPACA_PAPER_SECRET_KEY=...
+X_BEARER_TOKEN=...               # optional: X developer account, pay-per-use
+TRADER_DASHBOARD_PASSWORD=...    # only needed to open the dashboard from your phone
+```
 
-| # | Command | Job |
-|---|---|---|
-| 1 | `/trader-scanner` | Scans a universe on 5-min candles and ranks setups into `trader/setups.json` — stocks: ~5,000 US tickers (opening-range breakout 15/30, VWAP reclaim, gap-and-go, bull flag, high relative volume); crypto: top coins by volume (Asia / US-open / UTC-day range breakouts, VWAP reclaim, volume spikes, funding extremes, breakouts with rising open interest); meme: DexScreener boosted + new pairs (volume and buy-pressure spikes, momentum breakouts, first-hour launches) — every meme hit is run through rugcheck and hidden if it fails |
-| 2 | `/trader-news` | Only what is new since the last check, newest first, with why it matters — headlines + SEC 8-K filings, crypto news (listings, ETF flows, hacks, unlocks, regulation), meme token profile/boost/liquidity changes |
-| 3 | `/trader-entry` | Watches a setup candle by candle and says exactly when to get in ("Status: Watching → TRIGGERED — the 10:10 candle just closed above the opening range. Get in $364.18.") — with a liquidity and slippage check for meme coins |
-| 4 | `/trader-exit` | Stop (structure or ATR), R-multiple target, time stop (stocks flat by 3:55 p.m. ET; crypto/meme your horizon), optional trailing stop; meme scale-outs and a liquidity exit |
-| 5 | `/trader-timemachine` ⭐ | Replays the rest of the session 10,000 times from the symbol's own candles and shows the odds of target vs stop, expected value, the 90 % close range, a histogram and a fan chart |
-| 6 | `/trader-risk` | PASS or BLOCK against `limits.json`, with the reason. A meme coin that has not passed rugcheck is always blocked |
-| 7 | `/trader-sizer` | Size = (account × risk %) ÷ (entry − stop), capped by position %; shares, exchange lot sizes, or a USD amount capped by pool liquidity |
-| 8 | `/trader-alerts` | Rings once on price levels, stops/targets, % moves, the opening bell; meme: liquidity pulled, dev wallet selling, holder concentration jump — built for `/loop` or a scheduled task |
-| 9 | `/trader-broker` | Turns a risk-PASSED order into a plain ticket + the exact JSON for the brokerage MCP connector, waits for your "yes"; meme coins get a manual wallet checklist |
-| 10 | `/trader-journal` | Logs every trade and computes win rate, average R, expectancy, best/worst setups — overall and per asset class |
-| 11 | `/trader-backtest` | Runs a setup rule over the last N sessions/days with fees and slippage: "Last 59 sessions: 33 triggers, 13 hit target, 15 hit stop, 5 neither." |
-| 12 | `/trader-rugcheck` 🛡️ | Safety gate for meme coins: liquidity, LP lock/burn, mint/freeze authority, honeypot/taxes, holder concentration, dev share, age, buy/sell ratio, fake-volume hints → score 0–100 and SAFE / RISKY / DANGER with reasons. It never says a token is safe to buy — only "no red flags found in these checks" |
+Nothing ever prints, logs or returns a key — the dashboard only shows "set / not set".
 
-Every tool has `--help`, takes `--asset`, prints a compact text summary, writes JSON state to
-`trader/`, and — when there is a chart — a self-contained HTML report to `trader/reports/`
-(inline SVG, light theme, works on a phone, no CDN). Add `--json` for machine output, `--open`
-to open the report.
+### News from X and StockTwits
+
+* **X** works through the official API with *your* bearer token. Since 2026 X bills **pay-per-use**
+  (third-party sources put a post read around $0.005 — your X Developer Console shows the real price),
+  so every read counts against `news.x.max_reads_per_day` (default 300) and each query is cached for
+  `poll_minutes`. It follows cashtags on your watchlist plus curated breaking-news accounts
+  (configurable). Scraping x.com or using Nitter is not supported.
+* **StockTwits** is free and needs no key: crowd sentiment per symbol plus the top messages — labelled
+  as crowd mood, not information.
+* Everything lands in one ranked, deduplicated `trader/news_feed.json` (the same story from Yahoo and
+  X becomes one item), shown in the dashboard's News tab.
+
+## Running it for real
+
+```bash
+python3 app/server.py --autopilot           # dashboard + autopilot loop (simulator by default)
+python3 trader-autopilot/autopilot.py status
+python3 trader-autopilot/autopilot.py kill --confirm KILL
+```
+
+The autopilot only trades while it runs, so the computer has to stay on during market hours (crypto:
+24/7). For always-on use, run it on a small VPS as a systemd service — a sample unit file is in
+`trader-autopilot/SKILL.md`. To open the dashboard from your phone on the same Wi-Fi:
+`TRADER_DASHBOARD_PASSWORD='…' python3 app/server.py --host 0.0.0.0 --autopilot`.
+
+## Dashboard
+
+A local web app over the `trader/` folder (stdlib server, no CDN, dark/light, built for phones):
+Overview (equity curve, P&L today/total, win rate, expectancy, positions, latest decisions, top news,
+desk verdicts) · Trades (every trade with a candle chart, entry/exit, stop/target, R, fees) · Bot
+(status, pause / resume / run once / KILL, mode and what live would need, gates, decision timeline) ·
+News (X, StockTwits, news, SEC with importance and sentiment) · Setups · Reports.
+
+Security: binds to 127.0.0.1 unless you give a password; every button needs a per-session CSRF token;
+no response ever contains a key; reports are served sandboxed; live trading cannot be switched on from
+the dashboard. `python3 app/devdata.py --home /tmp/trader-sample` writes clearly-marked SAMPLE data.
+
+## Walkthroughs (real output of `python3 scripts/demo.py`, offline fixtures)
+
+The demo pins the clock and serves synthetic fixtures. The desk runs before every Trader step — only a
+**GO** leads to sizing, a risk check and a ticket. Output is trimmed.
+
+### 1 · NVDA opening-range breakout — the desk says GO
+
+NVDA's fixture history is generated with an opening-range follow-through, so this is the one setup in
+the demo with a genuine (synthetic) edge.
+
+```text
+$ python3 trader-entry/entry.py NVDA --setup orb15            [9:50 ET]
+Status: Watching → TRIGGERED — the 9:45 candle just closed above the opening range. Get in $193.92.
+$ python3 trader-exit/exit.py --id NVDA-20261020-orb15
+Get in $193.92 · Stop $190.90 · Target $199.96 (2R) · Time stop 3:55 p.m. ET
+$ python3 trader-backtest/backtest.py NVDA --setup orb15
+Last 59 sessions: 27 triggers, 12 hit target, 9 hit stop, 6 neither.   avg +0.67R net per trade
+$ python3 trader-timemachine/replay.py --id NVDA-20261020-orb15 --seed 7
+Target first 3.7% · Stop first 27.3% · Neither 69.0% · Expected value -0.01R
+$ python3 trader-desk/desk.py auto NVDA
+Status: GO — Cleared by the desk.
+  O1 [minor] stop first is 27% vs target first 4% — fine only if the backtest edge is real → Lead: accepted
+  ✓ Time Machine expected value  EV -0.01R (minimum EV -0.05R)
+  ✓ backtest expectancy          … expectancy +0.67R after costs
+$ python3 trader-sizer/size.py   →  BUY 32 NVDA ≈ $6,205 · risk $96.64 · limit $193.93 · capped by max position 25%
+$ python3 trader-risk/risk.py    →  PASS ✓  all 12 checks passed
+$ python3 trader-broker/ticket.py prepare
+  BUY 32 NVDA, limit $193.93, stop $190.90, day — PAPER
+Reply yes to send this exact ticket to the PAPER account.
+$ python3 trader-broker/ticket.py approve --ticket tkt-ord-NVDA-20261020-135000 --reply "yes"
+APPROVED — hand this payload unchanged to the alpaca MCP tool place_stock_order: {…"order_class": "bracket"…}
+$ python3 trader-journal/journal.py add --plan NVDA-20261020-orb15 --auto        [after the close]
+JOURNAL — CLOSED NVDA orb15 · $193.92 → $196.32 (time) · +0.80R · P&L $74.30
+```
+
+### 2 · TSLA — a real catalyst, but the desk says NO-GO
+
+```text
+$ python3 trader-news/news.py --symbols TSLA
+  [!!!] 9:05 ET  Tesla–SpaceX merger mania strikes Wall Street ahead of earnings — Yahoo Finance (also: Google News)
+  [!! ] 7:31 ET  8-K filed: Regulation FD disclosure — SEC EDGAR — guidance: official filing — read it before trading
+$ python3 trader-entry/entry.py --id TSLA-20261020-orb15     [10:15 ET]
+Status: Watching → TRIGGERED — the 10:10 candle just closed above the opening range. Get in $364.18.
+$ python3 trader-backtest/backtest.py TSLA --setup orb15
+Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither.   avg -0.12R net per trade
+$ python3 trader-desk/desk.py auto TSLA
+Status: NO-GO — The Trader stands down, no money moves.
+  O1 [critical] this rule lost money on TSLA: expectancy -0.12R after costs over 33 triggers → Lead: accepted
+  O3 [minor] earnings headlines in the feed — event risk inside or right after the holding window
+[desk] NO-GO → the Trader stands down: no sizing, no ticket, no money moves.
+```
+
+A merger headline and a clean breakout make TSLA *feel* like a trade. The history says this rule
+loses money on TSLA, so nothing is sized or sent.
+
+### 3 · BTC/USD Asia-range breakout at the US open — NO-GO
+
+```text
+$ python3 trader-scanner/scan.py --asset crypto
+  1. BTC/USDT  TRIGGERED  Asia-range breakout  $67,448.60 · 14:35 UTC · flags: volume_spike, rising_oi · score 92
+$ python3 trader-exit/exit.py --id BTCUSD-20261020-asia_range --horizon 4h
+Get in $67,448.60 · Stop $67,320.53 · Target $67,704.74 (2R) · Time stop 18:40 UTC (4h horizon)
+$ python3 trader-desk/desk.py auto BTC-USD
+Status: NO-GO — O1 [critical] this rule lost money on BTC/USD: expectancy -1.31R after costs over 15 triggers
+```
+
+### 4 · A Solana meme coin — rugcheck passes one, blocks the other, the desk says NO-GO
+
+```text
+$ python3 trader-scanner/scan.py --asset meme
+  1. PUPKIN  TRIGGERED  Momentum breakout  $0.004712 · liq $412.4k · rugcheck SAFE 95
+  2. NEWT    FLAG       First-hour launch  liq $38.5k · rugcheck RISKY 55
+  hidden: MLAMBO (solana) — rugcheck DANGER: LP not locked or burned (0% locked); Top holder owns 40.0% of supply; …
+$ python3 trader-risk/risk.py --symbol SOL:<MLAMBO> --notional 100 --entry 0.000918 --stop 0.00078
+BLOCK ✗ — rugcheck DANGER (score 0): LP not locked or burned (0% locked) — the deployer can pull liquidity; Top holder owns 40.0% …
+$ python3 trader-timemachine/replay.py --seed 7
+Target first 1.1% · Stop first 20.9% · Neither 77.0% · Rug pull 0.9% · EV -0.16R   (thin sample: 2.5 days of history)
+$ python3 trader-desk/desk.py auto SOL:<PUPKIN>
+Status: NO-GO — O2 [critical] the replay says this geometry loses: EV -0.16R (minimum -0.05R)
+```
+
+On a GO, the Trader would hand you a manual swap checklist (contract address, chain, pool, amount, max
+slippage, links to verify the address, "use a wallet that holds only this trade's amount", "a DEX has no
+stop orders — set alerts"). Meme coins are never sent anywhere automatically.
+
+### 5 · Autopilot — the bot trades the whole day in the simulator
+
+```text
+$ python3 trader-autopilot/autopilot.py replay --from 2026-10-20T13:35:00Z --to 2026-10-20T20:00:00Z --step 5m --approve
+AUTOPILOT REPLAY · 78 cycles in 10.9 s
+  13:50 UTC  taken NVDA orb15
+  13:55 UTC  filled 32 NVDA @ $193.92
+  14:15 UTC  skipped TSLA orb15
+  14:40 UTC  skipped BTC/USDT asia_range
+  19:55 UTC  closed NVDA (time) @ $196.28 · P&L $75.52
+Decisions: 1 taken · 18 skipped · 0 errors
+  skipped TSLA     orb15          desk NO-GO: this rule lost money on TSLA: expectancy -0.12R after costs over 33 triggers
+  skipped META     orb15          desk NO-GO: thin sample: only 3 past triggers (want ≥ 10)
+  skipped NVDA     gap_and_go     desk NO-GO: the edge is too thin to pay for mistakes: expectancy +0.00R (want ≥ +0.05R)
+  skipped BTC/USDT vwap_reclaim   desk NO-GO: this rule lost money on BTC/USDT: expectancy -1.08R after costs over 26 triggers
+```
+
+Then open the dashboard on that day: `python3 app/server.py --home demo/autopilot --offline`.
+
+### Arbitrage gap monitor
+
+```text
+$ python3 trader-arb/arb.py SOL:<PUPKIN> BTCUSDT
+PUPKIN — best route: buy meteora → sell raydium · gap +0.15% − costs 6.27% = net -6.12%  → NO EDGE AFTER COSTS
+BTC/USDT — best route: buy Kraken → sell Binance · gap +0.05% − costs 0.54% = net -0.49%  → NO EDGE AFTER COSTS
+```
+
+Real arbitrage is a millisecond race won by bots co-located with exchanges and validators; viral
+"$1 → $400k arbitrage bot" stories are survivorship bias at best, and bots that ask for your private
+key or a deposit are a common scam. This tool only watches.
 
 ## Workflows
 
 ```
-stocks / crypto:  scanner → news → entry → exit → timemachine → sizer → risk → broker → journal
-meme coins:       scanner → rugcheck → news → entry → exit → timemachine → sizer → risk → manual checklist → journal
-alerts / news:    stocks during market hours; crypto & meme 24/7 on a schedule (/loop 5m …)
-validate first:   backtest → timemachine
-second opinion:   /trader-desk  (Researcher → Skeptic → Lead → Trader, each checking the others)
+manual (stocks / crypto):  scanner → news → entry → exit → backtest → timemachine → DESK → sizer → risk → broker (your yes) → journal
+meme coins:                scanner → rugcheck → news → entry → exit → timemachine → DESK → sizer → risk → manual checklist → journal
+autopilot:                 the same chain, every cycle, for your watchlist — orders only on GO + risk PASS (simulator / paper by default)
+always on:                 dashboard · alerts · news feed (stocks in market hours, crypto & meme 24/7)
 ```
 
-## Walkthroughs (real output of `bash scripts/demo.sh`, offline fixtures)
-
-The demo runs everything below on synthetic fixtures with a pinned clock (`--offline --now …`).
-Output is trimmed; every tool also prints the disclaimer and writes an HTML report
-(`demo/trader/reports/index.html` lists them all).
-
-### 1 · TSLA opening-range breakout
-
-```text
-$ python3 trader-scanner/scan.py --asset stock --offline --now 2026-10-20T14:15:00Z
-6 of 30 US stocks scanned, 13 setups
-  1. TSLA  TRIGGERED  Opening-range breakout (15 min)  $364.18 · 5-min close above opening range high $362.18 (9:30–9:45 ET) · 10:10 ET · relvol 2.8× · flags: high_relvol · score 85
-  2. NVDA  TRIGGERED  Opening-range breakout (30 min)  $194.90 · …
-  5. AMD   TRIGGERED  VWAP reclaim                     $240.31 · 5-min close back above VWAP ($238.87) after 5 closes below   ← served by Stooq: Yahoo had no data
-
-$ python3 trader-news/news.py --symbols TSLA …
-TSLA — 5 new since last check
-  [!!!] 9:05 ET  Tesla–SpaceX merger mania strikes Wall Street ahead of earnings — Yahoo Finance (also: Google News) — merger + earnings: expect a volatile open
-  [!! ] 7:31 ET  8-K filed: Regulation FD disclosure (often guidance or investor deck) — SEC EDGAR — guidance: official filing — read it before trading
-
-$ python3 trader-entry/entry.py --id TSLA-20261020-orb15 …      (at 10:05, then at 10:15)
-Opening range high $362.18 (9:30–9:45 ET). Rule: 5-min close above.
-Status: WATCHING — waiting for a 5-min close above $362.18
-Status: Watching → TRIGGERED — the 10:10 candle just closed above the opening range. Get in $364.18.
-
-$ python3 trader-exit/exit.py --id TSLA-20261020-orb15 …
-Get in $364.18 · Stop $358.32 · Target $375.90 (2R) · Time stop 3:55 p.m. ET
-Stop: below the opening range low ($5.86 risk per share = 3.4× ATR).
-
-$ python3 trader-backtest/backtest.py TSLA --setup orb15 …
-Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither.
-Win rate 39% · avg -0.12R net per trade · total -3.89R · max drawdown -7.37R
-
-$ python3 trader-timemachine/replay.py --id TSLA-20261020-orb15 --seed 7 …
-10,000 replays (seed 7) from 60 sessions of 5-min candles (Yahoo Finance)
-  Target first   24.3%  ███████
-  Stop first     55.7%  █████████████████
-  Neither        20.0%  ██████
-Expected value  +0.02R  (≈ +$2.00 on 17 shares)
-9 in 10 close between $346.60 and $383.29 · median $364.17
-Backtest: 18% target / 52% stop / 30% neither over 33 triggers
-
-$ python3 trader-sizer/size.py --id TSLA-20261020-orb15 …
-BUY 17 TSLA ≈ $6,191 · risk $99.62 (0.40% of account) · limit $364.20 · capped by max position 25%
-
-$ python3 trader-risk/risk.py …
-PASS ✓  all 12 checks passed
-
-$ python3 trader-broker/ticket.py prepare …
-  BUY 17 TSLA, limit $364.20, stop $358.32, day — PAPER
-Reply yes to send this exact ticket to the PAPER account.
-$ python3 trader-broker/ticket.py approve --ticket tkt-ord-TSLA-20261020-141500 --reply "yes"
-APPROVED — hand this payload unchanged to the alpaca MCP tool place_stock_order:
-{"symbol": "TSLA", "side": "buy", "quantity": 17, "order_type": "limit", "limit_price": 364.2, "time_in_force": "day",
- "order_class": "bracket", "take_profit_limit_price": 375.9, "stop_loss_stop_price": 358.32, …}
-Recorded the reply 'yes' in trader/approvals.jsonl. This approval covers this one ticket only.
-
-$ python3 trader-journal/journal.py add --plan TSLA-20261020-orb15 --auto --now 2026-10-20T20:05:00Z …
-JOURNAL — CLOSED TSLA orb15 · $364.18 → $375.90 (target) · +2.00R · P&L $196.72 (fees $0.00, slippage $2.52)
-```
-
-Note what the Time Machine and the backtest said *before* the trade: stop-first was more likely than
-target-first, and the rule had lost money on TSLA over 59 sessions. That this paper trade hit the target is
-one outcome, not proof of an edge.
-
-### 2 · BTC/USD breakout of the Asia range at the US open, rising open interest, 4h horizon
-
-```text
-$ python3 trader-scanner/scan.py --asset crypto --offline --now 2026-10-20T14:40:00Z
-4 of 7 coins scanned (top 30 by volume via CoinGecko), 10 setups
-  1. BTC/USDT  TRIGGERED  Asia-range breakout  $67,448.60 · 5-min close above Asia range high $67,420.00 (00:00–08:00 UTC) · 14:35 UTC · vol 4.0× · flags: volume_spike, rising_oi · score 92
-
-$ python3 trader-entry/entry.py BTC-USD --setup asia_range …
-Status: Watching → TRIGGERED — the 14:35 UTC candle just closed above the Asia range. Get in $67,448.60.
-
-$ python3 trader-exit/exit.py --id BTCUSD-20261020-asia_range --horizon 4h …
-Get in $67,448.60 · Stop $67,320.53 · Target $67,704.74 (2R) · Time stop 18:40 UTC (4h horizon)
-Stop: just below the breakout level (1×ATR) — the structure low $66,612.40 is more than 4×ATR away.
-
-$ python3 trader-timemachine/replay.py --id BTCUSD-20261020-asia_range --seed 7 …
-10,000 replays (seed 7) from 29.6 days of 5-min candles (Binance)
-  Target first   33.2%  ██████████
-  Stop first     66.8%  ████████████████████
-Expected value  -0.00R  ·  9 in 10 close between $66,424.30 and $68,498.20
-
-$ python3 trader-sizer/size.py …   →   BUY 0.05559 BTC/USD ≈ $3,749 · limit $67,462.09 · capped by max position 15%
-$ python3 trader-risk/risk.py …    →   PASS ✓  all 13 checks passed
-$ python3 trader-broker/ticket.py prepare …
-  BUY 0.05559 BTC/USD, limit $67,462.09, gtc — PAPER
-  stop $67,320.53 — place it as a separate stop order after the fill (crypto has no bracket orders on Alpaca)
-```
-
-On the live network the same command chain works unchanged: `api.binance.com` answered HTTP 451 from
-this machine, so the data layer used `data-api.binance.vision`, and Binance futures data came from OKX.
-
-### 3 · A Solana meme coin from DexScreener — one passes, one is BLOCKED
-
-```text
-$ python3 trader-scanner/scan.py --asset meme --offline --now 2026-10-20T15:55:00Z
-3 meme tokens scanned (DexScreener boosted + new tokens on solana, base), 2 setups shown, 1 hidden by rugcheck
-  1. PUPKIN  TRIGGERED  Momentum breakout  $0.004712 · 5-min close above the 12-bar high $0.004424 on 4.0× volume · liq $412.4k · rugcheck SAFE 95
-  2. NEWT    FLAG       First-hour launch  Launched 35 min ago with $38.5k liquidity · rugcheck RISKY 55
-  hidden: MLAMBO (solana) — rugcheck DANGER: LP not locked or burned (0% locked) — the deployer can pull liquidity; Top holder owns 40.0% of supply; …
-
-$ python3 trader-rugcheck/rugcheck.py SOL:<PUPKIN> …
-Verdict: SAFE — No red flags found in these checks (not a guarantee)   Score 95/100
-  ✓ Pool liquidity $412.4k   ✓ Mint authority revoked   ✓ Freeze authority revoked   ✓ LP 100% locked/burned   ✓ Top-10 17.8%
-
-$ python3 trader-rugcheck/rugcheck.py SOL:<MLAMBO> …
-Verdict: DANGER — Serious red flags — do not trade this   Score 0/100
-  ✗ LP locked or burned      0% locked/burned (-30)
-  ✗ Largest single holder    40.0% (-30)
-  ✗ Top-10 holder share      54.7% (-30)
-
-$ python3 trader-risk/risk.py --symbol SOL:<MLAMBO> --notional 100 --entry 0.000918 --stop 0.00078 …
-BLOCK ✗ — rugcheck DANGER (score 0): LP not locked or burned (0% locked) — the deployer can pull liquidity; Top holder owns 40.0% of supply; …
-
-$ python3 trader-exit/exit.py …
-Get in $0.004712 · Stop $0.004348 · Target $0.005804 (3R) · Time stop 19:55 UTC (4h horizon)
-Scale-out: sell 50% at 2× — recovers the initial stake ($0.009424) (beyond the target — only if you let a runner go).
-Liquidity exit: get out if pool liquidity drops 30% (below $288.6k).
-
-$ python3 trader-timemachine/replay.py --seed 7 …
-10,000 replays (seed 7) from 2.5 days of 5-min candles (GeckoTerminal)
-  Target first 1.1% · Stop first 20.9% · Neither 77.0% · Rug pull 0.9%
-Expected value -0.16R (≈ -$6.14 on a $500 position)
-  ! thin sample: only 2.5 days of history — volatility widened ×1.25
-
-$ python3 trader-sizer/size.py …   →   BUY $500.00 of PUPKIN · est. slippage 0.24% · 0.12% of pool · capped by max position 2%
-$ python3 trader-risk/risk.py …    →   PASS ✓  all 17 checks passed (rugcheck SAFE, score 95, 0 min old)
-$ python3 trader-broker/ticket.py prepare …
-  MANUAL SWAP — BUY $500.00 of PUPKIN on solana (you execute it in your own wallet)
-  [ ] Token contract address: Fk6KsBpN…pump      [ ] Max slippage: 3.0% (estimated impact 0.24%)
-  [ ] Verify on DexScreener / Solscan / rugcheck.xyz   [ ] Compare the address character by character from two sources
-  [ ] Use a wallet that holds only this trade's amount; never sign an unlimited approval
-  [ ] A DEX has no stop orders: set /trader-alerts for the stop, the target and a liquidity drop
-  [ ] Never paste your seed phrase or private key anywhere — this pack never asks for them.
-```
-
-## Add-ons
-
-### `/trader-desk` — a team of four that checks its own work
-
-| Role | Who | Job |
-|---|---|---|
-| Researcher | subagent `agents/trader-researcher.md` | the sourced case: setup, entry, news, 8-K filings, rugcheck |
-| Skeptic | subagent `agents/trader-skeptic.md` | tries to prove it wrong — backtest, Time Machine, liquidity, event risk → `O1 [critical] …` |
-| Lead | subagent `agents/trader-lead.md` | answers every objection (rebutted / mitigated / accepted), decides GO / NO-GO / WAIT |
-| Trader | the main conversation | only on a verified GO: sizer → risk → broker ticket → **your** "yes" |
-
-`desk.py verify` refuses a GO with an unanswered objection, an accepted critical objection, a failed hard
-gate (exit plan, fresh rugcheck for meme coins, a Time Machine run on the current plan with EV ≥ minimum),
-or a replay made before the plan changed. From the demo (canned memos standing in for the subagents):
-
-```text
-$ python3 trader-desk/desk.py verify --id TSLA-20261020-orb15 …
-Status: NO-GO — The Trader stands down, no money moves.
-  O1 [critical] Earnings land tomorrow after the close … → Lead: mitigated
-  O2 [major] This rule lost money on TSLA: backtest expectancy is negative after costs → Lead: accepted
-  O3 [major] Time Machine: stop first is about twice as likely as target → Lead: accepted
-  ✗ backtest expectancy   Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither. · expectancy -0.12R after costs (soft)
-```
-
-X/Twitter is not part of the Researcher's sources — its API is not free.
-
-### `/trader-arb` — arbitrage gap monitor (read-only)
-
-Compares the same meme token across its DEX pools, or the same coin across Binance / Coinbase / Kraken
-(USDT converted to USD), and subtracts both legs' fees, slippage at your size and network costs:
-
-```text
-$ python3 trader-arb/arb.py SOL:<PUPKIN> BTCUSDT …
-PUPKIN (solana) — 2 pools, size $500 per leg
-  best route: buy meteora → sell raydium · gap +0.15% − costs 6.27% (fees 0.50% + slippage 5.76%) = net -6.12%
-  Verdict: NO EDGE AFTER COSTS.
-BTC/USDT — 3 venues, size $1,000 per leg
-  best route: buy Kraken → sell Binance · gap +0.05% − costs 0.54% = net -0.49%
-  Verdict: NO EDGE AFTER COSTS.
-```
-
-It never trades. Real arbitrage is a millisecond race won by bots co-located with exchanges and
-validators (MEV searchers on Solana); free APIs lag by seconds to minutes. Viral "$1 → $400k arbitrage
-bot" stories are survivorship bias at best, and bots that ask for your private key or a deposit are a
-common scam.
-
-## Data sources (all free, no keys)
+## Data sources (free unless noted)
 
 | Data | Primary | Fallbacks |
 |---|---|---|
 | Stock candles & quotes | Yahoo Finance chart JSON | Stooq CSV |
 | Stock universe | SEC `company_tickers_exchange.json` | Nasdaq Trader symbol directory |
-| Stock news | Yahoo Finance RSS, Google News RSS | — |
-| Filings | SEC EDGAR 8-K Atom feed (User-Agent with name + e-mail, ≤ 10 req/s) | — |
-| Crypto candles & quotes | Binance public klines (`api.binance.com`) | `data-api.binance.vision` mirror → Coinbase Exchange → Kraken |
-| Crypto universe | CoinGecko markets | Binance 24h tickers |
-| Funding & open interest | Binance futures | OKX public swap data |
-| Lot / tick sizes | Binance `exchangeInfo` | Coinbase product → built-in defaults |
+| Stock news / filings | Yahoo & Google News RSS · SEC EDGAR 8-K (User-Agent with name + e-mail) | — |
+| Crypto candles & quotes | Binance (`api.binance.com`) | `data-api.binance.vision` mirror → Coinbase → Kraken |
+| Crypto universe · funding & OI | CoinGecko · Binance futures | Binance tickers · OKX |
 | Crypto news | CoinDesk, Cointelegraph, The Block RSS | — |
-| Meme pairs, boosts, new launches | DexScreener public API | — |
-| Meme candles | GeckoTerminal pool OHLCV | the token's next-deepest pool |
-| Meme safety | RugCheck (Solana), honeypot.is (Base, Ethereum, BSC) | — (verdict capped at RISKY if unavailable) |
+| Meme pairs · candles · safety | DexScreener · GeckoTerminal · RugCheck / honeypot.is | next-deepest pool |
+| Social | **X API (your token, pay-per-use)** · StockTwits (free) | — |
+| Trading | Local simulator · **Alpaca** (free paper account; live by explicit opt-in) | — |
 
-`api.binance.com` and Binance futures answer HTTP 451 from some countries (including the US); the
-data layer notices, stops asking, and moves on to the mirror / OKX automatically.
+`api.binance.com` and Binance futures answer HTTP 451 from some countries; the data layer notices and
+moves on to the mirror / OKX automatically.
 
 ## Offline mode, tests and the demo
 
 ```bash
-python3 -m unittest                 # 227 tests, no network (fixtures only), Python 3.8+
-bash scripts/demo.sh                # the three walkthroughs below, end to end, offline
-python3 trader-scanner/scan.py --asset stock --offline --now 2026-10-20T14:15:00Z
+python3 -m unittest            # 288 tests, no network (fixtures only), Python 3.8+
+python3 scripts/demo.py        # all walkthroughs; reports in demo/trader/reports/index.html
 ```
 
-`--offline` serves every HTTP request from `tests/fixtures/http/` — synthetic data stored in each
-API's raw response format, so offline runs exercise exactly the same parsing code as live runs.
-`--now` (or `TRADER_NOW`) pins the clock.
+`--offline` serves every request from `tests/fixtures/http/` — synthetic data in each API's raw
+format, so offline runs go through the same parsing code as live runs. `--now` pins the clock.
 
 ## Known limits
 
-* **Delayed, rate-limited, sometimes wrong data.** Free endpoints change without notice, throttle
-  hard and can be geo-blocked. Yahoo keeps only ~60 calendar days of 5-minute bars (≈ 40 sessions),
-  so live replays and backtests use ~40 sessions, not 60. Scanning all ~5,000 US stocks within a
-  time budget means only part of the universe gets a full chart each run (a cheap bulk pre-filter
-  picks which).
-* **Simulation ≠ prediction.** The Time Machine resamples the symbol's own past 5-minute behaviour.
-  It cannot know about news, halts, gaps or regime changes. Treat its odds as a sanity check on
-  the stop/target geometry, not as a forecast.
-* **Backtests are small samples.** 30–60 windows is not much; costs and slippage are estimates.
-* **Meme-coin data can be manipulated.** Wash trading and fake volume are common, holder lists can
-  hide insiders behind many wallets, LP locks can expire, and contracts can change. A clean rugcheck
-  means "no red flags found in *these* checks", nothing more. Slippage estimates assume a
-  constant-product pool.
-* **The desk is only as good as its evidence.** Subagents can still be wrong together; the desk's
-  checks are mechanical (every objection answered, hard gates passed), not a guarantee of judgement.
-* **Not an execution system.** Tickets need your explicit "yes", and the connector call is made by
-  Claude through your brokerage's MCP server. Bracket orders exist for stocks on Alpaca but not
-  for crypto — the crypto stop is a separate order after the fill.
+* **Free data is delayed, rate-limited and sometimes wrong.** Yahoo keeps only ~60 calendar days of
+  5-minute bars (≈ 40 sessions live). Endpoints change without notice.
+* **Backtests are small samples** (tens of trades); costs and slippage are estimates. A positive backtest
+  is necessary, not sufficient.
+* **The Time Machine is not a prediction.** It resamples ordinary bars, so it cannot see the conditional
+  behaviour after a breakout, news shocks, halts or gaps; a fair 2:1 bracket replays to about 0R.
+* **The autopilot is simple on purpose:** long only, one position per symbol, bracket exits, no
+  pre/after-market. It is as good as the edge in your rules — which you have to prove on paper first.
+* **X costs money and its timeline is noisy;** StockTwits is crowd mood. Neither is a signal by itself.
+* **Meme-coin data can be manipulated** (wash trading, hidden insiders, expiring LP locks). A clean
+  rugcheck means "no red flags found in these checks", nothing more.
 
 ## Repo layout
 
 ```
 trader-skill/
   README.md  LICENSE  .claude-plugin/{plugin.json, marketplace.json, icon.png}
-  trader-scanner/ trader-news/ trader-entry/ trader-exit/ trader-timemachine/ trader-risk/
-  trader-sizer/ trader-alerts/ trader-broker/ trader-journal/ trader-backtest/ trader-rugcheck/
-  trader-desk/ trader-arb/        add-ons
+  trader-scanner/ trader-news/ trader-entry/ trader-exit/ trader-timemachine/ trader-risk/ trader-sizer/
+  trader-alerts/ trader-broker/ trader-journal/ trader-backtest/ trader-rugcheck/
+  trader-desk/ trader-arb/ trader-autopilot/
   agents/        trader-researcher.md, trader-skeptic.md, trader-lead.md (the desk's subagents)
-  shared/        data.py (get_candles / get_quote), sources/*, symbols.py, market_clock.py,
-                 setups.py, trade_sim.py, indicators.py, cache.py, http.py, offline.py, html.py, cli.py
+  app/           server.py + static/ (the dashboard), devdata.py (sample data)
+  shared/        data.py, sources/* (incl. x.py, stocktwits.py), brokers/ (simulator, alpaca), symbols, market_clock,
+                 setups, trade_sim, indicators, cache, http, offline, secrets, html, cli
   tests/         test_*.py, fixtures/ (make_fixtures.py regenerates them)
   docs/SCHEMAS.md  every trader/ state file, field by field
-  scripts/demo.sh  the walkthroughs, offline (scripts/demo.py does the work; Windows: python scripts/demo.py)
+  scripts/demo.py  the walkthroughs, offline (scripts/demo.sh wraps it)
 ```
 
 ## License

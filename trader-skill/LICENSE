@@ -20,7 +20,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-The Software is an educational tool. It is not financial advice, it does not
-place orders on its own, and its market data comes from free public sources
-that may be delayed or wrong. Trading — and meme coins in particular — can
-lose you all of the money involved.
+The Software is an educational tool. It is not financial advice. It places
+orders only when you approve a ticket or explicitly start its autopilot (which
+uses a local simulator or a paper account unless you configure live trading
+yourself), and its market data comes from free public sources that may be
+delayed or wrong. Trading — and meme coins in particular — can lose you all of
+the money involved.

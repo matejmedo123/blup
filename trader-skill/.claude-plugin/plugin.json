@@ -1,7 +1,7 @@
 {
   "name": "trader-skill",
-  "version": "1.0.0",
-  "description": "Trader: 12 day-trading skills for US stocks, crypto and DEX meme coins \u2014 chart scanner, news monitor, entry timer, exit planner, a 10,000-path Time Machine, risk manager, position sizer, alerts, paper-first order tickets, journal, backtester and a meme-coin rug check \u2014 plus two add-ons: a four-role AI trading desk (Researcher, Skeptic, Lead, Trader) and a read-only arbitrage gap monitor. Free public data only, no API keys, paper trading by default.",
+  "version": "2.0.0",
+  "description": "Trader: day-trading skills for US stocks, crypto and DEX meme coins \u2014 scanner, news (incl. X and StockTwits), entry timer, exit planner, a 10,000-path Time Machine, risk manager, sizer, alerts, paper-first tickets, journal, backtester, rug check \u2014 plus an AI trading desk, an arbitrage gap monitor, an opt-in autopilot (simulator / Alpaca paper by default) and a web dashboard.",
   "author": {
     "name": "trader-skill authors"
   },
@@ -32,6 +32,7 @@
     "./trader-backtest",
     "./trader-rugcheck",
     "./trader-desk",
-    "./trader-arb"
+    "./trader-arb",
+    "./trader-autopilot"
   ]
 }

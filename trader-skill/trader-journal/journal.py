@@ -359,6 +359,18 @@ def _upsert(trade: dict) -> None:
     _save({"trades": trades})
 
 
+def save_trade(trade: dict) -> None:
+    """Insert or replace one trade (by id) — used by the autopilot."""
+    _upsert(trade)
+
+
+def get_trade(trade_id: str):
+    for t in _doc().get("trades") or []:
+        if t.get("id") == trade_id:
+            return t
+    return None
+
+
 def _write_reports(args, trade, series=None):
     if args.no_html:
         return None, None

@@ -168,10 +168,11 @@ def _report(doc, sym, asset):
     return html.write_report("backtest-%s-%s.html" % (sym.key, doc["setup"]), html.page(title, body, sub, asset))
 
 
-@cli.entrypoint
-def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
-    ctx = cli.init(args)
+def run(args, ctx) -> dict:
+    """Run the backtest described by parsed ``args`` and write backtests/{key}-{setup}.json.
+
+    Importable so the autopilot can backtest in-process; ``main`` only adds the text output.
+    """
     sym = data.as_symbol(args.symbol, args.asset)
     asset = sym.asset
     setup = args.setup or setups.DEFAULT_SETUP[asset]
@@ -240,6 +241,18 @@ def main(argv=None) -> int:
         report = _report(doc, sym, asset)
         doc["report"] = state.rel(report)
     out = state.write_json("backtests/%s-%s.json" % (sym.key, setup), doc)
+    return {"doc": doc, "sym": sym, "asset": asset, "setup": setup, "res": res, "warnings": warnings, "fee": fee,
+            "slip": slip, "impact": impact, "target_r": target_r, "report": report, "out": out}
+
+
+@cli.entrypoint
+def main(argv=None) -> int:
+    args = build_parser().parse_args(argv)
+    ctx = cli.init(args)
+    r = run(args, ctx)
+    doc, sym, asset, setup, res = r["doc"], r["sym"], r["asset"], r["setup"], r["res"]
+    warnings, fee, slip, impact, target_r = r["warnings"], r["fee"], r["slip"], r["impact"], r["target_r"]
+    report, out, summary = r["report"], r["out"], doc["summary"]
 
     lines = ["%s · %s — backtest" % (sym.display, setups.SETUPS[setup]["label"]), summary]
     if res["triggers"]:
