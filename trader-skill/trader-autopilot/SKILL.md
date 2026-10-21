@@ -117,13 +117,14 @@ Config (`trader/config.json → autopilot`): `universe` (`mode` auto|watchlist, 
 `min_tm_ev_r`, `tm_paths`, `max_trigger_age_bars`), `scan_time_budget_sec`, `playbook`
 (`required_for_crypto`, `max_age_days`, `auto_refresh_days`, `top`, `min_target_r`, `confidence_sizing`,
 `risk_tiers`, `max_risk_mult`, `max_risk_pct`, `boost_min_test_trades`, `setups`, `timeframes`), `runner`
-(`enabled`, `require_lab`, `keep`), `news_gate`
+(`enabled`, `require_lab`, `keep`), `etf_trend` (`enabled`, `when`, `required_lab`, `symbols`), `news_gate`
 (`lookback_hours`, `critical_tags`, `major_tags`, `min_credibility`, `refresh_before_trade`), `adapt`
 (`min_trades`, `disable_below_r`, `cooldown_days`, `symbol_loss_streak`, `loss_streak`,
 `loss_streak_risk_mult`, `max_drawdown_pct`), `max_new_trades_per_day`, `flatten_on_kill`,
 `sim_starting_cash`. Top level: `leverage` (`stock`, `crypto`; used only when `limits.json` allows it, never
 past 2×, never for crypto at Alpaca), `borrow_rate_pct` (simulator interest), `notify` (ntfy topic / Telegram, events, `daily_summary_et`) and
-`ai_desk` (`enabled`, `model`, daily call and USD budget, `on_unavailable`).
+`ai_desk` (`enabled`, `model`, daily call and USD budget, `on_unavailable`); `cash_yield_pct` (simulator interest
+on idle cash).
 
 ## Notifications on the phone
 
@@ -194,6 +195,17 @@ is sold in full. It only happens while this week's lab run found that it paid on
 (`runner.require_lab`). `status` and the dashboard describe every open position in plain words — what was bought,
 where the stop is, what makes it sell and whether part of it is riding. When you present results, use those
 sentences; say that the sold third and the riding two thirds are two journal trades.
+
+## Bear markets
+
+Crypto trend trades only buy while Bitcoin is above its 200-day average, so a crypto bear market means cash. With
+`autopilot.etf_trend.enabled` (the trend profile turns it on) the bot then trades the daily trend rule
+(`etf_trend`) on the ETFs the ETF lab validated (`trader-backtest/lab.py --etf`; gold, the dollar, commodities,
+bonds, energy, the indexes) — entries 9:45 a.m.–3:30 p.m. ET, held for days with a GTC bracket, sold at the first
+daily close below the 50-day EMA. In the simulator idle cash earns `cash_yield_pct` (T-bills). Shorts, bear-market
+dip buying and inverse ETFs were tested and lose or are too thin to trust — say so if the user asks for them; the
+bot is long only. When you present a bear-market period, say what the bot holds and that cash earning interest is
+the plan, not a failure.
 
 ## Leverage and the trend profile
 

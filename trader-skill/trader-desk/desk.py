@@ -462,7 +462,9 @@ def verify(idea_id: str, case: dict, cfg: dict, limits: dict) -> dict:
 def max_idea_age(d: dict, asset: str, plan: dict = None) -> float:
     """Hours an idea stays fresh; a signal on daily bars stays good for longer than an intraday one."""
     hours = float(d["max_idea_age_hours"].get(asset or "stock", 2))
-    return max(hours, 12.0) if (plan or {}).get("interval") == "1d" else hours
+    if (plan or {}).get("interval") == "1d":  # a daily stock signal waits over a weekend or a holiday
+        return max(hours, 96.0 if (asset or "stock") == "stock" else 12.0)
+    return hours
 
 
 def _desk_cfg(cfg: dict) -> dict:

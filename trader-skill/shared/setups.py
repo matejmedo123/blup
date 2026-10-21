@@ -65,6 +65,14 @@ SETUPS = {
                   "exit_rule": {"type": "close_below_ema", "n": 50, "max_bars": 250,
                                 "text": "first daily close below the 50-day EMA (the trend is broken)",
                                 "short": "close < 50-day EMA"}},
+    # the same trend rule on ETFs that move unlike crypto (gold, the dollar, commodities, bonds, energy, the indexes):
+    # each judged by its own 200-day trend; the autopilot uses it while crypto is in a bear market
+    "etf_trend": {"label": "ETF trend following (20 EMA above the 50 EMA, higher highs and higher lows, above its own "
+                           "200-day average)", "assets": ("stock",), "kind": "series", "intervals": ("1d",),
+                  "cooldown": 1, "stop_rule": {"type": "swing_low", "n": 10, "min_atr": 1.0},
+                  "exit_rule": {"type": "close_below_ema", "n": 50, "max_bars": 250,
+                                "text": "first daily close below the 50-day EMA (the trend is broken)",
+                                "short": "close < 50-day EMA"}},
     "breakout_volume": {"label": "Breakout (close above the 20-day high on 1.5× volume, BTC above its 200-day "
                                  "average)", "assets": ("crypto",), "kind": "series", "intervals": ("1d",),
                         "needs_btc": True, "cooldown": 1, "stop_rule": {"type": "level", "atr": 1.0},
@@ -542,10 +550,14 @@ def _series_hit(setup: str, candles, i: int, x: dict, context: dict = None):
         return ("3 lower closes in a row, RSI(2) %.1f, above the 50- and 200-day averages, Bitcoin above its "
                 "200-day average" % x["rsi2"][i], {"trigger_level": cl[i], "stop_ref": None, "sma5": x["sma5"][i],
                                                    "sma50": x["sma50"][i], "sma200": x["sma200"][i]})
-    if setup in ("trend_ema", "breakout_volume"):
-        btc_up = (context or {}).get("btc_up")
-        if not btc_up or not btc_up.get(c.t):
-            return None
+    if setup in ("trend_ema", "breakout_volume", "etf_trend"):
+        if setup == "etf_trend":
+            if cl[i] <= x["sma200"][i]:
+                return None  # its own long-term trend must be up
+        else:
+            btc_up = (context or {}).get("btc_up")
+            if not btc_up or not btc_up.get(c.t):
+                return None
         if setup == "breakout_volume":
             res = max(b.h for b in candles[i - 20:i])
             if not (cl[i] > res and c.v > 1.5 * x["vol20"][i - 1] and cl[i - 1] <= max(b.h for b in candles[i - 21:i - 1])):
@@ -559,9 +571,9 @@ def _series_hit(setup: str, candles, i: int, x: dict, context: dict = None):
                     and min(b.l for b in candles[k - 9:k + 1]) > min(b.l for b in candles[k - 19:k - 9]))
         if not trending(i) or trending(i - 1):
             return None  # only the day the trend is confirmed
-        return ("trend confirmed: 20 EMA above the 50 EMA, close above the 20 EMA, higher highs and higher lows, "
-                "Bitcoin above its 200-day average", {"trigger_level": cl[i], "stop_ref": min(b.l for b in candles[i - 9:i + 1]),
-                                                       "ema50": x["ema50"][i]})
+        return ("trend confirmed: 20 EMA above the 50 EMA, close above the 20 EMA, higher highs and higher lows, " +
+                ("above its own 200-day average" if setup == "etf_trend" else "Bitcoin above its 200-day average"),
+                {"trigger_level": cl[i], "stop_ref": min(b.l for b in candles[i - 9:i + 1]), "ema50": x["ema50"][i]})
     if setup == "trend_breakout":
         btc_up = (context or {}).get("btc_up")
         if not btc_up or not btc_up.get(c.t):

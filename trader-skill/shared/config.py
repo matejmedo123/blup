@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     # (allow_margin / allow_leverage + max_leverage); see leverage() below
     "leverage": {"stock": 1.0, "crypto": 1.0},
     "borrow_rate_pct": 10.0,
+    "cash_yield_pct": 0.0,      # simulator: what idle cash earns a year (T-bills); 0 = nothing
     "fractional_shares": False,
     "watchlists": {
         "stocks": ["TSLA", "NVDA", "AAPL", "AMD", "META"],
@@ -66,6 +67,10 @@ DEFAULT_CONFIG = {
         # let part of a winner ride (setups with a runner rule): off unless you turn it on; by default only while
         # the latest lab run found that it paid on periods nobody tuned on
         "runner": {"enabled": False, "require_lab": True, "keep": None},
+        # while crypto is in a bear market (Bitcoin below its 200-day average), the daily trend rule on ETFs that
+        # move unlike crypto; held for days; only what the ETF lab validated (trader-backtest/lab.py --etf)
+        "etf_trend": {"enabled": False, "when": "crypto_bear", "required_lab": True,
+                      "symbols": ["SPY", "QQQ", "IWM", "DIA", "GLD", "TLT", "DBC", "UUP", "XLE", "XLF", "XLK", "SMH"]},
         "playbook": {"required_for_crypto": True, "max_age_days": 14, "auto_refresh_days": 7, "top": 25,
                      "min_target_r": 0, "confidence_sizing": True, "max_risk_mult": 2.0,
                      "max_risk_pct": None, "setups": None, "timeframes": None,

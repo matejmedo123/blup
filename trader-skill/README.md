@@ -310,6 +310,48 @@ three-year windows):
 The typical year is about +20 %; the averages are pulled up by rare years like 2021. On BTC + ETH alone
 the typical year is +10 % (3 years: €1,545) with drops under −20 %.
 
+### Bear markets — what was tested, what the bot does
+
+The crypto strategies only buy while Bitcoin is above its 200-day average, so in a bear market they sit in
+cash: 2018 and 2022 ended at 0 % and −1 % while Bitcoin fell 73 % and 65 %. Earning *in* those years was
+tested on the same data, rules fixed in advance:
+
+| Idea | Result |
+|---|---|
+| Short crypto (mirror of both trend rules, 10 %/yr carry), Bitcoin below its 200-day average | +0.02R per trade on the 10 biggest coins, −0.03R on 33 others; wins in 2018 and 2026, loses in the corrections of 2021, 2023 and 2024 |
+| … only in a "death cross" (50-day below 200-day) | +0.08R up to 2022, −0.10 to −0.23R since 2023 — not adopted |
+| … BTC + ETH only | +0.23R, but 57 trades in eight years; through Alpaca only as BITI (−1× Bitcoin, US hours), which lost 18 % on the same 15 signals the futures short gained 9 % on — not adopted |
+| Buy the dips in a bear market (RSI(2) < 10 below the lower band) | −0.07R, 58 % wins — loses |
+| Inverse ETFs (SH, PSQ, BITI) with the trend rules | −0.25 to −0.35R — bear-market rallies and decay |
+| Stocks with the trend rules | +0.13 to +0.27R overall, but negative in 2018 and 2022 |
+| **Trend rule on ETFs that move unlike crypto** (gold, dollar, commodities, bonds, energy, indexes) | +0.28R per trade, positive in 2022 (+0.51R); the lab holds it in all 3 walk-forward periods |
+| **Idle cash in T-bills** | 2 % (2018, 2022) to 5 % (2023–24) a year on whatever is not invested |
+
+So the bot (trend profile) now does both of the last two: **while Bitcoin is below its 200-day average,
+it trades the daily trend rule on the ETFs the ETF lab validated** (`lab.py --etf`; today gold, the dollar,
+commodities, tech and semiconductors), held for days with a GTC bracket at the broker and sold at the
+first daily close below the 50-day EMA during market hours; and in the simulator idle cash earns
+`cash_yield_pct` (T-bills). At Alpaca, idle cash earns what your account pays — holding a T-bill ETF
+(SGOV) yourself is the manual equivalent.
+
+**€1,000 started on any week since mid-2018** (382 one-year, 278 three-year windows; 2 % risk, 1×):
+
+| | Crypto only | + T-bills | + ETF trend in crypto bear markets |
+|---|---|---|---|
+| After 1 year, typical | €1,210 | €1,229 | **€1,293** |
+| … 1 year in 10 is worse than | €957 | €973 | €982 |
+| … in profit | 80 % of starts | 84 % | **86 %** |
+| After 3 years, typical | €3,117 | **€3,357** | €3,276 |
+| … 1 in 10 is worse than | €1,819 | **€1,952** | €1,714 |
+| 2022 (crypto −65 %, stocks −20 %) | €1,000 | €1,020 | **€1,125** |
+| Crypto winter mid-2018 → spring 2019 | €1,000 | **€1,017** | €999 |
+| Last 12 months | €1,126 | **€1,163** | €1,104 |
+
+Honest reading: T-bills help every year a little. The ETF rotation is the only thing that earned in a
+real bear year (2022: +12.5 %) and makes one-year results better, but it did nothing in the 2018 crypto
+winter, cost a little in the last 12 months, and makes the worst three-year case worse. `profile` turns it
+on; `--no-etf` keeps the bot in cash and T-bills instead.
+
 In short: a high *win chance* is easy and loses money; the edge that survives is the oldest one in
 crypto — follow Bitcoin's trend and let the few big winners run. 40 % of its trades win, but the
 average win is about 4× the average loss, so the chance of being up after 20 trades is ~80 % (~94 % on

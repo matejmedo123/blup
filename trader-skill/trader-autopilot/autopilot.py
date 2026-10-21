@@ -130,7 +130,7 @@ def _write_broker_files(broker, acct, positions, orders, book, realized_today):
     unreal = sum(float(p.get("unrealized_pl") or 0) for p in positions)
     line = {"at": market_clock.iso(market_clock.now_utc()), "equity": acct.get("equity"), "cash": acct.get("cash"),
             "unrealized": round(unreal, 2), "realized_today": round(realized_today, 2), "mode": broker.mode}
-    for k in ("borrowed", "interest_paid"):  # only when leverage is in play
+    for k in ("borrowed", "interest_paid", "interest_earned"):  # only when leverage or cash interest is in play
         if acct.get(k):
             line[k] = acct[k]
     state.append_jsonl("broker/equity.jsonl", line)
@@ -298,7 +298,8 @@ def rule_exit_due(it: dict) -> str:
     step = market_clock.interval_seconds(interval)
     need = 4 * n if rule["type"] == "close_below_ema" else n + 3  # an EMA needs a run-in to settle
     try:
-        bars = data.get_candles(it["data_key"], interval, days=need * step / 86400.0, asset="crypto").candles
+        days = need * step / 86400.0 if it.get("asset", "crypto") != "stock" else need + 5  # stocks: sessions
+        bars = data.get_candles(it["data_key"], interval, days=days, asset=it.get("asset") or "crypto").candles
     except (data.DataUnavailable, ValueError, KeyError):
         return ""
     since = (it.get("runner") or {}).get("since") or it.get("filled_at") or it["placed_at"]
@@ -476,7 +477,8 @@ def manage_exits(broker, book: dict, positions: list, orders: list, cfg: dict = 
                 reason = "target"
             elif float(p["last"]) <= float(it["stop"]) and not it.get("stop_order_id"):
                 reason = "stop"
-        if not reason and it.get("exit_rule"):
+        if not reason and it.get("exit_rule") and (
+                it["asset"] != "stock" or market_clock.market_status(market_clock.now_utc())["state"] == "open"):
             why = rule_exit_due(it)
             if why:
                 reason = "rule"
@@ -714,22 +716,22 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None, pbs: dict
 
 
 def _series_candidates(sym, e: dict, memo: dict, handled: dict, holding: set, now_ts: int, max_age: int,
-                       notes: list) -> list:
+                       notes: list, asset: str = "crypto") -> list:
     """A validated swing or daily setup (1h / 4h / 1d bars) that fired on the newest closed bar."""
     interval = e["interval"]
     step = market_clock.interval_seconds(interval)
     days = SERIES_HISTORY_DAYS.get(interval, 45)
 
-    def candles(s):
-        key = (s.key, "crypto", interval)
+    def candles(s, a=asset):
+        key = (s.key, a, interval)
         if key not in memo:
-            memo[key] = data.get_candles(s, interval, days=days, asset="crypto")
+            memo[key] = data.get_candles(s, interval, days=days, asset=a)
         return memo[key]
     try:
         series = candles(sym)
         context = None
         if (setups.SETUPS.get(e["setup"]) or {}).get("needs_btc"):  # Bitcoin's 200-day trend switches it on and off
-            context = {"btc_up": setups.regime_map(candles(data.as_symbol("BTCUSDT", "crypto")).candles)}
+            context = {"btc_up": setups.regime_map(candles(data.as_symbol("BTCUSDT", "crypto"), "crypto").candles)}
     except (data.DataUnavailable, ValueError) as exc:
         notes.append("%s %s: %s" % (sym.display, interval, exc))
         return []
@@ -741,15 +743,83 @@ def _series_candidates(sym, e: dict, memo: dict, handled: dict, holding: set, no
                                    context=context):
         trig = r["trigger"]
         age = (now_ts - (trig["t"] + step)) // step
+        if asset == "stock":  # weekends and holidays: fresh means the newest closed session
+            age = 0 if trig["index"] == len(series.candles) - 1 else max_age + 1
         sid = setups.setup_id(sym.key, r["window"], e["setup"])
         if age > max_age or sid in handled:
             continue
-        cand = {"id": sid, "sym": sym, "asset": "crypto", "setup": e["setup"], "result": r, "series": series,
+        cand = {"id": sid, "sym": sym, "asset": asset, "setup": e["setup"], "result": r, "series": series,
                 "window": None, "trigger": trig, "interval": interval, "playbook": e}
         if sym.key in holding:
             cand["skip"] = "already holding or waiting on %s" % sym.display
         out.append(cand)
     return out
+
+
+ETF_FIRST_ENTRY = (9, 45)  # ET — yesterday's daily bar is closed and the opening auction is over
+
+
+def crypto_bull(memo: dict) -> tuple:
+    """(True/False/None, text): is Bitcoin's last daily close above its 200-day average?"""
+    key = ("BTCUSDT", "crypto", "1d")
+    try:
+        if key not in memo:
+            memo[key] = data.get_candles(data.as_symbol("BTCUSDT", "crypto"), "1d", days=SERIES_HISTORY_DAYS["1d"],
+                                         asset="crypto")
+        bars = memo[key].candles
+    except (data.DataUnavailable, ValueError) as exc:
+        return None, "Bitcoin's daily prices are unavailable (%s)" % exc
+    if len(bars) < 200:
+        return None, "only %d daily Bitcoin closes — the 200-day average needs 200" % len(bars)
+    avg = sum(b.c for b in bars[-200:]) / 200.0
+    up = bars[-1].c > avg
+    return up, "Bitcoin %s its 200-day average (%s vs %s)" % ("above" if up else "below", fmt.price(bars[-1].c),
+                                                             fmt.price(avg))
+
+
+def etf_playbook(cfg: dict, now=None) -> dict:
+    ec = (cfg.get("autopilot") or {}).get("etf_trend") or {}
+    lab = _mod("trader-backtest", "lab")
+    pb, problem = lab.load_playbook(now, float(((cfg.get("autopilot") or {}).get("playbook") or {}).get(
+        "max_age_days") or lab.PLAYBOOK_DAYS), lab.PLAYBOOK_ETF)
+    by_symbol = {}
+    for key, e in ((pb or {}).get("entries") or {}).items():
+        by_symbol.setdefault(e["symbol"], []).append(dict(e, key=key))
+    return {"required": bool(ec.get("required_lab", True)), "playbook": pb, "problem": problem,
+            "by_symbol": by_symbol}
+
+
+def etf_candidates(cfg: dict, book: dict, memo: dict, now=None) -> tuple:
+    """While crypto is in a bear market, the same trend rule on ETFs that move unlike crypto — held for days."""
+    ec = (cfg.get("autopilot") or {}).get("etf_trend") or {}
+    if not ec.get("enabled"):
+        return [], []
+    now = now or market_clock.now_utc()
+    if market_clock.market_status(now)["state"] != "open":
+        return [], []
+    et = market_clock.to_et(now)
+    if (et.hour, et.minute) < ETF_FIRST_ENTRY or (et.hour, et.minute) >= NO_NEW_STOCK_ENTRIES:
+        return [], []
+    if ec.get("when", "crypto_bear") == "crypto_bear":
+        up, why = crypto_bull(memo)
+        if up is None:
+            return [], ["ETF trend: %s — waiting" % why]
+        if up:
+            return [], ["ETF trend waits: crypto is in a bull market (%s)" % why]
+    pbs = etf_playbook(cfg, now)
+    if pbs["required"] and not pbs["playbook"]:
+        return [], ["ETF trend: %s" % pbs["problem"]]
+    wanted = [str(x).upper() for x in ec.get("symbols") or []]
+    holding = {it["data_key"] for it in book["items"].values() if it["status"] in ("pending", "open")}
+    handled = book["handled"].setdefault(_today(now), {})
+    found, notes = [], []
+    for raw in wanted:
+        sym = data.as_symbol(raw, "stock")
+        entries = pbs["by_symbol"].get(sym.key) if pbs["required"] else \
+            [{"symbol": sym.key, "setup": "etf_trend", "interval": "1d", "key": "%s:etf_trend@1d" % sym.key}]
+        for e in entries or []:
+            found += _series_candidates(sym, e, memo, handled, holding, int(now.timestamp()), 0, notes, "stock")
+    return found, notes
 
 
 def _write_entry(c: dict) -> None:
@@ -791,9 +861,10 @@ def make_plan(c: dict, cfg: dict) -> dict:
         stop, atr_mult = pb["stop"], float(pb["atr_mult"])
         target_r = float(pb["target_r"]) if pb.get("target_r") is not None else RULE_TARGET_CAP_R
         horizon_s = market_clock.parse_horizon(pb["horizon"])
+    swing = asset == "stock" and interval == "1d"
     lv = exit_mod.plan_levels(trig["price"], entry_ts, asset, until, stop_ref=levels.get("stop_ref"),
                               trigger_level=levels.get("trigger_level"), stop=stop, atr_mult=atr_mult,
-                              target_r=target_r, tick=tick, horizon_s=horizon_s)
+                              target_r=target_r, tick=tick, horizon_s=horizon_s, swing=swing)
     if lv["stop"]["method"] == "range_low":
         lv["stop"]["note"] = exit_mod.structure_note(c["setup"])
     if rule:
@@ -805,7 +876,7 @@ def make_plan(c: dict, cfg: dict) -> dict:
             "time_stop": lv["time_stop"], "horizon": lv["horizon"], "trailing": None, "scale_out": [],
             "liquidity_exit": None, "atr": lv["atr"], "interval": interval, "source": c["series"].source,
             "created_at": market_clock.iso(market_clock.now_utc()), "chart": None, "origin": "autopilot",
-            "playbook": (pb or {}).get("key"),
+            "playbook": (pb or {}).get("key"), "swing": swing,
             "exit_rule": dict(rule, interval=interval) if rule else None}
     if rule:
         plan["target"]["note"] = "a far cap — the exit rule decides: %s" % rule.get("text")
@@ -1075,7 +1146,8 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     try:
         bo = broker.place_entry({"client_order_id": order["id"], "symbol": bsym, "asset": asset, "qty": order["qty"],
                                  "limit_price": order["limit_price"], "stop_price": order["stop_price"],
-                                 "target_price": order["target_price"], "leverage": lev})
+                                 "target_price": order["target_price"], "leverage": lev,
+                                 "swing": bool(plan.get("swing"))})
     except BrokerError as exc:
         _update_order(order["id"], status="error", error=str(exc))
         return _decision(action="error", reasons=["broker refused: %s" % exc], desk=desk_info, gates=gates, ai=ai_info,
@@ -1091,7 +1163,8 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         "qty_unit": order.get("qty_unit"), "stop": order["stop_price"], "target": order["target_price"],
         "time_stop": plan["time_stop"]["at"], "status": "pending", "placed_at": market_clock.iso(now),
         "exit_rule": plan.get("exit_rule"), "interval": plan.get("interval"), "leverage": lev,
-        "runner": plan.get("runner"), "setup": c["setup"], "entry_plan": plan["entry"]["price"]}
+        "runner": plan.get("runner"), "setup": c["setup"], "entry_plan": plan["entry"]["price"],
+        "swing": bool(plan.get("swing"))}
     notify.send("trade_opened", "BUY %s %s (%s)" % (fmt.qty(order["qty"]), bsym, c["setup"]),
                 "%s. Risk %s%s. Desk GO, risk PASS%s." % (
                     text, fmt.money(order.get("risk_usd")), " (risk × %g)" % mult if abs(mult - 1) > 1e-9 else "",
@@ -1309,6 +1382,12 @@ def _cycle(approved=None) -> dict:
         except Exception as exc:  # a bad symbol must not stop exits from being managed next cycle
             cands, notes = [], []
             errors.append("trigger scan: %s: %s" % (type(exc).__name__, exc))
+        try:
+            more, more_notes = etf_candidates(cfg, book, memo, now)
+            cands += more
+            notes += more_notes
+        except Exception as exc:
+            errors.append("ETF scan: %s: %s" % (type(exc).__name__, exc))
         handled = book["handled"].setdefault(_today(now), {})
         use_learned = learned if learned.get("enabled", True) else None
         # when several fire at once and the caps allow only some, the most certain go first
@@ -1500,6 +1579,13 @@ def _refresh_lab(cfg: dict) -> None:
             doc["coins"], s["coins_validated"], (": " + ", ".join(names)) if names else
             " — nothing kept an edge after costs on unseen data, so no crypto trades for now"))
         notify.send("learned", "Backtest lab: %d validated" % s["coins_validated"], text, cfg)
+        if ((cfg.get("autopilot") or {}).get("etf_trend") or {}).get("enabled"):
+            eargs = lab.build_parser().parse_args(["--etf", "--no-html"])
+            edoc = lab.run(eargs, cli.Context(args=eargs, cfg=config.load_config(), limits=config.load_limits(),
+                                              home=config.trader_home()))["doc"]
+            notify.send("learned", "ETF lab: %d validated" % edoc["summary"]["coins_validated"],
+                        "ETF trend lab re-ran on %d ETFs: %s." % (edoc["coins"], ", ".join(
+                            r["display"] for r in edoc["validated"]) or "none validated"), cfg)
         state.append_jsonl("autopilot/housekeeping.jsonl", {"at": started, "task": "lab", "validated": s["coins_validated"],
                                                             "seconds": s["seconds"]})
     except Exception as exc:
@@ -1642,6 +1728,10 @@ def build_parser():
     p.add_argument("--stock-leverage", type=float, default=1.0, help="profile: stock margin, 1–2 (default 1 = none)")
     p.add_argument("--capital", type=float, help="profile: account size (default: config account_size)")
     p.add_argument("--write", action="store_true", help="profile: save the changes (default: show them only)")
+    p.add_argument("--no-etf", action="store_true",
+                   help="profile: no ETF trend while crypto is in a bear market (default: on)")
+    p.add_argument("--cash-yield", type=float, default=4.0,
+                   help="profile: %% a year idle cash earns in the simulator — today's T-bill yield (default 4)")
     p.add_argument("--no-runner", action="store_true",
                    help="profile: sell the whole trend breakout at its exit (default: let two thirds of a winner ride)")
     return p
@@ -1653,7 +1743,8 @@ TREND_SETUPS = ["trend_ema", "trend_breakout"]
 MAX_PROFILE_RISK = 5.0
 
 
-def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, runner: bool = True) -> tuple:
+def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, runner: bool = True,
+                  etf: bool = True, cash_yield: float = 4.0) -> tuple:
     """(config changes, limits changes) for daily trend following on the biggest coins.
 
     Every number is what the portfolio backtest used. The learning rules are loosened to fit a strategy that
@@ -1667,9 +1758,10 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
         if not 1.0 <= x <= config.LEVERAGE_HARD_CAP:
             raise ValueError("%s must be between 1 and %g" % (name, config.LEVERAGE_HARD_CAP))
     backstop = lambda pct: round(capital * pct / 100.0 * 4)  # dollar limits bind only after the account grew 4×
-    cfg = {"risk_per_trade_pct": risk, "account_size": capital,
+    cfg = {"risk_per_trade_pct": risk, "account_size": capital, "cash_yield_pct": float(cash_yield),
            "leverage": {"crypto": lev, "stock": stock_lev},
            "autopilot": {"sim_starting_cash": capital, "runner": {"enabled": bool(runner)},
+                         "etf_trend": {"enabled": bool(etf), "when": "crypto_bear"},
                          "playbook": {"top": 10, "setups": TREND_SETUPS, "timeframes": ["1d"], "max_risk_pct": risk},
                          "universe": {"crypto": {"top_n": 10}},
                          "adapt": {"loss_streak": 7, "symbol_loss_streak": 5, "min_trades": 20,
@@ -1709,6 +1801,11 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
     lines = ["PROFILE · daily trend following on the 10 biggest coins · %g%% risk · crypto %g× · stocks %g×%s" % (
         c_cfg["risk_per_trade_pct"], c_cfg["leverage"]["crypto"], c_cfg["leverage"]["stock"],
         " · winners ride" if c_cfg["autopilot"]["runner"]["enabled"] else "")]
+    if c_cfg["autopilot"]["etf_trend"]["enabled"]:
+        lines.append("Bear markets: while Bitcoin is below its 200-day average (no crypto trend to follow), the bot "
+                     "trades the same trend rule on ETFs that move unlike crypto — gold, the dollar, commodities, "
+                     "bonds, energy, the indexes — held for days, only those the ETF lab validated; idle cash counts "
+                     "%g%% a year in the simulator (T-bills)." % c_cfg["cash_yield_pct"])
     if c_cfg["autopilot"]["runner"]["enabled"]:
         lines.append("Let winners ride: when a trend breakout's exit comes in profit while the coin is above its "
                      "200-day average, the bot sells a third and lets two thirds ride until a daily close below the "
@@ -1725,8 +1822,10 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
         lines.append("The simulator keeps its current book (started at %s); delete trader/broker/sim.json to restart "
                      "it at %s." % (fmt.money(sim.get("starting_cash")), fmt.money(c_cfg["account_size"])))
     lines.append("Not touched: broker, mode, paper, live_confirmation, keys, autopilot.enabled.")
-    lines.append("Saved. The weekly lab run rebuilds the playbook for these coins and setups; run it now with:\n"
-                 "  python3 trader-backtest/lab.py --top 10 --timeframes 1d --setups %s" % ",".join(TREND_SETUPS)
+    lines.append("Saved. The weekly lab run rebuilds the playbooks; run them now with:\n"
+                 "  python3 trader-backtest/lab.py --top 10 --timeframes 1d --setups %s%s" % (
+                     ",".join(TREND_SETUPS), "\n  python3 trader-backtest/lab.py --etf"
+                     if c_cfg["autopilot"]["etf_trend"]["enabled"] else "")
                  if written else "Dry run — add --write to save.")
     return "\n".join(lines)
 
@@ -1885,7 +1984,8 @@ def main(argv=None) -> int:
         capital = float(args.capital or cfg.get("account_size") or 0)
         if capital <= 0:
             raise ValueError("--capital must be positive")
-        changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital, not args.no_runner)
+        changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital, not args.no_runner,
+                                not args.no_etf, args.cash_yield)
         if args.write:
             config.update_file("config.json", changes[0])
             config.update_file("limits.json", changes[1])

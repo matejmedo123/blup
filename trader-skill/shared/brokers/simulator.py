@@ -162,14 +162,22 @@ class SimBroker(Broker):
         self._save()
 
     def _charge_interest(self, now_ts: int) -> None:
+        """Borrowed cash costs borrow_rate_pct; idle cash earns cash_yield_pct (T-bills), both by the second."""
         last = self.book.get("interest_at")
         self.book["interest_at"] = now_ts
-        if last is None or now_ts <= int(last) or self.book["cash"] >= 0:
+        if last is None or now_ts <= int(last):
             return
-        rate = float(self.cfg.get("borrow_rate_pct") if self.cfg.get("borrow_rate_pct") is not None else 10.0) / 100.0
-        fee = -self.book["cash"] * rate * (now_ts - int(last)) / (365.0 * 86400)
-        self.book["cash"] -= fee
-        self.book["interest_paid"] = _r(float(self.book.get("interest_paid") or 0) + fee, 4)
+        years = (now_ts - int(last)) / (365.0 * 86400)
+        cash = self.book["cash"]
+        if cash < 0:
+            rate = float(self.cfg.get("borrow_rate_pct") if self.cfg.get("borrow_rate_pct") is not None else 10.0) / 100.0
+            fee = -cash * rate * years
+            self.book["cash"] -= fee
+            self.book["interest_paid"] = _r(float(self.book.get("interest_paid") or 0) + fee, 4)
+        elif cash > 0 and float(self.cfg.get("cash_yield_pct") or 0) > 0:
+            earned = cash * float(self.cfg["cash_yield_pct"]) / 100.0 * years
+            self.book["cash"] += earned
+            self.book["interest_earned"] = _r(float(self.book.get("interest_earned") or 0) + earned, 4)
 
     def leverage(self, asset: str) -> float:
         return config.leverage(self.cfg, config.load_limits(), asset, self.name)[0]
@@ -191,6 +199,7 @@ class SimBroker(Broker):
         return {"equity": _r(equity, 2), "cash": _r(cash, 2),
                 "buying_power": _r(max(0.0, cash + (lev - 1) * max(equity, 0.0)), 2),
                 "borrowed": _r(max(0.0, -cash), 2), "interest_paid": _r(self.book.get("interest_paid") or 0, 2),
+                "interest_earned": _r(self.book.get("interest_earned") or 0, 2),
                 "currency": "USD", "starting_cash": self.book.get("starting_cash"), "mode": self.mode}
 
     def positions(self) -> list:

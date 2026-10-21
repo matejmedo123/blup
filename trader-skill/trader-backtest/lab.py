@@ -52,6 +52,9 @@ from shared.indicators import Candle  # noqa: E402
 
 LAB_FILE = "backtests/lab-crypto.json"
 PLAYBOOK = "backtests/playbook.json"
+LAB_FILE_ETF = "backtests/lab-etf.json"
+PLAYBOOK_ETF = "backtests/playbook-etf.json"
+DEFAULT_ETFS = ("SPY", "QQQ", "IWM", "DIA", "GLD", "TLT", "DBC", "UUP", "XLE", "XLF", "XLK", "SMH")
 STORE = "cache/lab"
 TIMEFRAMES = {
     "5m": {"kind": "window", "horizons_h": (1, 4, 12, 24)},
@@ -73,7 +76,11 @@ PLAYBOOK_DAYS = 14            # the autopilot stops trusting a playbook older th
 
 def build_parser():
     p = cli.parser("lab.py", __doc__)
-    p.add_argument("--symbols", help="comma-separated coins (default: the top --top by 24h volume)")
+    p.add_argument("--etf", action="store_true",
+                   help="the daily ETF trend on autopilot.etf_trend.symbols (gold, the dollar, commodities, bonds, "
+                        "energy, the indexes) instead of crypto")
+    p.add_argument("--symbols", help="comma-separated coins or ETFs (default: the top --top coins by 24h volume, or "
+                                     "autopilot.etf_trend.symbols)")
     p.add_argument("--top", type=int, default=25, help="how many coins by 24h volume (default 25)")
     p.add_argument("--timeframes", default="5m,1h,4h,1d", help="any of 5m,1h,4h,1d (default all four)")
     p.add_argument("--days", type=float, default=180, help="days of 5-minute history (default 180)")
@@ -107,7 +114,7 @@ def _store_name(sym, interval: str) -> str:
     return "%s/%s-%s.json" % (STORE, sym.key, interval)
 
 
-def history(sym, interval: str, days: float, now_ts: int) -> tuple:
+def history(sym, interval: str, days: float, now_ts: int, asset: str = "crypto") -> tuple:
     """(candles, source) for the last ``days`` — reuses the local copy and fetches only the new tail."""
     step = market_clock.interval_seconds(interval)
     start_ts = now_ts - int(days * 86400)
@@ -115,14 +122,14 @@ def history(sym, interval: str, days: float, now_ts: int) -> tuple:
     rows = doc.get("candles") or []
     if rows and rows[0][0] <= start_ts + 86400 and doc.get("source"):
         tail_days = max(0.01, (now_ts - rows[-1][0]) / 86400.0 + 2 * step / 86400.0)
-        series = data.get_candles(sym, interval, days=tail_days, asset="crypto", end=market_clock.iso(now_ts))
+        series = data.get_candles(sym, interval, days=tail_days, asset=asset, end=market_clock.iso(now_ts))
         if series.source == doc["source"]:
             seen = {r[0] for r in rows}
             rows += [[c.t, c.o, c.h, c.l, c.c, c.v] for c in series.candles if c.t not in seen]
         else:
             rows = []
     if not rows:
-        series = data.get_candles(sym, interval, days=days, asset="crypto", end=market_clock.iso(now_ts))
+        series = data.get_candles(sym, interval, days=days, asset=asset, end=market_clock.iso(now_ts))
         rows = [[c.t, c.o, c.h, c.l, c.c, c.v] for c in series.candles]
         doc["source"] = series.source
     rows = sorted((r for r in rows if r[0] + step <= now_ts), key=lambda r: r[0])
@@ -555,6 +562,11 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
 # --- the run -----------------------------------------------------------------------------------------
 
 def universe(args, cfg) -> tuple:
+    if getattr(args, "etf", False):
+        raw = args.symbols.split(",") if args.symbols else \
+            (((cfg.get("autopilot") or {}).get("etf_trend") or {}).get("symbols") or DEFAULT_ETFS)
+        return [symbols.parse(s.strip(), asset="stock") for s in raw if s.strip()], \
+            "your list" if args.symbols else "%d ETFs (autopilot.etf_trend.symbols)" % len(raw)
     quote = cfg.get("quote_currency") or "USDT"
     if args.symbols:
         return [symbols.parse(s.strip(), asset="crypto", quote=quote) for s in args.symbols.split(",") if s.strip()], \
@@ -567,17 +579,19 @@ def universe(args, cfg) -> tuple:
 def run(args, ctx) -> dict:
     cfg = ctx.cfg
     now_ts = int(ctx.now.timestamp())
-    costs = (cfg.get("costs") or {}).get("crypto") or {}
+    asset = "stock" if getattr(args, "etf", False) else "crypto"
+    costs = (cfg.get("costs") or {}).get(asset) or {}
     fee = args.fee_bps if args.fee_bps is not None else float(costs.get("fee_bps") or 0)
     slip = args.slippage_bps if args.slippage_bps is not None else float(costs.get("slippage_bps") or 0)
     cost = trade_sim.cost_pct(fee, slip)
-    tfs = [t.strip() for t in args.timeframes.split(",") if t.strip()]
+    tfs = ["1d"] if asset == "stock" else [t.strip() for t in args.timeframes.split(",") if t.strip()]
     for t in tfs:
         if t not in TIMEFRAMES:
             raise ValueError("--timeframes takes 5m, 1h and/or 4h (got %r)" % t)
-    wanted = [s.strip() for s in args.setups.split(",")] if args.setups else setups.for_asset("crypto")
+    wanted = [s.strip() for s in args.setups.split(",")] if args.setups else \
+        (setups.for_asset("stock", "series") if asset == "stock" else setups.for_asset("crypto"))
     for s in wanted:
-        setups.check(s, "crypto")
+        setups.check(s, asset)
     exit_mod = skills.load("trader-exit", "exit")
     syms, uname = universe(args, cfg)
     started = time.time()
@@ -591,7 +605,7 @@ def run(args, ctx) -> dict:
 
         def load(sym):
             try:
-                return sym, history(sym, interval, days, now_ts), None
+                return sym, history(sym, interval, days, now_ts, asset), None
             except (data.DataUnavailable, symbols.SymbolError, ValueError) as exc:
                 return sym, None, str(exc)
         coins = []
@@ -601,7 +615,7 @@ def run(args, ctx) -> dict:
                     notes.append("%s %s skipped: %s" % (sym.display, interval, err or "no candles"))
                     continue
                 try:
-                    tick = data.lot_info(sym).get("tick")
+                    tick = 0.01 if asset == "stock" else data.lot_info(sym).get("tick")
                 except (data.DataUnavailable, ValueError):
                     tick = None
                 coins.append((sym, got[0], tick))
@@ -625,7 +639,8 @@ def run(args, ctx) -> dict:
     families.sort(key=lambda f: (not f["validated"], -((f["test"] or {}).get("expectancy_r") or -9)))
     validated.sort(key=lambda r: -((r["test"] or {}).get("expectancy_r") or 0))
     doc = {
-        "generated_at": market_clock.iso(ctx.now), "universe": uname, "coins": len(syms), "timeframes": tfs,
+        "generated_at": market_clock.iso(ctx.now), "asset": "etf" if asset == "stock" else "crypto",
+        "universe": uname, "coins": len(syms), "timeframes": tfs,
         "days": {t: tf_days(t, args) for t in TIMEFRAMES}, "objective": args.objective,
         "folds": args.folds,
         "costs": {"fee_bps": fee, "slippage_bps": slip, "round_trip_pct": round(2 * cost, 4)},
@@ -642,14 +657,14 @@ def run(args, ctx) -> dict:
                     "seconds": round(time.time() - started, 1)},
         "families": families, "validated": validated, "coins_detail": rows, "notes": notes,
     }
-    state.write_json(LAB_FILE, doc)
+    state.write_json(LAB_FILE_ETF if asset == "stock" else LAB_FILE, doc)
     if not args.no_playbook:
-        write_playbook(doc, ctx.now)
+        write_playbook(doc, ctx.now, PLAYBOOK_ETF if asset == "stock" else PLAYBOOK)
     report = None if args.no_html else write_report(doc)
     return {"doc": doc, "report": report}
 
 
-def write_playbook(doc: dict, now) -> dict:
+def write_playbook(doc: dict, now, path: str = PLAYBOOK) -> dict:
     entries = {}
     for r in doc["validated"]:
         e = r["exit"]
@@ -671,15 +686,16 @@ def write_playbook(doc: dict, now) -> dict:
           "valid_until": market_clock.iso(market_clock.ts(now) + PLAYBOOK_DAYS * 86400),
           "objective": doc["objective"], "costs": doc["costs"], "days": doc["days"],
           "families_validated": doc["summary"]["families_validated"], "entries": entries}
-    state.write_json(PLAYBOOK, pb)
+    state.write_json(path, pb)
     return pb
 
 
-def load_playbook(now=None, max_age_days: float = PLAYBOOK_DAYS):
+def load_playbook(now=None, max_age_days: float = PLAYBOOK_DAYS, path: str = PLAYBOOK):
     """(playbook, problem) — problem says why it can't be used (missing, stale, unreadable)."""
-    pb = state.read_json(PLAYBOOK)
+    pb = state.read_json(path)
     if not pb or not isinstance(pb.get("entries"), dict):
-        return None, "no backtest-lab playbook yet — run trader-backtest/lab.py"
+        return None, "no backtest-lab playbook yet — run trader-backtest/lab.py%s" % (
+            " --etf" if path == PLAYBOOK_ETF else "")
     now_ts = market_clock.ts(now or market_clock.now_utc())
     age_d = (now_ts - market_clock.ts(pb["generated_at"])) / 86400.0
     if age_d > max_age_days:
@@ -700,7 +716,7 @@ def _arrow(a, b, f) -> str:
 
 def text(doc: dict) -> str:
     s = doc["summary"]
-    lines = ["BACKTEST LAB · crypto · %s · %s · costs %.2f%% round trip · objective: %s%s" % (
+    lines = ["BACKTEST LAB · %s · %s · %s · costs %.2f%% round trip · objective: %s%s" % (doc.get("asset") or "crypto",
         doc["universe"], ", ".join("%s %gd" % (t, doc["days"][t]) for t in doc["timeframes"]),
         doc["costs"]["round_trip_pct"], "highest win chance with a net edge" if doc["objective"] == "win"
         else "highest profit chance", " · targets ≥ %gR only" % doc["rules"]["min_target_r"]
@@ -738,7 +754,8 @@ def text(doc: dict) -> str:
             _arrow(h["train"]["expectancy_r"], h["test"]["expectancy_r"], fmt.r)))
     lines.append("")
     if doc["validated"]:
-        lines.append("VALIDATED — the autopilot may trade these (crypto only from this list):")
+        lines.append("VALIDATED — the autopilot may trade these (%s only from this list):" % (
+            "ETFs" if doc.get("asset") == "etf" else "crypto"))
         for r in doc["validated"][:20]:
             lines.append("  ✓ %-11s %-16s %-3s %-38s out of sample: win %s · edge %s · profit chance %s · %d trades" % (
                 r["display"], r["setup"], r["timeframe"], r["exit"]["text"], _pct(r["test"]["win_rate"]),
@@ -811,7 +828,9 @@ def write_report(doc: dict):
         if rows else "<p>Nothing passed. No setup made money after costs in every period it was tested on unseen "
                      "data, so the autopilot will not trade crypto until a later run finds something.</p>")
     sub = "%s · %s · %s" % (doc["universe"], ", ".join(doc["timeframes"]), doc["generated_at"])
-    return html.write_report("lab-crypto.html", html.page("Backtest lab · crypto", body, sub, "crypto"))
+    name = doc.get("asset") or "crypto"
+    return html.write_report("lab-%s.html" % name, html.page("Backtest lab · %s" % name, body, sub,
+                                                              "stock" if name == "etf" else "crypto"))
 
 
 @cli.entrypoint
@@ -823,10 +842,11 @@ def main(argv=None) -> int:
     out = text(doc)
     if not args.no_playbook:
         out += "\nPlaybook: %d validated combinations → trader/%s (valid %d days)" % (
-            doc["summary"]["coins_validated"], PLAYBOOK, PLAYBOOK_DAYS)
+            doc["summary"]["coins_validated"], PLAYBOOK_ETF if doc.get("asset") == "etf" else PLAYBOOK, PLAYBOOK_DAYS)
     if res["report"]:
         out += "\n" + cli.report_line(res["report"])
-    cli.emit(args, out, {"lab": {k: v for k, v in doc.items() if k not in ("coins_detail",)}}, "crypto")
+    cli.emit(args, out, {"lab": {k: v for k, v in doc.items() if k not in ("coins_detail",)}},
+             "stock" if doc.get("asset") == "etf" else "crypto")
     cli.maybe_open(args, res["report"])
     return 0
 

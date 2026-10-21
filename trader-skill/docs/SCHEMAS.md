@@ -726,3 +726,40 @@ everything is sold next cycle). A sale that a real broker fills later is picked 
 within 30 minutes counts as failed. The ride's rule only looks at bars that closed after the ride started.
 `adapt` judges a ride together with the trade it came from (`part: "ride"` trades are not counted on their own).
 `broker/positions.json` rows gain `"story"` (plain words: what is held, what happens next) and `"riding"`.
+
+## v3.4 — bear markets: ETF trend while crypto is in a bear market, interest on idle cash
+
+### Setup `etf_trend` (`shared/setups.py`, asset `stock`, daily)
+The trend-following rule (20 EMA above the 50 EMA, close above the 20 EMA, higher highs and higher lows, the day it is
+confirmed) with the instrument's **own** close above its 200-day average instead of Bitcoin's; stop below the 10-day
+swing low (≥ 1 ATR); exit at the first daily close below the 50-day EMA (≤ 250 days).
+
+### `config.json` additions
+```json
+"cash_yield_pct": 0.0,        // simulator: yearly interest on idle (positive) cash — T-bills; profile sets 4
+"autopilot": {"etf_trend": {
+  "enabled": false,           // the trend profile turns it on (--no-etf keeps it off)
+  "when": "crypto_bear",      // only while Bitcoin's last daily close is below its 200-day average; "always" = any time
+  "required_lab": true,       // only ETFs in backtests/playbook-etf.json
+  "symbols": ["SPY", "QQQ", "IWM", "DIA", "GLD", "TLT", "DBC", "UUP", "XLE", "XLF", "XLK", "SMH"]
+}}
+```
+
+### Lab: `trader-backtest/lab.py --etf`
+Same walk-forward on daily ETF bars (Yahoo, ~8 years, stock costs) for the stock series setups; writes
+`backtests/lab-etf.json`, `backtests/playbook-etf.json` and `reports/lab-etf.html` (the crypto files are untouched);
+`lab.history(..., asset)`, `lab.load_playbook(now, max_age, path)`, `lab.write_playbook(doc, now, path)`. The weekly
+refresh runs it too when `etf_trend.enabled`.
+
+### Autopilot
+`etf_candidates(cfg, book, memo, now)` runs once per cycle between 9:45 a.m. and 3:30 p.m. ET while the US market is
+open: `crypto_bull(memo)` checks Bitcoin's daily close against its 200-day average; each validated ETF fires when the
+rule is met on its newest closed daily bar (weekends and holidays don't age it; the desk keeps a daily stock idea
+fresh for 96 h). Plans for daily stock bars are **swing** plans: `"swing": true`, time stop = entry + `max_bars`
+days (`exit.plan_levels(..., swing=True)`), the order goes out as a GTC bracket at Alpaca (`order["swing"]`), the
+book item carries `"swing": true`, and the rule exit is only checked while the US market is open.
+`_series_candidates(..., asset)` serves both crypto and ETFs.
+
+### Simulator
+`_charge_interest` also credits idle cash at `cash_yield_pct` (`book.interest_earned`, `account()["interest_earned"]`,
+`broker/equity.jsonl` `interest_earned` when not zero).

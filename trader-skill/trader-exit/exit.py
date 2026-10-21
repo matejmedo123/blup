@@ -64,9 +64,10 @@ def _horizon_label(seconds: int) -> str:
     return "%dm" % (seconds // 60)
 
 
-def _time_stop(entry_time_ts: int, asset: str, horizon_s: int = None) -> tuple:
-    """(time_stop dict, horizon dict). Stocks: flat by 3:55 p.m. ET; crypto/meme: entry + horizon."""
-    if asset == "stock":
+def _time_stop(entry_time_ts: int, asset: str, horizon_s: int = None, swing: bool = False) -> tuple:
+    """(time_stop dict, horizon dict). Stocks: flat by 3:55 p.m. ET (unless held for days: swing);
+    crypto/meme: entry + horizon."""
+    if asset == "stock" and not swing:
         d = market_clock.et_date(entry_time_ts - 1)
         flat = market_clock.flat_by(d)
         close = market_clock.session_close_time(d)
@@ -84,7 +85,7 @@ def _time_stop(entry_time_ts: int, asset: str, horizon_s: int = None) -> tuple:
 
 
 def plan_levels(entry, entry_time_ts, asset, candles_until_entry, stop_ref=None, trigger_level=None, stop="auto",
-                atr_mult=1.5, target_r=2.0, tick=None, horizon_s=None) -> dict:
+                atr_mult=1.5, target_r=2.0, tick=None, horizon_s=None, swing: bool = False) -> dict:
     """Stop, target and time stop for a long entry.
 
     auto: the structural stop (range/flag low) when it is within 4×ATR — far stops make the
@@ -123,7 +124,7 @@ def plan_levels(entry, entry_time_ts, asset, candles_until_entry, stop_ref=None,
         raise ValueError("stop %s must be below entry %s for a long trade" % (fmt.price(stop_px), fmt.price(entry)))
     risk = entry - stop_px
     target_px = round_price(entry + float(target_r) * risk, asset, tick, "nearest")
-    time_stop, horizon = _time_stop(int(entry_time_ts), asset, horizon_s)
+    time_stop, horizon = _time_stop(int(entry_time_ts), asset, horizon_s, swing)
     return {
         "stop": {"price": stop_px, "method": method, "note": note},
         "target": {"price": target_px, "r_multiple": float(target_r)},

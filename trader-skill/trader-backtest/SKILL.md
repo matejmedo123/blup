@@ -72,6 +72,9 @@ python3 "${CLAUDE_SKILL_DIR}/lab.py" --fee-bps 25                     # e.g. Alp
   and keeps two thirds until a daily close below the 50-day EMA, stop at the buy price — and reports
   whether that paid ("✓ let winners ride: … added +0.44R per trade, profit chance 93 % → 92 %"). The
   verdict goes into the playbook; the autopilot lets winners ride only while it says yes.
+* **ETFs:** `lab.py --etf` runs the same walk-forward on the daily ETF trend (`etf_trend`) for
+  `autopilot.etf_trend.symbols` (gold, the dollar, commodities, bonds, energy, the indexes) with stock costs and
+  writes `playbook-etf.json` — the ETFs the autopilot may hold while crypto is in a bear market.
 * Validated combinations go to `trader/backtests/playbook.json` (valid 14 days). The autopilot trades
   crypto **only** from it, with those exits, and sizes by certainty: profit chance ≥ 90 % → risk × 2,
   ≥ 80 % → × 1.5, ≥ 70 % → × 1, lower → × 0.5 (a boost needs ≥ 30 unseen trades; `limits.json` caps

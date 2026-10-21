@@ -264,7 +264,8 @@ class AlpacaBroker(Broker):
         if asset == "stock":
             if float(order["target_price"]) <= float(order["stop_price"]):
                 raise BrokerError("take-profit must be above the stop for a buy bracket")
-            body.update(time_in_force="day", order_class="bracket",
+            # a position held for days needs its stop and target to outlive the session
+            body.update(time_in_force="gtc" if order.get("swing") else "day", order_class="bracket",
                         take_profit={"limit_price": _fmt_price(order["target_price"], asset)},
                         stop_loss={"stop_price": _fmt_price(order["stop_price"], asset)})
         else:
