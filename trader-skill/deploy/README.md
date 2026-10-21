@@ -63,9 +63,16 @@ sudo traderctl status                       # what it is doing, today's trades, 
 sudo traderctl logs                         # follow the log (Ctrl+C to leave)
 ```
 
-**A stop or restart can take up to two minutes**: on SIGTERM the daemon finishes the cycle it is in
-(a fresh trigger means a backtest and a Time Machine replay, 60–90 s) and only then exits. systemd waits
-120 s (`TimeoutStopSec=120`), Docker 2 minutes (`stop_grace_period: 2m`).
+**A stop or restart can take up to two minutes**: on SIGTERM (or SIGHUP — a closed terminal) the daemon
+judges no further ideas, finishes the order it is sending and the exits of the cycle it is in, and then
+exits; one waiting for another cycle's lock gives up at once. systemd waits 120 s (`TimeoutStopSec=120`),
+Docker 2 minutes (`stop_grace_period: 2m`). Killed in the middle anyway, nothing is doubled: an entry is
+booked as `submitting` before it is sent and found again at the broker by its client order id.
+
+**A stuck cycle restarts itself**: a cycle running for 20 minutes (a socket that never answers) makes the
+daemon say so, notify you and exit with code 70 — systemd / Docker start it again. `healthcheck.py` fails
+when the heartbeat is stale, a cycle has run for 15 minutes, or every cycle has failed for an hour (the
+heartbeat's `last_ok_at`).
 
 ## Or with Docker
 

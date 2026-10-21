@@ -180,7 +180,11 @@ class SimBroker(Broker):
             self.book["interest_earned"] = _r(float(self.book.get("interest_earned") or 0) + earned, 4)
 
     def leverage(self, asset: str) -> float:
-        return config.leverage(self.cfg, config.load_limits(), asset, self.name)[0]
+        try:
+            limits = config.load_limits()
+        except ValueError:  # limits.json being edited: no borrowing until it reads again — fills and stops go on
+            return 1.0
+        return config.leverage(self.cfg, limits, asset, self.name)[0]
 
     def _equity(self) -> float:
         return self.book["cash"] + sum(p["qty"] * p.get("last", p["avg_entry"]) for p in self.book["positions"].values())

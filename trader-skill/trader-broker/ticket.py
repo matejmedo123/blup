@@ -208,7 +208,7 @@ def prepare(args, ctx) -> tuple:
     existing = _find(_tickets_doc().get("tickets") or [], "id", "tkt-" + order["id"])
     if existing and existing.get("status") == "approved":
         raise ValueError("ticket %s was already approved — approvals are single-use; size a new order" % existing["id"])
-    if args.live and ctx.cfg.get("paper", True):
+    if args.live and ctx.cfg.get("paper", True) is not False:  # only a real false — not null, 0 or ""
         raise ValueError("live tickets are disabled: trader/config.json has \"paper\": true")
     mode = "live" if args.live else "paper"
     ticket = build_ticket(order, mode)
@@ -263,7 +263,7 @@ def _approval_problem(ticket: dict, order, ctx, now) -> str:
         return "the order changed or lost its risk PASS since the ticket was shown — re-run risk and prepare again"
     if build_ticket(order, ticket["mode"])["hash"] != ticket["hash"]:
         return "the order no longer matches the ticket that was shown — prepare it again"
-    if ticket["mode"] == "live" and ctx.cfg.get("paper", True):
+    if ticket["mode"] == "live" and ctx.cfg.get("paper", True) is not False:
         return "live ticket refused: trader/config.json has \"paper\": true"
     return ""
 

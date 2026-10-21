@@ -788,7 +788,11 @@ def run(args, ctx) -> dict:
                     if err or not got or not got[0]:
                         notes.append("%s %s skipped: %s" % (sym.display, interval, err or "no candles"))
                         continue
-                    loaded += segments(sym, got[0])
+                    for seg, bars in segments(sym, got[0]):
+                        # named after the daily listing it belongs to — its first bar here may be later than there
+                        own = [base_of[k][1] for k in base_of if base_of[k][0].key == sym.key and daily.get(k)
+                               and daily[k][0].t - 86400 <= bars[0].t <= daily[k][-1].t + 86400]
+                        loaded.append((own[0] if own else seg, bars))
             for seg, bars in loaded:
                 if seg.key in keys and bars:
                     coins.append((seg, bars, _tick(seg, asset)))

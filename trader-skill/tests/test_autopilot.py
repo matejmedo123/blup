@@ -233,7 +233,7 @@ class CryptoOnAlpaca(TraderTestCase):
         a.reconcile(b, book, [], b.ords, cfg, limits)
         it = book["items"][plan["id"]]
         self.assertEqual(it["status"], "open")
-        self.assertEqual(b.calls[0], ("stop", "BTC/USD", 0.05, 67320.53))
+        self.assertEqual(b.calls[0], ("stop", "BTC/USD", 0.049875, 67320.53))  # Alpaca takes its fee in the coin
         self.assertEqual(it["stop_order_id"], "stop-1")
         b.pos = [{"symbol": "BTC/USD", "asset": "crypto", "qty": 0.05, "last": 67710.0}]
         acts = a.manage_exits(b, book, b.pos, b.ords)

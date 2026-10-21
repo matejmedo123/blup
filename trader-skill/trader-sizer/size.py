@@ -62,6 +62,9 @@ def _decimals(step: float) -> int:
     return len(s.split(".", 1)[1]) if "." in s else 0
 
 
+MIN_STOP_FRACTION = 0.001  # 0.1 % — tighter than that is noise, not a stop
+
+
 def floor_to(x: float, step: float):
     if not step:
         return x
@@ -98,10 +101,15 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
     entry = float(plan["entry"]["price"])
     stop = float(plan["stop"]["price"])
     target = float((plan.get("target") or {}).get("price") or 0) or None
+    if not (math.isfinite(entry) and math.isfinite(stop)) or entry <= 0 or stop < 0:
+        raise ValueError("entry %s / stop %s are not usable prices — skipped" % (entry, stop))
     rpu = entry - stop
     if rpu <= 0:
         raise ValueError("stop %s is not below entry %s — this pack only sizes long trades" % (stop, entry))
-    account = float(account or cfg.get("account_size") or 0)
+    if rpu < entry * MIN_STOP_FRACTION:  # a stop a tick away "risks" nothing on paper and slips straight through
+        raise ValueError("the stop is only %.3f%% below the entry — under %.1f%%, slippage alone is a full loss"
+                         % (100.0 * rpu / entry, 100.0 * MIN_STOP_FRACTION))
+    account = float(account if account is not None else (cfg.get("account_size") or 0))
     if account <= 0:
         raise ValueError("account size must be positive (set account_size in trader/config.json)")
     risk_pct = float(risk_pct if risk_pct is not None else cfg.get("risk_per_trade_pct", 0.5))
@@ -205,7 +213,7 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
             sizing["rounding"] = "fractional shares (4 dp)" if step < 1 else "whole shares"
         else:
             tick = lot.get("tick") or 0.01
-            if tick > entry * 0.001:  # a cent tick on a $0.0004 coin would put the limit 25× above the price
+            if tick > entry * 0.01:  # a cent tick on a $0.0004 coin would put the limit 25× above the price
                 tick = 10.0 ** (math.floor(math.log10(entry)) - 4)
             limit = ceil_to(entry * 1.0002, tick)
             sizing["rounding"] = "lot step %s, tick %s (%s)" % (fmt.qty(step), fmt.qty(tick), lot.get("source"))

@@ -12,12 +12,14 @@
 from __future__ import annotations
 
 import gzip
+import http.client
 import json
 import random
 import socket
 import time
 import urllib.error
 import urllib.request
+import zlib
 from urllib.parse import urlsplit
 
 from . import config
@@ -76,8 +78,10 @@ MAX_WARNINGS = 20
 
 def note(text: str) -> None:
     """A data warning for whoever reads data next — each once, and only the latest few (a daemon runs for months)."""
-    if text in warnings:
-        warnings.remove(text)
+    try:
+        warnings.remove(text)  # another thread may clear the list in between — never an error for a warning
+    except ValueError:
+        pass
     warnings.append(text)
     del warnings[:-MAX_WARNINGS]
 
@@ -127,6 +131,28 @@ def _decode(raw: bytes, headers) -> str:
         return raw.decode("utf-8", errors="replace")
 
 
+def read_body(resp, timeout: float, max_bytes: int = None) -> bytes:
+    """The whole body within ``timeout`` seconds in total — a socket timeout only limits each read, so a server
+    that trickles a byte a second would otherwise hold the caller for as long as it likes."""
+    deadline = time.monotonic() + timeout
+    chunks, size = [], 0
+    while True:
+        chunk = resp.read(65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+        if max_bytes is not None and size > max_bytes:
+            raise SourceError(getattr(resp, "url", "?"), "response larger than %d bytes" % max_bytes)
+        if time.monotonic() > deadline:
+            raise socket.timeout("the download took longer than %d s" % timeout)
+    raw = b"".join(chunks)
+    want = (resp.headers.get("Content-Length") or "").strip() if getattr(resp, "headers", None) else ""
+    if want.isdigit() and len(raw) < int(want):
+        raise http.client.IncompleteRead(raw, int(want) - len(raw))
+    return raw
+
+
 def _retry_after(err) -> float:
     value = err.headers.get("Retry-After") if getattr(err, "headers", None) else None
     try:
@@ -154,15 +180,14 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
     hdrs = {"User-Agent": USER_AGENT, "Accept": "*/*", "Accept-Encoding": "gzip"}
     hdrs.update(headers or {})
     last_error = None
+    budget = time.monotonic() + timeout * 3 + 30  # retries and waits included: one source never holds a cycle long
     for attempt in range(retries + 1):
         _throttle(host)
         stats["requests"] += 1
         try:
             req = urllib.request.Request(url, headers=hdrs)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read(MAX_BYTES + 1)
-                if len(raw) > MAX_BYTES:
-                    raise SourceError(url, "response larger than %d bytes" % MAX_BYTES)
+                raw = read_body(resp, timeout * 2, MAX_BYTES)
                 body = _decode(raw, resp.headers)
             if ttl and ttl > 0:
                 cache.set(url, body)
@@ -173,15 +198,16 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
                 _blocked_hosts[host] = "HTTP 451"
                 raise GeoBlocked(url, "%s refused this location (HTTP 451)" % host, 451)
             if err.code == 429 or err.code >= 500:
-                if attempt < retries:
+                delay = _retry_after(err) or min(30.0, (2 ** attempt) + random.random())
+                if attempt < retries and time.monotonic() + delay < budget:
                     stats["retries"] += 1
-                    delay = _retry_after(err) or min(30.0, (2 ** attempt) + random.random())
                     time.sleep(delay)
                     continue
             break
-        except (urllib.error.URLError, socket.timeout, ConnectionError) as err:
+        except (urllib.error.URLError, socket.timeout, ConnectionError, OSError, EOFError, zlib.error,
+                http.client.HTTPException) as err:  # a cut-off or garbled download is a failed request, not a crash
             last_error = err
-            if attempt < min(retries, 1):
+            if attempt < min(retries, 1) and time.monotonic() + 2 < budget:
                 stats["retries"] += 1
                 time.sleep(1.0 + random.random())
                 continue

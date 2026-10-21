@@ -452,10 +452,10 @@ class RuleExit(TraderTestCase):
         b = FakeBroker()
         b.pos = [{"symbol": "ETH/USD", "asset": "crypto", "qty": 1.0, "last": 91.0}]
         stop = [{"id": "s1", "symbol": "ETH/USD", "side": "sell", "type": "stop_limit", "status": "new", "leg": "stop"}]
-        book = {"items": {"p": self.item()}, "handled": {}}
+        book = {"items": {"p": dict(self.item(), stop_order_id="s1")}, "handled": {}}
         self.assertEqual(ap().manage_exits(b, book, b.pos, stop), [])
         self.closes([100, 98, 96, 94, 92, 99])
-        book = {"items": {"p": self.item(filled_at="2026-10-20T00:01:00Z")}, "handled": {}}
+        book = {"items": {"p": dict(self.item(filled_at="2026-10-20T00:01:00Z"), stop_order_id="s1")}, "handled": {}}
         self.assertEqual(ap().manage_exits(b, book, b.pos, stop), [])  # that close happened before we owned it
 
     def test_a_position_whose_stop_is_gone_gets_it_back_once_an_hour(self):

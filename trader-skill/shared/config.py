@@ -120,7 +120,7 @@ DEFAULT_CONFIG = {
         "model": "claude-opus-5-5",
         "max_calls_per_day": 40,
         "max_usd_per_day": 3.0,
-        "timeout_sec": 120,
+        "timeout_sec": 45,
         "on_unavailable": "rule_based",
     },
     "news": {
@@ -266,6 +266,76 @@ def ensure_home() -> Path:
     return home
 
 
+_NUM_SUFFIXES = ("_pct", "_usd", "_sec", "_days", "_minutes", "_hours", "_bps", "_r", "_mult", "_trades",
+                 "_positions", "_leverage", "_n", "_paths", "_size", "_per_day", "_per_hour")
+# must be above zero: 0 would not mean "off" — a daily-loss limit of 0 kills at once, a 0 interval never waits
+_POSITIVE = ("max_daily_loss_usd", "max_daily_loss_pct", "max_risk_per_trade_usd", "max_risk_per_trade_pct",
+             "max_position_pct", "max_total_exposure_pct", "max_leverage", "risk_per_trade_pct", "account_size",
+             "interval_sec", "max_risk_mult")
+MIN_INTERVAL_SEC = 5
+warnings = []   # settings that were fixed up on load (an explicit null limit → its default); the autopilot shows them
+
+
+def _kind(key: str, default):
+    if isinstance(default, bool) or key in ("enabled", "paper") or key.startswith("allow_") or key.endswith("_enabled"):
+        return "bool"
+    if isinstance(default, (int, float)) or (default is None and key.endswith(_NUM_SUFFIXES)):
+        return "number"
+    if isinstance(default, dict):
+        return "object"
+    if isinstance(default, list):
+        return "list"
+    if isinstance(default, str):
+        return "text"
+    return None
+
+
+def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = "") -> None:
+    for key, value in list(doc.items()):
+        here = path + key
+        default = (defaults or {}).get(key)
+        kind = _kind(key, default)
+        if value is None:
+            if kind == "number" and isinstance(default, (int, float)) and not isinstance(default, bool):
+                doc[key] = default  # null never means "no limit": a limit you can't see is no limit at all
+                note = "%s %s is null — using the default %s (set a number to change it)" % (where, here, default)
+                if note not in warnings:
+                    warnings.append(note)
+            elif kind in ("bool", "object"):
+                problems.append("%s must be %s, not null" % (here, "true or false" if kind == "bool" else "an object"))
+            continue
+        if kind == "bool" and not isinstance(value, bool):
+            problems.append("%s must be true or false (without quotes), not %s" % (here, json.dumps(value)))
+        elif kind == "number":
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value:
+                problems.append("%s must be a number (like 5, not \"5%%\" or \"5\"), not %s" % (here, json.dumps(value)))
+            elif key in _POSITIVE and value <= 0:
+                problems.append("%s must be above 0 (%s would not switch it off — use a large number instead)"
+                                % (here, value))
+            elif key == "interval_sec" and value < MIN_INTERVAL_SEC:
+                problems.append("interval_sec must be at least %d seconds" % MIN_INTERVAL_SEC)
+        elif kind == "object":
+            if not isinstance(value, dict):
+                problems.append("%s must be an object { … }, not %s" % (here, json.dumps(value)))
+            else:
+                _check(value, default if isinstance(default, dict) else {}, where, problems, here + ".")
+        elif kind == "list" and not isinstance(value, list):
+            problems.append("%s must be a list [ … ], not %s" % (here, json.dumps(value)))
+        elif kind == "text" and not isinstance(value, str):
+            problems.append("%s must be text in quotes, not %s" % (here, json.dumps(value)))
+
+
+def validate(name: str, doc: dict, defaults: dict) -> dict:
+    """Types checked against the defaults: a value of the wrong type is an error, never silently "truthy" or "no
+    limit". Raises ConfigError listing every problem."""
+    problems = []
+    _check(doc, defaults, name, problems)
+    if problems:
+        raise ConfigError("%s has %d problem%s: %s" % (name, len(problems), "" if len(problems) == 1 else "s",
+                                                       "; ".join(problems[:8])))
+    return doc
+
+
 def _load(name: str, defaults: dict) -> dict:
     path = ensure_home() / name
     try:
@@ -274,7 +344,7 @@ def _load(name: str, defaults: dict) -> dict:
         raise ConfigError("cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
     if not isinstance(user, dict):
         raise ConfigError("%s must contain a JSON object" % path)
-    return deep_merge(defaults, user)
+    return validate(name, deep_merge(defaults, user), defaults)
 
 
 def update_file(name: str, changes: dict) -> dict:
@@ -316,7 +386,7 @@ def leverage(cfg: dict, limits: dict, asset: str, broker: str = None) -> tuple:
         return 1.0, None
     lim = (limits or {}).get(asset) or {}
     key = "allow_margin" if asset == "stock" else "allow_leverage"
-    if not lim.get(key):
+    if lim.get(key) is not True:
         return 1.0, "config asks for %g× but limits.json %s.%s is false — no leverage" % (want, asset, key)
     if broker is None:
         broker = (cfg.get("autopilot") or {}).get("broker") or cfg.get("connector")

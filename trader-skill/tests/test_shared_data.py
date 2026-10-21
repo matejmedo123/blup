@@ -259,8 +259,9 @@ class CacheAndHttp(TraderTestCase):
             def __init__(self, body):
                 self.body = body
 
-            def read(self, n):
-                return self.body
+            def read(self, n):  # a stream: the body, then the end
+                body, self.body = self.body, b""
+                return body
 
             def __enter__(self):
                 return self
@@ -277,6 +278,41 @@ class CacheAndHttp(TraderTestCase):
             self.assertEqual(http.get_json("https://api.example.test/x", ttl=0), {"ok": 1})
         self.assertEqual(len(calls), 2)
         self.assertEqual(http.stats["retries"], 1)
+
+    def test_a_server_that_trickles_or_cuts_off_is_a_failed_request(self):
+        self._online()
+
+        class Trickle:
+            headers = {}
+
+            def read(self, n):
+                return b"x"  # a byte at a time, forever
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        class Cut(Trickle):
+            headers = {"Content-Length": "100"}
+
+            def __init__(self):
+                self.left = b'{"ok"'
+
+            def read(self, n):
+                body, self.left = self.left, b""
+                return body
+        clock = [0.0]
+
+        def mono():
+            clock[0] += 1.0
+            return clock[0]
+        for resp in (Trickle, Cut):
+            with mock.patch("urllib.request.urlopen", lambda req, timeout=0, r=resp: r()), \
+                    mock.patch("time.sleep"), mock.patch("time.monotonic", mono):
+                with self.assertRaises(http.SourceError):
+                    http.get_text("https://api.example.test/slow", ttl=0, allow_stale=False, timeout=5)
 
     def test_geo_block_trips_breaker(self):
         self._online()

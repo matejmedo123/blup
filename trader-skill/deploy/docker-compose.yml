@@ -34,7 +34,8 @@ services:
     <<: *trader
     # remove --approve for a dry run: same analysis, no orders
     command: ["python3", "trader-autopilot/autopilot.py", "daemon", "--approve"]
-    # a cycle can take 60–90 s (backtest + Time Machine for a fresh trigger); SIGTERM lets it finish
+    # SIGTERM: no new ideas are judged, the order and the exits in progress finish; a cycle stuck for 20 min
+    # exits with code 70 on its own and `restart: unless-stopped` brings it back
     stop_signal: SIGTERM
     stop_grace_period: 2m
 

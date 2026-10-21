@@ -18,7 +18,8 @@ EnvironmentFile=/etc/trader/trader.env
 ExecStart=/usr/bin/python3 /opt/trader/trader-autopilot/autopilot.py daemon --approve --home /var/lib/trader
 Restart=always
 RestartSec=15
-# SIGTERM: the daemon finishes the cycle it is in (up to ~90 s with a backtest + Time Machine), then exits
+# SIGTERM: the daemon judges no new ideas, finishes the order and the exits it is on, then exits; a cycle stuck
+# for 20 min makes it exit with code 70 on its own (Restart=always brings it back)
 KillSignal=SIGTERM
 TimeoutStopSec=120
 UMask=0077

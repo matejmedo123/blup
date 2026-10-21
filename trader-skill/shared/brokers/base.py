@@ -60,6 +60,10 @@ class Broker:
     def orders(self, since: str = None) -> list:
         raise NotImplementedError
 
+    def find_client(self, client_order_id: str):
+        """The order sent under this client id, or None — for an entry whose answer never reached the book."""
+        return next((o for o in self.orders() if o.get("client_order_id") == client_order_id), None)
+
     def lookup(self, order_id: str) -> list:
         """One order by its broker id, with its bracket legs — for orders older than what orders() returns."""
         return [o for o in self.orders() if o.get("id") == order_id or o.get("parent_id") == order_id]

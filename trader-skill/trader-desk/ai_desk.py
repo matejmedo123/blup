@@ -226,8 +226,9 @@ def available(cfg: dict, need_client: bool = True) -> tuple:
 def _make_client(ai: dict):
     sdk = _import_sdk()
     # explicit key: it comes from trader/secrets.env as well as the environment
-    return sdk.Anthropic(api_key=secrets.get("ANTHROPIC_API_KEY"), timeout=float(ai.get("timeout_sec") or 120),
-                         max_retries=2)
+    # one retry: the autopilot waits for this while it manages nothing else — at most 2 calls × 2 tries × timeout
+    return sdk.Anthropic(api_key=secrets.get("ANTHROPIC_API_KEY"), timeout=float(ai.get("timeout_sec") or 45),
+                         max_retries=1)
 
 
 # --- the case, trimmed to what a reviewer needs ------------------------------------------------------

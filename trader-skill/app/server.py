@@ -79,7 +79,7 @@ REPORT_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe
 LIVE_PHRASE = "I ACCEPT REAL MONEY RISK"
 HEARTBEAT_MIN_STALE_SEC = 180  # alive = a heartbeat younger than 3 × interval, never less than this
 CYCLE_MAX_SEC = 900            # a cycle that started this long ago and never finished is a hung bot
-NO_NEW_STOCK_ENTRIES_ET = (15, 30)  # mirrors the autopilot: too little session left after 3:30 p.m. ET
+NO_NEW_STOCK_ENTRIES_MIN = 30  # mirrors the autopilot: no new stock entries in the session's last 30 minutes
 PROXY_HEADERS = ("X-Forwarded-For", "Forwarded", "X-Real-IP")
 REDACTED = "[redacted]"
 
@@ -705,13 +705,15 @@ def sessions_view(cfg: dict = None) -> dict:
     entries_until = None
     bot_trading = False
     if ms["state"] == "open" and ms.get("closes_at"):
-        cutoff = market_clock.et_to_utc(d, *NO_NEW_STOCK_ENTRIES_ET)
         close = market_clock.parse_iso(ms["closes_at"])
-        entries_until = min(cutoff, close)
+        entries_until = close - timedelta(minutes=NO_NEW_STOCK_ENTRIES_MIN)
         bot_trading = now < entries_until
     if ms["state"] == "open":
-        label = "open — new entries until 3:30 p.m. ET" if bot_trading else \
-            "open — exits only, no new entries after 3:30 p.m. ET"
+        et = market_clock.to_et(entries_until) if entries_until else None
+        until = "%d:%02d %s" % ((et.hour - 1) % 12 + 1, et.minute, "a.m." if et.hour < 12 else "p.m.") if et \
+            else "3:30 p.m."
+        label = ("open — new entries until %s ET" % until) if bot_trading else \
+            ("open — exits only, no new entries after %s ET" % until)
     elif ms["state"] == "pre-market":
         label = "pre-market — the bot waits for the 9:30 a.m. ET open"
     elif ms["state"] == "after-hours":
@@ -1022,6 +1024,7 @@ class DashboardApp:
     def __init__(self, password: str = "", run_autopilot: bool = False, news_every: float = None):
         self.csrf = _pysecrets.token_urlsafe(32)
         self.login_lock = threading.Lock()
+        self.login_fails = {}  # client → recent wrong-password times
         self._compacted = 0.0
         self.password = password or ""
         self.sessions = {}
@@ -1080,6 +1083,23 @@ class DashboardApp:
         self._ap_mod = mod
         return mod
 
+    LOGIN_WINDOW_SEC, LOGIN_MAX_FAILS = 600, 10
+
+    def login_failed(self, who: str) -> None:
+        with self.login_lock:
+            now = time.time()
+            recent = [t for t in self.login_fails.get(who, []) if now - t < self.LOGIN_WINDOW_SEC]
+            self.login_fails[who] = recent + [now]
+            if len(self.login_fails) > 1000:  # many addresses: forget the quiet ones
+                for k in [k for k, v in self.login_fails.items() if now - v[-1] > self.LOGIN_WINDOW_SEC]:
+                    del self.login_fails[k]
+
+    def login_blocked(self, who: str) -> bool:
+        with self.login_lock:
+            now = time.time()
+            return sum(1 for t in self.login_fails.get(who, []) if now - t < self.LOGIN_WINDOW_SEC) >= \
+                self.LOGIN_MAX_FAILS
+
     def daemon_active(self) -> bool:
         """A separate autopilot daemon holds the lock or is beating — this server must not trade the folder too."""
         mod = getattr(self, "_ap_mod", None)
@@ -1122,7 +1142,8 @@ class DashboardApp:
                     self.autopilot.update(last_run=_now_iso(), last_error=None, runs=self.autopilot["runs"] + 1)
                     if hasattr(mod, "compact_equity") and time.time() - self._compacted > 6 * 3600:
                         self._compacted = time.time()  # without a daemon, this loop keeps equity.jsonl small
-                        mod.compact_equity()
+                        with state.locked("autopilot/cycle"):  # never while a CLI cycle appends to it
+                            mod.compact_equity()
                 except Exception as exc:  # keep the dashboard alive whatever the bot does
                     self.autopilot.update(last_run=_now_iso(), last_error="%s: %s" % (type(exc).__name__, exc))
                     _log_error("autopilot cycle", exc)
@@ -1308,6 +1329,11 @@ def make_handler(app: DashboardApp):
             return self._error(403, "unknown Host header — open the dashboard as http://127.0.0.1:<port>/ or "
                                     "http://localhost:<port>/ (or add the name to TRADER_DASHBOARD_HOSTS)")
 
+        def _client_ip(self) -> str:
+            ip = self.client_address[0] if self.client_address else "?"
+            fwd = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+            return fwd if fwd and is_loopback(ip) else ip  # behind Caddy every request comes from 127.0.0.1
+
         def _same_origin(self) -> bool:
             host = self.headers.get("Host") or ""
             site = (self.headers.get("Sec-Fetch-Site") or "").lower()
@@ -1356,7 +1382,7 @@ def make_handler(app: DashboardApp):
                     return self._redirect("/")
                 return self._send(200, (LOGIN_PAGE % "").encode("utf-8"), "text/html; charset=utf-8")
             if path.startswith("/static/"):
-                return self._static(path[len("/static/"):], bool(q.get("v")))
+                return self._static(path[len("/static/"):], q.get("v") == asset_version())
             if path == "/favicon.ico":
                 return self._static("favicon.svg")
             if path == "/robots.txt":
@@ -1503,11 +1529,14 @@ def make_handler(app: DashboardApp):
                 return self._error(403, "cross-origin request refused")
             raw = self._read_body().decode("utf-8", "replace")
             pw = (parse_qs(raw).get("password") or [""])[-1]
-            with app.login_lock:  # one guess at a time, however many connections — at most two a second
-                ok = app.check_password(pw)
-                if not ok:
-                    time.sleep(0.5)
+            who = self._client_ip()
+            if app.login_blocked(who):
+                return self._send(429, (LOGIN_PAGE % "<p class='login-error'>Too many wrong passwords from here — "
+                                                     "wait 10 minutes.</p>").encode("utf-8"), "text/html; charset=utf-8")
+            ok = app.check_password(pw)
             if not ok:
+                app.login_failed(who)
+                time.sleep(0.5)  # slows one guesser down without holding up anyone else's login
                 return self._send(401, (LOGIN_PAGE % "<p class='login-error'>Wrong password.</p>").encode("utf-8"),
                                   "text/html; charset=utf-8")
             token = app.new_session()
@@ -1582,7 +1611,7 @@ def main(argv=None) -> int:
             os.environ["TRADER_NOW"] = pinned
     config.ensure_home()
     cfg = config.load_config()
-    run_ap = False if args.no_autopilot else bool(args.autopilot or (cfg.get("autopilot") or {}).get("enabled"))
+    run_ap = False if args.no_autopilot else bool(args.autopilot or (cfg.get("autopilot") or {}).get("enabled") is True)
     news_every = args.news_every
     if news_every is None:
         news_every = 0 if config.is_offline() else float(((cfg.get("news") or {}).get("x") or {}).get("poll_minutes") or 15)

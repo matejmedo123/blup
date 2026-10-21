@@ -571,12 +571,12 @@ def _status_from_notes(notes: list, names, status: dict) -> None:
 def refresh_feed(assets=None, symbols=None, now=None) -> dict:
     """Fetch every source once, fold duplicates, rank, merge into trader/news_feed.json.
 
-    Safe to call from a background thread: one refresh at a time, every source fails
-    on its own (its status says why), and nothing but news_feed.json and x_usage.json
-    is written. Returns {"new": n, "items": total, "sources": {name: status}, "updated_at": iso}.
+    Safe to call from a background thread: every source fails on its own (its status says why), and nothing
+    but news_feed.json and x_usage.json is written. The fetching runs without any lock — a slow or rate-limited
+    source never makes another caller (the autopilot, right before a trade) wait; only the merge into the file
+    is one at a time. Returns {"new": n, "items": total, "sources": {name: status}, "updated_at": iso}.
     """
-    with _FEED_LOCK:
-        return _refresh_feed(assets, symbols, now)
+    return _refresh_feed(assets, symbols, now)
 
 
 def _refresh_feed(assets, raw_symbols, now) -> dict:
@@ -629,6 +629,15 @@ def _refresh_feed(assets, raw_symbols, now) -> dict:
     cutoff = now_ts - FEED_MAX_AGE_DAYS * 86400
     fresh = [it for it in fresh if not it.get("published")
              or cutoff <= market_clock.parse_iso(it["published"]).timestamp() <= now_ts]
+    snaps = doc.get("meme_snapshots")
+    with _FEED_LOCK, state.locked(FEED_FILE):  # what other refreshes wrote while this one was fetching is kept
+        doc = state.read_json(FEED_FILE, {}) or {}
+        if snaps is not None:
+            doc["meme_snapshots"] = dict(doc.get("meme_snapshots") or {}, **snaps)
+        return _merge_feed(doc, fresh, status, cutoff, now, now_ts, news_cfg, stocks, coins, memes)
+
+
+def _merge_feed(doc, fresh, status, cutoff, now, now_ts, news_cfg, stocks, coins, memes) -> dict:
     old = [it for it in doc.get("items") or []
            if not (it.get("published") and market_clock.parse_iso(it["published"]).timestamp() < cutoff)]
     # the crowd summary is a snapshot: the newest one per symbol replaces the previous

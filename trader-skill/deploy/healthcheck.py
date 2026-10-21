@@ -18,6 +18,7 @@ from pathlib import Path
 
 MIN_STALE_SEC = 180
 CYCLE_MAX_SEC = 900   # a cycle that started this long ago and never finished is a hung bot
+FAILING_MAX_SEC = 3600  # beating but every cycle failing for an hour (broker down, bad settings): not healthy
 
 
 def check(home: Path, now: datetime = None):
@@ -41,6 +42,14 @@ def check(home: Path, now: datetime = None):
         return False, "the autopilot stopped at %s" % hb["at"]
     if age > limit:
         return False, "last heartbeat %d s ago (limit %d s) — status %s" % (age, limit, hb.get("status"))
+    if hb.get("status") in ("error", "hung") and hb.get("last_ok_at"):
+        try:
+            ok_at = datetime.fromisoformat(str(hb["last_ok_at"]).replace("Z", "+00:00"))
+            failing = (now - ok_at).total_seconds()
+        except ValueError:
+            failing = 0
+        if failing > FAILING_MAX_SEC:
+            return False, "no successful cycle for %d min — status %s" % (failing // 60, hb.get("status"))
     return True, "alive: beat %d s ago · %s · cycle %s · %s" % (max(0, age), hb.get("runner"), hb.get("cycle"),
                                                                 hb.get("status"))
 

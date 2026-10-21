@@ -149,9 +149,14 @@ class EtfSleeve(TraderTestCase):
               "placed_at": "2026-09-01T14:00:00Z", "filled_at": "2026-09-01T14:00:00Z", "broker": "alpaca",
               "mode": "paper", "exit_rule": dict(setups.exit_rule("etf_trend"), interval="1d")}
         self.gld = self.gld[:-1] + [Candle(self.gld[-1].t, 60, 60, 60, 60.0, 1)]  # far below the 50-day EMA
-        book = {"items": {"p": it}, "handled": {}}
-        self.set_now("2026-10-21T02:00:00Z")  # night in New York
-        self.assertEqual(ap().manage_exits(b, book, b.pos, [], self.cfg), [])
+        book = {"items": {"p": dict(it, broker_order_id="e1")}, "handled": {}}
+        it = book["items"]["p"]
+        legs = [{"id": "sl", "parent_id": "e1", "symbol": "GLD", "side": "sell", "type": "stop", "status": "held",
+                 "leg": "stop"}]
+        self.set_now("2026-10-21T02:00:00Z")  # night in New York: its GTC stop is there, nothing to do
+        self.assertEqual(ap().manage_exits(b, book, b.pos, legs, self.cfg), [])
+        acts = ap().manage_exits(b, book, b.pos, [], self.cfg)  # …and if the stop were gone, it would get one back
+        self.assertIn("put back", acts[0])
         self.set_now("2026-10-21T15:00:00Z")
         ap().manage_exits(b, book, b.pos, [], self.cfg)
         self.assertEqual((it["exit_reason"], b.calls[-1]), ("rule", ("close", "GLD")))

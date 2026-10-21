@@ -7,6 +7,7 @@ the order is looked up by its client_order_id first, so a slow network can't dou
 """
 from __future__ import annotations
 
+import http.client
 import json
 import math
 import socket
@@ -16,6 +17,7 @@ import urllib.parse
 import urllib.request
 
 from .. import config, data, market_clock, secrets, symbols
+from ..http import read_body
 from .base import Broker, BrokerError, order_dict
 
 BASE = {"paper": "https://paper-api.alpaca.markets", "live": "https://api.alpaca.markets"}
@@ -98,9 +100,12 @@ class AlpacaBroker(Broker):
         url = self.base + path
         payload = json.dumps(body).encode("utf-8") if body is not None else None
         req = urllib.request.Request(url, data=payload, method=method, headers=self._headers())
-        with _OPENER.open(req, timeout=TIMEOUT) as resp:
-            raw = resp.read()
-        return json.loads(raw.decode("utf-8")) if raw.strip() else {}
+        try:
+            with _OPENER.open(req, timeout=TIMEOUT) as resp:
+                raw = read_body(resp, TIMEOUT * 2)  # the whole reply in bounded time, not just each read
+            return json.loads(raw.decode("utf-8")) if raw.strip() else {}
+        except (http.client.HTTPException, ValueError, EOFError) as exc:  # cut off or garbled: like a lost reply
+            raise ConnectionError("unreadable reply from Alpaca (%s)" % type(exc).__name__)
 
     @staticmethod
     def _message(err) -> str:
@@ -181,14 +186,19 @@ class AlpacaBroker(Broker):
             if not cid:
                 raise BrokerError("Alpaca order may or may not have been placed (%s) and has no client id to check — "
                                   "look in the Alpaca dashboard before doing anything else" % failure)
-            found = self._lookup(cid)
+            try:
+                found = self._lookup(cid)
+            except BrokerError as exc:
+                raise BrokerError("Alpaca order may or may not have been placed (%s; %s) — it is looked up again "
+                                  "under %s" % (failure, exc, cid))
             if found:
                 self.log("post_recovered", client_order_id=cid, order_id=found.get("id"))
                 return found
             if attempt == 0:
                 time.sleep(1.0)
                 continue
-            raise BrokerError("Alpaca order failed twice (%s); nothing was found under %s" % (failure, cid))
+            raise BrokerError("Alpaca order may or may not have been placed: it failed twice (%s) and nothing was "
+                              "found under %s yet — it is looked up again" % (failure, cid))
 
     # -- mapping -------------------------------------------------------------------------------------
     @staticmethod
@@ -219,7 +229,9 @@ class AlpacaBroker(Broker):
         if a.get("trading_blocked") or a.get("account_blocked"):
             raise BrokerError("Alpaca says this account is blocked from trading")
         return {"equity": _f(a.get("equity")), "cash": _f(a.get("cash")), "buying_power": _f(a.get("buying_power")),
-                "currency": a.get("currency") or "USD", "mode": self.mode, "status": a.get("status")}
+                "currency": a.get("currency") or "USD", "mode": self.mode, "status": a.get("status"),
+                "daytrade_count": int(_f(a.get("daytrade_count")) or 0),
+                "pattern_day_trader": bool(a.get("pattern_day_trader"))}
 
     def positions(self) -> list:
         out = []
@@ -242,6 +254,11 @@ class AlpacaBroker(Broker):
 
     def open_orders(self) -> list:
         return self._flatten(self._get("/v2/orders?status=open&nested=true&limit=500"))
+
+    def find_client(self, client_order_id: str):
+        """The order sent under this client id, or None when Alpaca has none. Raises when it can't tell."""
+        found = self._lookup(client_order_id)
+        return self._order(found, leg="entry") if found else None
 
     def lookup(self, order_id: str) -> list:
         try:

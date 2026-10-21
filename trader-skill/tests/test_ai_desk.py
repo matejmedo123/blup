@@ -267,7 +267,7 @@ class AIDesk(TraderTestCase):
             sys.modules.pop("anthropic", None)
             if saved is not None:
                 sys.modules["anthropic"] = saved
-        self.assertEqual(seen, {"api_key": KEY, "timeout": 30.0, "max_retries": 2})
+        self.assertEqual(seen, {"api_key": KEY, "timeout": 30.0, "max_retries": 1})
 
     def test_unknown_model_is_priced_like_opus(self):
         self.assertEqual(self.ai.price_of("claude-something-new"), self.ai.price_of("claude-opus-5-5"))

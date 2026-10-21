@@ -112,7 +112,7 @@ def open_book(now_iso: str) -> list:
                      "source": tk["id"]})
     # the autopilot's entries waiting at the broker have no ticket and no journal trade yet — they still count
     for it in ((state.read_json("autopilot/book.json", {}) or {}).get("items") or {}).values():
-        if it.get("status") != "pending" or it.get("order_id") in journaled:
+        if it.get("status") not in ("pending", "submitting") or it.get("order_id") in journaled:
             continue
         book.append({"asset": it.get("asset"), "symbol": it.get("data_key") or it.get("symbol"),
                      "notional": float(it.get("qty") or 0) * float(it.get("entry_plan") or 0),
@@ -220,7 +220,7 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
         key = "allow_margin" if asset == "stock" else "allow_leverage"
         cap = min(float(lim.get("max_leverage") or 1.0), config.LEVERAGE_HARD_CAP)
         word = "margin" if asset == "stock" else "leverage"
-        if asset == "meme" or not lim.get(key):
+        if asset == "meme" or lim.get(key) is not True:
             add("no_leverage", False, "%g× %s is not allowed (limits.json %s.%s)" % (lev, word, asset, key))
         elif lev > cap + 1e-9:
             add("no_leverage", False, "%g× %s is over the %g× maximum (limits.json max_leverage, hard cap %g×)" % (
