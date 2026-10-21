@@ -1002,6 +1002,12 @@ def lock_holder():
     return None
 
 
+def running_daemon():
+    """Another live daemon on this trader/ folder (so the CLI hands work to it instead of racing it)."""
+    holder = lock_holder()
+    return holder if holder and holder.get("pid") != os.getpid() else None
+
+
 def acquire_lock() -> dict:
     holder = lock_holder()
     if holder and holder.get("pid") != os.getpid():
@@ -1322,6 +1328,13 @@ def main(argv=None) -> int:
     if args.action == "kill":
         if args.confirm != "KILL":
             cli.fail('kill needs --confirm KILL (it cancels every order and closes every position)')
+        holder = running_daemon()
+        if holder:  # two cycles at once would race on the book — let the daemon do it, now
+            write_control(kill=True, run_once=True)
+            cli.emit(args, "KILL sent to the running daemon (pid %s on %s) — it cancels every order and closes every "
+                           "position within a few seconds. Check with: autopilot.py status" % (
+                               holder.get("pid"), holder.get("host")), read_control())
+            return 0
         write_control(kill=True)
         res = run_cycle(approved=False)
         cli.emit(args, "\n".join([res["message"]] + ["  " + a for a in res["actions"]]), res)
@@ -1331,6 +1344,15 @@ def main(argv=None) -> int:
                                          "live_ready": brokers.live_readiness(cfg)[0]})
         return 0
     approved = True if args.approve else None
+    holder = running_daemon() if args.action in ("run", "loop") else None
+    if holder and args.action == "run":
+        write_control(run_once=True)
+        cli.emit(args, "A daemon is running (pid %s on %s) — asked it to run a cycle now instead of starting a second "
+                       "one. Check with: autopilot.py status" % (holder.get("pid"), holder.get("host")), read_control())
+        return 0
+    if holder and args.action == "loop":
+        cli.fail("a daemon is already trading this trader/ folder (pid %s on %s) — stop it before starting a loop"
+                 % (holder.get("pid"), holder.get("host")))
     if args.action == "run":
         res = run_cycle(approved=approved)
         cli.emit(args, "\n".join([res["message"]] + ["  " + a for a in res["actions"]] +

@@ -263,6 +263,22 @@ class V3(TraderTestCase):
         code, out, err = self.run_tool("trader-autopilot", "autopilot", ["daemon", "--max-cycles", "1"])
         self.assertEqual(code, 0, out + err)
 
+    def test_cli_hands_run_and_kill_to_a_running_daemon(self):
+        self.write_state("autopilot/daemon.lock", {"pid": os.getppid(), "host": socket.gethostname(),
+                                                   "started_at": mc.iso(time.time())})
+        code, out, _ = self.run_tool("trader-autopilot", "autopilot", ["run", "--approve"])
+        self.assertEqual(code, 0)
+        self.assertIn("asked it to run a cycle now", out)
+        self.assertTrue(ap().read_control()["run_once"])
+        self.assertFalse((self.home / "autopilot" / "state.json").exists())  # no second cycle ran
+        code, out, _ = self.run_tool("trader-autopilot", "autopilot", ["kill", "--confirm", "KILL"])
+        self.assertEqual(code, 0)
+        self.assertIn("KILL sent to the running daemon", out)
+        self.assertTrue(ap().read_control()["kill"])
+        code, _, err = self.run_tool("trader-autopilot", "autopilot", ["loop", "--max-cycles", "1"])
+        self.assertEqual(code, 2)
+        self.assertIn("already trading", err)
+
     def test_daemon_needs_the_real_clock(self):
         code, out, err = self.run_tool("trader-autopilot", "autopilot", ["daemon"])
         self.assertEqual(code, 2)

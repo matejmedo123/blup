@@ -364,7 +364,7 @@ moves on to the mirror / OKX automatically.
 ## Offline mode, tests and the demo
 
 ```bash
-python3 -m unittest            # 369+ tests, no network (fixtures only), Python 3.8+
+python3 -m unittest            # 375 tests, no network (fixtures only), Python 3.8+
 python3 scripts/demo.py        # all walkthroughs; reports in demo/trader/reports/index.html
 ```
 

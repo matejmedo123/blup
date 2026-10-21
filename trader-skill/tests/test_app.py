@@ -6,6 +6,7 @@ import json
 import os
 import threading
 import types
+from pathlib import Path
 from unittest import mock
 
 from tests.helpers import TraderTestCase, load
@@ -462,6 +463,21 @@ class Background(DashboardCase):
             self.assertEqual(server.main(["--home", str(self.home), "--port", "0"]), 2)
             self.assertTrue(seen["run_ap"])
 
+    def test_news_loop_leaves_the_feed_to_a_live_daemon(self):
+        app = self.start()
+        hb = {"at": "2026-10-20T19:29:30Z", "pid": 1, "host": "other", "runner": "daemon", "status": "running",
+              "interval_sec": 60}
+        (self.home / "autopilot").mkdir(parents=True, exist_ok=True)
+        (self.home / "autopilot" / "heartbeat.json").write_text(json.dumps(hb), encoding="utf-8")
+        os.environ["TRADER_NOW"] = "2026-10-20T19:30:00Z"
+        called = []
+        fake = types.SimpleNamespace(refresh_feed=lambda: called.append(1))
+        with mock.patch.object(self.server_mod.skills, "load", return_value=fake), \
+                mock.patch.object(app.stop_event, "wait", side_effect=lambda *_: app.stop_event.set()):
+            app.news_loop()
+        self.assertEqual(called, [])
+        self.assertTrue(app.news["deferred_to_daemon"])
+
     def test_news_refresh_calls_refresh_feed(self):
         app = self.start()
         called = []
@@ -486,3 +502,66 @@ class DevData(TraderTestCase):
         code, out, _ = self.run_tool("app", "server", ["--help"])
         self.assertEqual(code, 0)
         self.assertIn("password", out)
+
+
+class Deploy(TraderTestCase):
+    """The VPS kit: stops wait for the running cycle, the dashboard never trades twice, no real env file."""
+    ROOT = Path(__file__).resolve().parent.parent / "deploy"
+
+    def text(self, name):
+        return (self.ROOT / name).read_text(encoding="utf-8")
+
+    def test_units_and_compose_give_the_daemon_time_to_finish_its_cycle(self):
+        ap = self.text("trader-autopilot.service")
+        for line in ("KillSignal=SIGTERM", "TimeoutStopSec=120", "Restart=always", "User=trader",
+                     "ProtectSystem=strict", "ReadWritePaths=/var/lib/trader", "NoNewPrivileges=true",
+                     "EnvironmentFile=/etc/trader/trader.env", "autopilot.py daemon --approve"):
+            self.assertIn(line, ap)
+        dash = self.text("trader-dashboard.service")
+        self.assertIn("--host 127.0.0.1", dash)
+        self.assertIn("--no-autopilot --news-every 0", dash)
+        compose = self.text("docker-compose.yml")
+        self.assertIn("stop_grace_period: 2m", compose)
+        self.assertIn('"127.0.0.1:8765:8765"', compose)
+        self.assertIn('"--no-autopilot", "--news-every", "0"', compose)
+        self.assertIn("env_file: trader.env", compose)
+
+    def test_no_real_env_file_and_examples_are_empty(self):
+        self.assertFalse((self.ROOT / "trader.env").exists(), "a real deploy/trader.env must never be in the tree")
+        for line in self.text("trader.env.example").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                self.assertTrue(line.endswith("="), "placeholder with a value: %s" % line)
+        self.assertIn("trader.env", self.text(".gitignore"))
+
+    def test_shell_scripts_parse(self):
+        import shutil
+        import subprocess
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("bash not available")
+        for name in ("install-vps.sh", "traderctl"):
+            r = subprocess.run([bash, "-n", str(self.ROOT / name)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_healthcheck_matches_the_dashboard_rule(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("trader_healthcheck", str(self.ROOT / "healthcheck.py"))
+        hc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(hc)
+        from datetime import datetime, timezone
+        now = datetime(2026, 10, 20, 14, 0, tzinfo=timezone.utc)
+        ap = self.home / "autopilot"
+        ap.mkdir(parents=True, exist_ok=True)
+        self.assertFalse(hc.check(self.home, now)[0])  # no heartbeat yet
+
+        def beat(at, **kw):
+            hb = {"at": at, "interval_sec": 60, "status": "running", "runner": "daemon", "cycle": 1}
+            hb.update(kw)
+            (ap / "heartbeat.json").write_text(json.dumps(hb), encoding="utf-8")
+            return hc.check(self.home, now)[0]
+        self.assertTrue(beat("2026-10-20T13:57:01Z"))
+        self.assertFalse(beat("2026-10-20T13:56:59Z"))
+        self.assertTrue(beat("2026-10-20T13:50:00Z", interval_sec=300))
+        self.assertFalse(beat("2026-10-20T13:59:59Z", status="stopped"))
+        self.assertEqual(hc.main(["--home", str(self.home), "--quiet"]), 1)  # real clock: 2026-10-20 is long gone
