@@ -876,3 +876,13 @@ period). Per-coin rows are made for today's coins only and use each coin's whole
 if it also traded in the latest period and its history reaches today. Playbook entries: `"test"` is now the
 setup's (point-in-time) result — confidence sizing uses it — and `"coin_test"` the coin's own. With
 `autopilot.broker: "alpaca"` crypto fees default to Alpaca's 25 bps per side. `--universe today` keeps the old way.
+
+### Dashboard — launch checklist (v3.6)
+`GET /robots.txt` → `Disallow: /` (public); every response carries `X-Robots-Tag: noindex, nofollow`. Unknown
+non-API paths get an HTML 404 page (`/api/*` keeps JSON errors). `index.html` links `app.js` / `app.css` with
+`?v=<asset_version()>` — cached `immutable` until they change; other static files an hour; API responses stay
+`no-store`. Text responses ≥ 1 kB are gzipped when the client accepts it. `static/manifest.webmanifest`,
+`icon-192.png`, `icon-512.png` (maskable) and `apple-touch-icon.png` make it installable on a phone.
+`Referrer-Policy: same-origin` (with `no-referrer` a browser posts the login form with `Origin: null`);
+`_same_origin` honours `Sec-Fetch-Site` and accepts `Origin: null` only when the browser says `same-origin`.
+The **Help** tab (`renderHelp`) holds the FAQ, the privacy note and the terms of use; `document.title` follows the tab.

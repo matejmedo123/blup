@@ -4,8 +4,10 @@
   'use strict';
 
   var CSRF = (document.querySelector('meta[name="trader-csrf"]') || {}).content || '';
-  var TABS = ['overview', 'trades', 'bot', 'checks', 'brain', 'news', 'setups', 'reports'];
-  var MORE_TABS = ['brain', 'news', 'setups', 'reports'];  // behind "More" in the phone tab bar
+  var TABS = ['overview', 'trades', 'bot', 'checks', 'brain', 'news', 'setups', 'reports', 'help'];
+  var MORE_TABS = ['brain', 'news', 'setups', 'reports', 'help'];  // behind "More" in the phone tab bar
+  var TAB_TITLES = { overview: 'Overview', trades: 'Trades', bot: 'Bot', checks: 'Checks', brain: 'Brain', news: 'News',
+    setups: 'Setups', reports: 'Reports', help: 'Help' };
   var SVGNS = 'http://www.w3.org/2000/svg';
   var ASSET_LABEL = { stock: 'Stocks', crypto: 'Crypto', meme: 'Meme coins' };
   var REFRESH_MS = 10000;
@@ -557,9 +559,14 @@
     var tones = [botTone, hv[0], sv_[0], rTone];
     var overall = tones.indexOf('alarm') >= 0 ? st('needs attention', 'red') : (tones.indexOf('watch') >= 0 ? st('worth a look', 'amber')
       : (tones.every(function (t) { return t === 'ok'; }) ? st('all clear', 'green') : st('partly checked', '')));
-    return card('Is everything OK?', overall, h('div', { class: 'answers' },
+    // the one thing to do next: the bot's controls — the way back in when it is paused, killed or silent
+    var cta = h('div', { class: 'btn-row cta-row' },
+      h('a', { class: 'btn' + (botTone === 'ok' ? '' : ' btn-primary'), href: '#tab=bot' },
+        botTone === 'ok' ? 'Bot controls — pause · run once · KILL' : (p[0] === 'stale' ? 'Why is the bot silent? →' : 'Open the bot controls →')),
+      h('a', { class: 'btn btn-quiet', href: '#tab=help' }, 'Help & FAQ'));
+    return card('Is everything OK?', overall, h('div', null, h('div', { class: 'answers' },
       answer('bot', 'Bot', [botTone, botVal, botNote]), answer('checks', 'Is it normal?', hv),
-      answer('checks', 'Rules followed', sv_), answer('bot', 'Risk used', [rTone, rVal, rNote])));
+      answer('checks', 'Rules followed', sv_), answer('bot', 'Risk used', [rTone, rVal, rNote])), cta));
   }
 
   function reasonKind(r) {
@@ -1276,7 +1283,51 @@
     });
   }
 
-  var VIEWS = { overview: renderOverview, trades: renderTrades, bot: renderBot, checks: renderChecks, brain: renderBrain, news: renderNews, setups: renderSetups, reports: renderReports };
+  function qa(q, a) { return h('details', { class: 'qa' }, h('summary', { text: q }), h('p', { text: a })); }
+  function renderHelp() {
+    var frag = [head('Help', 'Quick answers, your data, and the terms of use')];
+    frag.push(card('Quick answers', null, h('div', { class: 'qas' },
+      qa('Is this real money?', 'Only if you switched live trading on yourself — it takes five separate steps in your own files ' +
+        '(broker alpaca, mode live, paper false, live keys and the sentence "I ACCEPT REAL MONEY RISK"). The badge at the top says ' +
+        'SIMULATOR, PAPER or LIVE. Nothing on this page can switch it on.'),
+      qa('How do I stop the bot right now?', 'Bot → Pause stops new trades; open positions keep their stops, targets and time stops. ' +
+        'Bot → KILL cancels the bot\'s orders and sells what the bot bought — within seconds when a daemon runs. Shares or coins ' +
+        'you hold yourself at the same broker are never touched. Resume to trade again.'),
+      qa('Why didn\'t it take a trade?', 'Bot → decisions: every idea it skipped says which gate said no — the backtest lab, the ' +
+        'desk, news, the risk limits, the daily cap or its own record. Most ideas are skipped; that is the point.'),
+      qa('How does it choose what to trade?', 'Crypto only from the backtest lab\'s playbook: coin + setup combinations that made ' +
+        'money on years of data the choice never saw, with coins chosen as they were at the time (not today\'s winners). ' +
+        'ETFs only while crypto is in a bear market. Meme coins never, not even DOGE or SHIB.'),
+      qa('Is it working normally?', 'Checks compares the bot\'s closed trades with thousands of backtest histories and matches ' +
+        'every daily signal with what the bot did. An alarm pauses new entries and says why.'),
+      qa('What is R?', '1R is the amount a trade risks: (entry − stop) × size. +2R means it won twice what it risked, −1R that ' +
+        'the stop was hit. Expectancy is the average R per trade after costs.'),
+      qa('How do I open this on my phone?', 'Run the dashboard with a password (TRADER_DASHBOARD_PASSWORD) and reach it through ' +
+        'an SSH tunnel or the deploy kit (Caddy, HTTPS). Then use "Add to Home Screen" — it opens like an app.'),
+      qa('Something looks broken.', 'Bot shows the last errors and when the bot last checked in. The bot never stops managing ' +
+        'open positions because of a broken file or a bad setting — it takes no new trades and says why instead.'))));
+    frag.push(h('div', { class: 'grid-even' },
+      card('Your data & privacy', null, h('div', { class: 'prose' },
+        h('p', { text: 'Everything — trades, decisions, settings, reports — stays in your trader/ folder on your own computer or ' +
+          'server. This dashboard has no analytics, no tracking, no ads and loads nothing from other sites (no fonts, no scripts).' }),
+        h('p', { text: 'One cookie: your sign-in session, only when a password is set (HttpOnly, SameSite=Strict, 7 days). It is ' +
+          'strictly necessary, so there is no cookie banner. Your theme choice is kept in this browser only.' }),
+        h('p', { text: 'What leaves your machine: requests for prices and news (exchanges, Yahoo, CoinGecko, DexScreener, SEC, ' +
+          'StockTwits, X if you added a token), orders to your broker if you connected one, notifications if you turned them on, ' +
+          'and — only with the optional AI desk — the trade case to Anthropic. API keys stay in your environment or ' +
+          'trader/secrets.env: never in a page, a log or git.' }),
+        h('p', { text: 'Search engines are told not to index this dashboard (robots.txt and noindex).' }))),
+      card('Terms of use & risk', null, h('div', { class: 'prose' },
+        h('p', { text: 'An educational tool, not financial advice. Nothing here is a recommendation to buy or sell anything.' }),
+        h('p', { text: 'Backtests describe the past, and the past does not predict the future. Trading can lose money — crypto can ' +
+          'lose most of its value within days, and leverage makes losses bigger. Only trade money you can afford to lose.' }),
+        h('p', { text: 'You decide whether to run the bot and with how much; you are responsible for your trades and your taxes, and ' +
+          'for checking what the law in your country allows.' }),
+        h('p', { text: 'The software is provided as is, without warranty, under the MIT license.' })))));
+    return Promise.resolve(frag);
+  }
+
+  var VIEWS = { overview: renderOverview, trades: renderTrades, bot: renderBot, checks: renderChecks, brain: renderBrain, news: renderNews, setups: renderSetups, reports: renderReports, help: renderHelp };
 
   // ---------------------------------------------------------------- routing + refresh
   function tabFromHash() {
@@ -1286,6 +1337,7 @@
     return m && TABS.indexOf(m[1]) >= 0 ? m[1] : 'overview';
   }
   function markTabs() {
+    document.title = (TAB_TITLES[S.tab] || 'Overview') + ' · Trader';
     each('.tab[data-tab]', function (b) {
       if (b.getAttribute('data-tab') === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });

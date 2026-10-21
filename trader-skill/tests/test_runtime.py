@@ -177,3 +177,67 @@ class DashboardHost(DashboardCase):
         self.assertEqual(self.control({"action": "kill", "confirm": "KILL"})[0], 200)
         c = json.loads((self.home / "autopilot" / "control.json").read_text(encoding="utf-8"))
         self.assertEqual((c["kill"], c["run_once"]), (True, True))
+
+
+class BrowserLogin(DashboardCase):
+    """What a real browser sends: a login form posted from the page itself arrives with "Origin: null" when the
+    referrer is withheld — it must still sign in; a post from another site must not."""
+
+    def login(self, headers):
+        return self.req("POST", "/login", "password=pw-for-test-1", dict({"Content-Type":
+                                                                         "application/x-www-form-urlencoded"}, **headers))
+
+    def test_the_login_form_works_from_a_browser_and_not_from_elsewhere(self):
+        self.start(password="pw-for-test-1")
+        code, hdrs, _ = self.login({"Origin": "null", "Sec-Fetch-Site": "same-origin"})
+        self.assertEqual(code, 303)
+        self.assertIn("trader_session", hdrs.get("Set-Cookie", ""))
+        code, hdrs, _ = self.login({"Origin": "http://127.0.0.1:%d" % self.port, "Sec-Fetch-Site": "same-origin"})
+        self.assertEqual(code, 303)
+        self.assertEqual(self.login({"Origin": "null", "Sec-Fetch-Site": "cross-site"})[0], 403)
+        self.assertEqual(self.login({"Origin": "null"})[0], 403)          # no word from the browser: refused
+        self.assertEqual(self.login({"Origin": "http://127.0.0.1:%d" % self.port, "Sec-Fetch-Site": "cross-site"})[0],
+                         403)
+        _, hdrs, _ = self.req("GET", "/login")
+        self.assertEqual(hdrs.get("Referrer-Policy"), "same-origin")
+
+
+class LaunchChecklist(DashboardCase):
+    """What a site needs before it goes out — the parts that fit a private dashboard."""
+
+    def test_never_indexed_and_a_real_404_page(self):
+        self.start()
+        code, hdrs, text = self.req("GET", "/robots.txt")
+        self.assertEqual((code, text), (200, "User-agent: *\nDisallow: /\n"))
+        code, hdrs, text = self.req("GET", "/")
+        self.assertEqual(hdrs.get("X-Robots-Tag"), "noindex, nofollow")
+        self.assertIn('<meta name="robots" content="noindex, nofollow">', text)
+        self.assertIn('<meta name="description"', text)
+        self.assertIn('rel="manifest"', text)
+        self.assertNotIn("{{V}}", text)
+        code, hdrs, text = self.req("GET", "/no-such-page")
+        self.assertEqual(code, 404)
+        self.assertIn("text/html", hdrs.get("Content-Type"))
+        self.assertIn("Back to the dashboard", text)
+        self.assertEqual(self.req("GET", "/api/nothing")[0], 404)   # the API still answers in JSON
+
+    def test_assets_are_cached_until_they_change_and_compressed(self):
+        self.start()
+        _, _, page = self.req("GET", "/")
+        import re
+        js = re.search(r'src="(/static/app\.js\?v=[0-9a-f]{12})"', page).group(1)
+        code, hdrs, _ = self.req("GET", js, headers={"Accept-Encoding": "gzip"})
+        self.assertEqual(code, 200)
+        self.assertEqual(hdrs.get("Content-Encoding"), "gzip")
+        self.assertIn("immutable", hdrs.get("Cache-Control"))
+        self.assertEqual(self.req("GET", "/api/summary")[1].get("Cache-Control"), "no-store")
+        code, hdrs, text = self.req("GET", "/static/manifest.webmanifest")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(text)["display"], "standalone")
+        for icon in ("icon-192.png", "icon-512.png", "apple-touch-icon.png"):
+            self.assertEqual(self.req("GET", "/static/" + icon)[0], 200)
+
+    def test_help_has_faq_privacy_and_terms(self):
+        js = (load("app", "server").STATIC / "app.js").read_text(encoding="utf-8")
+        for needle in ("renderHelp", "Quick answers", "Your data & privacy", "Terms of use & risk", "TAB_TITLES"):
+            self.assertIn(needle, js)

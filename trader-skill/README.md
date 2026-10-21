@@ -495,7 +495,12 @@ stop → entry → target bar, latest decisions, top news, desk verdicts) · Tra
 the universe with reasons, what it learned, notifications, AI desk spend) · Checks (where the bot's
 results sit among the backtest's histories, every daily signal matched with what the bot did, each
 idea through the six desks) · Brain · News (X, StockTwits, news, SEC with importance and sentiment) ·
-Setups · Reports. On a phone: a tab bar with Overview, Trades, Bot, Checks and More.
+Setups · Reports · Help (quick answers, your data & privacy, terms of use & risk). On a phone: a tab bar
+with Overview, Trades, Bot, Checks and More; "Add to Home Screen" installs it like an app (web manifest
+and icons). Every tab has its own title, text meets WCAG AA contrast (checked with axe on every tab, phone
+and desktop), unknown addresses get a real 404 page, and search engines are told to stay out
+(`robots.txt`, `noindex`). No analytics, no trackers, nothing loaded from other sites; the only cookie is
+the sign-in session, so there is no cookie banner. The app's files are gzipped and cached until they change.
 The design lives in Figma ("Trader — dashboard redesign": tokens, components, desktop and phone
 screens); `app/static/app.css` uses the same tokens.
 

@@ -20,6 +20,8 @@ reverse proxy. No API response ever contains a secret.
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import hmac
 import importlib.util
 import inspect
@@ -52,7 +54,22 @@ MAX_BODY = 16 * 1024
 SESSION_COOKIE = "trader_session"
 REPORT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,200}\.html$")
 STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-                ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon"}
+                ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
+                ".webmanifest": "application/manifest+json; charset=utf-8"}
+ROBOTS = b"User-agent: *\nDisallow: /\n"  # a private dashboard: nothing here belongs in a search engine
+GZIP_TYPES = ("text/", "application/json", "application/manifest+json", "image/svg+xml")
+
+
+def asset_version() -> str:
+    """Changes whenever app.js or app.css changes — the browser may keep them until then."""
+    h = hashlib.sha256()
+    for name in ("app.js", "app.css"):
+        try:
+            st = (STATIC / name).stat()
+            h.update(("%s:%d:%d" % (name, st.st_mtime_ns, st.st_size)).encode("ascii"))
+        except OSError:
+            pass
+    return h.hexdigest()[:12]
 APP_CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; "
            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 # generated reports carry inline SVG/CSS and a tiny inline script — sandbox them into an opaque origin
@@ -1191,8 +1208,19 @@ def _accepts(fn, name: str) -> bool:
 
 # --- HTTP -----------------------------------------------------------------------------------------
 
+NOT_FOUND_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<title>Not found · Trader</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css"></head><body class="login-body">
+<main class="login"><div class="brand"><span class="brand-mark"></span>Trader</div>
+<h1 class="nf-title">This page doesn't exist</h1>
+<p class="muted">The address may be mistyped, or the page was a report that has been cleaned up.</p>
+<a class="btn btn-primary" href="/">Back to the dashboard</a>
+<p class="muted small">Educational tool, not financial advice.</p></main></body></html>"""
+
 LOGIN_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Trader · sign in</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><title>Trader · sign in</title>
 <link rel="stylesheet" href="/static/app.css"></head><body class="login-body">
 <form class="login" method="post" action="/login"><div class="brand"><span class="brand-mark"></span>Trader</div>
 <label for="pw">Dashboard password</label><input id="pw" name="password" type="password" autocomplete="current-password" autofocus required>
@@ -1211,18 +1239,28 @@ def make_handler(app: DashboardApp):
                 sys.stderr.write("dashboard: " + fmt % args + "\n")
 
         # -- helpers
-        def _security_headers(self, csp: str = APP_CSP):
+        def _security_headers(self, csp: str = APP_CSP, cache: str = "no-store"):
             self.send_header("Content-Security-Policy", csp)
+            self.send_header("X-Robots-Tag", "noindex, nofollow")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "no-referrer")
+            # same-origin, not no-referrer: with no-referrer a browser sends "Origin: null" on a form POST, and
+            # the same-origin check below would refuse the login form itself
+            self.send_header("Referrer-Policy", "same-origin")
             self.send_header("X-Frame-Options", "DENY")
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
 
-        def _send(self, code, body: bytes, ctype: str, csp: str = APP_CSP, extra=None):
+        def _send(self, code, body: bytes, ctype: str, csp: str = APP_CSP, extra=None, cache: str = "no-store"):
+            gz = len(body) >= 1024 and ctype.startswith(GZIP_TYPES) and \
+                "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
+            if gz:  # the app is ~140 kB of text; over a phone connection that is most of the wait
+                body = gzip.compress(body, 6)
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            self._security_headers(csp)
+            if gz:
+                self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
+            self._security_headers(csp, cache)
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
@@ -1272,8 +1310,13 @@ def make_handler(app: DashboardApp):
 
         def _same_origin(self) -> bool:
             host = self.headers.get("Host") or ""
+            site = (self.headers.get("Sec-Fetch-Site") or "").lower()
+            if site and site not in ("same-origin", "none"):
+                return False  # the browser itself says this request comes from another site
             for h in ("Origin", "Referer"):
                 v = self.headers.get(h)
+                if v == "null":  # an opaque origin: only the browser's own word can vouch for it
+                    return site == "same-origin"
                 if v:
                     return urlsplit(v).netloc == host
             return True
@@ -1313,21 +1356,24 @@ def make_handler(app: DashboardApp):
                     return self._redirect("/")
                 return self._send(200, (LOGIN_PAGE % "").encode("utf-8"), "text/html; charset=utf-8")
             if path.startswith("/static/"):
-                return self._static(path[len("/static/"):])
+                return self._static(path[len("/static/"):], bool(q.get("v")))
             if path == "/favicon.ico":
                 return self._static("favicon.svg")
+            if path == "/robots.txt":
+                return self._send(200, ROBOTS, "text/plain; charset=utf-8", cache="public, max-age=86400")
             if not self._authed():
                 if path.startswith("/api/"):
                     return self._error(401, "sign in first")
                 return self._redirect("/login")
             if path in ("/", "/index.html"):
-                html_ = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{CSRF}}", app.csrf)
+                html_ = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{CSRF}}", app.csrf) \
+                    .replace("{{V}}", asset_version())
                 return self._send(200, html_.encode("utf-8"), "text/html; charset=utf-8")
             if path.startswith("/reports/"):
                 return self._report(path[len("/reports/"):])
             if path.startswith("/api/"):
                 return self._api(path[len("/api/"):], q)
-            return self._error(404, "not found")
+            return self._send(404, NOT_FOUND_PAGE.encode("utf-8"), "text/html; charset=utf-8")
 
         def _redirect(self, where: str, extra=None):
             self.send_response(303)
@@ -1338,13 +1384,15 @@ def make_handler(app: DashboardApp):
                 self.send_header(k, v)
             self.end_headers()
 
-        def _static(self, name: str):
+        def _static(self, name: str, versioned: bool = False):
             if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._\-]*$", name or ""):
                 return self._error(404, "not found")
             p = STATIC / name
             if not p.is_file() or p.suffix not in STATIC_TYPES or name == "index.html":
                 return self._error(404, "not found")
-            return self._send(200, p.read_bytes(), STATIC_TYPES[p.suffix])
+            # app.js / app.css are linked with ?v=<their version>: kept until they change; icons for an hour
+            cache = "private, max-age=31536000, immutable" if versioned else "private, max-age=3600"
+            return self._send(200, p.read_bytes(), STATIC_TYPES[p.suffix], cache=cache)
 
         def _report(self, name: str):
             if not REPORT_NAME.match(name or "") or ".." in name:
