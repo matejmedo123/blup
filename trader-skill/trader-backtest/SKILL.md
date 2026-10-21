@@ -1,6 +1,6 @@
 ---
 name: trader-backtest
-description: Backtester for day-trading setups on US stocks, crypto and DEX meme coins. Replays one setup rule (opening-range breakout, gap-and-go, VWAP reclaim, bull flag, Asia/US-open range breakout, momentum) over the last N sessions or days with the exit planner's stop/target/time stop, fees and slippage — "Last 59 sessions: 33 triggers, 13 hit target, 15 hit stop, 5 neither." Also the backtest lab (`lab.py`): every crypto setup on dozens of coins and on 5-minute, 1-hour and 4-hour bars, a grid of 160 exits, pooled train/test validation, and the playbook of validated coin+setup combinations the autopilot trades crypto from — sized by how certain the result is. Use when the user asks "does this setup work?", "backtest the ORB on TSLA", "how often does the Asia-range breakout hit target on BTC?", "validate this setup before I trade it", "what's the hit rate?", "backtest more coins", "which crypto setup has the highest chance?", "find the best exits", or "refresh the playbook".
+description: Backtester for day-trading setups on US stocks, crypto and DEX meme coins. Replays one setup rule (opening-range breakout, gap-and-go, VWAP reclaim, bull flag, Asia/US-open range breakout, momentum) over the last N sessions or days with the exit planner's stop/target/time stop, fees and slippage — "Last 59 sessions: 33 triggers, 13 hit target, 15 hit stop, 5 neither." Also the backtest lab (`lab.py`): every crypto setup on dozens of coins and on 5-minute, 1-hour and 4-hour bars, a grid of 160 exits, walk-forward validation, and the playbook of validated coin+setup combinations the autopilot trades crypto from — sized by how certain the result is. Use when the user asks "does this setup work?", "backtest the ORB on TSLA", "how often does the Asia-range breakout hit target on BTC?", "validate this setup before I trade it", "what's the hit rate?", "backtest more coins", "which crypto setup has the highest chance?", "find the best exits", or "refresh the playbook".
 ---
 
 # Trader · Backtester
@@ -51,13 +51,15 @@ python3 "${CLAUDE_SKILL_DIR}/lab.py" --fee-bps 25                     # e.g. Alp
   200 EMA).
 * Exits: targets 0.5–5R × structure stop or 1/1.5/2/3×ATR × four time stops (5m: 1–24 h; 1h: 12–72 h;
   4h: 1–7 days) = 160 per setup and timeframe, fees and slippage on every trade.
-* **Certainty first:** the exit with the highest *profit chance* (how often 20 trades ended in profit)
-  among exits with a net edge is picked on the **train** period (first two thirds) with all coins
-  pooled, then run unchanged on the **test** period (last third). A coin is **validated** only if the
-  pooled rule held on the test period and that coin made money with it on both periods.
+* **Certainty first, walk-forward:** the history is cut into four equal periods. For each of the last
+  three, the exit with the highest *profit chance* (how often 20 trades ended in profit) among exits
+  with a net edge is picked on everything before it, all coins pooled, and then traded unchanged in
+  that period, which the choice never saw. A setup **holds** only if it made money in every one of
+  those periods; a coin is **validated** only if it made money out of sample, including the latest
+  period. The exit traded is the one chosen last.
 * The report also shows the highest *win chance* each setup can reach and what it earned — usually a
   lot of small wins and a loss overall — and an overfitting check: how many per-coin "best settings"
-  survived the test period.
+  survived the latest period.
 * Validated combinations go to `trader/backtests/playbook.json` (valid 14 days). The autopilot trades
   crypto **only** from it, with those exits, and sizes by certainty: profit chance ≥ 90 % → risk × 2,
   ≥ 80 % → × 1.5, ≥ 70 % → × 1, lower → × 0.5 (a boost needs ≥ 30 unseen trades; `limits.json` caps
@@ -79,13 +81,13 @@ Quote the summary sentence exactly ("Last 59 sessions: 33 triggers, 13 hit targe
 5 neither.") then win rate, average net R and max drawdown, and the cost assumptions. Flag thin
 samples plainly. Past hit rates are not a promise — say so. Suggest `/trader-timemachine` next.
 For the lab: lead with how many combinations were validated on unseen data, then the validated list
-(win chance, edge, profit chance, test trades), then the "highest win chance" table to explain why a
+(win chance, edge, profit chance, out-of-sample trades), then the "highest win chance" table to explain why a
 high hit rate alone loses money, and the overfitting check. If nothing was validated, say plainly that
 the autopilot will not trade crypto until something is. Always include the disclaimer line.
 
 ## Never
 
 - Never present a backtest as a prediction or guarantee, and never cherry-pick parameters until
-  the numbers look good without telling the user — the lab's train/test split exists for exactly this;
-  quote test-period numbers, not train-period ones.
+  the numbers look good without telling the user — the lab's walk-forward exists for exactly this;
+  quote out-of-sample numbers, not training ones.
 - Never place orders or call a broker/exchange trading API.

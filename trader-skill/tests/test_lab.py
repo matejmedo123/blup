@@ -74,10 +74,13 @@ class Validation(TraderTestCase):
                                                 "--slippage-bps", "0"] + list(extra))
 
     def test_a_real_edge_is_validated_on_every_coin(self):
-        coins = [(symbols.parse(s, asset="crypto"), synthetic(i), 0.01) for i, s in enumerate(("AAAUSDT", "BBBUSDT"))]
+        coins = [(symbols.parse(s, asset="crypto"), synthetic(i, bars=5000), 0.01)
+                 for i, s in enumerate(("AAAUSDT", "BBBUSDT"))]
         now = coins[0][1][-1].t + 3600
-        fam, rows, picks = lab().study_family("oversold_bounce", "1h", coins, now, self._args("--swing-days", "125"),
+        fam, rows, picks = lab().study_family("oversold_bounce", "1h", coins, now, self._args("--swing-days", "208"),
                                               load("trader-exit", "exit"), 0.0)
+        self.assertEqual(len(fam["folds"]), 3)
+        self.assertTrue(all(f["test"]["expectancy_r"] > 0 for f in fam["folds"]))
         self.assertTrue(fam["validated"], fam["verdict"])
         self.assertGreater(fam["test"]["expectancy_r"], 0.05)
         self.assertGreaterEqual(fam["test"]["win_rate"], 0.6)
@@ -232,6 +235,20 @@ class Autopilot(TraderTestCase):
         self.assertEqual(d["action"], "taken")
         order = [o for o in state.read_json("orders.json")["orders"] if o["id"] == d["order_id"]][0]
         self.assertLessEqual(order["risk_usd"], config.load_limits()["crypto"]["max_risk_per_trade_usd"] + 1e-6)
+
+    def test_validated_coins_outside_the_universe_are_watched(self):
+        self.write_state("backtests/playbook.json", {
+            "generated_at": "2026-10-20T00:00:00Z", "valid_until": "2026-11-03T00:00:00Z",
+            "entries": {"XRPUSDT:asia_range@5m": entry("XRPUSDT", "asia_range", "5m"),
+                        "DOGEUSDT:asia_range@5m": entry("DOGEUSDT", "asia_range", "5m")}})
+        doc = json.loads((self.home / "config.json").read_text())
+        doc["autopilot"]["universe"]["exclude"] = ["DOGE"]
+        (self.home / "config.json").write_text(json.dumps(doc))
+        ap().run_cycle("2026-10-20T14:40:00Z", approved=True)
+        st = state.read_json("autopilot/state.json")
+        self.assertTrue(any("also watching XRPUSDT" in n for n in st["notes"]), st["notes"])
+        self.assertFalse(any("DOGE" in n for n in st["notes"] if "also watching" in n))
+        self.assertEqual(state.read_json("autopilot/scan.json")["crypto"]["total"], 1)  # only validated coins are scanned
 
     def test_status_shows_the_playbook(self):
         ap().run_cycle("2026-10-20T14:40:00Z", approved=True)

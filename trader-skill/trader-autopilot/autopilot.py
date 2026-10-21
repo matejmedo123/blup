@@ -347,6 +347,34 @@ def watched(cfg: dict, broker=None, now=None) -> tuple:
 SERIES_HISTORY_DAYS = {"1h": 12, "4h": 45}   # enough closed bars for the 200-bar EMA of the swing setups
 
 
+def add_playbook_coins(uni: dict, pbs: dict, cfg: dict, limits: dict, broker=None) -> list:
+    """Validated coins are watched even when they are not in today's top by volume (exclusions still win)."""
+    if "crypto" not in uni or not pbs.get("required") or not pbs.get("playbook"):
+        return []
+    have = set()
+    for raw in uni["crypto"]:
+        try:
+            have.add(data.as_symbol(raw, "crypto").key)
+        except (symbols.SymbolError, ValueError):
+            continue
+    blocked = {str(x).upper() for x in ((cfg.get("autopilot") or {}).get("universe") or {}).get("exclude") or []}
+    blocked |= {str(x).upper() for x in limits.get("blocked_symbols") or []}
+    try:
+        tradable = broker.tradable("crypto") if broker is not None else None
+    except Exception:
+        tradable = None
+    added = []
+    for key, entries in sorted(pbs["by_coin"].items()):
+        if key in have or key in blocked:
+            continue
+        sym = data.as_symbol(key, "crypto")
+        if sym.base in blocked or sym.display.upper() in blocked or (tradable is not None and sym.base not in tradable):
+            continue
+        uni["crypto"].append(key)
+        added.append(key)
+    return added
+
+
 def playbook_state(cfg: dict, now=None) -> dict:
     """Is crypto gated by the backtest lab, and which coin+setup+timeframe combinations did it validate?"""
     pb_cfg = (cfg.get("autopilot") or {}).get("playbook") or {}
@@ -995,6 +1023,10 @@ def _cycle(approved=None) -> dict:
         pbs = playbook_state(cfg, now)
     except Exception as exc:  # a broken playbook file must not stop exits — crypto just stays gated
         pbs = {"required": True, "playbook": None, "problem": "playbook unreadable: %s" % exc, "by_coin": {}}
+    if status == "running":
+        extra = add_playbook_coins(uni, pbs, cfg, limits, broker)
+        if extra:
+            uni_notes.append("also watching %s — validated by the backtest lab" % ", ".join(extra))
     if status == "running":
         memo = {}
         try:

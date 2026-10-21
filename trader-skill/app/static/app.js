@@ -824,20 +824,20 @@
     }
     var tiles = h('div', { class: 'tiles' },
       tile('Validated', String(entries.length), 'coin + setup combinations the bot may trade', entries.length ? '' : 'down'),
-      tile('Setups that held', (sm.families_validated || 0) + ' / ' + (sm.families || 0), 'on data the choice never saw'),
-      tile('Per-coin tuning survived', sm.per_coin_survival_rate === null || sm.per_coin_survival_rate === undefined ? '—' : pct(100 * sm.per_coin_survival_rate, false, 0), 'the luck check — low means most "best settings" were luck'));
+      tile('Setups that held', (sm.families_validated || 0) + ' / ' + (sm.families || 0), 'in every walk-forward period'),
+      tile('Per-coin tuning survived', sm.per_coin_survival_rate === null || sm.per_coin_survival_rate === undefined ? '—' : pct(100 * sm.per_coin_survival_rate, false, 0), 'the luck check — near or below 50% means the per-coin "best settings" were luck'));
     var list = entries.length ? h('div', { class: 'rows' }, entries.map(function (e) {
       return h('div', { class: 'row' },
         h('div', { class: 'title' }, h('span', { class: 'sym', text: e.display }), st(e.setup + ' · ' + e.interval, 'blue'), st('risk × ' + e.risk_mult, e.risk_mult > 1 ? 'green' : (e.risk_mult < 1 ? 'amber' : ''))),
         h('div', { class: 'right' }, h('div', { class: 'big up', text: pct(100 * (e.profit_chance || 0), false, 0) }), h('div', { class: 'sm', text: 'profit chance' })),
         h('div', { class: 'detail', text: (e.exit || '') + ' · win ' + pct(100 * (e.win_rate || 0), false, 0) + ' · edge ' + rr(e.edge_r) + ' · ' + (e.trades || 0) + ' unseen trades' }));
-    })) : empty('Nothing validated — no setup kept a net edge after costs on data it never saw, so the autopilot trades no crypto for now.');
+    })) : empty('Nothing validated — no setup made money after costs in every period it was tested on unseen data, so the autopilot trades no crypto for now.');
     var trap = (L.highest_win || []).length ? h('details', { class: 'gates' }, h('summary', { text: 'Why not just the highest win chance?' }),
       h('ul', { class: 'reasons' }, L.highest_win.map(function (x) {
         return h('li', null, h('b', { text: x.setup + ' (' + x.timeframe + ')' }), ' — ' + (x.exit || '') + ': wins ' + pct(100 * (x.win_test || 0), false, 0) + ' of trades, but earns ' + rr(x.edge_test) + ' per trade after costs');
       })), h('p', { class: 'small muted', text: 'Small targets with wide stops win often and still lose money: the losses are bigger than the wins, and fees come out of every trade.' })) : null;
     return card('Backtest lab · crypto', meta, h('div', null, tiles, list, trap,
-      h('p', { class: 'small muted', text: 'The exit with the highest profit chance is picked on the first two thirds of the history with all coins pooled, then checked on the last third. The autopilot trades crypto only from the validated list, sizing up with certainty (never past trader/limits.json). ' + (pb.valid_until ? 'Valid until ' + localDT(pb.valid_until) + '.' : '') }),
+      h('p', { class: 'small muted', text: 'Walk-forward: for each of the last three periods the exit with the highest profit chance is picked on everything before it, all coins pooled, and traded unchanged in that period. A setup counts only if it made money in every period. The autopilot trades crypto only from the validated list, sizing up with certainty (never past trader/limits.json). ' + (pb.valid_until ? 'Valid until ' + localDT(pb.valid_until) + '.' : '') }),
       L.report ? reportLink(L.report, 'Open the full lab report') : null));
   }
   function renderBrain() {

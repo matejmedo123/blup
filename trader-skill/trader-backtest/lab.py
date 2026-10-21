@@ -7,19 +7,19 @@ band bounce, 24-bar breakout) — and tries a grid of exits for each: target 0.5
 1–3×ATR, four time stops. Fees and slippage are paid on every trade. ``--min-target-r 2`` keeps only
 exits that aim for at least 2R (one win pays for two losses).
 
-How it avoids fooling itself:
-  1. the exit with the highest certainty (profit chance, below) is chosen on the TRAIN period — the first
-     two thirds — with all coins pooled together: one rule for every coin, hundreds of trades, instead of
-     a lucky fit per coin;
-  2. that exit then runs unchanged on the TEST period (the last third), which the choice never saw;
-  3. a coin is VALIDATED for a setup only if the pooled rule held on the test period AND that coin made
-     money with it on both periods.
-Validated coin + setup + timeframe combinations go into trader/backtests/playbook.json; the autopilot
-trades crypto only from that playbook, with those exits.
+How it avoids fooling itself (walk-forward):
+  1. the history is cut into four equal periods (``--folds 3``). For each of the last three, the exit with
+     the highest certainty (profit chance, below) is chosen on everything BEFORE it, with all coins pooled —
+     one rule for every coin, hundreds of trades, not a lucky fit per coin — and then traded, unchanged,
+     in that period, which the choice never saw;
+  2. a setup HOLDS only if that out-of-sample result made money in every one of those periods;
+  3. a coin is VALIDATED for a held setup only if it made money out of sample, including the latest period.
+Validated coin + setup + timeframe combinations go into trader/backtests/playbook.json — with the exit
+chosen last — and the autopilot trades crypto only from that playbook.
 
   win chance     share of trades that ended in profit after fees and slippage
   edge           average net result per trade in R (1R = the amount risked)
-  profit chance  how often 20 trades, drawn at random from the test results, added up to a profit
+  profit chance  how often 20 trades, drawn at random from the out-of-sample results, added up to a profit
 
 A high win chance alone means nothing — many small wins and a few big losses lose money. The report
 shows the highest win chance each setup can reach and what it earned. All of it describes the past.
@@ -76,14 +76,17 @@ def build_parser():
     p.add_argument("--swing-days", type=float, default=365,
                    help="days of 1-hour history (default 365; 4-hour bars get twice as much)")
     p.add_argument("--setups", help="comma-separated crypto setups (default: every crypto setup)")
-    p.add_argument("--test-frac", type=float, default=1 / 3.0, help="share of each history kept for the test (1/3)")
+    p.add_argument("--folds", type=int, default=3,
+                   help="walk-forward periods: the history is cut into FOLDS + 1 parts and every part after the first "
+                        "is traded with an exit chosen on the parts before it (default 3)")
     p.add_argument("--objective", choices=("profit", "win"), default="profit",
                    help="profit = highest profit chance, i.e. certainty (default); win = highest win chance among "
                         "exits with a net edge")
     p.add_argument("--min-target-r", type=float, default=0.0,
                    help="only exits whose target is at least this many R (e.g. 3 for 3:1 reward to risk)")
     p.add_argument("--min-pooled", type=int, default=100, help="minimum pooled train trades for an exit (100)")
-    p.add_argument("--min-pooled-test", type=int, default=50, help="minimum pooled test trades (50)")
+    p.add_argument("--min-pooled-test", type=int, default=50, help="minimum out-of-sample trades, all coins (50)")
+    p.add_argument("--min-fold-test", type=int, default=10, help="minimum trades in each walk-forward period (10)")
     p.add_argument("--min-test", type=int, default=10, help="minimum test trades for one coin (10)")
     p.add_argument("--min-edge", type=float, default=0.05, help="minimum net edge in R per trade (0.05)")
     p.add_argument("--fee-bps", type=float, help="fee per side (default config costs.crypto)")
@@ -302,67 +305,107 @@ def highest_win(by_key: dict, min_n: int, min_target_r: float = 0.0):
 # --- one setup on one timeframe, all coins -------------------------------------------------------------
 
 def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit_mod, cost: float) -> tuple:
-    """coins: [(sym, candles, tick)] → (family summary, per-coin rows, per-coin-optimised picks)."""
+    """Walk-forward test of one setup on one timeframe across all coins.
+
+    The history is cut into folds + 1 equal periods. In fold k the exit is chosen on everything before period
+    k + 1 (all coins pooled) and then traded, unchanged, in period k + 1. The setup holds only if that
+    out-of-sample result made money in every period; the exit to trade is the one chosen last.
+    coins: [(sym, candles, tick)] → (family summary, per-coin rows, per-coin-optimised test edges).
+    """
     days = args.days if interval == "5m" else args.swing_days * (2 if interval == "4h" else 1)
-    split_ts = int(now_ts - days * 86400 * args.test_frac)
-    pooled_tr, pooled_te, per_coin = {}, {}, []
+    start_ts = int(now_ts - days * 86400)
+    k = max(1, int(args.folds))
+    bounds = [int(start_ts + i * (now_ts - start_ts) / float(k + 1)) for i in range(1, k + 1)] + [int(now_ts)]
+    per_coin = []
     for sym, candles, tick in coins:
-        tr, te = {}, {}
-        trigs = triggers(candles, setup, interval, now_ts)
-        for t in trigs:
-            bucket = tr if t["entry_ts"] < split_ts else te
-            for key, r in grid_outcomes(candles, t, interval, exit_mod, tick, cost).items():
-                bucket.setdefault(key, []).append(r)
-        for key, rs in tr.items():
-            pooled_tr.setdefault(key, []).extend(rs)
-        for key, rs in te.items():
-            pooled_te.setdefault(key, []).extend(rs)
-        per_coin.append((sym, tr, te, len(trigs)))
-    fam = {"setup": setup, "label": setups.SETUPS[setup]["label"], "timeframe": interval,
-           "train_until": market_clock.iso(split_ts), "coins": sum(1 for _, tr, te, n in per_coin if n),
-           "signals": sum(n for _, _, _, n in per_coin)}
-    # what the highest win chance looks like, edge or not
-    hw = highest_win(pooled_tr, args.min_pooled, args.min_target_r)
-    fam["highest_win"] = None if hw is None else {
-        "exit": exit_label(hw), "train": stats(pooled_tr[hw]), "test": stats(pooled_te.get(hw, []))}
-    best = choose(pooled_tr, args.objective, args.min_pooled, args.min_edge, args.min_target_r)
-    rows = []
-    if best is None:
-        fam.update(exit=None, train=None, test=None, validated=False, validated_coins=[],
-                   verdict="no exit had a net edge ≥ %s across all coins on the train period" % fmt.r(args.min_edge))
-    else:
-        tr_s, te_s = final_stats(pooled_tr[best]), final_stats(pooled_te.get(best, []))
-        ok = te_s["n"] >= args.min_pooled_test and te_s["expectancy_r"] >= args.min_edge
-        fam.update(exit=exit_label(best), train=tr_s, test=te_s, validated=ok,
-                   verdict="held on the test period" if ok else (
-                       "only %d test trades" % te_s["n"] if te_s["n"] < args.min_pooled_test else
-                       "the edge did not survive the test period (%s per trade)" % fmt.r(te_s["expectancy_r"])))
-        for sym, tr, te, n in per_coin:
-            if not n:
+        per_coin.append((sym, [(t["entry_ts"], grid_outcomes(candles, t, interval, exit_mod, tick, cost))
+                               for t in triggers(candles, setup, interval, now_ts)]))
+
+    def pool(lo, hi, only=None):
+        out = {}
+        for sym, trades in per_coin:
+            if only is not None and sym.key != only:
                 continue
-            a, b = stats(tr.get(best, [])), stats(te.get(best, []))
+            for ts, res in trades:
+                if lo <= ts < hi:
+                    for key, r in res.items():
+                        out.setdefault(key, []).append(r)
+        return out
+
+    folds, oos, oos_coin, best = [], [], {sym.key: [] for sym, _ in per_coin}, None
+    for i in range(k):
+        train, test = pool(start_ts, bounds[i]), pool(bounds[i], bounds[i + 1])
+        b = choose(train, args.objective, args.min_pooled, args.min_edge, args.min_target_r)
+        f = {"train_until": market_clock.iso(bounds[i]), "test_until": market_clock.iso(bounds[i + 1]),
+             "exit": exit_label(b) if b else None, "train": stats(train[b]) if b else None,
+             "test": stats(test.get(b, [])) if b else None}
+        folds.append(f)
+        best = b
+        if b is None:
+            continue
+        oos += test.get(b, [])
+        for sym, trades in per_coin:
+            oos_coin[sym.key] += [res[b] for ts, res in trades if bounds[i] <= ts < bounds[i + 1] and b in res]
+    last_train, last_test = pool(start_ts, bounds[k - 1]), pool(bounds[k - 1], bounds[k])
+    fam = {"setup": setup, "label": setups.SETUPS[setup]["label"], "timeframe": interval,
+           "train_until": market_clock.iso(bounds[k - 1]), "coins": sum(1 for _, t in per_coin if t),
+           "signals": sum(len(t) for _, t in per_coin), "folds": folds}
+    # what the highest win chance looks like, edge or not
+    hw = highest_win(last_train, args.min_pooled, args.min_target_r)
+    fam["highest_win"] = None if hw is None else {
+        "exit": exit_label(hw), "train": stats(last_train[hw]), "test": stats(last_test.get(hw, []))}
+    rows, verdict = [], None
+    missing = [i + 1 for i, f in enumerate(folds) if not f["exit"]]
+    thin = [i + 1 for i, f in enumerate(folds) if f["exit"] and f["test"]["n"] < args.min_fold_test]
+    losing = [(i + 1, f["test"]["expectancy_r"]) for i, f in enumerate(folds)
+              if f["exit"] and f["test"]["n"] and f["test"]["expectancy_r"] <= 0]
+    oos_s = final_stats(oos) if oos else stats([])
+    if missing:
+        verdict = "no exit had a net edge ≥ %s on the training data of period%s %s" % (
+            fmt.r(args.min_edge), "" if len(missing) == 1 else "s", ", ".join(map(str, missing)))
+    elif thin:
+        verdict = "too few trades in walk-forward period%s %s" % ("" if len(thin) == 1 else "s",
+                                                                    ", ".join(map(str, thin)))
+    elif losing:
+        verdict = "lost money in walk-forward period%s %s" % (
+            "" if len(losing) == 1 else "s", ", ".join("%d (%s)" % (i, fmt.r(e)) for i, e in losing))
+    elif oos_s["n"] < args.min_pooled_test:
+        verdict = "only %d out-of-sample trades" % oos_s["n"]
+    elif oos_s["expectancy_r"] < args.min_edge:
+        verdict = "out-of-sample edge %s is below %s" % (fmt.r(oos_s["expectancy_r"]), fmt.r(args.min_edge))
+    ok = verdict is None
+    if best is None:
+        fam.update(exit=None, train=None, test=oos_s if oos else None, validated=False, verdict=verdict)
+    else:
+        fam.update(exit=exit_label(best), train=final_stats(last_train[best]), test=oos_s, validated=ok,
+                   verdict=verdict or "made money in all %d walk-forward periods" % k)
+        for sym, trades in per_coin:
+            if not trades:
+                continue
+            a = stats(pool(start_ts, bounds[k - 1], sym.key).get(best, []))
+            b = stats(oos_coin[sym.key])
+            recent = stats(pool(bounds[k - 1], bounds[k], sym.key).get(best, []))
             why = []
             if not ok:
                 why.append("the setup failed across all coins")
-            if (a["n"] or 0) < 10 or (a["expectancy_r"] or 0) <= 0:
-                why.append("lost money on this coin in the train period" if a["n"] >= 10 else
-                           "only %d train trades on this coin" % a["n"])
-            if (b["n"] or 0) < args.min_test:
-                why.append("only %d test trades on this coin" % b["n"])
-            elif (b["expectancy_r"] or 0) < args.min_edge:
-                why.append("test edge %s on this coin" % fmt.r(b["expectancy_r"]))
+            if b["n"] < args.min_test:
+                why.append("only %d out-of-sample trades on this coin" % b["n"])
+            elif b["expectancy_r"] < args.min_edge:
+                why.append("out-of-sample edge %s on this coin" % fmt.r(b["expectancy_r"]))
+            if recent["n"] and recent["expectancy_r"] < 0:
+                why.append("lost money on this coin in the latest period (%s)" % fmt.r(recent["expectancy_r"]))
             if not why:
-                b = final_stats(te.get(best, []))
+                b = final_stats(oos_coin[sym.key])
             rows.append({"symbol": sym.key, "display": sym.display, "setup": setup, "timeframe": interval,
-                         "exit": exit_label(best), "train": a, "test": b, "validated": not why,
-                         "why": "; ".join(why) or "made money with the pooled rule on both periods"})
+                         "exit": exit_label(best), "train": a, "test": b, "recent": recent, "validated": not why,
+                         "why": "; ".join(why) or "made money out of sample, including the latest period"})
     fam["validated_coins"] = [r["display"] for r in rows if r["validated"]]
     # the tempting alternative: tune every coin on its own — how much of that survives?
     picks = []
-    for sym, tr, te, n in per_coin:
-        k = choose(tr, args.objective, 20, args.min_edge, args.min_target_r)
-        if k is not None:
-            picks.append(stats(te.get(k, []))["expectancy_r"])
+    for sym, _ in per_coin:
+        key = choose(pool(start_ts, bounds[k - 1], sym.key), args.objective, 20, args.min_edge, args.min_target_r)
+        if key is not None:
+            picks.append(stats(pool(bounds[k - 1], bounds[k], sym.key).get(key, []))["expectancy_r"])
     return fam, rows, picks
 
 
@@ -433,12 +476,12 @@ def run(args, ctx) -> dict:
     doc = {
         "generated_at": market_clock.iso(ctx.now), "universe": uname, "coins": len(syms), "timeframes": tfs,
         "days": {"5m": args.days, "1h": args.swing_days, "4h": args.swing_days * 2}, "objective": args.objective,
-        "test_frac": args.test_frac,
+        "folds": args.folds,
         "costs": {"fee_bps": fee, "slippage_bps": slip, "round_trip_pct": round(2 * cost, 4)},
         "grid": {"targets_r": list(TARGETS_R), "stops": ["structure"] + ["%g×ATR" % m for k, m in STOPS if k == "atr"],
                  "horizons_h": {k: list(v["horizons_h"]) for k, v in TIMEFRAMES.items() if k in tfs},
                  "exits_per_setup": sum(1 for t in TARGETS_R if t >= args.min_target_r) * len(STOPS) * 4},
-        "rules": {"min_target_r": args.min_target_r, "min_pooled": args.min_pooled, "min_pooled_test": args.min_pooled_test, "min_test": args.min_test,
+        "rules": {"min_target_r": args.min_target_r, "min_pooled": args.min_pooled, "min_fold_test": args.min_fold_test, "min_pooled_test": args.min_pooled_test, "min_test": args.min_test,
                   "min_edge_r": args.min_edge, "profit_chance_trades": PROFIT_TRADES},
         "summary": {"families": len(families), "families_validated": sum(1 for f in families if f["validated"]),
                     "coins_validated": len(validated), "per_coin_picks": len(picks),
@@ -502,23 +545,25 @@ def text(doc: dict) -> str:
         doc["costs"]["round_trip_pct"], "highest win chance with a net edge" if doc["objective"] == "win"
         else "highest profit chance", " · targets ≥ %gR only" % doc["rules"]["min_target_r"]
         if doc["rules"].get("min_target_r") else ""),
-        "%d setup × timeframe families · %d held on the test period · %d coin+setup combinations VALIDATED" % (
-            s["families"], s["families_validated"], s["coins_validated"]), "",
-        "  setup (timeframe)                exit picked on train, all coins pooled     win train → test   "
-        "edge train → test   profit chance"]
+        "%d setup × timeframe families · %d held in all %d walk-forward periods · %d coin+setup combinations "
+        "VALIDATED" % (s["families"], s["families_validated"], doc["folds"], s["coins_validated"]), "",
+        "  setup (timeframe)           latest exit (all coins pooled)        edge per period, out of sample   "
+        "win · edge out of sample · profit chance"]
     for f in doc["families"]:
         name = "%s (%s)" % (f["setup"], f["timeframe"])
+        per = " / ".join(fmt.r((x.get("test") or {}).get("expectancy_r")) if x.get("exit") else "—"
+                         for x in f.get("folds") or [])
         if not f["exit"]:
-            lines.append("  %-3s %-28s %s" % ("·", name, f["verdict"]))
+            lines.append("  %-3s %-24s %-37s %-32s %s" % ("·", name, "—", per, f["verdict"]))
             continue
-        lines.append("  %-3s %-28s %-42s %-18s %-19s %s" % (
-            "✓" if f["validated"] else "·", name, f["exit"]["text"],
-            _arrow(f["train"]["win_rate"], f["test"]["win_rate"], _pct),
-            _arrow(f["train"]["expectancy_r"], f["test"]["expectancy_r"], fmt.r), _pct(f["test"]["profit_chance"])))
+        lines.append("  %-3s %-24s %-37s %-32s %s · %s · %s%s" % (
+            "✓" if f["validated"] else "·", name, f["exit"]["text"], per, _pct(f["test"]["win_rate"]),
+            fmt.r(f["test"]["expectancy_r"]), _pct(f["test"]["profit_chance"]),
+            "" if f["validated"] else "  — " + f["verdict"]))
     hw = sorted([f for f in doc["families"] if f["highest_win"]],
                 key=lambda f: -(f["highest_win"]["test"]["win_rate"] or 0))[:6]
     if hw:
-        lines += ["", "Highest win chance each setup can reach%s — and what it earned (train → test):" % (
+        lines += ["", "Highest win chance each setup can reach%s — and what it earned (training → latest period):" % (
             " with a ≥ %gR target" % doc["rules"]["min_target_r"] if doc["rules"].get("min_target_r") else "")]
     for f in hw:
         h = f["highest_win"]
@@ -530,18 +575,18 @@ def text(doc: dict) -> str:
     if doc["validated"]:
         lines.append("VALIDATED — the autopilot may trade these (crypto only from this list):")
         for r in doc["validated"][:20]:
-            lines.append("  ✓ %-11s %-16s %-3s %-38s test: win %s · edge %s · profit chance %s · %d trades" % (
+            lines.append("  ✓ %-11s %-16s %-3s %-38s out of sample: win %s · edge %s · profit chance %s · %d trades" % (
                 r["display"], r["setup"], r["timeframe"], r["exit"]["text"], _pct(r["test"]["win_rate"]),
                 fmt.r(r["test"]["expectancy_r"]), _pct(r["test"]["profit_chance"]), r["test"]["n"]))
     else:
-        lines.append("VALIDATED: nothing — no setup kept a net edge after costs on data it never saw. The autopilot "
-                     "will not trade crypto until the lab finds something (it re-checks every week).")
+        lines.append("VALIDATED: nothing — no setup made money after costs in every period it was tested on unseen "
+                     "data. The autopilot will not trade crypto until the lab finds something (it re-checks weekly).")
     if s["per_coin_picks"]:
-        lines.append("Overfitting check: tuning every coin on its own found %d \"winners\" on train; only %d (%s) "
-                     "stayed profitable on the test period." % (s["per_coin_picks"], s["per_coin_survived"],
-                                                                 _pct(s["per_coin_survival_rate"])))
+        lines.append("Overfitting check: tuning every coin on its own found %d \"winners\" in training; only %d (%s) "
+                     "stayed profitable in the latest period." % (s["per_coin_picks"], s["per_coin_survived"],
+                                                                   _pct(s["per_coin_survival_rate"])))
     lines.append("win = trades that made money after costs · edge = average net R per trade · profit chance = share "
-                 "of random 20-trade runs from the test period that ended in profit")
+                 "of random 20-trade runs from the out-of-sample trades that ended in profit")
     for n in doc["notes"][:6]:
         lines.append("note: " + n)
     if len(doc["notes"]) > 6:
@@ -553,32 +598,34 @@ def write_report(doc: dict):
     s = doc["summary"]
     body = html.tiles([
         ("Coins", fmt.count(doc["coins"]), "info"), ("Setup × timeframe", fmt.count(s["families"]), ""),
-        ("Held on test", fmt.count(s["families_validated"]), "good" if s["families_validated"] else "bad"),
+        ("Held in every period", fmt.count(s["families_validated"]), "good" if s["families_validated"] else "bad"),
         ("Validated coin+setup", fmt.count(s["coins_validated"]), "good" if s["coins_validated"] else "bad"),
         ("Per-coin tuning survived", _pct(s["per_coin_survival_rate"]), "warn"),
         ("Costs (round trip)", "%.2f%%" % doc["costs"]["round_trip_pct"], "")])
     body += html.card("How to read this", (
-        "<p>Every setup was replayed on every coin with %d exits (%s targets × %d stops × 4 time stops). The exit "
-        "was chosen on the <b>train</b> period with all coins pooled — one rule, hundreds of trades — and then run "
-        "unchanged on the <b>test</b> period it never saw (the last %s of each history). A coin is "
-        "<b>validated</b> for a setup only if the pooled rule kept an edge ≥ %s on the test period and that coin "
-        "made money with it on both periods.</p><p><b>Win</b> = trades that made money after fees and slippage. "
-        "<b>Edge</b> = average net result per trade in R (1R = the amount risked). <b>Profit chance</b> = share of "
-        "4,000 random 20-trade runs drawn from the test trades that ended in profit. A high win chance alone means "
-        "little: many small wins and a few big losses lose money — the second table shows exactly that.</p>" % (
+        "<p>Every setup was replayed on every coin with %d exits (%s targets × %d stops × 4 time stops). The history "
+        "is cut into %d equal periods; for each of the last %d, the exit was chosen on everything before it with all "
+        "coins pooled — one rule, hundreds of trades — and then traded, unchanged, in that period, which the choice "
+        "never saw (walk-forward). A setup <b>holds</b> only if it made money in every one of those periods with an "
+        "average edge ≥ %s; a coin is <b>validated</b> only if it made money out of sample, including the latest "
+        "period.</p><p><b>Win</b> = trades that made money after fees and slippage. <b>Edge</b> = average net "
+        "result per trade in R (1R = the amount risked). <b>Profit chance</b> = share of 4,000 random 20-trade runs "
+        "drawn from the out-of-sample trades that ended in profit. A high win chance alone means little: many small "
+        "wins and a few big losses lose money — the second table shows exactly that.</p>" % (
             doc["grid"]["exits_per_setup"], len(doc["grid"]["targets_r"]), len(doc["grid"]["stops"]),
-            _pct(doc["test_frac"]), fmt.r(doc["rules"]["min_edge_r"]))))
+            doc["folds"] + 1, doc["folds"], fmt.r(doc["rules"]["min_edge_r"]))))
     rows = []
     for f in doc["families"]:
-        tr, te = f["train"] or {}, f["test"] or {}
+        te = f["test"] or {}
+        per = " / ".join(fmt.r((x.get("test") or {}).get("expectancy_r")) if x.get("exit") else "—"
+                         for x in f.get("folds") or [])
         rows.append(("✓ held" if f["validated"] else "—", f["label"], f["timeframe"],
-                     f["exit"]["text"] if f["exit"] else "—", _arrow(tr.get("win_rate"), te.get("win_rate"), _pct),
-                     _arrow(tr.get("expectancy_r"), te.get("expectancy_r"), fmt.r), _pct(te.get("profit_chance")),
-                     "%s / %s" % (tr.get("n", "—"), te.get("n", "—")), ", ".join(f["validated_coins"]) or "—",
-                     f["verdict"]))
-    body += html.card("Each setup on all coins (exit chosen on train)", html.table(
-        ["", "Setup", "Bars", "Exit", "Win train → test", "Edge train → test", "Profit chance (test)",
-         "Trades train / test", "Validated coins", "Verdict"], rows))
+                     f["exit"]["text"] if f["exit"] else "—", per, _pct(te.get("win_rate")),
+                     fmt.r(te.get("expectancy_r")) if te else "—", _pct(te.get("profit_chance")), te.get("n", "—"),
+                     ", ".join(f["validated_coins"]) or "—", f["verdict"]))
+    body += html.card("Each setup on all coins — walk-forward, out of sample", html.table(
+        ["", "Setup", "Bars", "Latest exit", "Edge per period", "Win", "Edge", "Profit chance", "Trades",
+         "Validated coins", "Verdict"], rows))
     rows = []
     for f in sorted([f for f in doc["families"] if f["highest_win"]],
                     key=lambda f: -(f["highest_win"]["test"]["win_rate"] or 0)):
@@ -589,14 +636,14 @@ def write_report(doc: dict):
                      _arrow(h["train"]["avg_win_r"], h["test"]["avg_win_r"], fmt.r),
                      _arrow(h["train"]["avg_loss_r"], h["test"]["avg_loss_r"], fmt.r)))
     body += html.card("The highest win chance each setup can reach — and what it earned", html.table(
-        ["Setup", "Bars", "Exit", "Win train → test", "Edge train → test", "Avg win", "Avg loss"], rows))
+        ["Setup", "Bars", "Exit", "Win training → latest", "Edge training → latest", "Avg win", "Avg loss"], rows))
     rows = [(r["display"], r["setup"], r["timeframe"], r["exit"]["text"], _pct(r["test"]["win_rate"]),
              fmt.r(r["test"]["expectancy_r"]), _pct(r["test"]["profit_chance"]), r["test"]["n"])
             for r in doc["validated"]]
     body += html.card("Validated — the only crypto the autopilot will trade", html.table(
-        ["Coin", "Setup", "Bars", "Exit", "Win (test)", "Edge (test)", "Profit chance (test)", "Test trades"], rows)
-        if rows else "<p>Nothing passed. No setup kept a net edge after costs on data it never saw, so the autopilot "
-                     "will not trade crypto until a later run finds something.</p>")
+        ["Coin", "Setup", "Bars", "Exit", "Win", "Edge", "Profit chance", "Out-of-sample trades"], rows)
+        if rows else "<p>Nothing passed. No setup made money after costs in every period it was tested on unseen "
+                     "data, so the autopilot will not trade crypto until a later run finds something.</p>")
     sub = "%s · %s · %s" % (doc["universe"], ", ".join(doc["timeframes"]), doc["generated_at"])
     return html.write_report("lab-crypto.html", html.page("Backtest lab · crypto", body, sub, "crypto"))
 

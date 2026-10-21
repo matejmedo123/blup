@@ -598,17 +598,25 @@ exposure, daily loss) still caps every order. A cut (× 0.5) also lowers the per
 
 ### `backtests/lab-crypto.json` — written by `trader-backtest/lab.py`
 `{"generated_at", "universe", "coins", "timeframes": ["5m","1h","4h"], "days": {"5m": 180, "1h": 365, "4h": 730},
-  "objective": "profit|win", "test_frac": 0.333, "costs": {"fee_bps", "slippage_bps", "round_trip_pct"},
-  "grid": {...}, "rules": {"min_target_r", "min_pooled", "min_pooled_test", "min_test", "min_edge_r", "profit_chance_trades"},
+  "objective": "profit|win", "folds": 3, "costs": {"fee_bps", "slippage_bps", "round_trip_pct"},
+  "grid": {...}, "rules": {"min_target_r", "min_pooled", "min_fold_test", "min_pooled_test", "min_test", "min_edge_r",
+                           "profit_chance_trades"},
   "summary": {"families", "families_validated", "coins_validated", "per_coin_picks", "per_coin_survived",
               "per_coin_survival_rate", "seconds"},
   "families": [{"setup", "label", "timeframe", "train_until", "coins", "signals", "exit": {"stop", "atr_mult",
-                "target_r", "horizon", "text"} | null, "train": {stats}, "test": {stats}, "validated": bool,
+                "target_r", "horizon", "text"} | null (the exit chosen last), "train": {stats, latest training data},
+                "test": {stats, every out-of-sample trade}, "folds": [{"train_until", "test_until", "exit", "train",
+                "test"}], "validated": bool,
                 "validated_coins": [...], "verdict", "highest_win": {"exit", "train", "test"} | null}],
-  "validated": [{"symbol", "display", "setup", "timeframe", "exit", "train", "test", "validated": true, "why"}],
+  "validated": [{"symbol", "display", "setup", "timeframe", "exit", "train", "test" (out of sample), "recent" (latest
+                 period), "validated": true, "why"}],
   "coins_detail": [... the same per coin, validated or not ...], "notes": [...]}`
 stats = `{"n", "win_rate", "expectancy_r", "total_r", "profit_factor", "avg_win_r", "avg_loss_r", "max_drawdown_r",
 "profit_chance"}` (net of costs; profit chance = share of 4,000 bootstrap runs of 20 trades that ended > 0).
+Walk-forward: the history is cut into `folds + 1` equal periods; in fold k the exit is chosen on everything before
+period k + 1 and traded in it. A family holds only if every fold made money (`min_fold_test` trades each) and the
+pooled out-of-sample edge is ≥ `min_edge_r`; a coin is validated only if its out-of-sample edge is ≥ `min_edge_r`
+over ≥ `min_test` trades and it did not lose in the latest period.
 
 ### `backtests/playbook.json` — what the autopilot may trade in crypto
 `{"generated_at", "valid_until", "objective", "costs", "days", "families_validated",

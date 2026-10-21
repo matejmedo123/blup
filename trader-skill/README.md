@@ -37,7 +37,7 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
 | `/trader-entry` | Watches a setup candle by candle: "Status: Watching → TRIGGERED — the 10:10 candle just closed above the opening range. Get in $364.18." |
 | `/trader-exit` | Stop, R-multiple target, time stop, trailing stop; meme scale-outs and liquidity exit |
 | `/trader-timemachine` ⭐ | Replays the rest of the session 10,000 times from the symbol's own candles: odds of target vs stop, expected value, 90 % close range, fan chart |
-| `/trader-backtest` | "Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither." — with fees and slippage. Plus the **backtest lab** (`lab.py`): every crypto setup on dozens of coins and on 5m / 1h / 4h bars, 160 exits each, train/test validation, a playbook of what held up — the only crypto the autopilot trades, sized by certainty |
+| `/trader-backtest` | "Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither." — with fees and slippage. Plus the **backtest lab** (`lab.py`): every crypto setup on dozens of coins and on 5m / 1h / 4h bars, 160 exits each, walk-forward validation, a playbook of what held up — the only crypto the autopilot trades, sized by certainty |
 | `/trader-desk` | Researcher → Skeptic → Lead: every objection must be answered; GO only through hard gates. AI subagents, a rule-based mode (`desk.py auto`, incl. a news & filings gate) or the optional Claude API desk (`ai_desk.py`, veto-only) |
 | `/trader-sizer` · `/trader-risk` | Position size from account × risk %; PASS/BLOCK against `limits.json` (per asset class, daily loss, exposure, rugcheck) |
 | `/trader-broker` | A plain ticket + the exact JSON for your brokerage MCP connector, sent only after you type **yes**; meme coins get a manual wallet checklist |
@@ -165,15 +165,28 @@ python3 trader-backtest/lab.py --min-target-r 2      # only exits that aim for 2
 
 For every crypto setup — the one-day breakouts on 5-minute bars and four swing setups on 1-hour and
 4-hour bars — it tries 160 exits (targets 0.5–5R, structure or 1–3×ATR stops, four time stops), with
-fees and slippage. The exit with the highest **profit chance** (certainty: how often 20 trades ended in
-profit) is picked on the first two thirds of the history with all coins pooled, then checked on the last
-third, which the choice never saw. Only coin + setup combinations that held up there are **validated**;
-they become `trader/backtests/playbook.json`, the only crypto the autopilot trades — with those exits,
-and with more size the higher the certainty. The daemon re-runs it weekly.
+fees and slippage. It works **walk-forward**: the history is cut into four periods, and for each of the
+last three the exit with the highest **profit chance** (certainty: how often 20 trades ended in profit)
+is picked on everything before it — all coins pooled — and then traded unchanged in that period, which
+the choice never saw. A setup holds only if it made money in every one of those periods; a coin is
+**validated** only if it made money out of sample, including the latest period. Validated combinations
+become `trader/backtests/playbook.json`, the only crypto the autopilot trades — with those exits, and
+with more size the higher the certainty (never past `limits.json`). The daemon re-runs it weekly.
 
-What the first real run showed (top 30 coins, October 2026) is in the section below; the short version:
-a high *win chance* is easy — 60–70 % with a small target and a wide stop — but those small wins lose to
-fees and the occasional big loss. What counts is the edge after costs on data the choice never saw.
+**The first real run** (21 Oct 2026 · top 30 coins by volume · 5m 180 days, 1h 365 days, 4h 730 days ·
+0.26 % round-trip costs · 14 setup × timeframe combinations × 160 exits):
+
+| | Result |
+|---|---|
+| Held in all three walk-forward periods | **none** — so the autopilot trades no crypto for now |
+| Closest | 24-bar breakout on 4h bars, 5R target, 1.5×ATR stop, 48 h: +0.34R / −0.34R / +0.18R per trade in the three periods (40 % wins, +0.13R overall) — works in trending stretches, loses in choppy ones |
+| Highest win chance | 64–73 % (0.5R target, 2–3×ATR stop) — and −0.09R to −0.17R per trade after costs; the best of them, the 4h band bounce, nets +0.02R |
+| A single train/test split | "validated" the 4h band bounce on 6 coins (profit chance up to 98 % on 10 trades) — a different split flipped it, which is why the lab now insists on every period |
+| Per-coin tuning | 109 per-coin "best settings" in training, 43 % still profitable in the latest period — worse than a coin flip |
+| One-day setups on 5-minute bars | no exit had an edge in any training period: 0.26 % costs are a whole 1R on many of these stops |
+
+In short: a high *win chance* is easy and loses money; a real edge after costs that survives unseen data
+is rare, and the lab is built to say "none" rather than flatter a lucky fit.
 
 ## Running it for real — 24/7
 
@@ -405,6 +418,9 @@ format, so offline runs go through the same parsing code as live runs. `--now` p
   pre/after-market or overnight stock trading. It is as good as the edge in your rules — which you have
   to prove on paper first. "Learning" means pausing what lost and trading smaller after losses; it does
   not invent new strategies.
+* **The backtest lab tests many ideas;** every extra idea raises the odds that one passes by luck.
+  Walk-forward over three periods and pooling all coins make that much harder, not impossible — trade
+  anything it validates on paper first. Costs and fills are modelled, not measured.
 * **The news gate reads headline tags, not meaning.** It catches the obvious (a dilution 8-K, a hack);
   the optional AI desk reads the text, but it can be wrong too, and neither sees news that isn't
   published yet. SEC filings need `sec_user_agent` set to your name and e-mail.
