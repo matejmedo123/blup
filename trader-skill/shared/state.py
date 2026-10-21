@@ -60,10 +60,12 @@ def rel(p) -> str:
 
 def read_json(name: str, default=None):
     p = home() / name
-    if not p.exists():
+    try:
+        raw = p.read_bytes()
+    except FileNotFoundError:
         return default
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        return json.loads(raw.decode("utf-8"))
     except ValueError as exc:
         bak = p.with_name(p.name + ".bak")
         try:
@@ -71,12 +73,24 @@ def read_json(name: str, default=None):
             doc = json.loads(text)
         except (OSError, ValueError):
             raise StateError("%s is not valid JSON (%s) and has no good copy — fix or delete it" % (p, exc))
-        try:  # put the good copy back, keep the broken one to look at: the next read is clean again
-            os.replace(str(p), str(p.with_name(p.name + ".broken")))
-            config.atomic_write(p, text)
-            where = " — restored from its last good copy (the broken file is %s.broken)" % name
-        except OSError:
-            where = " — using its last good copy"
+        where = " — using its last good copy"
+        try:
+            # under the file's lock, and only if it still holds the same broken bytes: a good write that landed
+            # meanwhile is never replaced by the older copy. The file is never missing — a reader in between
+            # must not take "no file" for an empty book
+            with locked(name, timeout=5):
+                now = p.read_bytes()
+                if now != raw:
+                    try:
+                        return json.loads(now.decode("utf-8"))
+                    except ValueError:
+                        pass
+                else:
+                    p.with_name(p.name + ".broken").write_bytes(raw)
+                    config.atomic_write(p, text)
+                    where = " — restored from its last good copy (the broken file is %s.broken)" % name
+        except (OSError, StateError):
+            pass
         note = "%s was not valid JSON (%s)%s" % (name, exc, where)
         if note not in recovered:
             recovered.append(note)
@@ -207,24 +221,90 @@ def append_jsonl(name: str, obj) -> Path:
 
 
 def append_jsonl_rows(name: str, rows: list) -> Path:
-    """Append several records in one write — all of them or, on a full disk, none."""
+    """Append several records in one write — all of them or, on a full disk, none. Writers hold the file's own
+    lock while they append, and so does a rotation while it swaps the file: no line lands in a file that is
+    being replaced, and a failed append never cuts off another writer's line."""
     p = path(name)
     line = "".join(json.dumps(obj, ensure_ascii=False) + "\n" for obj in rows).encode("utf-8")
-    # created owner-only like every other state file (a plain open() would follow the umask: 0644)
-    fd = os.open(str(p), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-    with os.fdopen(fd, "ab") as fh:
-        size = fh.tell()
-        try:
-            fh.write(line)
-            fh.flush()
-        except OSError:
-            # a full disk leaves half a line, and the next record would be glued onto it — both lost: cut it off
+    for _ in range(5):
+        # created owner-only like every other state file (a plain open() would follow the umask: 0644)
+        fd = os.open(str(p), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "ab") as fh:
+            if fcntl is not None:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                try:
+                    if os.fstat(fh.fileno()).st_ino != os.stat(str(p)).st_ino:
+                        continue  # rotated while this writer waited: append to the new file
+                except FileNotFoundError:
+                    continue
+            size = os.fstat(fh.fileno()).st_size
             try:
-                fh.truncate(size)
+                fh.write(line)
+                fh.flush()
+            except OSError:
+                # a full disk leaves half a line, and the next record would be glued onto it — both lost: cut it off
+                try:
+                    fh.truncate(size)
+                except OSError:
+                    pass
+                raise
+            return p
+    raise StateError("could not append to %s: it kept being replaced" % name)
+
+
+def rotate_jsonl(name: str, max_bytes: int, keep_bytes: int, dest: Path) -> int:
+    """Move all but the newest ``keep_bytes`` of a JSONL file into the gzip file ``dest`` (appended) once it is
+    larger than ``max_bytes``; returns the bytes moved. Streams in chunks (a 400 MB log never sits in memory) and
+    holds the file's lock, so appends wait and then go to the new file."""
+    import gzip
+    import tempfile
+    p = home() / name
+    try:
+        fh = p.open("rb")
+    except FileNotFoundError:
+        return 0
+    with fh:
+        if fcntl is not None:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        size = os.fstat(fh.fileno()).st_size
+        if size <= max_bytes:
+            return 0
+        if keep_bytes <= 0:
+            cut = size
+        else:
+            fh.seek(max(0, size - keep_bytes))
+            fh.readline()  # to the start of the next whole line
+            cut = fh.tell()
+        if cut <= 0:
+            return 0
+        fh.seek(0)
+        left = cut
+        with gzip.open(str(dest), "ab") as gz:
+            while left > 0:
+                chunk = fh.read(min(1 << 20, left))
+                if not chunk:
+                    break
+                gz.write(chunk)
+                left -= len(chunk)
+        fd, tmp = tempfile.mkstemp(prefix="." + p.name + ".", suffix=".tmp", dir=str(p.parent))
+        try:
+            with os.fdopen(fd, "wb") as out:
+                fh.seek(cut)
+                while True:
+                    chunk = fh.read(1 << 20)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(tmp, str(p))
+        except BaseException:
+            try:
+                os.unlink(tmp)
             except OSError:
                 pass
             raise
-    return p
+    return cut
 
 
 def tail_jsonl(name: str, n: int = None, stop=None) -> list:
@@ -267,7 +347,7 @@ def read_jsonl(name: str) -> list:
     if not p.exists():
         return []
     rows = []
-    for line in p.read_text(encoding="utf-8").splitlines():
+    for line in p.read_text(encoding="utf-8").split("\n"):  # not splitlines(): U+2028 in a headline
         line = line.strip()
         if line:
             try:

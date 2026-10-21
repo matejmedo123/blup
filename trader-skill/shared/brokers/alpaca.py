@@ -175,10 +175,17 @@ class AlpacaBroker(Broker):
                 if err.code < 500:
                     why = self._message(err)
                     if cid and err.code == 422 and "client_order_id" in why.lower():
-                        found = self._lookup(cid)  # our first try did land — that order is the one
+                        # our first try did land — that order is the one; if it can't be read yet (Alpaca shows a
+                        # new order a moment late, or the lookup fails) it still exists: never "refused"
+                        try:
+                            found = self._lookup(cid)
+                        except BrokerError as exc:
+                            found, why = None, "%s; %s" % (why, exc)
                         if found:
                             self.log("post_recovered", client_order_id=cid, order_id=found.get("id"))
                             return found
+                        raise BrokerError("Alpaca order may or may not have been placed: an order under %s already "
+                                          "exists but could not be read yet (%s) — it is looked up again" % (cid, why))
                     raise BrokerError("Alpaca rejected the order (HTTP %s): %s" % (err.code, why))
                 failure = "HTTP %s" % err.code
             except (urllib.error.URLError, socket.timeout, ConnectionError) as err:
@@ -391,20 +398,10 @@ class AlpacaBroker(Broker):
         self.log("cancel", order_id=order_id)
         return {"id": order_id, "status": "canceled"}
 
-    def cancel_all(self) -> list:
-        res = self._delete("/v2/orders")
-        self.log("cancel_all")
-        return res if isinstance(res, list) else []
-
     def close_position(self, symbol: str) -> dict:
         res = self._delete("/v2/positions/%s" % urllib.parse.quote(symbol.replace("/", ""), safe=""))
         self.log("close_position", symbol=symbol, order_id=(res or {}).get("id"))
         return self._order(res, leg="exit") if res else {"symbol": symbol, "status": "flat"}
-
-    def close_all(self) -> list:
-        res = self._delete("/v2/positions?cancel_orders=true")
-        self.log("close_all")
-        return res if isinstance(res, list) else []
 
     def fills(self) -> list:
         """Filled orders, newest last — the autopilot matches them to its plans by client_order_id."""

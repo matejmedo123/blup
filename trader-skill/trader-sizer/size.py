@@ -190,12 +190,19 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
     else:
         lot = data.lot_info(sym)
         step = lot.get("step") or (1.0 if asset == "stock" else 0.000001)
+        # a daily signal's entry may pay up to entry_slack_pct above the close (the strongest moves leave at once —
+        # an order at the close would miss exactly them); the risk is sized at that worst price, never above budget
+        slack = max(0.0, float(plan.get("entry_slack_pct") or 0)) / 100.0
+        worst = entry * (1 + slack)
+        if slack:
+            rpu = worst - stop
+            sizing["entry_slack_pct"] = round(100 * slack, 3)
         raw = budget / rpu
         sizing["raw_qty"] = round(raw, 8)
         qty = raw
-        capped_by_position = qty * entry > max_notional
+        capped_by_position = qty * worst > max_notional
         if capped_by_position:
-            qty = max_notional / entry
+            qty = max_notional / worst
         qty = floor_to(qty, step)
         unit = "shares" if asset == "stock" else "coins"
         if capped_by_position:
@@ -209,15 +216,16 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
                 fmt.money(qty * entry), fmt.money(lot["min_notional"])))
         if asset == "stock":
             tick = 0.01 if entry >= 1 else 0.0001
-            limit = round(entry + max(tick, entry * 0.00005) + 1e-9, 2 if tick == 0.01 else 4)
+            limit = round(math.floor(worst / tick + 1e-9) * tick if slack else
+                          entry + max(tick, entry * 0.00005) + 1e-9, 2 if tick == 0.01 else 4)
             sizing["rounding"] = "fractional shares (4 dp)" if step < 1 else "whole shares"
         else:
             tick = lot.get("tick") or 0.01
             if tick > entry * 0.01:  # a cent tick on a $0.0004 coin would put the limit 25× above the price
                 tick = 10.0 ** (math.floor(math.log10(entry)) - 4)
-            limit = ceil_to(entry * 1.0002, tick)
+            limit = math.floor(worst / tick + 1e-9) * tick if slack else ceil_to(entry * 1.0002, tick)
             sizing["rounding"] = "lot step %s, tick %s (%s)" % (fmt.qty(step), fmt.qty(tick), lot.get("source"))
-        order.update(qty=qty, qty_unit=unit, notional_usd=round(qty * entry, 2), limit_price=limit,
+        order.update(qty=qty, qty_unit=unit, notional_usd=round(qty * worst, 2), limit_price=limit,
                      risk_usd=round(qty * rpu, 2), lot=lot)
     order["risk_pct"] = round(100.0 * order["risk_usd"] / account, 3)
     order["position_pct"] = round(100.0 * order["notional_usd"] / account, 3)

@@ -108,6 +108,8 @@ def _equity(prev: dict, now_ts: float) -> dict:
     except OSError:
         return eq
     offset = int(eq.get("offset") or 0)
+    if not eq.get("first_at"):  # a state from before this field: compaction keeps the first hour, so it still tells
+        eq["first_at"] = _first_at(path)
     if offset > size:  # smaller than what was read: compacted, or replaced (a fresh simulator)
         first = _first_at(path)
         # compaction keeps the first hour: the same file, and the peak since the same basis still stands

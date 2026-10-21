@@ -203,7 +203,17 @@ class FakeBroker(Broker):
 
     def cancel(self, order_id):
         self.calls.append(("cancel", order_id))
+        self.__dict__.setdefault("cancelled", set()).add(order_id)
+        for o in self.ords:
+            if o.get("id") == order_id and o.get("status") in ("new", "held", "accepted"):
+                o["status"] = "canceled"
         return {"id": order_id, "status": "canceled"}
+
+    def lookup(self, order_id):
+        # like Alpaca: a cancelled order reads back as cancelled (the tests pass their own order lists around)
+        found = [o for o in self.ords if o.get("id") == order_id]
+        return found or [{"id": order_id, "status": "canceled" if order_id in self.__dict__.get("cancelled", ())
+                          else "new"}]
 
     def close_position(self, symbol):
         self.calls.append(("close", symbol))

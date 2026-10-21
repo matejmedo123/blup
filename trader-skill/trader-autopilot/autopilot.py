@@ -66,6 +66,8 @@ LOCK = "autopilot/daemon.lock"
 FLOCK = "autopilot/daemon.flock"  # held by the live daemon's process for as long as it runs (the OS frees it)
 INTERVAL = "5m"
 STALE_ENTRY_BARS = 3          # an entry that has not filled 15 min after the trigger is cancelled
+DAILY_ENTRY_WAIT_SEC = 3600   # a daily signal's entry keeps working for an hour (the lab buys every one at the close)
+DAILY_ENTRY_SLACK_PCT = (0.5, 2.0)  # …and may pay a quarter ATR above the close: at least 0.5 %, at most 2 %
 NO_NEW_STOCK_ENTRIES = 30   # minutes before the close (3:30 p.m. ET, 12:30 on early-close days): too little
                             # session left for a 2R move before the time stop five minutes before the bell
 TM_SEED = 7
@@ -250,8 +252,11 @@ def _live_stop(it: dict, orders: list):
             continue
         if o.get("id") == sid or o.get("leg") == "stop" or str(o.get("type") or "").startswith("stop"):
             return o
-    if sid and not any(o.get("id") == sid for o in orders):
-        # placed after this order list was read (a fill in this very cycle): there until the broker says otherwise
+    placed = it.get("stop_retry_at")
+    fresh = bool(placed) and market_clock.now_utc().timestamp() - market_clock.ts(placed) < 600
+    if sid and fresh and not any(o.get("id") == sid for o in orders):
+        # placed after this order list was read (a fill in this very cycle): there until the next list says — an
+        # older id the broker doesn't know (a save that failed, a lookup that didn't answer) is no stop at all
         return {"id": sid, "status": "new", "symbol": it["symbol"], "side": "sell",
                 "type": "stop_limit" if it["asset"] == "crypto" else "stop"}
     return None
@@ -279,24 +284,24 @@ def _split_check(it: dict, p: dict, cfg: dict = None) -> str:
     if it["asset"] != "stock":
         return ""
     try:
-        avg, fill = float(p.get("avg_entry") or 0), float(it.get("entry_fill") or 0)
+        avg, held = float(p.get("avg_entry") or 0), float(p.get("qty") or 0)
     except (TypeError, ValueError):
         return ""
-    if avg <= 0 or fill <= 0:
+    if avg <= 0 or held <= 0:
         return ""
-    ratio = fill / avg
+    # judged on what the broker reported LAST cycle, not on the bot's fill price: shares you hold yourself blend
+    # into the broker's average price, and a blend is no split. A split moves both the quantity and the average
+    # by the same ratio from one cycle to the next; the bot's own sales change only the quantity
+    prev_q, prev_a = it.get("broker_qty"), it.get("broker_avg")
+    it["broker_qty"], it["broker_avg"] = held, avg
+    if not prev_q or not prev_a:
+        return ""
     for n in SPLITS:
         for k, word in ((n, "%d-for-1 split" % n), (1.0 / n, "1-for-%d reverse split" % n)):
-            if abs(ratio / k - 1) < 0.02:
+            if abs(held / float(prev_q) / k - 1) < 0.02 and abs(float(prev_a) / avg / k - 1) < 0.02:
                 break
         else:
             continue
-        try:
-            held = float(p.get("qty") or 0)
-        except (TypeError, ValueError):
-            held = 0.0
-        if held < float(it["qty"]) * k * 0.98:  # the broker's quantity must have moved by the same ratio
-            return ""
         it["qty"] = round(float(it["qty"]) * k, 6)
         for f in ("stop", "target", "entry_fill", "entry_plan"):
             if it.get(f) is not None:
@@ -332,6 +337,70 @@ def _sell_own(broker, it: dict, held: float = None) -> dict:
                               client_order_id="%s-x%d" % (it["order_id"], int(time.time())))
     it["exit_order_id"] = o.get("id")
     return o
+
+
+CANCEL_WAIT_SEC = 6     # how long an exit waits for the broker to confirm a cancelled stop
+EXIT_RETRY_SEC = 900    # after the broker refuses a sale: the stop goes back, the sale is tried again this much later
+
+
+def _cancel_own_sells(broker, it: dict, orders: list, live=None) -> str:
+    """Cancel this trade's working sell orders (its stop, bracket legs, exits) and wait until the broker says they
+    are cancelled. '' when the way is clear for a sale; otherwise why it must wait: at Alpaca a cancel is pending
+    for a moment and still holds the quantity (the sale would be refused), and a stop that filled in between has
+    already sold — a second sale would come out of shares you hold yourself."""
+    ids = [o["id"] for o in orders if o.get("status") in OPEN_ORDER and o.get("side") == "sell"
+           and (o is live or _mine(o, it))]
+    for oid in ids:
+        try:
+            broker.cancel(oid)
+        except BrokerError:
+            pass  # "not cancelable" — perhaps it just filled: the look below tells
+    deadline = time.monotonic() + CANCEL_WAIT_SEC
+    while ids:
+        status = {}
+        for oid in ids:
+            found = [o for o in broker.lookup(oid) if o.get("id") == oid]
+            status[oid] = found[0].get("status") if found else None
+        sold = [oid for oid, st in status.items() if st in ("filled", "partially_filled")]
+        if sold:
+            return "its sell order %s filled meanwhile — the next sync books it" % sold[0]
+        waiting = [oid for oid, st in status.items() if st not in ("canceled", "expired", "rejected", "replaced")]
+        if not waiting:
+            break
+        if time.monotonic() >= deadline:
+            return "the cancel of %s is not confirmed yet — the sale waits for the next cycle" % waiting[0]
+        time.sleep(1.0)
+    return ""
+
+
+def _restore_stop(broker, it: dict, held, now) -> list:
+    """Put the protective stop back (after a refused sale, or when the broker lost it)."""
+    it["stop_retry_at"] = market_clock.iso(now)
+    try:
+        so = broker.place_stop(it["symbol"], min(float(it["qty"]), float(held or it["qty"])), it["stop"],
+                               client_order_id="%s-s%d" % (it["order_id"], int(now.timestamp())), asset=it["asset"])
+        it["stop_order_id"] = so.get("id")
+        return ["protective stop %s for %s put back" % (fmt.price(it["stop"]), it["symbol"])]
+    except BrokerError as exc:  # the old id stays: its own fill must still close the trade as a stop
+        return ["no stop order for %s (%s) — the bot watches the stop" % (it["symbol"], exc)]
+
+
+def _sale_refused(broker, it: dict, p: dict, exc, now, cfg: dict = None) -> list:
+    """The broker said no to the bot's sale (a wash-trade guard against your own open buy order, the
+    pattern-day-trader rule, an asset no longer tradable): the position must not sit there without its stop."""
+    if UNSURE_ORDER in str(exc):  # it may have gone through: a stop now could sell a second time
+        return ["could not tell whether the sale of %s went through (%s) — the next sync shows" % (it["symbol"], exc)]
+    first = not it.get("exit_refused_at")
+    it["exit_refused_at"], it["exit_refused"] = market_clock.iso(now), str(exc)
+    out = ["the broker refused the sale of %s: %s — the stop goes back, the sale is tried again in %d min" % (
+        it["symbol"], exc, EXIT_RETRY_SEC // 60)]
+    out += _restore_stop(broker, it, p.get("qty") if p else None, now)
+    if first:
+        notify.send("error", "%s: the broker refused the bot's sale" % it["symbol"],
+                    "%s. The protective stop is back in place and the sale is retried every %d minutes. An open order "
+                    "of your own on %s (Alpaca's wash-trade guard) or the day-trade rule are the usual reasons." % (
+                        exc, EXIT_RETRY_SEC // 60, it["symbol"]), cfg, priority="high")
+    return out
 
 
 def _tracked(broker, book: dict, orders: list) -> list:
@@ -485,7 +554,8 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
             it["status"] = "canceled"
             _update_order(it["order_id"], status=o["status"])
             actions.append("entry for %s %s" % (it["symbol"], o["status"]))
-        elif now.timestamp() - market_clock.ts(it["placed_at"]) > STALE_ENTRY_BARS * step:
+        elif now.timestamp() - market_clock.ts(it["placed_at"]) > (
+                DAILY_ENTRY_WAIT_SEC if it.get("interval") == "1d" else STALE_ENTRY_BARS * step):
             if not it.get("cancel_asked_at"):
                 # the next sync says how it ended: cancelled, partly filled or filled in between
                 try:
@@ -494,7 +564,8 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
                     pass
                 it["cancel_asked_at"] = market_clock.iso(now)
                 actions.append("entry for %s not filled within %d min — cancelling it so a late fill can't "
-                               "happen" % (it["symbol"], STALE_ENTRY_BARS * step // 60))
+                               "happen" % (it["symbol"], (DAILY_ENTRY_WAIT_SEC if it.get("interval") == "1d"
+                                                          else STALE_ENTRY_BARS * step) // 60))
             elif now.timestamp() - market_clock.ts(it["cancel_asked_at"]) > 6 * step:
                 if not o:
                     it["status"] = "canceled"
@@ -650,12 +721,11 @@ def ride_check(it: dict, p: dict, cfg: dict = None) -> tuple:
 def sell_part(broker, it: dict, orders: list, cfg: dict = None) -> list:
     """Sell the part that leaves now; the rest rides on with its stop at the buy price."""
     ride = it["runner"]
-    for o in orders:  # its protective stop covers the whole position — a new one comes for the part that stays
-        if o.get("status") in OPEN_ORDER and _mine(o, it):  # never your own orders on the same coin
-            try:
-                broker.cancel(o["id"])
-            except BrokerError:
-                pass
+    # its protective stop covers the whole position — a new one comes for the part that stays; never your own
+    # orders on the same coin
+    wait = _cancel_own_sells(broker, it, orders)
+    if wait:  # the runner stays planned: the next cycle sells the part
+        return ["%s: %s" % (it["symbol"], wait)]
     it["stop_order_id"] = None  # cancelled: until the new one is in, the bot itself watches the stop
     try:
         o = broker.place_exit(it["symbol"], ride["sell_qty"], "market", client_order_id=it["order_id"] + "-part",
@@ -686,7 +756,8 @@ def start_ride(broker, it: dict, sold: dict, cfg: dict = None) -> list:
     if first:
         rest = copy.deepcopy(first)
         first["qty"] = sold_qty
-        journal.finalize(first, cfg, price, at, "rule")
+        journal.finalize(first, cfg, price, at, "time" if (it.get("exit_note") or "").startswith("time stop")
+                         else "rule")
         first["exit"]["broker_order_id"] = sold.get("id")
         first["runner"] = {"part": "sold", "of_qty": float(it["qty"])}
         first["notes"] = (first.get("notes") or "") + " · " + (it.get("exit_note") or "exit rule") + \
@@ -809,42 +880,43 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
         if why:
             reason = "rule"
             it["exit_note"] = "exit rule: " + why
-    if not reason:
-        if live is None and (it["asset"] == "crypto" or it.get("swing") or closed) and \
-                now_ts - market_clock.ts(it.get("stop_retry_at") or "1970-01-01T00:00:00Z") > 3600:
-            # its stop is gone (Alpaca cancels GTC orders after 90 days, a fee left less to sell…): put it back
-            it["stop_retry_at"] = market_clock.iso(now)
-            try:
-                so = broker.place_stop(it["symbol"], min(float(it["qty"]), float(p.get("qty") or it["qty"])),
-                                       it["stop"], client_order_id="%s-s%d" % (it["order_id"], int(now_ts)),
-                                       asset=it["asset"])
-                it["stop_order_id"] = so.get("id")
-                actions.append("protective stop %s for %s put back" % (fmt.price(it["stop"]), it["symbol"]))
-            except BrokerError as exc:  # the old id stays: its own fill must still close the trade as a stop
-                actions.append("no stop order for %s (%s) — the bot watches the stop" % (it["symbol"], exc))
+    refused = it.get("exit_refused_at")
+    backing_off = bool(refused) and now_ts - market_clock.ts(refused) < EXIT_RETRY_SEC
+    if not reason or backing_off:
+        # its stop is gone (Alpaca cancels GTC orders after 90 days, a fee left less to sell, a refused sale…):
+        # put it back — an intraday stock's bracket legs are the stop, unless a refused sale cancelled them
+        if live is None and (it["asset"] == "crypto" or it.get("swing") or closed or refused) and \
+                now_ts - market_clock.ts(it.get("stop_retry_at") or "1970-01-01T00:00:00Z") > \
+                (60 if refused else 3600):
+            actions += _restore_stop(broker, it, p.get("qty"), now)
         return actions
-    if reason == "rule" and (it.get("runner") or {}).get("status") == "planned":
+    # the lab lets two thirds ride after its time stop as after its exit rule — so does the bot
+    if reason in ("rule", "time") and (it.get("runner") or {}).get("status") == "planned":
         ok, why_not = ride_check(it, p, cfg)
         if ok:
+            if reason == "time":
+                it["exit_note"] = "time stop"
             actions += sell_part(broker, it, orders, cfg)
             if (it.get("runner") or {}).get("status") != "failed":
                 return actions
         else:
             it["runner"]["status"] = "skipped"
-            it["exit_note"] += " · sold everything: " + why_not
-    for o in orders:
-        if o.get("status") in OPEN_ORDER and (o is live or _mine(o, it)) and o.get("side") == "sell":
-            try:
-                broker.cancel(o["id"])
-            except BrokerError:
-                pass
-    it["stop_order_id"] = None  # cancelled — if the close fails, the bot itself watches the stop next cycle
+            it["exit_note"] = it.get("exit_note", "") + " · sold everything: " + why_not
+    queued = _find(orders, it.get("exit_order_id")) if it.get("exit_order_id") else None
+    if queued and queued.get("status") in OPEN_ORDER:  # its sale is on its way (sent earlier this cycle)
+        return actions
+    wait = _cancel_own_sells(broker, it, orders, live)
+    if wait:
+        actions.append("%s exit for %s waits: %s" % (reason, it["symbol"], wait))
+        return actions
+    it["stop_order_id"] = None  # cancelled — if the close fails, the stop goes back at once
     it["exit_reason"] = reason
     try:
         _sell_own(broker, it, p.get("qty"))
         actions.append("%s exit for %s" % (reason, it["symbol"]))
+        it.pop("exit_refused_at", None)
     except BrokerError as exc:
-        actions.append("could not close %s: %s — retrying next cycle" % (it["symbol"], exc))
+        actions += _sale_refused(broker, it, p, exc, now, cfg)
     return actions
 
 
@@ -877,23 +949,28 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
                 broker.cancel(oid)
             except BrokerError as exc:
                 problems.append(str(exc))
-        # a fill that raced the cancel still turns into a trade on the next sync — and the KILL then sells it
-        it["cancel_asked_at"] = market_clock.iso(market_clock.now_utc())
+        # a fill that raced the cancel still turns into a trade on the next sync — and the KILL then sells it; the
+        # first ask is kept (re-stamped every retry, the "no answer for 30 min → cancelled" rule would never fire)
+        it.setdefault("cancel_asked_at", market_clock.iso(market_clock.now_utc()))
     elif it["status"] == "open" and flatten:
         it["exit_reason"], it["exit_note"] = "manual", "kill switch: %s" % reason
-        for o in orders:
-            if _mine(o, it) and o.get("status") in OPEN_ORDER:
-                try:
-                    broker.cancel(o["id"])
-                except BrokerError:
-                    pass
         p = pos_by.get(it["symbol"])
-        if p and float(p.get("qty") or 0) > 1e-9:
+        queued = _find(orders, it.get("exit_order_id")) if it.get("exit_order_id") else None
+        if queued and queued.get("status") in OPEN_ORDER:  # after hours a stock sale waits for the open: leave it
+            problems.append("%s: its sale is queued at the broker" % it["symbol"])
+            return problems
+        wait = _cancel_own_sells(broker, it, orders, _live_stop(it, orders))
+        if wait:  # the KILL stays on and the next cycle sells — never a sale out of your own shares
+            problems.append("%s: %s" % (it["symbol"], wait))
+        elif p and float(p.get("qty") or 0) > 1e-9:
             it["stop_order_id"] = None
             try:
                 _sell_own(broker, it, p.get("qty"))
-            except BrokerError as exc:  # e.g. the cancelled legs still hold the shares: the next cycle retries
+            except BrokerError as exc:  # refused: the stop goes back and the next cycle tries again
+                now = market_clock.now_utc()
                 problems.append("%s: %s" % (it["symbol"], exc))
+                if UNSURE_ORDER not in str(exc):
+                    _restore_stop(broker, it, p.get("qty"), now)
     return problems
 
 
@@ -1262,6 +1339,9 @@ def make_plan(c: dict, cfg: dict) -> dict:
             "exit_rule": dict(rule, interval=interval) if rule else None}
     if rule:
         plan["target"]["note"] = "a far cap — the exit rule decides: %s" % rule.get("text")
+    if interval == "1d" and lv.get("atr") and float(trig["price"]) > 0:
+        lo, hi = DAILY_ENTRY_SLACK_PCT
+        plan["entry_slack_pct"] = round(min(hi, max(lo, 25.0 * float(lv["atr"]) / float(trig["price"]))), 3)
     plan["runner"], plan["runner_note"] = runner_plan(c, cfg)
     def save(doc):
         doc.setdefault("plans", {})[plan["id"]] = plan
@@ -1460,7 +1540,13 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
                          **base)
     # one position per symbol: two setups firing on the same coin in one cycle must not both buy it — the broker
     # holds one position, and the first exit rule would close the other trade too
-    held = [it for it in book["items"].values() if it["status"] in LIVE_ITEM and it.get("data_key") == sym.key]
+    # (by the broker's name too: BTCUSDT and BTC-USD are two data keys but one BTC/USD position at Alpaca)
+    try:
+        bname = broker_symbol(sym, asset)
+    except (BrokerError, symbols.SymbolError, ValueError):
+        bname = None
+    held = [it for it in book["items"].values() if it["status"] in LIVE_ITEM
+            and (it.get("data_key") == sym.key or (bname and it.get("symbol") == bname))]
     if held:
         return _decision(reasons=["already holding or waiting on %s (%s)" % (sym.display, held[0].get("setup") or
                                                                          held[0].get("plan_id"))], **base)
@@ -1885,6 +1971,8 @@ def _cycle(approved=None) -> dict:
         done = not left and not any(a.startswith("kill incomplete") for a in actions)
         # not done (the broker still holds cancelled legs, an entry filled in the race): the KILL stays on and the
         # next cycle tries again — it is never quietly dropped
+        if not flatten:  # the positions keep their stops — and their targets, time stops and exit rules
+            actions += manage_exits(broker, book, positions, orders, cfg)
         write_control(by="autopilot", kill=not done, kill_tries=0 if done else tries + 1, paused=True, run_once=False)
         best_effort("saving the book", lambda: state.write_json(BOOK, book))
         line = best_effort("broker files", lambda: _write_broker_files(broker, acct, positions, orders, book,
@@ -2054,9 +2142,10 @@ def run_cycle(now=None, approved=None, runner: str = "cli") -> dict:
                 heartbeat(runner, "cycling")
             except Exception:
                 pass
-        _PROCESS["cycle_t0"] = time.monotonic()
         with state.locked("autopilot/cycle", timeout=CYCLE_LOCK_WAIT_SEC, stop=lambda: _PROCESS.get("stopping")):
-            # the daemon, the dashboard and a CLI run never cycle at once — and never wait for each other forever
+            # the daemon, the dashboard and a CLI run never cycle at once — and never wait for each other forever;
+            # the watchdog times the cycle, not the wait for another process's cycle
+            _PROCESS["cycle_t0"] = time.monotonic()
             asked = read_control()
             try:
                 res = _cycle(approved)
@@ -2232,10 +2321,13 @@ HK_STATE = "autopilot/housekeeping_state.json"
 def _run_lab(argv: list, out_file: str) -> dict:
     """The lab in a process of its own, at low priority: its hundreds of MB of candles are freed when it ends,
     and its CPU never competes with a cycle that has a stop to manage."""
-    kw = {"preexec_fn": lambda: os.nice(10)} if os.name == "posix" else {}
-    r = subprocess.run([sys.executable, os.path.join(_ROOT, "trader-backtest", "lab.py")] + argv,
+    import shutil
+    # `nice` as a command, not a preexec_fn: running Python code between fork and exec is unsafe in a process
+    # with threads (the watchdog, the news refresh)
+    nice = [shutil.which("nice"), "-n", "10"] if os.name == "posix" and shutil.which("nice") else []
+    r = subprocess.run(nice + [sys.executable, os.path.join(_ROOT, "trader-backtest", "lab.py")] + argv,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
-                       timeout=LAB_TIMEOUT_SEC, env=dict(os.environ), **kw)
+                       timeout=LAB_TIMEOUT_SEC, env=dict(os.environ))
     if r.returncode != 0:
         raise RuntimeError("the lab exited with %d: %s" % (r.returncode, (r.stderr or r.stdout or "")[-300:].strip()))
     doc = state.read_json(out_file)
@@ -2317,31 +2409,11 @@ def _older(at, cut: str) -> bool:
 
 
 def rotate_log(name: str, max_mb: float, keep_mb: float, now=None) -> int:
-    """Move all but the newest ``keep_mb`` of a JSONL log into a gzipped archive once it passes ``max_mb``.
-    Returns the bytes moved. Lines appended while it runs are carried over."""
-    import gzip
-    p = state.home() / name
-    try:
-        size = p.stat().st_size
-    except OSError:
-        return 0
-    if size <= max_mb * 1024 * 1024:
-        return 0
-    with p.open("rb") as fh:
-        raw = fh.read(size)
-    cut = len(raw) - 1 if keep_mb <= 0 else raw.find(b"\n", max(0, len(raw) - int(keep_mb * 1024 * 1024)))
-    if cut < 0:
-        return 0
-    old, keep = raw[:cut + 1], raw[cut + 1:]
+    """Move all but the newest ``keep_mb`` of a JSONL log into archive/<name>-<date>.jsonl.gz once it passes
+    ``max_mb``. Returns the bytes moved."""
     day = market_clock.iso(now or market_clock.now_utc())[:10].replace("-", "")
     dest = state.path("archive", "%s-%s.jsonl.gz" % (name.replace("/", "-")[:-6], day))
-    with gzip.open(str(dest), "ab") as gz:  # a second rotation the same day adds to the same archive
-        gz.write(old)
-    with p.open("rb") as fh:  # whatever was appended meanwhile stays
-        fh.seek(size)
-        keep += fh.read()
-    config.atomic_write(p, keep.decode("utf-8", errors="replace"))
-    return len(old)
+    return state.rotate_jsonl(name, int(max_mb * 1024 * 1024), int(keep_mb * 1024 * 1024), dest)
 
 
 def _newest_mtime(f) -> float:
@@ -2380,7 +2452,7 @@ def _archive_doc(name: str, coll: str, when: tuple, cut: str, keep) -> int:
     return len(moved)
 
 
-def prune_state(now=None, keep_days: int = KEEP_DAYS, cache_age: float = None) -> dict:
+def prune_state(now=None, keep_days: int = KEEP_DAYS, cache_age: float = None, cache: bool = True) -> dict:
     """Keep the folder the size of a few weeks, not of every day the bot ever ran: old downloads are deleted;
     finished book items, plans, entries and orders move to trader/archive/*.jsonl; desk reviews, Time Machine
     replays and per-symbol backtests nobody needs any more are deleted; big logs are rotated. Anything an open
@@ -2389,7 +2461,7 @@ def prune_state(now=None, keep_days: int = KEEP_DAYS, cache_age: float = None) -
     now = market_clock.parse_iso(now) if now else market_clock.now_utc()
     cut_ts = now.timestamp() - keep_days * 86400
     cut = market_clock.iso(cut_ts)
-    out = {"cache": FileCache().prune(http.STALE_MAX_AGE if cache_age is None else cache_age)}
+    out = {"cache": FileCache().prune(http.STALE_MAX_AGE if cache_age is None else cache_age) if cache else None}
     with state.locked("autopilot/cycle", timeout=60):  # the cycle reads the book at its start, writes it at its end
         book = _book()
         live = {k: it for k, it in book["items"].items() if it.get("status") in LIVE_ITEM}
@@ -2445,6 +2517,7 @@ class Housekeeping:
         self.shadow_tried = None
         self.last_prune = None
         self.disk_warned = None
+        self.cache_thread = None
 
     def tick(self, cfg: dict) -> None:
         self._run(cfg, (self._news, self._lab, self._shadow, self._compact, self._prune, self._disk))
@@ -2506,21 +2579,29 @@ class Housekeeping:
             with state.locked("autopilot/cycle", timeout=60):
                 compact_equity()
 
+    def _prune_cache(self, max_age: float) -> None:
+        # in the background: an old install holds millions of cache files, and deleting them must not hold up exits
+        if self.cache_thread is None or not self.cache_thread.is_alive():
+            self.cache_thread = threading.Thread(target=_guarded, args=("cache", FileCache().prune, max_age),
+                                                 daemon=True, name="trader-cache-prune")
+            self.cache_thread.start()
+
     def _prune(self, cfg: dict, now) -> None:
         if self.last_prune is None or time.monotonic() - self.last_prune >= PRUNE_EVERY_SEC:
             self.last_prune = time.monotonic()
-            prune_state(now)
+            self._prune_cache(http.STALE_MAX_AGE)
+            prune_state(now, cache=False)
 
     def _disk(self, cfg: dict, now) -> None:
         free = _free_mb()
         if free is None or free >= LOW_DISK_MB:
             return
-        freed = FileCache().prune(0)  # downloads are fetched again; nothing else is touched
+        self._prune_cache(3600)  # downloads are fetched again; the last hour stays as the copy for an outage
         if self.disk_warned is None or time.monotonic() - self.disk_warned >= 6 * 3600:
             self.disk_warned = time.monotonic()
-            notify.send("error", "Disk almost full", "%d MB free on the trader's disk (emptied the download cache: "
-                        "%d MB). Under %d MB the bot opens nothing new; exits go on." % (
-                            free, freed["bytes"] // (1024 * 1024), MIN_FREE_MB), cfg, priority="high")
+            notify.send("error", "Disk almost full", "%d MB free on the trader's disk — the download cache is being "
+                        "emptied down to its last hour. Under %d MB the bot opens nothing new; exits go on." % (
+                            free, MIN_FREE_MB), cfg, priority="high")
 
 
 WATCHDOG_SEC = 1200  # a cycle running this long is stuck (a socket that never answers): restart the process
@@ -2571,6 +2652,8 @@ def daemon(args, cfg) -> int:
     previous = {}
     for sig in (getattr(signal, "SIGTERM", None), getattr(signal, "SIGINT", None), getattr(signal, "SIGHUP", None)):
         if sig is not None:
+            if sig == getattr(signal, "SIGHUP", None) and signal.getsignal(sig) == signal.SIG_IGN:
+                continue  # started with nohup: a closed terminal is meant to leave it running
             try:
                 previous[sig] = signal.signal(sig, _stop)
             except (ValueError, OSError):  # not the main thread — the flag still works
@@ -2698,7 +2781,8 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
     for name, x in (("--leverage", lev), ("--stock-leverage", stock_lev)):
         if not 1.0 <= x <= config.LEVERAGE_HARD_CAP:
             raise ValueError("%s must be between 1 and %g" % (name, config.LEVERAGE_HARD_CAP))
-    backstop = lambda pct: round(capital * pct / 100.0 * 4)  # dollar limits bind only after the account grew 4×
+    # dollar limits bind only after the account grew 4× — and never round down to 0 (a limit of 0 is refused)
+    backstop = lambda pct: max(1, round(capital * pct / 100.0 * 4))
     cfg = {"risk_per_trade_pct": risk, "account_size": capital, "cash_yield_pct": float(cash_yield),
            "leverage": {"crypto": lev, "stock": stock_lev},
            "autopilot": {"sim_starting_cash": capital, "runner": {"enabled": bool(runner)},

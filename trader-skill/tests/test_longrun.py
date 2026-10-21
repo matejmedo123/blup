@@ -189,7 +189,7 @@ class Simulator(TraderTestCase):
 
 
 class FullDisk(TraderTestCase):
-    def test_the_time_stop_still_runs_and_nothing_new_opens(self):
+    def test_the_exits_are_still_tried_and_nothing_new_opens(self):
         a = ap()
         a.run_cycle("2026-10-20T15:00:00Z", approved=True)
         broker = a.brokers.get(config.load_config())
@@ -206,7 +206,9 @@ class FullDisk(TraderTestCase):
                 mock.patch.object(state, "append_jsonl", side_effect=full), \
                 mock.patch.object(a, "_free_mb", return_value=20):
             res = a.run_cycle("2026-10-20T15:35:00Z", approved=True)
-        self.assertTrue(any("time exit for NVDA" in x for x in res["actions"]), res)
+        # the cycle reaches the exits and says what happened: the simulator can't keep a sale it can't save, so it
+        # refuses it out loud (at a real broker the sale goes through whatever the disk) — and nothing new opens
+        self.assertTrue(any("refused the sale of NVDA" in x and "could not save" in x for x in res["actions"]), res)
         self.assertTrue(any("disk almost full" in e for e in res["errors"]), res)
         self.assertEqual([d for d in res.get("decisions") or [] if d.get("action") == "taken"], [])
 
@@ -266,6 +268,29 @@ class Pruning(TraderTestCase):
             archived = [json.loads(x) for x in fh]
         self.assertEqual(archived[0]["i"], 0)
         self.assertEqual(archived[-1]["i"] + 1, kept[0]["i"])  # nothing lost, nothing twice
+
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "file locks are POSIX")
+    def test_no_line_is_lost_while_a_log_rotates(self):
+        import threading
+        state.append_jsonl("autopilot/control_log.jsonl", {"w": -1, "i": -1})
+
+        def writer(w):
+            for i in range(1500):
+                state.append_jsonl("autopilot/control_log.jsonl", {"w": w, "i": i, "pad": "x" * 40})
+        threads = [threading.Thread(target=writer, args=(w,)) for w in range(4)]
+        for t in threads:
+            t.start()
+        while any(t.is_alive() for t in threads):
+            ap().rotate_log("autopilot/control_log.jsonl", 0.02, 0.005)
+        for t in threads:
+            t.join()
+        rows = state.read_jsonl("autopilot/control_log.jsonl")
+        for gz in (config.ensure_home() / "archive").glob("autopilot-control_log-*.jsonl.gz"):
+            with gzip.open(str(gz), "rt") as fh:
+                rows += [json.loads(x) for x in fh]
+        self.assertEqual(len(rows), 6001)
+        self.assertEqual(len({(r["w"], r["i"]) for r in rows}), 6001)
 
 
 class EquityPeak(TraderTestCase):

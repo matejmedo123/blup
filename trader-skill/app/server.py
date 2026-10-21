@@ -101,7 +101,7 @@ def read_jsonl(rel: str, tail: int = None) -> list:
     if tail:  # read from the end: a poll every 10 s must not parse years of decisions for the last 200
         return [r for r in state.tail_jsonl(rel, tail) if isinstance(r, dict)]
     try:
-        lines = (home() / rel).read_text(encoding="utf-8").splitlines()
+        lines = (home() / rel).read_text(encoding="utf-8").split("\n")  # U+2028 in a headline is no line end
     except OSError:
         return []
     out = []
@@ -1351,8 +1351,9 @@ def make_handler(app: DashboardApp):
             ip = self.client_address[0] if self.client_address else "?"
             # behind Caddy every request comes from 127.0.0.1; Caddy APPENDS the real address to whatever the
             # client sent, so only the last entry can be trusted — the first is whatever an attacker typed
+            # (Caddy on the host reaches a Docker container from the bridge's private address, not 127.0.0.1)
             fwd = (self.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
-            return fwd if fwd and is_loopback(ip) else ip
+            return fwd if fwd and (is_loopback(ip) or _private(ip)) else ip
 
         def _same_origin(self) -> bool:
             host = self.headers.get("Host") or ""
@@ -1565,6 +1566,13 @@ def make_handler(app: DashboardApp):
                                         % (SESSION_COOKIE, token, secure)})
 
     return Handler
+
+
+def _private(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_private
+    except ValueError:
+        return False
 
 
 def is_loopback(host: str) -> bool:

@@ -144,10 +144,11 @@ def evaluate(trades: list, ref: list, cfg: dict = None, seed: int = 7) -> dict:
     histories — remembered until a trade closes or the reference changes, not redone every minute."""
     key = hashlib.sha1(json.dumps([[[t["r"], t["setup"]] for t in trades], ref, settings(cfg), seed],
                                   sort_keys=True, default=str).encode("utf-8")).hexdigest()
-    if key not in _MEMO:
-        _MEMO.clear()  # one entry: the bot's current record
-        _MEMO[key] = _evaluate(trades, ref, cfg, seed)
-    return copy.deepcopy(_MEMO[key])
+    last = _MEMO.get("last")  # one entry, swapped whole: the dashboard and a cycle may ask at the same time
+    if last is None or last[0] != key:
+        last = (key, _evaluate(trades, ref, cfg, seed))
+        _MEMO["last"] = last
+    return copy.deepcopy(last[1])
 
 
 def _evaluate(trades: list, ref: list, cfg: dict = None, seed: int = 7) -> dict:

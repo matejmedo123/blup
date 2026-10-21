@@ -44,14 +44,17 @@ class SimBroker(Broker):
         return {"cash": cash, "starting_cash": cash, "currency": "USD", "seq": 0, "orders": [], "positions": {},
                 "fills": [], "created_at": market_clock.iso(market_clock.now_utc()), "last_sync": None}
 
-    def _save(self) -> None:
+    def _save(self, strict: bool = True) -> None:
         try:
             state.write_json(BOOK, self.book)
             self.save_error = None
         except OSError as exc:
-            # a full disk: this cycle goes on with the book in memory, so the stops and time stops still act —
-            # the autopilot reports it and opens nothing new until the book is on disk again
+            # a full disk: a sync goes on with the book in memory, so the stops and time stops still act — the
+            # autopilot reports it and opens nothing new. A new order that can't be kept is refused instead: the
+            # bot must not believe in a stop that the next cycle's book won't have
             self.save_error = "%s: %s" % (type(exc).__name__, exc)
+            if strict:
+                raise BrokerError("the simulator could not save its book (%s) — the order is not kept" % self.save_error)
 
     def _next_id(self) -> str:
         self.book["seq"] = int(self.book.get("seq") or 0) + 1
@@ -184,7 +187,7 @@ class SimBroker(Broker):
         self._charge_interest(now_ts)
         self._archive(now_ts)
         self.book["last_sync"] = market_clock.iso(now_ts)
-        self._save()
+        self._save(strict=False)
 
     def _archive(self, now_ts: int) -> None:
         """Finished orders and fills older than KEEP_DAYS go to broker/sim-archive.jsonl — a bracket stays whole

@@ -92,26 +92,8 @@ class Broker:
     def cancel(self, order_id: str) -> dict:
         raise NotImplementedError
 
-    def cancel_all(self) -> list:
-        out = []
-        for o in self.open_orders():
-            try:
-                out.append(self.cancel(o["id"]))
-            except BrokerError as exc:
-                out.append({"id": o["id"], "error": str(exc)})
-        return out
-
     def close_position(self, symbol: str) -> dict:
         raise NotImplementedError
-
-    def close_all(self) -> list:
-        out = []
-        for p in self.positions():
-            try:
-                out.append(self.close_position(p["symbol"]))
-            except BrokerError as exc:
-                out.append({"symbol": p["symbol"], "error": str(exc)})
-        return out
 
     # -- bookkeeping -------------------------------------------------------------------------
     def log(self, action: str, **fields) -> None:

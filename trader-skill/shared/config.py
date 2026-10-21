@@ -296,6 +296,8 @@ def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = ""
         here = path + key
         default = (defaults or {}).get(key)
         kind = _kind(key, default)
+        if here == "leverage" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            kind = "number"  # "leverage": 1.5 — one multiple for every asset class, still read by leverage()
         if value is None:
             if kind == "number" and isinstance(default, (int, float)) and not isinstance(default, bool):
                 doc[key] = default  # null never means "no limit": a limit you can't see is no limit at all
@@ -356,6 +358,9 @@ def update_file(name: str, changes: dict) -> dict:
     except (OSError, ValueError) as exc:
         raise ConfigError("cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
     merged = deep_merge(user if isinstance(user, dict) else {}, changes)
+    defaults = {"config.json": DEFAULT_CONFIG, "limits.json": DEFAULT_LIMITS}.get(name)
+    if defaults is not None:  # never write a file that every tool would then refuse to read
+        validate(name, deep_merge(defaults, json.loads(json.dumps(merged))), defaults)
     atomic_write(path, json.dumps(merged, indent=2) + "\n")
     return merged
 

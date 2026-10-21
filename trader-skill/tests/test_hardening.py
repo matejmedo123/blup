@@ -110,11 +110,23 @@ class YourOwnOrders(OnlyWhatTheBotOwns):
         self.it.update(status="open", filled_at="2026-10-20T14:02:00Z", entry_fill=100.0, swing=True,
                        time_stop="2027-01-01T00:00:00Z", stop_order_id="s1")
         stop = [{"id": "s1", "symbol": "NVDA", "side": "sell", "type": "stop", "status": "new"}]
+        before = [{"symbol": "NVDA", "asset": "stock", "qty": 10.0, "avg_entry": 100.0, "last": 101.0}]
+        self.assertEqual(ap().manage_exits(self.b, self.book, before, stop, self.cfg), [])
         pos = [{"symbol": "NVDA", "asset": "stock", "qty": 20.0, "avg_entry": 50.0, "last": 50.5}]
         acts = ap().manage_exits(self.b, self.book, pos, stop, self.cfg)
         self.assertIn("2-for-1 split", acts[0])
         self.assertEqual((self.it["qty"], self.it["stop"], self.it["entry_fill"]), (20.0, 47.5, 50.0))
         self.assertFalse([c for c in self.b.calls if c[0] in ("exit", "close")])
+
+    def test_your_own_shares_in_the_average_price_are_no_split(self):
+        # you hold 10 NVDA bought at $2; the bot buys 10 at $100 — Alpaca reports 20 at an average of $51
+        self.it.update(status="open", filled_at="2026-10-20T14:02:00Z", entry_fill=100.0, swing=True,
+                       time_stop="2027-01-01T00:00:00Z", stop_order_id="s1")
+        stop = [{"id": "s1", "symbol": "NVDA", "side": "sell", "type": "stop", "status": "new"}]
+        pos = [{"symbol": "NVDA", "asset": "stock", "qty": 20.0, "avg_entry": 51.0, "last": 101.0}]
+        for _ in range(3):
+            self.assertEqual(ap().manage_exits(self.b, self.book, pos, stop, self.cfg), [])
+        self.assertEqual((self.it["qty"], self.it["stop"]), (10.0, 95.0))
 
     def test_an_intraday_stock_held_past_the_close_gets_a_stop(self):
         self.it.update(status="open", filled_at="2026-10-20T14:02:00Z")
