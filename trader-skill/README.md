@@ -37,7 +37,7 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
 | `/trader-entry` | Watches a setup candle by candle: "Status: Watching → TRIGGERED — the 10:10 candle just closed above the opening range. Get in $364.18." |
 | `/trader-exit` | Stop, R-multiple target, time stop, trailing stop; meme scale-outs and liquidity exit |
 | `/trader-timemachine` ⭐ | Replays the rest of the session 10,000 times from the symbol's own candles: odds of target vs stop, expected value, 90 % close range, fan chart |
-| `/trader-backtest` | "Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither." — with fees and slippage |
+| `/trader-backtest` | "Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither." — with fees and slippage. Plus the **backtest lab** (`lab.py`): every crypto setup on dozens of coins and on 5m / 1h / 4h bars, 160 exits each, train/test validation, a playbook of what held up — the only crypto the autopilot trades, sized by certainty |
 | `/trader-desk` | Researcher → Skeptic → Lead: every objection must be answered; GO only through hard gates. AI subagents, a rule-based mode (`desk.py auto`, incl. a news & filings gate) or the optional Claude API desk (`ai_desk.py`, veto-only) |
 | `/trader-sizer` · `/trader-risk` | Position size from account × risk %; PASS/BLOCK against `limits.json` (per asset class, daily loss, exposure, rugcheck) |
 | `/trader-broker` | A plain ticket + the exact JSON for your brokerage MCP connector, sent only after you type **yes**; meme coins get a manual wallet checklist |
@@ -60,11 +60,14 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
   3. a Time Machine replay that doesn't reject the stop/target geometry (EV ≥ −0.05R),
   4. no fresh red-flag news or filing for the symbol (fetched right before the decision: dilution /
      offering, bankruptcy, delisting, restatement 8-Ks; hacks and delistings for coins),
-  5. its own record doesn't argue against it (setups that lost money for the bot are paused; a symbol
+  5. crypto: the **backtest lab** validated that coin + setup on months of history it never saw while
+     choosing the exit — and the size follows that certainty (more risk only with a high profit chance on
+     many unseen trades, never past `limits.json`),
+  6. its own record doesn't argue against it (setups that lost money for the bot are paused; a symbol
      with three losses in a row sits out; a losing streak halves the size; a 10 % drawdown pauses the bot),
-  6. desk verdict GO — and, if you enable the optional **AI desk**, Claude doesn't veto it (it can only
+  7. desk verdict GO — and, if you enable the optional **AI desk**, Claude doesn't veto it (it can only
      say no, never yes to something the rules rejected) — then sizing and a risk PASS against `limits.json`,
-  7. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever).
+  8. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever).
 
   It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries after 15:30 ET,
   kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a KILL
@@ -152,6 +155,25 @@ $0.10–0.20 per review) and logged in `trader/ai_usage.json`. If it is off, off
 failing, `ai_desk.on_unavailable` decides: `rule_based` keeps the rule-based decision, `skip` places no
 trade. Try it by hand: `python3 trader-desk/ai_desk.py --id <idea>`. The rest of the pack never needs
 the SDK.
+
+## Backtest lab — what actually worked, with how much certainty
+
+```bash
+python3 trader-backtest/lab.py                       # top 25 coins · 5m (180 d) + 1h (365 d) + 4h (730 d)
+python3 trader-backtest/lab.py --min-target-r 2      # only exits that aim for 2R or more
+```
+
+For every crypto setup — the one-day breakouts on 5-minute bars and four swing setups on 1-hour and
+4-hour bars — it tries 160 exits (targets 0.5–5R, structure or 1–3×ATR stops, four time stops), with
+fees and slippage. The exit with the highest **profit chance** (certainty: how often 20 trades ended in
+profit) is picked on the first two thirds of the history with all coins pooled, then checked on the last
+third, which the choice never saw. Only coin + setup combinations that held up there are **validated**;
+they become `trader/backtests/playbook.json`, the only crypto the autopilot trades — with those exits,
+and with more size the higher the certainty. The daemon re-runs it weekly.
+
+What the first real run showed (top 30 coins, October 2026) is in the section below; the short version:
+a high *win chance* is easy — 60–70 % with a small target and a wide stop — but those small wins lose to
+fees and the occasional big loss. What counts is the edge after costs on data the choice never saw.
 
 ## Running it for real — 24/7
 
@@ -337,7 +359,7 @@ key or a deposit are a common scam. This tool only watches.
 ```
 manual (stocks / crypto):  scanner → news → entry → exit → backtest → timemachine → DESK → sizer → risk → broker (your yes) → journal
 meme coins:                scanner → rugcheck → news → entry → exit → timemachine → DESK → sizer → risk → manual checklist → journal
-autopilot (24/7):          own universe → the same chain + just-in-time news & filings + its own record → DESK (+ AI veto) → orders only on GO + risk PASS
+autopilot (24/7):          own universe → crypto only from the lab's playbook → the same chain + just-in-time news & filings + its own record → DESK (+ AI veto) → size by certainty → orders only on GO + risk PASS
 always on:                 dashboard · alerts · news feed (stocks in market hours, crypto & meme 24/7)
 ```
 

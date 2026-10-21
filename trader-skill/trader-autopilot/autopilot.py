@@ -344,12 +344,27 @@ def watched(cfg: dict, broker=None, now=None) -> tuple:
     return {a: list(uni.get(a) or []) for a in ("stock", "crypto") if a in assets}, notes
 
 
+SERIES_HISTORY_DAYS = {"1h": 12, "4h": 45}   # enough closed bars for the 200-bar EMA of the swing setups
+
+
+def playbook_state(cfg: dict, now=None) -> dict:
+    """Is crypto gated by the backtest lab, and which coin+setup+timeframe combinations did it validate?"""
+    pb_cfg = (cfg.get("autopilot") or {}).get("playbook") or {}
+    required = bool(pb_cfg.get("required_for_crypto", True))
+    lab = _mod("trader-backtest", "lab")
+    pb, problem = lab.load_playbook(now, float(pb_cfg.get("max_age_days") or lab.PLAYBOOK_DAYS))
+    by_coin = {}
+    for key, e in ((pb or {}).get("entries") or {}).items():
+        by_coin.setdefault(e["symbol"], []).append(dict(e, key=key))
+    return {"required": required, "playbook": pb, "problem": problem, "by_coin": by_coin}
+
+
 def last_closed_bar(now_ts: int, step: int) -> int:
     """Open time of the newest closed bar."""
     return (int(now_ts) // step - 1) * step
 
 
-def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None) -> tuple:
+def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None, pbs: dict = None) -> tuple:
     """Look at every watched symbol once per closed 5-min bar, within the per-cycle time budget.
 
     Symbols the budget did not reach roll over to the next cycle of the same bar (and to the next bar,
@@ -365,6 +380,7 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None) -> tuple:
     found, notes = [], []
     holding = {it["data_key"] for it in book["items"].values() if it["status"] in ("pending", "open")}
     uni = watchlist(cfg) if uni is None else uni
+    pbs = pbs or {"required": False, "by_coin": {}}
     scan = state.read_json(SCAN, {}) or {}
     deadline = time.monotonic() + float(ap.get("scan_time_budget_sec") or 40)
     for asset, syms in uni.items():
@@ -377,6 +393,24 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None) -> tuple:
             if (et.hour, et.minute) >= NO_NEW_STOCK_ENTRIES:
                 notes.append("after 3:30 p.m. ET — no new stock entries")
                 continue
+        if asset == "crypto" and pbs["required"]:
+            # crypto is traded only from what the backtest lab validated on data it never saw
+            if not pbs.get("playbook"):
+                notes.append("crypto: %s" % pbs.get("problem"))
+                continue
+            gated = []
+            for raw in syms:
+                try:
+                    k = data.as_symbol(raw, asset).key
+                except (symbols.SymbolError, ValueError):
+                    continue
+                if k in pbs["by_coin"]:
+                    gated.append(raw)
+            if not gated:
+                notes.append("crypto: none of the %d watched coins is validated in the backtest-lab playbook (%d "
+                             "combinations)" % (len(syms), len(pbs["playbook"].get("entries") or {})))
+                continue
+            syms = gated
         sc = scan.get(asset) or {}
         if sc.get("bar") != bar:
             sc = {"bar": bar, "done": [], "total": len(syms), "finished_at": None}
@@ -399,12 +433,19 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None) -> tuple:
                 continue
             if not series.candles:
                 continue
+            entries = pbs["by_coin"].get(sym.key) if asset == "crypto" and pbs["required"] else None
+            for e in [e for e in entries or [] if e["interval"] != INTERVAL]:
+                found += _series_candidates(sym, e, memo, handled, holding, now_ts, max_age, notes)
             w = setups.window_at(series.candles, asset, INTERVAL, now_ts - 1)
             if not w or not (w.start <= now_ts - 1 < w.end):
                 continue
             seen_bar = None
-            for setup in (ap.get("setups") or {}).get(asset) or []:
-                if setup not in setups.SETUPS or asset not in setups.SETUPS[setup]["assets"]:
+            if entries is None:
+                wanted = [(st, None) for st in (ap.get("setups") or {}).get(asset) or []]
+            else:  # the playbook decides which setups, and with which exits
+                wanted = [(e["setup"], e) for e in entries if e["interval"] == INTERVAL]
+            for setup, entry in wanted:
+                if setup not in setups.SETUPS or asset not in setups.SETUPS[setup]["assets"] or setups.is_series(setup):
                     continue
                 r = setups.evaluate(setup, w, now_ts, {"pick": "last"})
                 trig = r.get("trigger")
@@ -415,7 +456,7 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None) -> tuple:
                 if age > max_age or sid in handled:
                     continue
                 cand = {"id": sid, "sym": sym, "asset": asset, "setup": setup, "result": r, "series": series,
-                        "window": w, "trigger": trig}
+                        "window": w, "trigger": trig, "interval": INTERVAL, "playbook": entry}
                 if sym.key in holding:
                     cand["skip"] = "already holding or waiting on %s" % sym.display
                 elif seen_bar == trig["t"]:
@@ -430,6 +471,37 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None) -> tuple:
     return found, notes
 
 
+def _series_candidates(sym, e: dict, memo: dict, handled: dict, holding: set, now_ts: int, max_age: int,
+                       notes: list) -> list:
+    """A validated swing setup (1h / 4h bars) that fired on the newest closed bar."""
+    interval = e["interval"]
+    step = market_clock.interval_seconds(interval)
+    key = (sym.key, "crypto", interval)
+    try:
+        if key not in memo:
+            memo[key] = data.get_candles(sym, interval, days=SERIES_HISTORY_DAYS.get(interval, 45), asset="crypto")
+        series = memo[key]
+    except (data.DataUnavailable, ValueError) as exc:
+        notes.append("%s %s: %s" % (sym.display, interval, exc))
+        return []
+    if not series.candles:
+        return []
+    last_t = series.candles[-1].t
+    out = []
+    for r in setups.series_signals(e["setup"], series.candles, interval, start_ts=last_t - max_age * step):
+        trig = r["trigger"]
+        age = (now_ts - (trig["t"] + step)) // step
+        sid = setups.setup_id(sym.key, r["window"], e["setup"])
+        if age > max_age or sid in handled:
+            continue
+        cand = {"id": sid, "sym": sym, "asset": "crypto", "setup": e["setup"], "result": r, "series": series,
+                "window": None, "trigger": trig, "interval": interval, "playbook": e}
+        if sym.key in holding:
+            cand["skip"] = "already holding or waiting on %s" % sym.display
+        out.append(cand)
+    return out
+
+
 def _write_entry(c: dict) -> None:
     r, sym, trig = c["result"], c["sym"], c["trigger"]
     exit_mod = _mod("trader-exit", "exit")
@@ -440,8 +512,9 @@ def _write_entry(c: dict) -> None:
         "previous_status": None, "rule": r.get("rule", ""), "levels": r.get("levels") or {}, "range": r.get("range"),
         "trigger": {"time": trig["time"], "close_time": trig["close_time"], "price": trig["price"],
                     "candle": trig["candle"]},
-        "entry_price": trig["price"], "checked_at": market_clock.iso(market_clock.now_utc()), "interval": INTERVAL,
-        "source": c["series"].source, "notes": r.get("notes") or [], "origin": "autopilot",
+        "entry_price": trig["price"], "checked_at": market_clock.iso(market_clock.now_utc()),
+        "interval": c.get("interval") or INTERVAL, "source": c["series"].source, "notes": r.get("notes") or [],
+        "origin": "autopilot", "playbook": (c.get("playbook") or {}).get("key"),
     }
     doc.setdefault("latest", c["id"])
     state.write_json("entries.json", doc)
@@ -450,15 +523,21 @@ def _write_entry(c: dict) -> None:
 def make_plan(c: dict, cfg: dict) -> dict:
     exit_mod = _mod("trader-exit", "exit")
     sym, asset, trig, r = c["sym"], c["asset"], c["trigger"], c["result"]
-    step = market_clock.interval_seconds(INTERVAL)
+    interval = c.get("interval") or INTERVAL
+    step = market_clock.interval_seconds(interval)
     entry_ts = trig["t"] + step
     until = [x for x in c["series"].candles if x.t + step <= entry_ts]
     tick = 0.01 if asset == "stock" else (data.lot_info(sym).get("tick") or None)
     horizon_s = None if asset == "stock" else market_clock.parse_horizon(cfg.get("crypto_horizon") or "4h")
     levels = r.get("levels") or {}
+    pb = c.get("playbook")
+    stop, atr_mult, target_r = "auto", 1.5, exit_mod.DEFAULT_TARGET_R[asset]
+    if pb:  # trade it exactly the way the backtest lab validated it
+        stop, atr_mult, target_r = pb["stop"], float(pb["atr_mult"]), float(pb["target_r"])
+        horizon_s = market_clock.parse_horizon(pb["horizon"])
     lv = exit_mod.plan_levels(trig["price"], entry_ts, asset, until, stop_ref=levels.get("stop_ref"),
-                              trigger_level=levels.get("trigger_level"), stop="auto", atr_mult=1.5,
-                              target_r=exit_mod.DEFAULT_TARGET_R[asset], tick=tick, horizon_s=horizon_s)
+                              trigger_level=levels.get("trigger_level"), stop=stop, atr_mult=atr_mult,
+                              target_r=target_r, tick=tick, horizon_s=horizon_s)
     if lv["stop"]["method"] == "range_low":
         lv["stop"]["note"] = exit_mod.structure_note(c["setup"])
     plan = {"id": c["id"], "symbol": exit_mod._canonical(sym), "symbol_display": sym.display, "symbol_key": sym.key,
@@ -466,8 +545,9 @@ def make_plan(c: dict, cfg: dict) -> dict:
             "entry": {"price": float(trig["price"]), "time": market_clock.iso(entry_ts)},
             "stop": lv["stop"], "target": lv["target"], "risk_per_unit": lv["risk_per_unit"],
             "time_stop": lv["time_stop"], "horizon": lv["horizon"], "trailing": None, "scale_out": [],
-            "liquidity_exit": None, "atr": lv["atr"], "interval": INTERVAL, "source": c["series"].source,
-            "created_at": market_clock.iso(market_clock.now_utc()), "chart": None, "origin": "autopilot"}
+            "liquidity_exit": None, "atr": lv["atr"], "interval": interval, "source": c["series"].source,
+            "created_at": market_clock.iso(market_clock.now_utc()), "chart": None, "origin": "autopilot",
+            "playbook": (pb or {}).get("key")}
     doc = state.read_json("plan.json", {}) or {}
     doc.setdefault("plans", {})[plan["id"]] = plan
     doc.setdefault("latest", plan["id"])
@@ -480,8 +560,20 @@ def _ctx(args, cfg, limits):
 
 
 def ensure_backtest(c: dict, plan: dict, cfg: dict, limits: dict) -> dict:
-    """Backtest the rule on this symbol — once per symbol, rule and day."""
+    """Backtest the rule on this symbol — once per symbol, rule and day (or take the backtest lab's validation)."""
     rel = "backtests/%s-%s.json" % (c["sym"].key, c["setup"])
+    pb = c.get("playbook")
+    if pb:  # validated out of sample by the lab, with these exact exits: that is the evidence the desk reads
+        te = pb["test"]
+        doc = {"symbol": c["sym"].display, "symbol_key": c["sym"].key, "asset": c["asset"], "setup": c["setup"],
+               "generated_at": market_clock.iso(market_clock.now_utc()), "source": "backtest lab",
+               "triggers": te["n"], "expectancy_r": te["expectancy_r"], "win_rate": te["win_rate"],
+               "summary": "Backtest lab, unseen test period (%s bars): %d trades, win %.0f%%, profit chance %.0f%%" % (
+                   pb["interval"], te["n"], 100 * (te["win_rate"] or 0), 100 * (te.get("profit_chance") or 0)),
+               "params": {"interval": pb["interval"], "target_r": pb["target_r"], "stop": pb["stop"],
+                          "atr_mult": pb["atr_mult"], "horizon": pb["horizon"]}, "playbook": pb.get("key")}
+        state.write_json(rel, doc)
+        return doc
     doc = state.read_json(rel)
     today = _today(market_clock.now_utc())
     if doc and (doc.get("generated_at") or "")[:10] == today:
@@ -532,15 +624,42 @@ def refresh_news(plan: dict, cfg: dict) -> str:
 
 
 def _scaled(cfg: dict, limits: dict, asset: str, mult: float) -> tuple:
-    """Risk per trade (and the per-trade risk cap) times the adapt multiplier."""
-    if mult >= 1:
+    """Risk per trade times ``mult``. Smaller also shrinks the per-trade cap; larger never lifts limits.json."""
+    if abs(mult - 1) < 1e-9:
         return cfg, limits
     cfg2, lim2 = copy.deepcopy(cfg), copy.deepcopy(limits)
     cfg2["risk_per_trade_pct"] = float(cfg.get("risk_per_trade_pct", 0.5)) * mult
     lim = lim2.get(asset) or {}
-    if lim.get("max_risk_per_trade_usd") is not None:
+    if mult < 1 and lim.get("max_risk_per_trade_usd") is not None:
         lim["max_risk_per_trade_usd"] = float(lim["max_risk_per_trade_usd"]) * mult
     return cfg2, lim2
+
+
+DEFAULT_RISK_TIERS = ((0.9, 2.0), (0.8, 1.5), (0.7, 1.0), (0.0, 0.5))
+
+
+def confidence_mult(entry: dict, cfg: dict) -> tuple:
+    """(multiplier, reason): size by how sure the backtest lab is — its profit chance on trades it never saw.
+
+    Bigger only with enough unseen trades behind it, never above max_risk_mult, never past limits.json.
+    """
+    pb_cfg = (cfg.get("autopilot") or {}).get("playbook") or {}
+    if not entry or not pb_cfg.get("confidence_sizing", True):
+        return 1.0, None
+    te = entry.get("test") or {}
+    pc, n = float(te.get("profit_chance") or 0), int(te.get("n") or 0)
+    tiers = pb_cfg.get("risk_tiers") or DEFAULT_RISK_TIERS
+    mult = 1.0
+    for threshold, m in sorted(([float(a), float(b)] for a, b in tiers), reverse=True):
+        if pc >= threshold:
+            mult = m
+            break
+    why = "profit chance %.0f%% over %d unseen trades" % (100 * pc, n)
+    min_n = int(pb_cfg.get("boost_min_test_trades") or 30)
+    if mult > 1 and n < min_n:
+        mult, why = 1.0, why + " — too few to size up (want ≥ %d)" % min_n
+    cap = float(pb_cfg.get("max_risk_mult") or 2.0)
+    return min(mult, cap), why
 
 
 def ai_review(plan: dict, desk: dict, cfg: dict) -> tuple:
@@ -611,10 +730,16 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     sizer = _mod("trader-sizer", "size")
     risk = _mod("trader-risk", "risk")
     mult = adapt.risk_mult(learned) if learned is not None else 1.0
-    s_cfg, s_limits = _scaled(cfg, limits, asset, mult)
     if mult < 1:
         gates.append({"name": "learned · risk multiplier", "ok": True,
                       "detail": "risk × %g — %s" % (mult, (learned or {}).get("risk_reason") or "losing streak")})
+    conf, conf_why = confidence_mult(c.get("playbook"), cfg)
+    if conf_why:
+        gates.append({"name": "confidence sizing", "ok": True,
+                      "detail": "risk × %g — %s%s" % (conf, conf_why, " (limits.json still caps it)" if conf > 1
+                                                       else "")})
+    mult *= conf
+    s_cfg, s_limits = _scaled(cfg, limits, asset, mult)
     try:
         order = sizer.size_order(plan, s_cfg, s_limits, account=acct.get("equity") or None)
     except ValueError as exc:
@@ -666,7 +791,7 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         "time_stop": plan["time_stop"]["at"], "status": "pending", "placed_at": market_clock.iso(now)}
     notify.send("trade_opened", "BUY %s %s (%s)" % (fmt.qty(order["qty"]), bsym, c["setup"]),
                 "%s. Risk %s%s. Desk GO, risk PASS%s." % (
-                    text, fmt.money(order.get("risk_usd")), " (× %g after a losing streak)" % mult if mult < 1 else "",
+                    text, fmt.money(order.get("risk_usd")), " (risk × %g)" % mult if abs(mult - 1) > 1e-9 else "",
                     ", AI desk %s" % ai_info["status"] if ai_info else ""), cfg)
     return _decision(action="taken", reasons=["desk GO, risk PASS — " + text], desk=desk_info, gates=gates,
                      broker_order_id=bo.get("id"), ai=ai_info, **base)
@@ -866,10 +991,14 @@ def _cycle(approved=None) -> dict:
         status = "killed"
     decisions = []
     uni, uni_notes = watched(cfg, broker, now) if status == "running" else (_universe_counts_only(cfg), [])
+    try:
+        pbs = playbook_state(cfg, now)
+    except Exception as exc:  # a broken playbook file must not stop exits — crypto just stays gated
+        pbs = {"required": True, "playbook": None, "problem": "playbook unreadable: %s" % exc, "by_coin": {}}
     if status == "running":
         memo = {}
         try:
-            cands, notes = find_triggers(cfg, book, memo, uni)
+            cands, notes = find_triggers(cfg, book, memo, uni, pbs)
         except Exception as exc:  # a bad symbol must not stop exits from being managed next cycle
             cands, notes = [], []
             errors.append("trigger scan: %s: %s" % (type(exc).__name__, exc))
@@ -903,9 +1032,13 @@ def _cycle(approved=None) -> dict:
     last_errors = (prev.get("last_errors") or [])
     last_errors = (last_errors + [{"at": now_iso, "error": e} for e in errors])[-10:]
     today = _today_summary(book, now)
+    pb = pbs.get("playbook") or {}
+    playbook = {"required": pbs["required"], "problem": pbs.get("problem"), "generated_at": pb.get("generated_at"),
+                "valid_until": pb.get("valid_until"), "entries": len(pb.get("entries") or {}),
+                "coins": sorted(pbs.get("by_coin") or {})}
     st = _state(status=status, message=msg, today=today, equity=line, last_errors=last_errors,
                 universe={"stock": n_st, "crypto": n_cr}, notes=(uni_notes + (notes if status == "running" else []))[-20:],
-                **common)
+                playbook=playbook, **common)
     daily_summary(cfg, st, learned, now)
     actions += ["%s %s %s" % (d["action"], d["symbol"], d["setup"]) for d in decisions]
     return {"status": status, "message": msg, "actions": actions, "errors": errors,
@@ -1036,12 +1169,40 @@ def _refresh_watchlist_news(cfg: dict) -> None:
                                                             "task": "news", "error": "%s: %s" % (type(exc).__name__, exc)})
 
 
+def _refresh_lab(cfg: dict) -> None:
+    """Background: re-run the backtest lab so the crypto playbook follows the market (weekly by default)."""
+    pb_cfg = (cfg.get("autopilot") or {}).get("playbook") or {}
+    lab = _mod("trader-backtest", "lab")
+    started = market_clock.iso(market_clock.now_utc())
+    try:
+        argv = ["--top", str(int(pb_cfg.get("top") or 25)), "--no-html"]
+        if float(pb_cfg.get("min_target_r") or 0) > 0:  # e.g. 2 = only exits that aim for 2:1 or better
+            argv += ["--min-target-r", str(pb_cfg["min_target_r"])]
+        args = lab.build_parser().parse_args(argv)
+        ctx = cli.Context(args=args, cfg=config.load_config(), limits=config.load_limits(), home=config.trader_home())
+        doc = lab.run(args, ctx)["doc"]
+        s = doc["summary"]
+        names = ["%s %s (%s)" % (r["display"], r["setup"], r["timeframe"]) for r in doc["validated"][:6]]
+        text = ("Backtest lab re-ran on %d coins: %d validated combination(s)%s. Crypto is traded only from these." % (
+            doc["coins"], s["coins_validated"], (": " + ", ".join(names)) if names else
+            " — nothing kept an edge after costs on unseen data, so no crypto trades for now"))
+        notify.send("learned", "Backtest lab: %d validated" % s["coins_validated"], text, cfg)
+        state.append_jsonl("autopilot/housekeeping.jsonl", {"at": started, "task": "lab", "validated": s["coins_validated"],
+                                                            "seconds": s["seconds"]})
+    except Exception as exc:
+        state.append_jsonl("autopilot/housekeeping.jsonl", {"at": started, "task": "lab",
+                                                            "error": "%s: %s" % (type(exc).__name__, exc)})
+
+
 class Housekeeping:
-    """Work between cycles that must never delay exits: news refresh (background thread), daily compaction."""
+    """Work between cycles that must never delay exits: news refresh and the weekly backtest lab (background
+    threads), daily compaction."""
 
     def __init__(self):
         self.news_thread = None
+        self.lab_thread = None
         self.last_compact = None
+        self.lab_tried = None
 
     def tick(self, cfg: dict) -> None:
         now = market_clock.now_utc()
@@ -1053,6 +1214,19 @@ class Housekeeping:
             self.news_thread = threading.Thread(target=_refresh_watchlist_news, args=(cfg,), daemon=True,
                                                 name="trader-news-refresh")
             self.news_thread.start()
+        pb_cfg = (cfg.get("autopilot") or {}).get("playbook") or {}
+        every = float(pb_cfg.get("auto_refresh_days") or 0)
+        lab_busy = self.lab_thread is not None and self.lab_thread.is_alive()
+        if every > 0 and pb_cfg.get("required_for_crypto", True) and not lab_busy and not config.is_offline() \
+                and "crypto" in ((cfg.get("autopilot") or {}).get("assets") or ["stock", "crypto"]):
+            pb = state.read_json("backtests/playbook.json", {}) or {}
+            age = now.timestamp() - market_clock.ts(pb["generated_at"]) if pb.get("generated_at") else None
+            retry_ok = self.lab_tried is None or now.timestamp() - self.lab_tried >= 6 * 3600
+            if (age is None or age >= every * 86400) and retry_ok:
+                self.lab_tried = now.timestamp()
+                self.lab_thread = threading.Thread(target=_refresh_lab, args=(cfg,), daemon=True,
+                                                   name="trader-backtest-lab")
+                self.lab_thread.start()
         day = _today(now)
         if self.last_compact != day:
             self.last_compact = day
@@ -1175,6 +1349,16 @@ def status_text(cfg: dict) -> str:
     uni = st.get("universe") or {}
     if uni:
         lines.append("Watching %s stocks + %s coins (autopilot.py universe)" % (uni.get("stock", 0), uni.get("crypto", 0)))
+    pb = st.get("playbook") or {}
+    if pb:
+        if not pb.get("required"):
+            lines.append("Crypto playbook: off — crypto trades on the daily per-symbol backtest only")
+        elif pb.get("problem"):
+            lines.append("Crypto playbook: %s — no crypto trades until then" % pb["problem"])
+        else:
+            lines.append("Crypto playbook: %d validated combination(s)%s · built %s" % (
+                pb.get("entries") or 0, (" on " + ", ".join(pb.get("coins") or [])) if pb.get("coins") else "",
+                pb.get("generated_at")))
     learned = state.read_json("autopilot/adapt.json", {}) or {}
     if learned:
         paused = [k for k, v in (learned.get("setups") or {}).items() if v.get("status") == "paused"]

@@ -61,6 +61,42 @@ def sma(values, n: int) -> list:
     return out
 
 
+def ema(values, n: int) -> list:
+    """Exponential moving average seeded with the first value."""
+    k = 2.0 / (n + 1)
+    out, e = [], None
+    for v in values:
+        e = v if e is None else e + k * (v - e)
+        out.append(e)
+    return out
+
+
+def rsi(values, n: int = 14) -> list:
+    """Wilder RSI; 50 until there is a first change."""
+    out = [50.0] * len(values)
+    gain = loss = 0.0
+    for i in range(1, len(values)):
+        ch = values[i] - values[i - 1]
+        up, down = max(ch, 0.0), max(-ch, 0.0)
+        if i <= n:
+            gain += up / n
+            loss += down / n
+        else:
+            gain = (gain * (n - 1) + up) / n
+            loss = (loss * (n - 1) + down) / n
+        out[i] = 100.0 if loss == 0 else 100.0 - 100.0 / (1.0 + gain / loss)
+    return out
+
+
+def bollinger_lower(values, n: int = 20, k: float = 2.0) -> list:
+    out = []
+    for i in range(len(values)):
+        w = values[max(0, i - n + 1):i + 1]
+        m = sum(w) / len(w)
+        out.append(m - k * math.sqrt(sum((x - m) ** 2 for x in w) / len(w)))
+    return out
+
+
 def median(values):
     v = sorted(values)
     if not v:

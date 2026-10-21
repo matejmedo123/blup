@@ -33,7 +33,13 @@ stock universe for the next open.
    cap, and the 20 most traded coins (no stablecoins or wrapped tokens; only what the broker can trade) —
    always including your watchlists, never anything in `exclude` or `blocked_symbols`, **never meme
    coins**. Each symbol is scanned once per closed 5-minute bar within a per-cycle time budget.
-7. **Fresh triggers** → entry → exit plan → backtest of that rule on that symbol → Time Machine →
+7. **Crypto only from the backtest lab** (`autopilot.playbook`): a coin is traded only with a setup,
+   timeframe (5m, or the 1h / 4h swing setups) and exit the lab validated on data it never saw
+   (`trader-backtest/lab.py` → `backtests/playbook.json`, re-run weekly by the daemon). No fresh
+   playbook, or nothing validated → no crypto trades. Size follows certainty: the lab's profit chance on
+   unseen trades ≥ 90 % → risk × 2, ≥ 80 % → × 1.5, ≥ 70 % → × 1, lower → × 0.5 (a boost needs ≥ 30
+   unseen trades; `limits.json` caps always win).
+8. **Fresh triggers** → entry → exit plan → backtest of that rule on that symbol → Time Machine →
    **latest news and SEC filings for that symbol, fetched right before judging** → rule-based desk
    (`desk.py auto`; a fresh dilution/offering, bankruptcy, delisting or restatement filing, or a hack /
    delisting headline for a coin, is a critical objection; merger, FDA or change-of-control news is
@@ -41,7 +47,7 @@ stock universe for the next open.
    sizer → risk check → order. One look per setup per day; every look is written to
    `trader/autopilot/decisions.jsonl` with the reasons.
 
-**A trade happens only if** the backtest shows an edge after costs (expectancy ≥ +0.05R over
+**A trade happens only if** (crypto) the backtest lab validated that coin + setup, the backtest shows an edge after costs (expectancy ≥ +0.05R over
 ≥ 10 triggers), the Time Machine does not reject the geometry (EV ≥ −0.05R), no fresh news or filing
 blocks it, its own record does not argue against it, the desk says GO (and the AI desk, if enabled,
 does not say no), the risk manager says PASS, the daily caps allow it and there is buying power.
@@ -100,7 +106,9 @@ systemd, plus a step-by-step guide in Slovak, `deploy/NAVOD.sk.md`).
 Config (`trader/config.json → autopilot`): `universe` (`mode` auto|watchlist, `stocks.top_n`,
 `stocks.include_movers`, `crypto.top_n`, `crypto.min_volume_usd`, `always`, `exclude`), `watchlist`
 (watchlist mode), `setups` per asset, `gates` (`min_backtest_triggers`, `min_backtest_expectancy_r`,
-`min_tm_ev_r`, `tm_paths`, `max_trigger_age_bars`), `scan_time_budget_sec`, `news_gate`
+`min_tm_ev_r`, `tm_paths`, `max_trigger_age_bars`), `scan_time_budget_sec`, `playbook`
+(`required_for_crypto`, `max_age_days`, `auto_refresh_days`, `top`, `min_target_r`, `confidence_sizing`,
+`risk_tiers`, `max_risk_mult`, `boost_min_test_trades`), `news_gate`
 (`lookback_hours`, `critical_tags`, `major_tags`, `min_credibility`, `refresh_before_trade`), `adapt`
 (`min_trades`, `disable_below_r`, `cooldown_days`, `symbol_loss_streak`, `loss_streak`,
 `loss_streak_risk_mult`, `max_drawdown_pct`), `max_new_trades_per_day`, `flatten_on_kill`,
@@ -159,6 +167,7 @@ WantedBy=multi-user.target
 
 * reads `config.json`, `limits.json`, `autopilot/control.json`, `secrets.env` (keys only, never echoed),
   `news_feed.json`, `journal.json`
+* reads `backtests/playbook.json` (the lab's validated crypto combinations)
 * writes `autopilot/state.json`, `autopilot/decisions.jsonl`, `autopilot/book.json`,
   `autopilot/heartbeat.json`, `autopilot/daemon.lock`, `autopilot/universe.json`, `autopilot/scan.json`,
   `autopilot/adapt.json`, `notifications.jsonl`, `news_feed.json` (just-in-time refresh), `ai_usage.json`,

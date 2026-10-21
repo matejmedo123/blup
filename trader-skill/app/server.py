@@ -765,10 +765,78 @@ def ai_view(cfg: dict = None) -> dict:
             "recent": recent[:10]}
 
 
+def _tier_mult(pc, n, pcfg: dict) -> float:
+    """Same tiers as the autopilot's confidence sizing (trader-autopilot/autopilot.py confidence_mult)."""
+    if not pcfg.get("confidence_sizing", True):
+        return 1.0
+    tiers = pcfg.get("risk_tiers") or [[0.9, 2.0], [0.8, 1.5], [0.7, 1.0], [0.0, 0.5]]
+    mult = 1.0
+    for threshold, m in sorted(([_num(a, 0.0), _num(b, 1.0)] for a, b in tiers), reverse=True):
+        if (_num(pc, 0.0) or 0.0) >= threshold:
+            mult = m
+            break
+    if mult > 1 and (int(_num(n, 0) or 0)) < int(_num(pcfg.get("boost_min_test_trades"), 30) or 30):
+        mult = 1.0
+    return min(mult, _num(pcfg.get("max_risk_mult"), 2.0) or 2.0)
+
+
+def lab_view(cfg: dict = None) -> dict:
+    """The backtest lab's last run and the crypto playbook the autopilot trades from."""
+    cfg = cfg or config.load_config()
+    pcfg = ((cfg.get("autopilot") or {}).get("playbook") or {})
+    out = {"required": bool(pcfg.get("required_for_crypto", True)), "max_age_days": _num(pcfg.get("max_age_days")),
+           "auto_refresh_days": _num(pcfg.get("auto_refresh_days")), "available": False, "playbook": None,
+           "families": [], "highest_win": []}
+    pb = read_json("backtests/playbook.json", None)
+    if isinstance(pb, dict) and isinstance(pb.get("entries"), dict):
+        entries = []
+        for key, e in pb["entries"].items():
+            if not isinstance(e, dict):
+                continue
+            te = e.get("test") if isinstance(e.get("test"), dict) else {}
+            entries.append({"key": key, "display": e.get("display") or e.get("symbol"), "setup": e.get("setup"),
+                            "interval": e.get("interval"), "exit": e.get("exit_text"),
+                            "win_rate": _num(te.get("win_rate")), "edge_r": _num(te.get("expectancy_r")),
+                            "profit_chance": _num(te.get("profit_chance")), "trades": te.get("n"),
+                            "risk_mult": _tier_mult(te.get("profit_chance"), te.get("n"), pcfg)})
+        entries.sort(key=lambda e: -(e["profit_chance"] or 0))
+        out["playbook"] = {"generated_at": pb.get("generated_at"), "valid_until": pb.get("valid_until"),
+                           "entries": entries}
+    doc = read_json("backtests/lab-crypto.json", None)
+    if isinstance(doc, dict) and isinstance(doc.get("families"), list):
+        out["available"] = True
+        out["generated_at"] = doc.get("generated_at")
+        out["universe"] = doc.get("universe")
+        out["timeframes"] = doc.get("timeframes")
+        out["costs"] = doc.get("costs")
+        out["summary"] = doc.get("summary") if isinstance(doc.get("summary"), dict) else {}
+        out["report"] = "lab-crypto.html" if (home() / "reports" / "lab-crypto.html").exists() else None
+        for f in doc["families"]:
+            if not isinstance(f, dict):
+                continue
+            tr = f.get("train") if isinstance(f.get("train"), dict) else {}
+            te = f.get("test") if isinstance(f.get("test"), dict) else {}
+            out["families"].append({"setup": f.get("setup"), "timeframe": f.get("timeframe"),
+                                    "exit": (f.get("exit") or {}).get("text") if isinstance(f.get("exit"), dict) else None,
+                                    "validated": bool(f.get("validated")), "verdict": f.get("verdict"),
+                                    "win_train": _num(tr.get("win_rate")), "win_test": _num(te.get("win_rate")),
+                                    "edge_train": _num(tr.get("expectancy_r")), "edge_test": _num(te.get("expectancy_r")),
+                                    "profit_chance": _num(te.get("profit_chance"))})
+            hw = f.get("highest_win") if isinstance(f.get("highest_win"), dict) else None
+            if hw:
+                out["highest_win"].append({"setup": f.get("setup"), "timeframe": f.get("timeframe"),
+                                           "exit": (hw.get("exit") or {}).get("text"),
+                                           "win_test": _num((hw.get("test") or {}).get("win_rate")),
+                                           "edge_test": _num((hw.get("test") or {}).get("expectancy_r"))})
+        out["highest_win"].sort(key=lambda x: -(x["win_test"] or 0))
+        out["highest_win"] = out["highest_win"][:4]
+    return out
+
+
 def system_view(app=None) -> dict:
     cfg = config.load_config()
     return {"now": _now_iso(), "health": health_view(), "sessions": sessions_view(cfg), "universe": universe_view(cfg),
-            "adapt": adapt_view(cfg), "notify": notify_view(cfg), "ai": ai_view(cfg),
+            "adapt": adapt_view(cfg), "notify": notify_view(cfg), "ai": ai_view(cfg), "lab": lab_view(cfg),
             "server": app.status() if app else {}}
 
 

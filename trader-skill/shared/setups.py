@@ -4,6 +4,10 @@ entry timer watches them candle by candle, the backtester replays them.
 All rules are long-only (shorts are blocked by default in the risk limits) and
 act only on *closed* bars. A window is one regular session for stocks and one
 UTC day for crypto and meme coins.
+
+Swing setups (kind "series", crypto, meant for 1-hour and 4-hour bars) need days of history — a 200-bar
+EMA — so they don't fit a one-day window: ``series_signals`` finds them across a whole candle series.
+The backtest lab tests them; the autopilot trades them only when the lab validated them.
 """
 from __future__ import annotations
 
@@ -25,7 +29,18 @@ SETUPS = {
     "utc_open_range": {"label": "UTC-day opening-range breakout (1 h)", "assets": ("crypto", "meme"),
                        "kind": "range", "range": "utc_open"},
     "momentum": {"label": "Momentum breakout", "assets": ("stock", "crypto", "meme"), "kind": "momentum"},
+    # swing setups — whole-series rules for 1h / 4h bars (see series_signals)
+    "trend_pullback": {"label": "Trend pullback (back above the 20 EMA in an uptrend)", "assets": ("crypto",),
+                       "kind": "series"},
+    "oversold_bounce": {"label": "Oversold bounce (RSI(2) under 10 above the 200 EMA)", "assets": ("crypto",),
+                        "kind": "series"},
+    "band_bounce": {"label": "Bollinger-band bounce above the 200 EMA", "assets": ("crypto",), "kind": "series"},
+    "breakout_24": {"label": "24-bar high breakout on 2× volume above the 200 EMA", "assets": ("crypto",),
+                    "kind": "series"},
 }
+SERIES_INTERVALS = ("1h", "4h")
+SERIES_WARMUP = 210          # bars before the first signal (the 200-bar EMA needs them)
+SERIES_COOLDOWN = 12         # bars after a signal before the same rule may fire again
 DEFAULT_SETUP = {"stock": "orb15", "crypto": "asia_range", "meme": "momentum"}
 
 DEFAULT_PARAMS = {
@@ -65,8 +80,18 @@ def check(setup: str, asset: str) -> dict:
     return spec
 
 
-def for_asset(asset: str) -> list:
-    return [k for k, v in SETUPS.items() if asset in v["assets"]]
+def for_asset(asset: str, kind: str = None) -> list:
+    """Setups for an asset class; kind "window" = one-day rules, "series" = swing rules, None = all."""
+    out = [k for k, v in SETUPS.items() if asset in v["assets"]]
+    if kind == "series":
+        return [k for k in out if SETUPS[k]["kind"] == "series"]
+    if kind == "window":
+        return [k for k in out if SETUPS[k]["kind"] != "series"]
+    return out
+
+
+def is_series(setup: str) -> bool:
+    return (SETUPS.get(setup) or {}).get("kind") == "series"
 
 
 def setup_id(symbol_key: str, window_key: str, setup: str) -> str:
@@ -143,6 +168,9 @@ def _trigger(bar, index, step):
 
 def evaluate(setup: str, window: Window, now_ts: int = None, params: dict = None, since_ts: int = None) -> dict:
     spec = check(setup, window.asset)
+    if spec["kind"] == "series":
+        raise SetupError("%s is a multi-day swing setup for 1h/4h bars — test it with trader-backtest/lab.py"
+                         % setup)
     p = dict(DEFAULT_PARAMS)
     p.update(params or {})
     step = market_clock.interval_seconds(window.interval)
@@ -388,3 +416,78 @@ def _eval_momentum(setup, window, bars, step, p, since_ts):
     levels = {"trigger_level": hi, "stop_ref": min(b.l for b in bars[-6:])}
     return _result(setup, window, "watching", "%s close above the %d-bar high %s on %.0f×+ volume" % (
         label, n, fmt.price(hi), mult), levels, bars_seen=len(bars))
+
+
+# --- swing setups across a whole series ------------------------------------------------------------
+
+def _series_context(candles) -> dict:
+    cl = [c.c for c in candles]
+    return {"close": cl, "ema20": indicators.ema(cl, 20), "ema50": indicators.ema(cl, 50),
+            "ema200": indicators.ema(cl, 200), "rsi14": indicators.rsi(cl, 14), "rsi2": indicators.rsi(cl, 2),
+            "bb_low": indicators.bollinger_lower(cl, 20, 2.0)}
+
+
+def _series_hit(setup: str, candles, i: int, x: dict):
+    """(rule text, levels) when ``setup`` fires on the close of bar i, else None."""
+    c, cl = candles[i], x["close"]
+    if cl[i] <= x["ema200"][i]:
+        return None  # every swing rule here is long-only and wants the long-term trend up
+    low10 = min(b.l for b in candles[i - 9:i + 1])
+    if setup == "trend_pullback":
+        if (x["ema50"][i] > x["ema200"][i] and min(x["rsi14"][i - 6:i]) < 40
+                and cl[i - 1] < x["ema20"][i - 1] and cl[i] > x["ema20"][i]):
+            return ("close back above the 20 EMA %s after an RSI(14) dip below 40, 50 EMA above the 200 EMA"
+                    % fmt.price(x["ema20"][i]), {"trigger_level": x["ema20"][i], "stop_ref": low10,
+                                                 "ema200": x["ema200"][i]})
+    elif setup == "oversold_bounce":
+        if x["rsi2"][i] < 10:
+            return ("RSI(2) %.1f — oversold inside an uptrend (close above the 200 EMA %s)" % (
+                x["rsi2"][i], fmt.price(x["ema200"][i])), {"trigger_level": cl[i], "stop_ref": low10,
+                                                            "ema200": x["ema200"][i]})
+    elif setup == "band_bounce":
+        if cl[i - 1] < x["bb_low"][i - 1] and cl[i] > x["bb_low"][i]:
+            return ("close back inside the lower Bollinger band %s above the 200 EMA" % fmt.price(x["bb_low"][i]),
+                    {"trigger_level": x["bb_low"][i], "stop_ref": low10, "ema200": x["ema200"][i]})
+    elif setup == "breakout_24":
+        prior = candles[i - 24:i]
+        hi = max(b.h for b in prior)
+        med = indicators.median([b.v for b in prior])
+        if cl[i] > hi and med and c.v >= 2 * med:
+            return ("close above the 24-bar high %s on %.1f× volume" % (fmt.price(hi), c.v / med),
+                    {"trigger_level": hi, "stop_ref": min(b.l for b in candles[i - 5:i + 1]),
+                     "ema200": x["ema200"][i]})
+    return None
+
+
+def series_signals(setup: str, candles, interval: str = "1h", start_ts: int = None) -> list:
+    """Every bar where a swing setup fired (closed bars only), with a cool-down between signals.
+
+    Returns trigger dicts shaped like ``evaluate`` results: setup, label, rule, levels, stop_ref, trigger, window.
+    """
+    spec = SETUPS.get(setup) or {}
+    if spec.get("kind") != "series":
+        raise SetupError("%s is not a swing setup" % setup)
+    step = market_clock.interval_seconds(interval)
+    if len(candles) <= SERIES_WARMUP:
+        return []
+    x = _series_context(candles)
+    out, last = [], None
+    for i in range(SERIES_WARMUP, len(candles)):
+        if last is not None and i - last < SERIES_COOLDOWN:
+            continue
+        hit = _series_hit(setup, candles, i, x)
+        if not hit:
+            continue
+        last = i
+        if start_ts is not None and candles[i].t < start_ts:
+            continue
+        rule, levels = hit
+        key = market_clock.from_ts(candles[i].t).strftime("%Y-%m-%dT%H%M")
+        out.append({"setup": setup, "label": spec["label"], "direction": "long", "status": "triggered",
+                    "rule": "%s %s" % (bar_label(interval), rule),
+                    "levels": {k: (round(v, 10) if isinstance(v, float) else v) for k, v in levels.items()},
+                    "range": None, "stop_ref": levels.get("stop_ref"), "trigger": _trigger(candles[i], i, step),
+                    "notes": ["the %s %s candle closed on the signal" % (_clock(candles[i].t, "crypto"),
+                                                                           bar_label(interval))],
+                    "window": key, "bars_seen": i + 1, "interval": interval})
+    return out

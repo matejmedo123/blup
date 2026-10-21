@@ -38,7 +38,7 @@ class V3(TraderTestCase):
     def setUp(self):
         super().setUp()
         config.ensure_home()
-        self.cfg(universe={"mode": "watchlist"})
+        self.cfg(universe={"mode": "watchlist"}, playbook={"required_for_crypto": False})
 
     def cfg(self, top=None, **autopilot):
         doc = json.loads((self.home / "config.json").read_text())

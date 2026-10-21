@@ -576,3 +576,47 @@ market-wide crypto items), newest first, max 15, each `{"id","title","source","k
   that was not GO (no API call). A review needs two calls, so the budget refuses when fewer than two remain.
 * `autopilot/state.json` gains `universe` (counts), `notes` (last 20 scan notes) and `summary_sent`
   (New York date of the last daily summary). `autopilot/housekeeping.jsonl` logs background failures.
+
+## v3.1 — backtest lab, crypto playbook, sizing by certainty
+
+### `config.json` additions
+```json
+"autopilot": {"playbook": {
+  "required_for_crypto": true,   // crypto is traded only from a fresh lab playbook
+  "max_age_days": 14,            // older playbooks are ignored (no crypto trades)
+  "auto_refresh_days": 7,        // the daemon re-runs the lab in the background this often (0 = never)
+  "top": 25,                     // coins the weekly lab run covers
+  "min_target_r": 0,             // e.g. 2 = the weekly run keeps only exits that aim for 2R or more
+  "confidence_sizing": true,     // risk per trade × the tier of the lab's profit chance on unseen trades
+  "risk_tiers": [[0.9, 2.0], [0.8, 1.5], [0.7, 1.0], [0.0, 0.5]],
+  "max_risk_mult": 2.0,
+  "boost_min_test_trades": 30    // no boost above × 1 with fewer unseen trades than this
+}}
+```
+A boost raises `risk_per_trade_pct` only; `limits.json` (`max_risk_per_trade_usd`, `max_position_pct`,
+exposure, daily loss) still caps every order. A cut (× 0.5) also lowers the per-trade cap.
+
+### `backtests/lab-crypto.json` — written by `trader-backtest/lab.py`
+`{"generated_at", "universe", "coins", "timeframes": ["5m","1h","4h"], "days": {"5m": 180, "1h": 365, "4h": 730},
+  "objective": "profit|win", "test_frac": 0.333, "costs": {"fee_bps", "slippage_bps", "round_trip_pct"},
+  "grid": {...}, "rules": {"min_target_r", "min_pooled", "min_pooled_test", "min_test", "min_edge_r", "profit_chance_trades"},
+  "summary": {"families", "families_validated", "coins_validated", "per_coin_picks", "per_coin_survived",
+              "per_coin_survival_rate", "seconds"},
+  "families": [{"setup", "label", "timeframe", "train_until", "coins", "signals", "exit": {"stop", "atr_mult",
+                "target_r", "horizon", "text"} | null, "train": {stats}, "test": {stats}, "validated": bool,
+                "validated_coins": [...], "verdict", "highest_win": {"exit", "train", "test"} | null}],
+  "validated": [{"symbol", "display", "setup", "timeframe", "exit", "train", "test", "validated": true, "why"}],
+  "coins_detail": [... the same per coin, validated or not ...], "notes": [...]}`
+stats = `{"n", "win_rate", "expectancy_r", "total_r", "profit_factor", "avg_win_r", "avg_loss_r", "max_drawdown_r",
+"profit_chance"}` (net of costs; profit chance = share of 4,000 bootstrap runs of 20 trades that ended > 0).
+
+### `backtests/playbook.json` — what the autopilot may trade in crypto
+`{"generated_at", "valid_until", "objective", "costs", "days", "families_validated",
+  "entries": {"BTCUSDT:oversold_bounce@1h": {"symbol", "display", "setup", "interval": "5m|1h|4h", "stop": "auto|atr",
+              "atr_mult", "target_r", "horizon": "24h", "exit_text", "test": {"n", "win_rate", "expectancy_r",
+              "profit_chance", "profit_factor"}, "train": {"n", "win_rate", "expectancy_r"}}}}`
+Plans traded from it carry `"playbook": "<key>"` and `"interval"`; their `backtests/<key>-<setup>.json` is the
+lab's test-period result (`"source": "backtest lab"`). Swing-setup ids use the bar time:
+`BTCUSDT-20261021T1300-oversold_bounce`.
+
+### `cache/lab/<symbol>-<interval>.json` — the lab's candle store (only the new tail is downloaded on re-runs)

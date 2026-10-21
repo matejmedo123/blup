@@ -352,6 +352,36 @@ class V3Views(DashboardCase):
         self.assertNotIn("Secure", hdrs.get("Set-Cookie", ""))  # plain http on loopback
 
 
+class LabView(DashboardCase):
+    def test_no_lab_yet(self):
+        v = load("app", "server").lab_view()
+        self.assertEqual((v["available"], v["playbook"], v["required"]), (False, None, True))
+
+    def test_playbook_and_last_run(self):
+        e = {"symbol": "BTCUSDT", "display": "BTC/USDT", "setup": "oversold_bounce", "interval": "1h",
+             "exit_text": "1R target · 3×ATR stop · 24h",
+             "test": {"n": 45, "win_rate": 0.62, "expectancy_r": 0.14, "profit_chance": 0.91, "profit_factor": 1.6}}
+        weak = dict(e, symbol="ETHUSDT", display="ETH/USDT", test=dict(e["test"], profit_chance=0.6))
+        self.write_state("backtests/playbook.json", {"generated_at": "2026-10-20T00:00:00Z",
+                                                     "valid_until": "2026-11-03T00:00:00Z",
+                                                     "entries": {"BTCUSDT:oversold_bounce@1h": e,
+                                                                 "ETHUSDT:oversold_bounce@1h": weak}})
+        self.write_state("backtests/lab-crypto.json", {
+            "generated_at": "2026-10-20T00:00:00Z", "universe": "top 30", "timeframes": ["5m", "1h", "4h"],
+            "costs": {"round_trip_pct": 0.26}, "summary": {"families": 14, "families_validated": 1,
+                                                           "per_coin_survival_rate": 0.26},
+            "families": [{"setup": "oversold_bounce", "timeframe": "1h", "validated": True, "verdict": "held",
+                          "exit": {"text": "1R target"}, "train": {"win_rate": 0.6, "expectancy_r": 0.1},
+                          "test": {"win_rate": 0.62, "expectancy_r": 0.14, "profit_chance": 0.9},
+                          "highest_win": {"exit": {"text": "0.5R"}, "test": {"win_rate": 0.7, "expectancy_r": -0.1}}}]})
+        v = load("app", "server").lab_view()
+        self.assertTrue(v["available"])
+        mults = {x["display"]: x["risk_mult"] for x in v["playbook"]["entries"]}
+        self.assertEqual(mults, {"BTC/USDT": 2.0, "ETH/USDT": 0.5})
+        self.assertEqual(v["highest_win"][0]["edge_test"], -0.1)
+        self.assertIn("lab", load("app", "server").system_view())
+
+
 class Security(DashboardCase):
     def test_secrets_never_appear_in_any_response(self):
         for k, v in FAKE_SECRETS.items():

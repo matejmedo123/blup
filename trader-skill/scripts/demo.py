@@ -149,6 +149,9 @@ def autopilot():
     end = MAN["default_now"]
     banner("5 · Autopilot — the bot picks its own stocks and coins and trades the whole day by itself in the local "
            "simulator (paper money, no account)")
+    # crypto only from what the backtest lab validated — on 30 days of fixtures it finds nothing, so no crypto trades
+    run("trader-backtest", "lab.py", ["--symbols", "BTCUSDT,ETHUSDT,SOLUSDT,XRPUSDT", "--days", "30", "--swing-days",
+                                      "30"], "2026-10-20T13:30:00Z", home=AUTO_HOME)
     run("trader-autopilot", "autopilot.py", ["replay", "--from", "2026-10-20T13:35:00Z", "--to", end, "--step", "5m",
                                              "--approve"], end, home=AUTO_HOME)
     run("trader-autopilot", "autopilot.py", ["universe"], end, home=AUTO_HOME)

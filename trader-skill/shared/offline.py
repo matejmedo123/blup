@@ -132,9 +132,43 @@ def _nasdaq(m, q, url):
 
 # --- crypto (CEX) -------------------------------------------------------------
 
+_KLINE_SECONDS = {"15m": 900, "1h": 3600, "4h": 14400}
+
+
+def _resample_klines(rows: list, seconds: int) -> list:
+    """5-minute fixture rows → longer bars in Binance's raw format (only complete buckets)."""
+    out, cur, n_in = [], None, seconds // 300
+    for r in rows:
+        start = r[0] // 1000 // seconds * seconds * 1000
+        if cur is None or cur[0] != start:
+            if cur is not None and cur[-1] == n_in:
+                out.append(cur[:-1])
+            cur = [start, r[1], r[2], r[3], r[4], float(r[5]), start + seconds * 1000 - 1, float(r[7]), int(r[8]),
+                   float(r[9]), float(r[10]), "0", 0]
+        cur[2] = str(max(float(cur[2]), float(r[2])))
+        cur[3] = str(min(float(cur[3]), float(r[3])))
+        cur[4] = r[4]
+        if cur[-1]:
+            cur[5] += float(r[5])
+            cur[7] += float(r[7])
+            cur[8] += int(r[8])
+            cur[9] += float(r[9])
+            cur[10] += float(r[10])
+        cur[-1] += 1
+    if cur is not None and cur[-1] == n_in:
+        out.append(cur[:-1])
+    return [[r[0], r[1], r[2], r[3], r[4], "%.8f" % r[5], r[6], "%.2f" % r[7], r[8], "%.8f" % r[9], "%.2f" % r[10],
+             r[11]] for r in out]
+
+
 @route(r"(api\.binance\.com|data-api\.binance\.vision)", r"/api/v3/klines")
 def _binance_klines(m, q, url):
-    rows = _json("binance/klines/%s_%s.json" % (_safe(q.get("symbol", "")), _safe(q.get("interval", ""))), url)
+    sym, interval = _safe(q.get("symbol", "")), _safe(q.get("interval", ""))
+    if not _file("binance/klines/%s_%s.json" % (sym, interval)).exists() and interval in _KLINE_SECONDS \
+            and _file("binance/klines/%s_5m.json" % sym).exists():
+        rows = _resample_klines(_json("binance/klines/%s_5m.json" % sym, url), _KLINE_SECONDS[interval])
+    else:
+        rows = _json("binance/klines/%s_%s.json" % (sym, interval), url)
     limit = min(int(q.get("limit", 500)), 1000)
     start = int(q["startTime"]) if "startTime" in q else None
     end = int(q["endTime"]) if "endTime" in q else None

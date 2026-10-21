@@ -1,6 +1,6 @@
 ---
 name: trader-backtest
-description: Backtester for day-trading setups on US stocks, crypto and DEX meme coins. Replays one setup rule (opening-range breakout, gap-and-go, VWAP reclaim, bull flag, Asia/US-open range breakout, momentum) over the last N sessions or days with the exit planner's stop/target/time stop, fees and slippage — "Last 59 sessions: 33 triggers, 13 hit target, 15 hit stop, 5 neither." Use when the user asks "does this setup work?", "backtest the ORB on TSLA", "how often does the Asia-range breakout hit target on BTC?", "validate this setup before I trade it", "what's the hit rate?".
+description: Backtester for day-trading setups on US stocks, crypto and DEX meme coins. Replays one setup rule (opening-range breakout, gap-and-go, VWAP reclaim, bull flag, Asia/US-open range breakout, momentum) over the last N sessions or days with the exit planner's stop/target/time stop, fees and slippage — "Last 59 sessions: 33 triggers, 13 hit target, 15 hit stop, 5 neither." Also the backtest lab (`lab.py`): every crypto setup on dozens of coins and on 5-minute, 1-hour and 4-hour bars, a grid of 160 exits, pooled train/test validation, and the playbook of validated coin+setup combinations the autopilot trades crypto from — sized by how certain the result is. Use when the user asks "does this setup work?", "backtest the ORB on TSLA", "how often does the Asia-range breakout hit target on BTC?", "validate this setup before I trade it", "what's the hit rate?", "backtest more coins", "which crypto setup has the highest chance?", "find the best exits", or "refresh the playbook".
 ---
 
 # Trader · Backtester
@@ -36,21 +36,56 @@ auto|range|level|atr`, `--atr-mult`, `--horizon 1h|4h|24h`, `--trail`, `--fee-bp
 Free Yahoo data keeps only ~60 calendar days of 5-minute bars (≈ 40 sessions); meme coins often
 have only days of history — the tool warns when the sample is thin (< 10 triggers).
 
+## Backtest lab — many coins, every setup, honest validation
+
+```bash
+python3 "${CLAUDE_SKILL_DIR}/lab.py"                                  # top 25 coins · 5m 180 d · 1h 365 d · 4h 730 d
+python3 "${CLAUDE_SKILL_DIR}/lab.py" --symbols BTCUSDT,ETHUSDT --timeframes 1h,4h
+python3 "${CLAUDE_SKILL_DIR}/lab.py" --objective win                  # highest share of winners instead of certainty
+python3 "${CLAUDE_SKILL_DIR}/lab.py" --min-target-r 2                 # only exits that aim for 2R or more
+python3 "${CLAUDE_SKILL_DIR}/lab.py" --fee-bps 25                     # e.g. Alpaca's crypto taker fee
+```
+
+* Setups: the one-day crypto rules on 5-minute bars, plus four swing rules on 1-hour and 4-hour bars
+  (trend pullback, oversold bounce, Bollinger-band bounce, 24-bar breakout — all long, all above the
+  200 EMA).
+* Exits: targets 0.5–5R × structure stop or 1/1.5/2/3×ATR × four time stops (5m: 1–24 h; 1h: 12–72 h;
+  4h: 1–7 days) = 160 per setup and timeframe, fees and slippage on every trade.
+* **Certainty first:** the exit with the highest *profit chance* (how often 20 trades ended in profit)
+  among exits with a net edge is picked on the **train** period (first two thirds) with all coins
+  pooled, then run unchanged on the **test** period (last third). A coin is **validated** only if the
+  pooled rule held on the test period and that coin made money with it on both periods.
+* The report also shows the highest *win chance* each setup can reach and what it earned — usually a
+  lot of small wins and a loss overall — and an overfitting check: how many per-coin "best settings"
+  survived the test period.
+* Validated combinations go to `trader/backtests/playbook.json` (valid 14 days). The autopilot trades
+  crypto **only** from it, with those exits, and sizes by certainty: profit chance ≥ 90 % → risk × 2,
+  ≥ 80 % → × 1.5, ≥ 70 % → × 1, lower → × 0.5 (a boost needs ≥ 30 unseen trades; `limits.json` caps
+  always apply). The daemon re-runs the lab weekly.
+* History is cached in `trader/cache/lab/` and only the new tail is downloaded next time (the first run
+  downloads ~6 months of 5-minute bars per coin and takes 10–15 minutes).
+
 ## Reads / writes (in `trader/`)
 
 - reads `config.json` (costs, horizons), `limits.json` (meme default size)
 - writes `backtests/<symbol_key>-<setup>.json` (stats + every trade) and
   `reports/backtest-<symbol_key>-<setup>.html` (cumulative R chart, outcome table, trades)
+- lab: writes `backtests/lab-crypto.json`, `backtests/playbook.json`, `reports/lab-crypto.html` and the
+  candle store `cache/lab/<symbol>-<interval>.json`
 
 ## How to present results
 
 Quote the summary sentence exactly ("Last 59 sessions: 33 triggers, 13 hit target, 15 hit stop,
 5 neither.") then win rate, average net R and max drawdown, and the cost assumptions. Flag thin
 samples plainly. Past hit rates are not a promise — say so. Suggest `/trader-timemachine` next.
-Always include the disclaimer line.
+For the lab: lead with how many combinations were validated on unseen data, then the validated list
+(win chance, edge, profit chance, test trades), then the "highest win chance" table to explain why a
+high hit rate alone loses money, and the overfitting check. If nothing was validated, say plainly that
+the autopilot will not trade crypto until something is. Always include the disclaimer line.
 
 ## Never
 
 - Never present a backtest as a prediction or guarantee, and never cherry-pick parameters until
-  the numbers look good without telling the user.
+  the numbers look good without telling the user — the lab's train/test split exists for exactly this;
+  quote test-period numbers, not train-period ones.
 - Never place orders or call a broker/exchange trading API.

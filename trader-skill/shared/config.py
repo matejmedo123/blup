@@ -59,6 +59,9 @@ DEFAULT_CONFIG = {
             "exclude": [],
         },
         "scan_time_budget_sec": 40,
+        "playbook": {"required_for_crypto": True, "max_age_days": 14, "auto_refresh_days": 7, "top": 25,
+                     "min_target_r": 0, "confidence_sizing": True, "max_risk_mult": 2.0,
+                     "risk_tiers": [[0.9, 2.0], [0.8, 1.5], [0.7, 1.0], [0.0, 0.5]], "boost_min_test_trades": 30},
         "news_gate": {
             "enabled": True,
             "refresh_before_trade": True,
