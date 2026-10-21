@@ -365,6 +365,8 @@ a.answer:hover .v { text-decoration: underline; }
 .levels { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .levels span { white-space: nowrap; }
 .levels .stop { color: var(--loss); } .levels .entry { color: var(--faint); } .levels .target { color: var(--profit); }
+.levels .target.open { color: var(--muted); }
+.range.open .reward { background: linear-gradient(90deg, var(--profit-bg), transparent); }
 .hint { font-size: 12px; color: var(--faint); margin-top: 12px; }
 
 /* --- key/value grids ------------------------------------------------------------------- */

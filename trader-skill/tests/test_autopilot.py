@@ -83,7 +83,12 @@ class Day(TraderTestCase):
     def test_kill_cancels_flattens_and_stays_killed_until_resume(self):
         self.cycle("2026-10-20T13:50:00Z")
         self.cycle("2026-10-20T13:55:00Z")
-        self.assertEqual(len(state.read_json("broker/positions.json")), 1)
+        held = state.read_json("broker/positions.json")
+        self.assertEqual(len(held), 1)
+        # the dashboard draws the position between its stop and target
+        self.assertLess(held[0]["stop"], held[0]["avg_entry"])
+        self.assertGreater(held[0]["target"], held[0]["avg_entry"])
+        self.assertFalse(held[0]["rule_exit"])
         ap().write_control(kill=True)
         res = self.cycle("2026-10-20T14:30:00Z")
         self.assertEqual(res["status"], "killed")

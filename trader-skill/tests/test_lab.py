@@ -398,6 +398,9 @@ class DailyAutopilot(TraderTestCase):
         self.assertIn("3×ATR", plan["stop"]["note"])
         self.assertEqual(mc.ts(plan["time_stop"]["at"]) - mc.ts(plan["entry"]["time"]), 10 * 86400)
         self.assertIn("exit rule decides", plan["target"]["note"])
+        # like the lab's rule trades: no take-profit before the exit rule — only the stop and the rule close it
+        risk = plan["entry"]["price"] - plan["stop"]["price"]
+        self.assertGreaterEqual((plan["target"]["price"] - plan["entry"]["price"]) / risk, 999)
         self.assertFalse(list((self.home / "timemachine").glob("ETHUSDT-*")))  # no replay for a rule exit
         desk = state.read_json("desk/%s/desk.json" % did)
         tm = [g for g in desk["gates"] if g["name"] == "Time Machine"][0]

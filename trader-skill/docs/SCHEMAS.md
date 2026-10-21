@@ -634,7 +634,7 @@ lab's test-period result (`"source": "backtest lab"`). Swing-setup ids use the b
 ### Rule-exit plans (daily setups)
 Plans from `trend_ema` / `trend_breakout` / `breakout_volume` / `dip_in_uptrend` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
 the setup's protective stop (`stop_rule`: 3×ATR, below the 10-day swing low, or 1 ATR under the broken
-high), a far target cap (10R) and a time stop of `max_bars` days. The autopilot checks the rule after
+high), a target out of reach (1000R — the lab's rule trades have no target either) and a time stop of `max_bars` days. The autopilot checks the rule after
 every daily close that happened after the fill and closes with `"reason": "rule"` (journal exit reason `rule`). The
 Time Machine is skipped for them (it models stop / target / time only); the desk shows its gate as "not applicable"
 and relies on the lab's walk-forward record. Both setups need Bitcoin above its 200-day average

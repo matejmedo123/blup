@@ -141,9 +141,13 @@ class BacktestVsReality(TraderTestCase):
         self.write_state("autopilot/book.json", {"items": {}})
         state.append_jsonl("autopilot/decisions.jsonl", {"id": self.sid, "action": "skipped",
                                                          "reasons": ["5 open/pending crypto position(s) — max 5"]})
+        state.append_jsonl("autopilot/decisions.jsonl", {"id": self.sid, "action": "skipped",
+                                                         "reasons": ["desk NO-GO: the idea is stale: entry was 24.1 h ago"]})
         doc = shadow.run(self.cfg)
         self.assertEqual((doc["rows"][0]["outcome"], doc["verdict"]), ("skipped", "ok"))
-        self.assertIn("max 5", doc["rows"][0]["reason"])
+        self.assertIn("max 5", doc["rows"][0]["reason"])  # why it was not taken while fresh, not the next day's look
+        state.append_jsonl("autopilot/decisions.jsonl", {"id": self.sid, "action": "taken", "reasons": []})
+        self.assertEqual(shadow.run(self.cfg)["rows"][0]["outcome"], "ordered")
 
     def test_a_trade_the_rules_do_not_explain_is_extra(self):
         state.append_jsonl("autopilot/decisions.jsonl", {"id": self.sid, "action": "skipped", "reasons": ["x"]})

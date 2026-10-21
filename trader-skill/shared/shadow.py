@@ -37,10 +37,15 @@ def _btc_up(memo: dict, days: int, now_ts: int) -> dict:
 
 
 def _decisions() -> dict:
+    """One decision per signal id: the first, which says why the signal was not taken while it was fresh (a later
+    look only finds it stale) — unless a later one placed or tried to place the order."""
     out = {}
     for d in state.read_jsonl(DECISIONS):
-        if d.get("id"):
-            out[d["id"]] = d  # the last word on each id
+        if not d.get("id"):
+            continue
+        prev = out.get(d["id"])
+        if prev is None or (d.get("action") in ("taken", "error") and prev.get("action") != "taken"):
+            out[d["id"]] = d
     return out
 
 

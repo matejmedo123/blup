@@ -126,6 +126,10 @@ def _write_broker_files(broker, acct, positions, orders, book, realized_today):
             it = book["items"][p["plan_id"]]
             p["story"] = position_story(it)
             p["riding"] = (it.get("runner") or {}).get("status") == "riding"
+            for k in ("stop", "target"):  # the dashboard draws the position between them
+                if p.get(k) is None and it.get(k) is not None:
+                    p[k] = it[k]
+            p["rule_exit"] = bool(it.get("exit_rule"))
     state.write_json("broker/positions.json", positions)
     state.write_json("broker/orders.json", orders[-200:])
     unreal = sum(float(p.get("unrealized_pl") or 0) for p in positions)
@@ -557,8 +561,11 @@ def watched(cfg: dict, broker=None, now=None) -> tuple:
 
 
 SERIES_HISTORY_DAYS = {"1h": 12, "4h": 45, "1d": 300}   # enough closed bars for the 200-bar averages
-RULE_TARGET_CAP_R = 10.0   # rule-exit plans still carry a target (brackets, gates); it is far away on purpose
-RIDE_TARGET_R = 100.0      # the part that rides on has no real target — the trend decides
+# Rule-exit plans still carry a target (brackets need one) but the lab's rule trades have none: the stop and the
+# exit rule decide. A 10R cap halved the average trade on 2018–2026 data (+1.78R → +0.90R): the few huge trends
+# (ZEC +133R, BNB +100R, BTC +48R) are what pays for all the small losses. So the target is out of reach.
+RULE_TARGET_CAP_R = 1000.0
+RIDE_TARGET_R = 1000.0     # the part that rides on has no real target either — the trend decides
 
 
 def add_playbook_coins(uni: dict, pbs: dict, cfg: dict, limits: dict, broker=None) -> list:

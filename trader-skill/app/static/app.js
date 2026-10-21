@@ -490,19 +490,25 @@
       h('div', { class: 'right' }, right || null, acct));
   }
 
-  // stop on the left, target on the right, a tick at the entry and a dot where the price is now
+  // stop on the left, target on the right, a tick at the entry and a dot where the price is now; a trade the exit
+  // rule closes has no target in reach — its bar ends a little past the price and says so
   function rangeBar(p) {
     var stop = num(p.stop), tgt = num(p.target), entry = num(p.avg_entry), last = num(p.last);
-    if (stop === null || tgt === null || entry === null || !(tgt > stop) || tgt > entry * 5) return null;
-    var lo = Math.min(stop, last === null ? stop : last), hi = Math.max(tgt, last === null ? tgt : last);
+    if (stop === null || entry === null || !(entry > stop)) return null;
+    var open = p.rule_exit || p.riding || tgt === null || tgt > entry + 20 * (entry - stop);
+    var lo = Math.min(stop, last === null ? stop : last);
+    var hi = open ? Math.max(entry + 2 * (entry - stop), last === null ? entry : last + 0.25 * (entry - stop)) : Math.max(tgt, last === null ? tgt : last);
+    if (!(hi > lo)) return null;
     function at(v) { return 100 * (v - lo) / (hi - lo); }
-    var bar = h('div', { class: 'range', role: 'img', 'aria-label': 'stop ' + price(stop) + ', entry ' + price(entry) + ', target ' + price(tgt) +
-      (last !== null ? ', now ' + price(last) : '') },
+    var bar = h('div', { class: 'range' + (open ? ' open' : ''), role: 'img', 'aria-label': 'stop ' + price(stop) + ', entry ' + price(entry) +
+      (open ? ', no target' : ', target ' + price(tgt)) + (last !== null ? ', now ' + price(last) : '') },
       setWidth(h('span', { class: 'risk' }), at(entry)), setWidth(h('span', { class: 'reward' }), 100 - at(entry)),
       setLeft(h('span', { class: 'entry' }), at(entry)),
       last !== null ? setLeft(h('span', { class: 'now ' + (last >= entry ? 'up' : 'down') }), at(last)) : null);
     return [bar, h('div', { class: 'levels' }, h('span', { class: 'stop', text: 'stop ' + price(stop) }),
-      h('span', { class: 'entry', text: 'entry ' + price(entry) }), h('span', { class: 'target', text: 'target ' + price(tgt) }))];
+      h('span', { class: 'entry', text: 'entry ' + price(entry) }),
+      open ? h('span', { class: 'target open', text: p.riding ? 'riding — the trend decides' : 'no target — the exit rule decides' })
+        : h('span', { class: 'target', text: 'target ' + price(tgt) }))];
   }
   function positionCards(list) {
     if (!list.length) return empty('No open positions.');
@@ -516,7 +522,7 @@
           h('span', { class: 'last', text: 'last ' + price(p.last) })),
         rangeBar(p),
         p.story ? h('div', { class: 'story', text: p.story }) : null);
-    })), h('div', { class: 'hint', text: 'The bar runs from the stop (left) to the target (right) — the dot is where the price is now.' }));
+    })), h('div', { class: 'hint', text: 'The bar runs from the stop (left) towards the target — the tick is the entry, the dot is where the price is now.' }));
   }
 
   // the answers on top of the Overview: is the bot up, is it normal, did it follow its rules, how much risk is in use
