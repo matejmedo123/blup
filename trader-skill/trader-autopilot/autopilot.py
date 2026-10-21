@@ -21,6 +21,7 @@ Examples:
   python3 autopilot.py loop --approve --interval 60
   python3 autopilot.py universe [--refresh] | learned | notify-test
   python3 autopilot.py pause | resume | kill --confirm KILL | check-live
+  python3 autopilot.py profile --risk 2 --leverage 1.5 --capital 1000 [--write]   # the backtested daily-trend setup
   python3 autopilot.py replay --from 2026-10-20T13:35:00Z --to 2026-10-20T20:00:00Z --approve --offline
 """
 from __future__ import annotations
@@ -125,6 +126,9 @@ def _write_broker_files(broker, acct, positions, orders, book, realized_today):
     unreal = sum(float(p.get("unrealized_pl") or 0) for p in positions)
     line = {"at": market_clock.iso(market_clock.now_utc()), "equity": acct.get("equity"), "cash": acct.get("cash"),
             "unrealized": round(unreal, 2), "realized_today": round(realized_today, 2), "mode": broker.mode}
+    for k in ("borrowed", "interest_paid"):  # only when leverage is in play
+        if acct.get(k):
+            line[k] = acct[k]
     state.append_jsonl("broker/equity.jsonl", line)
     return line
 
@@ -414,8 +418,11 @@ def playbook_state(cfg: dict, now=None) -> dict:
     required = bool(pb_cfg.get("required_for_crypto", True))
     lab = _mod("trader-backtest", "lab")
     pb, problem = lab.load_playbook(now, float(pb_cfg.get("max_age_days") or lab.PLAYBOOK_DAYS))
+    only_setups, only_tfs = pb_cfg.get("setups"), pb_cfg.get("timeframes")
     by_coin = {}
     for key, e in ((pb or {}).get("entries") or {}).items():
+        if (only_setups and e.get("setup") not in only_setups) or (only_tfs and e.get("interval") not in only_tfs):
+            continue
         by_coin.setdefault(e["symbol"], []).append(dict(e, key=key))
     return {"required": required, "playbook": pb, "problem": problem, "by_coin": by_coin}
 
@@ -738,8 +745,12 @@ def confidence_mult(entry: dict, cfg: dict) -> tuple:
     min_n = int(pb_cfg.get("boost_min_test_trades") or 30)
     if mult > 1 and n < min_n:
         mult, why = 1.0, why + " — too few to size up (want ≥ %d)" % min_n
-    cap = float(pb_cfg.get("max_risk_mult") or 2.0)
-    return min(mult, cap), why
+    mult = min(mult, float(pb_cfg.get("max_risk_mult") or 2.0))
+    base = float(cfg.get("risk_per_trade_pct", 0.5))
+    top = pb_cfg.get("max_risk_pct")
+    if top is not None and base > 0 and base * mult > float(top) + 1e-9:
+        mult, why = float(top) / base, why + " — capped at %g%% per trade (playbook.max_risk_pct)" % float(top)
+    return mult, why
 
 
 def ai_review(plan: dict, desk: dict, cfg: dict) -> tuple:
@@ -820,9 +831,12 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
                       "detail": "risk × %g — %s%s" % (conf, conf_why, " (limits.json still caps it)" if conf > 1
                                                        else "")})
     mult *= conf
+    lev, lev_why = config.leverage(cfg, limits, asset, broker.name)
+    if lev_why:
+        gates.append({"name": "leverage", "ok": True, "detail": lev_why})
     s_cfg, s_limits = _scaled(cfg, limits, asset, mult)
     try:
-        order = sizer.size_order(plan, s_cfg, s_limits, account=acct.get("equity") or None)
+        order = sizer.size_order(plan, s_cfg, s_limits, account=acct.get("equity") or None, leverage=lev)
     except ValueError as exc:
         return _decision(reasons=["sizer: %s" % exc], desk=desk_info, gates=gates, **base)
     order["origin"] = "autopilot"
@@ -838,9 +852,13 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         fmt.qty(order["qty"]), bsym, fmt.price(order["limit_price"]), fmt.price(order["stop_price"]),
         fmt.price(order["target_price"]), broker.mode.upper())
     cash = float(acct.get("buying_power") or acct.get("cash") or 0)
+    if acct.get("cash") is not None and float(acct.get("equity") or 0) > 0:
+        # never more borrowed money than the leverage you allowed, whatever the broker would lend
+        cash = min(cash, float(acct["cash"]) + (lev - 1) * float(acct["equity"]))
     if order["notional_usd"] > cash + 1e-6:
-        return _decision(reasons=["not enough buying power: %s needed, %s available" % (
-            fmt.money(order["notional_usd"]), fmt.money(cash))], desk=desk_info, gates=gates, **base)
+        return _decision(reasons=["not enough buying power: %s needed, %s available%s" % (
+            fmt.money(order["notional_usd"]), fmt.money(cash), " at %g× leverage" % lev if lev > 1 else "")],
+            desk=desk_info, gates=gates, **base)
     if not approved:
         return _decision(reasons=["dry run — the autopilot is not enabled (autopilot.enabled or --approve); "
                                   "it would have placed: " + text], desk=desk_info, gates=gates, dry_run=True, **base)
@@ -855,7 +873,7 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     try:
         bo = broker.place_entry({"client_order_id": order["id"], "symbol": bsym, "asset": asset, "qty": order["qty"],
                                  "limit_price": order["limit_price"], "stop_price": order["stop_price"],
-                                 "target_price": order["target_price"]})
+                                 "target_price": order["target_price"], "leverage": lev})
     except BrokerError as exc:
         _update_order(order["id"], status="error", error=str(exc))
         return _decision(action="error", reasons=["broker refused: %s" % exc], desk=desk_info, gates=gates, ai=ai_info,
@@ -870,7 +888,7 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         "mode": broker.mode, "symbol": bsym, "data_key": sym.key, "asset": asset, "qty": order["qty"],
         "qty_unit": order.get("qty_unit"), "stop": order["stop_price"], "target": order["target_price"],
         "time_stop": plan["time_stop"]["at"], "status": "pending", "placed_at": market_clock.iso(now),
-        "exit_rule": plan.get("exit_rule"), "interval": plan.get("interval")}
+        "exit_rule": plan.get("exit_rule"), "interval": plan.get("interval"), "leverage": lev}
     notify.send("trade_opened", "BUY %s %s (%s)" % (fmt.qty(order["qty"]), bsym, c["setup"]),
                 "%s. Risk %s%s. Desk GO, risk PASS%s." % (
                     text, fmt.money(order.get("risk_usd")), " (risk × %g)" % mult if abs(mult - 1) > 1e-9 else "",
@@ -1266,6 +1284,10 @@ def _refresh_lab(cfg: dict) -> None:
         argv = ["--top", str(int(pb_cfg.get("top") or 25)), "--no-html"]
         if float(pb_cfg.get("min_target_r") or 0) > 0:  # e.g. 2 = only exits that aim for 2:1 or better
             argv += ["--min-target-r", str(pb_cfg["min_target_r"])]
+        if pb_cfg.get("setups"):
+            argv += ["--setups", ",".join(pb_cfg["setups"])]
+        if pb_cfg.get("timeframes"):
+            argv += ["--timeframes", ",".join(pb_cfg["timeframes"])]
         args = lab.build_parser().parse_args(argv)
         ctx = cli.Context(args=args, cfg=config.load_config(), limits=config.load_limits(), home=config.trader_home())
         doc = lab.run(args, ctx)["doc"]
@@ -1400,7 +1422,7 @@ def daemon(args, cfg) -> int:
 def build_parser():
     p = cli.parser("autopilot.py", __doc__)
     p.add_argument("action", choices=("status", "run", "loop", "daemon", "pause", "resume", "kill", "replay",
-                                      "check-live", "universe", "learned", "notify-test"))
+                                      "check-live", "universe", "learned", "notify-test", "profile"))
     p.add_argument("--once", action="store_true", help="run: a single cycle (default)")
     p.add_argument("--refresh", action="store_true", help="universe: rebuild it now instead of showing the cached one")
     p.add_argument("--approve", action="store_true",
@@ -1412,7 +1434,91 @@ def build_parser():
     p.add_argument("--from", dest="start", help="replay: start time (ISO)")
     p.add_argument("--to", dest="end", help="replay: end time (ISO)")
     p.add_argument("--step", default="5m", help="replay: clock step (default 5m)")
+    p.add_argument("--risk", type=float, default=2.0, help="profile: %% of equity at risk per trade (default 2)")
+    p.add_argument("--leverage", type=float, default=1.0, help="profile: crypto leverage, 1–2 (default 1 = none)")
+    p.add_argument("--stock-leverage", type=float, default=1.0, help="profile: stock margin, 1–2 (default 1 = none)")
+    p.add_argument("--capital", type=float, help="profile: account size (default: config account_size)")
+    p.add_argument("--write", action="store_true", help="profile: save the changes (default: show them only)")
     return p
+
+
+# --- profile: the daily-trend setup the €1,000 backtest ran -----------------------------------------------
+
+TREND_SETUPS = ["trend_ema", "trend_breakout"]
+MAX_PROFILE_RISK = 5.0
+
+
+def trend_profile(risk: float, lev: float, stock_lev: float, capital: float) -> tuple:
+    """(config changes, limits changes) for daily trend following on the biggest coins.
+
+    Every number is what the portfolio backtest used. The learning rules are loosened to fit a strategy that
+    wins 30–40 % of trades: three losses in a row happen in a quarter of all stretches there, so they are no
+    warning; seven (≈ 5 %) are. The drawdown pause sits above the worst drop of the backtest (−30 %), so it
+    fires only when reality is worse than eight years of history.
+    """
+    if not 0 < risk <= MAX_PROFILE_RISK:
+        raise ValueError("--risk must be above 0 and at most %g%% per trade" % MAX_PROFILE_RISK)
+    for name, x in (("--leverage", lev), ("--stock-leverage", stock_lev)):
+        if not 1.0 <= x <= config.LEVERAGE_HARD_CAP:
+            raise ValueError("%s must be between 1 and %g" % (name, config.LEVERAGE_HARD_CAP))
+    backstop = lambda pct: round(capital * pct / 100.0 * 4)  # dollar limits bind only after the account grew 4×
+    cfg = {"risk_per_trade_pct": risk, "account_size": capital,
+           "leverage": {"crypto": lev, "stock": stock_lev},
+           "autopilot": {"sim_starting_cash": capital,
+                         "playbook": {"top": 10, "setups": TREND_SETUPS, "timeframes": ["1d"], "max_risk_pct": risk},
+                         "universe": {"crypto": {"top_n": 10}},
+                         "adapt": {"loss_streak": 7, "symbol_loss_streak": 5, "min_trades": 20,
+                                   "max_drawdown_pct": 35}}}
+    day = 5 * risk  # five full losses in one day, then no new entries until tomorrow
+    lim = {"global": {"max_daily_loss_pct": day, "max_daily_loss_usd": backstop(day)},
+           "crypto": {"max_open_positions": 5, "max_position_pct": 25, "max_total_exposure_pct": 100,
+                      "allow_leverage": lev > 1, "max_leverage": lev, "max_risk_per_trade_pct": risk,
+                      "max_risk_per_trade_usd": backstop(risk), "max_daily_loss_pct": day,
+                      "max_daily_loss_usd": backstop(day)},
+           "stock": {"allow_margin": stock_lev > 1, "max_leverage": stock_lev, "max_risk_per_trade_pct": risk,
+                     "max_risk_per_trade_usd": backstop(risk), "max_daily_loss_pct": day,
+                     "max_daily_loss_usd": backstop(day)}}
+    return cfg, lim
+
+
+def _flat(d: dict, prefix: str = "") -> dict:
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, dict):
+            out.update(_flat(v, prefix + k + "."))
+        else:
+            out[prefix + k] = v
+    return out
+
+
+def _get(d: dict, dotted: str):
+    for part in dotted.split("."):
+        if not isinstance(d, dict):
+            return None
+        d = d.get(part)
+    return d
+
+
+def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
+    c_cfg, c_lim = changes
+    lines = ["PROFILE · daily trend following on the 10 biggest coins · %g%% risk · crypto %g× · stocks %g×" % (
+        c_cfg["risk_per_trade_pct"], c_cfg["leverage"]["crypto"], c_cfg["leverage"]["stock"])]
+    for name, cur, ch in (("config.json", cfg, c_cfg), ("limits.json", limits, c_lim)):
+        lines.append(name + ":")
+        for key, new in _flat(ch).items():
+            old = _get(cur, key)
+            lines.append("  %-44s %s%s" % (key, json.dumps(new), "" if old == new else "   (was %s)" % json.dumps(old)))
+    if (cfg.get("autopilot") or {}).get("broker") == "alpaca" and c_cfg["leverage"]["crypto"] > 1:
+        lines.append("Note: Alpaca has no crypto margin — crypto stays at 1× there; leverage works in the simulator.")
+    sim = state.read_json("broker/sim.json") or {}
+    if sim and float(sim.get("starting_cash") or 0) != float(c_cfg["account_size"]):
+        lines.append("The simulator keeps its current book (started at %s); delete trader/broker/sim.json to restart "
+                     "it at %s." % (fmt.money(sim.get("starting_cash")), fmt.money(c_cfg["account_size"])))
+    lines.append("Not touched: broker, mode, paper, live_confirmation, keys, autopilot.enabled.")
+    lines.append("Saved. The weekly lab run rebuilds the playbook for these coins and setups; run it now with:\n"
+                 "  python3 trader-backtest/lab.py --top 10 --timeframes 1d --setups %s" % ",".join(TREND_SETUPS)
+                 if written else "Dry run — add --write to save.")
+    return "\n".join(lines)
 
 
 def status_text(cfg: dict) -> str:
@@ -1559,6 +1665,17 @@ def main(argv=None) -> int:
         text = "Live trading is %s." % ("READY — every opt-in step is in place" if ok else "OFF") + "".join(
             "\n  missing: %s" % m for m in missing)
         cli.emit(args, text, {"live_ready": ok, "missing": missing})
+        return 0
+    if args.action == "profile":
+        capital = float(args.capital or cfg.get("account_size") or 0)
+        if capital <= 0:
+            raise ValueError("--capital must be positive")
+        changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital)
+        if args.write:
+            config.update_file("config.json", changes[0])
+            config.update_file("limits.json", changes[1])
+        cli.emit(args, profile_text(cfg, ctx.limits, changes, args.write),
+                 {"config": changes[0], "limits": changes[1], "written": bool(args.write)})
         return 0
     if args.action == "pause":
         write_control(paused=True)

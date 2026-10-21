@@ -217,7 +217,8 @@ def account_view(cfg: dict, stats: dict, positions: list) -> dict:
                 "unrealized": _num(last.get("unrealized"), unreal), "realized_today": _num(last.get("realized_today")),
                 "pnl_today": (eq - base) if (eq is not None and base is not None) else None,
                 "pnl_total": eq - _starting_cash(cfg) if eq is not None else None,
-                "as_of": last.get("at"), "starting_cash": _starting_cash(cfg)}
+                "as_of": last.get("at"), "starting_cash": _starting_cash(cfg),
+                "borrowed": _num(last.get("borrowed"), 0.0), "interest_paid": _num(last.get("interest_paid"), 0.0)}
     start = _starting_cash(cfg)
     eq = start + stats["pnl_total"] + unreal
     return {"source": "journal", "equity": eq, "cash": None, "unrealized": unreal,

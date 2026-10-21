@@ -27,7 +27,9 @@ stock universe for the next open.
 5. **Learning from its own record** (`autopilot/adapt.json`): a setup whose autopilot trades lost
    (≥ 8 trades, net expectancy ≤ −0.25R) is paused for that asset class for 7 days; a symbol with 3
    losses in a row sits out 5 days; 3 losing trades in a row overall → half the risk per trade until
-   the next win; equity 10 % below its peak → the bot pauses itself (resume resets the peak).
+   the next win; equity 10 % below its peak → the bot pauses itself (resume resets the peak). The trend
+   profile (`profile`, below) sets these to 20 trades / 5 losses / 7 losses / 35 % — a strategy that wins
+   30–40 % of its trades loses three in a row all the time, so that is no warning there.
 6. **Its own universe** (`autopilot/universe.json`, `autopilot.universe.mode: "auto"`): ~150 liquid US
    stocks ranked by today's gap + move (top 40) plus Yahoo's most active / day gainers above $2B market
    cap, and the 20 most traded coins (no stablecoins or wrapped tokens; only what the broker can trade) —
@@ -90,6 +92,7 @@ python3 "${CLAUDE_SKILL_DIR}/autopilot.py" loop --approve        # keep trading 
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" pause | resume
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" kill --confirm KILL   # cancel everything, close everything
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" check-live
+python3 "${CLAUDE_SKILL_DIR}/autopilot.py" profile --risk 2 --leverage 1.5 --capital 1000 [--write]
 # offline: replay the fixture day in the simulator (NVDA taken, TSLA/BTC skipped with reasons)
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" replay --from 2026-10-20T13:35:00Z --to 2026-10-20T20:00:00Z --approve --offline
 ```
@@ -105,6 +108,7 @@ systemd, plus a step-by-step guide in Slovak, `deploy/NAVOD.sk.md`).
 | `--max-cycles N` | loop/daemon: stop after N cycles |
 | `--refresh` | universe: rebuild it now |
 | `--from/--to/--step` | replay window and clock step (default 5m) |
+| `profile --risk --leverage --stock-leverage --capital --write` | the backtested daily-trend setup: % risk (≤ 5), crypto / stock leverage (1–2), account size; shows the changes, saves with `--write` |
 | common | `--offline --now --home --json` |
 
 Config (`trader/config.json → autopilot`): `universe` (`mode` auto|watchlist, `stocks.top_n`,
@@ -112,11 +116,12 @@ Config (`trader/config.json → autopilot`): `universe` (`mode` auto|watchlist, 
 (watchlist mode), `setups` per asset, `gates` (`min_backtest_triggers`, `min_backtest_expectancy_r`,
 `min_tm_ev_r`, `tm_paths`, `max_trigger_age_bars`), `scan_time_budget_sec`, `playbook`
 (`required_for_crypto`, `max_age_days`, `auto_refresh_days`, `top`, `min_target_r`, `confidence_sizing`,
-`risk_tiers`, `max_risk_mult`, `boost_min_test_trades`), `news_gate`
+`risk_tiers`, `max_risk_mult`, `max_risk_pct`, `boost_min_test_trades`, `setups`, `timeframes`), `news_gate`
 (`lookback_hours`, `critical_tags`, `major_tags`, `min_credibility`, `refresh_before_trade`), `adapt`
 (`min_trades`, `disable_below_r`, `cooldown_days`, `symbol_loss_streak`, `loss_streak`,
 `loss_streak_risk_mult`, `max_drawdown_pct`), `max_new_trades_per_day`, `flatten_on_kill`,
-`sim_starting_cash`. Top level: `notify` (ntfy topic / Telegram, events, `daily_summary_et`) and
+`sim_starting_cash`. Top level: `leverage` (`stock`, `crypto`; used only when `limits.json` allows it, never
+past 2×, never for crypto at Alpaca), `borrow_rate_pct` (simulator interest), `notify` (ntfy topic / Telegram, events, `daily_summary_et`) and
 `ai_desk` (`enabled`, `model`, daily call and USD budget, `on_unavailable`).
 
 ## Notifications on the phone
@@ -179,6 +184,16 @@ WantedBy=multi-user.target
   `broker/sim.json` (simulator), `entries.json`, `plan.json`, `backtests/`, `timemachine/`, `desk/`,
   `orders.json`, `approvals.jsonl`, `journal.json`
 
+## Leverage and the trend profile
+
+`profile` writes the setup the €1,000 portfolio backtest ran: 2 % risk per trade (1 % when the lab is less
+sure, never more than 2 %), only `trend_ema` + `trend_breakout` on daily bars on the 10 biggest coins, 5
+positions, 25 % per coin and 100 % in crypto (× leverage), the loosened learning rules above, and %-of-equity
+limits that grow with the account. Run it without `--write` first and show the user the before → after list.
+Leverage only lets more positions be open at once; the stop still sets the risk. When a user asks for
+leverage, say what it costs (interest, deeper losses when a price gaps through a stop) and that Alpaca has no
+crypto margin. Never raise `max_leverage` above what the user asked for; the code refuses more than 2×.
+
 ## How to present results
 
 Lead with the mode (SIMULATOR / PAPER / **LIVE**), status and heartbeat (alive?), then today: trades
@@ -196,3 +211,4 @@ Point to the dashboard for the full picture. Always include the disclaimer.
 * Never let the AI desk or anything learned loosen a gate — they can only make it more careful.
 * Never trade US stocks outside the regular session, never auto-trade anything in `exclude` / `blocked_symbols`.
 * Never claim the bot will make money.
+* Never turn on leverage the user did not ask for, and never past 2×.

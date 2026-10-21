@@ -6,6 +6,10 @@ better of limit and open); bracket children watch the bars after the fill; when 
 the stop and the target the stop wins; a gap through the stop fills at the open; market orders fill
 at the last closed bar's close plus slippage. Positions are marked to the last close. The whole book
 lives in trader/broker/sim.json.
+
+Leverage (only what config.leverage() allows) lets cash go below zero, down to −(leverage − 1) × equity;
+borrowed cash costs ``borrow_rate_pct`` a year, charged as time passes — a backtest that leaves the
+interest out flatters leverage.
 """
 from __future__ import annotations
 
@@ -153,8 +157,25 @@ class SimBroker(Broker):
                         and now_ts >= market_clock.ts(o["expires_at"])):
                     o["status"] = "expired" if o.get("leg") == "entry" else "canceled"
         self._mark()
+        self._charge_interest(now_ts)
         self.book["last_sync"] = market_clock.iso(now_ts)
         self._save()
+
+    def _charge_interest(self, now_ts: int) -> None:
+        last = self.book.get("interest_at")
+        self.book["interest_at"] = now_ts
+        if last is None or now_ts <= int(last) or self.book["cash"] >= 0:
+            return
+        rate = float(self.cfg.get("borrow_rate_pct") if self.cfg.get("borrow_rate_pct") is not None else 10.0) / 100.0
+        fee = -self.book["cash"] * rate * (now_ts - int(last)) / (365.0 * 86400)
+        self.book["cash"] -= fee
+        self.book["interest_paid"] = _r(float(self.book.get("interest_paid") or 0) + fee, 4)
+
+    def leverage(self, asset: str) -> float:
+        return config.leverage(self.cfg, config.load_limits(), asset, self.name)[0]
+
+    def _equity(self) -> float:
+        return self.book["cash"] + sum(p["qty"] * p.get("last", p["avg_entry"]) for p in self.book["positions"].values())
 
     def _mark(self) -> None:
         for p in self.book["positions"].values():
@@ -165,9 +186,11 @@ class SimBroker(Broker):
 
     # -- reads ----------------------------------------------------------------------------------
     def account(self) -> dict:
-        mv = sum(p["qty"] * p.get("last", p["avg_entry"]) for p in self.book["positions"].values())
-        equity = self.book["cash"] + mv
-        return {"equity": _r(equity, 2), "cash": _r(self.book["cash"], 2), "buying_power": _r(self.book["cash"], 2),
+        equity, cash = self._equity(), self.book["cash"]
+        lev = max(self.leverage(a) for a in config.LEVERAGE_ASSETS)
+        return {"equity": _r(equity, 2), "cash": _r(cash, 2),
+                "buying_power": _r(max(0.0, cash + (lev - 1) * max(equity, 0.0)), 2),
+                "borrowed": _r(max(0.0, -cash), 2), "interest_paid": _r(self.book.get("interest_paid") or 0, 2),
                 "currency": "USD", "starting_cash": self.book.get("starting_cash"), "mode": self.mode}
 
     def positions(self) -> list:
@@ -215,8 +238,13 @@ class SimBroker(Broker):
         qty, limit = float(order["qty"]), float(order["limit_price"])
         if qty <= 0 or limit <= 0:
             raise BrokerError("qty and limit price must be positive")
-        if qty * limit > self.book["cash"] + 1e-6:
-            raise BrokerError("insufficient buying power: %.2f needed, %.2f cash" % (qty * limit, self.book["cash"]))
+        lev = max(1.0, min(float(order.get("leverage") or 1.0), self.leverage(asset)))
+        power = self.book["cash"] + (lev - 1) * max(self._equity(), 0.0)
+        if qty * limit > power + 1e-6:
+            raise BrokerError("insufficient buying power: %.2f needed, %.2f available (cash %.2f, %g× leverage)" % (
+                qty * limit, power, self.book["cash"], lev))
+        if self.book.get("interest_at") is None:
+            self.book["interest_at"] = int(self._now().timestamp())
         tif = "day" if asset == "stock" else "gtc"
         entry = self._new(client_order_id=order.get("client_order_id"), symbol=order["symbol"], asset=asset,
                           side="buy", type="limit", qty=qty, limit_price=limit, leg="entry", time_in_force=tif,

@@ -554,7 +554,8 @@
         var unreal = pos.reduce(function (acc, p) { return acc + (num(p.unrealized_pl) || 0); }, 0);
         var frag = [head('Overview', s.bot && s.bot.message ? s.bot.message : 'Account, trades and what the bot is doing')];
         frag.push(h('div', { class: 'tiles' },
-          tile('Equity', money(a.equity), a.starting_cash ? 'start ' + money(a.starting_cash) : null),
+          tile('Equity', money(a.equity), (a.starting_cash ? 'start ' + money(a.starting_cash) : '') +
+            (a.borrowed ? ' · borrowed ' + money(a.borrowed) : '') + (a.interest_paid ? ' · interest ' + money(a.interest_paid) : '') || null),
           tile('P&L today', money(a.pnl_today, true), a.equity && a.pnl_today !== null ? pct(100 * a.pnl_today / (a.equity - a.pnl_today), true, 2) : null, tone(a.pnl_today)),
           tile('P&L total', money(a.pnl_total, true), a.starting_cash && a.pnl_total !== null ? pct(100 * a.pnl_total / a.starting_cash, true, 2) : null, tone(a.pnl_total)),
           tile('Win rate', st_.win_rate === null || st_.win_rate === undefined ? '—' : pct(100 * st_.win_rate, false, 0), (st_.wins || 0) + 'W · ' + (st_.losses || 0) + 'L of ' + (st_.closed || 0)),

@@ -13,13 +13,14 @@ Checks (per asset class `stock` / `crypto` / `meme`, plus a `global` layer, all 
 |-------|------|
 | blocked_symbols | symbol not on the blocked list |
 | stop_defined | a stop exists and sits below the entry (long only) |
-| no_shorts / no_leverage / no_options | blocked unless the class allows them (meme: never) |
+| no_shorts / no_leverage / no_options | blocked unless the class allows them (meme: never); leverage also ≤ `max_leverage` (hard cap 2×) |
 | max_risk_per_trade | (entry − stop) × qty ≤ `max_risk_per_trade_usd` |
-| max_position_pct | position value ≤ % of account |
+| max_risk_per_trade_pct | the same as % of the account the order was sized on (optional) |
+| max_position_pct | position value ≤ % of account (× the allowed leverage) |
 | max_open_positions | open journal trades + approved-but-unjournaled tickets, per class and global |
-| max_daily_loss | today's realized losses (journal) — blocked once hit, or if this trade's risk would cross it |
+| max_daily_loss | today's realized losses (journal) — blocked once hit, or if this trade's risk would cross it; `max_daily_loss_pct` does the same in % of the account |
 | max_daily_trades | approvals today, per class and global |
-| max_total_exposure | crypto / meme open value + this trade ≤ cap (meme default 5 % of account) |
+| max_total_exposure | crypto / meme open value + this trade ≤ cap (meme default 5 % of account; crypto × the allowed leverage) |
 | rugcheck_passed (meme) | `trader/rugcheck/{chain}-{address}.json` exists, verdict in `required_rugcheck_verdicts`, younger than `rugcheck_max_age_minutes` |
 | min_liquidity / max_slippage / max_pct_of_pool (meme) | pool-size guards |
 

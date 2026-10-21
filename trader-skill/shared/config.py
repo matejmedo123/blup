@@ -18,6 +18,10 @@ DEFAULT_CONFIG = {
     "account_size": 25000,
     "account_currency": "USD",
     "risk_per_trade_pct": 0.5,
+    # positions may use borrowed money only up to this multiple of equity, and only when limits.json allows it
+    # (allow_margin / allow_leverage + max_leverage); see leverage() below
+    "leverage": {"stock": 1.0, "crypto": 1.0},
+    "borrow_rate_pct": 10.0,
     "fractional_shares": False,
     "watchlists": {
         "stocks": ["TSLA", "NVDA", "AAPL", "AMD", "META"],
@@ -61,6 +65,7 @@ DEFAULT_CONFIG = {
         "scan_time_budget_sec": 40,
         "playbook": {"required_for_crypto": True, "max_age_days": 14, "auto_refresh_days": 7, "top": 25,
                      "min_target_r": 0, "confidence_sizing": True, "max_risk_mult": 2.0,
+                     "max_risk_pct": None, "setups": None, "timeframes": None,
                      "risk_tiers": [[0.9, 2.0], [0.8, 1.5], [0.7, 1.0], [0.0, 0.5]], "boost_min_test_trades": 30},
         "news_gate": {
             "enabled": True,
@@ -134,6 +139,7 @@ DEFAULT_LIMITS = {
         "max_daily_trades": 6,
         "allow_shorts": False,
         "allow_margin": False,
+        "max_leverage": 1.0,
         "allow_options": False,
     },
     "crypto": {
@@ -145,6 +151,7 @@ DEFAULT_LIMITS = {
         "max_daily_trades": 6,
         "allow_shorts": False,
         "allow_leverage": False,
+        "max_leverage": 1.0,
     },
     "meme": {
         "max_risk_per_trade_usd": 50,
@@ -161,6 +168,10 @@ DEFAULT_LIMITS = {
     },
     "blocked_symbols": [],
 }
+
+# No file can lift this: past 2× a normal day's move against a full book eats the account.
+LEVERAGE_HARD_CAP = 2.0
+LEVERAGE_ASSETS = ("stock", "crypto")
 
 SUBDIRS = ("cache", "reports", "rugcheck", "timemachine", "backtests", "autopilot", "broker")
 
@@ -222,12 +233,58 @@ def _load(name: str, defaults: dict) -> dict:
     return deep_merge(defaults, user)
 
 
+def update_file(name: str, changes: dict) -> dict:
+    """Merge ``changes`` into your own trader/<name> (not the defaults) and save it atomically."""
+    path = ensure_home() / name
+    try:
+        user = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SystemExit("trader: cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
+    merged = deep_merge(user if isinstance(user, dict) else {}, changes)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    os.replace(str(tmp), str(path))
+    return merged
+
+
 def load_config() -> dict:
     return _load("config.json", DEFAULT_CONFIG)
 
 
 def load_limits() -> dict:
     return _load("limits.json", DEFAULT_LIMITS)
+
+
+def leverage(cfg: dict, limits: dict, asset: str, broker: str = None) -> tuple:
+    """(multiple, why): how far this asset class may go past the cash in the account.
+
+    1.0 unless config ``leverage.<asset>`` asks for more AND limits.json allows it (``allow_margin`` for
+    stocks, ``allow_leverage`` for crypto, at most ``max_leverage``). Never above LEVERAGE_HARD_CAP, never
+    for meme coins, never for crypto at Alpaca (it has no crypto margin). Leverage only lets more money
+    work at once; the risk per trade is still set by the stop.
+    """
+    if asset not in LEVERAGE_ASSETS:
+        return 1.0, None
+    want = (cfg.get("leverage") or {}).get(asset) if isinstance(cfg.get("leverage"), dict) else cfg.get("leverage")
+    try:
+        want = float(want or 1.0)
+    except (TypeError, ValueError):
+        return 1.0, "leverage.%s is not a number — no leverage" % asset
+    if want <= 1.0:
+        return 1.0, None
+    lim = (limits or {}).get(asset) or {}
+    key = "allow_margin" if asset == "stock" else "allow_leverage"
+    if not lim.get(key):
+        return 1.0, "config asks for %g× but limits.json %s.%s is false — no leverage" % (want, asset, key)
+    if broker is None:
+        broker = (cfg.get("autopilot") or {}).get("broker") or cfg.get("connector")
+    if broker == "alpaca" and asset == "crypto":
+        return 1.0, "Alpaca has no crypto margin — crypto stays at 1× there"
+    cap = min(float(lim.get("max_leverage") or 1.0), LEVERAGE_HARD_CAP)
+    lev = max(1.0, min(want, cap))
+    why = "%g× (config %g×, limits.json max %g×, hard cap %g×)" % (lev, want, float(lim.get("max_leverage") or 1.0),
+                                                                    LEVERAGE_HARD_CAP)
+    return lev, why
 
 
 def sec_user_agent(cfg: dict = None) -> str:

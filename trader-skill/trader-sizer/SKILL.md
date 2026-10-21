@@ -46,4 +46,5 @@ Always end with the disclaimer line the tool prints.
 
 - Never present the proposal as an order or imply anything was bought — nothing is sent anywhere.
 - Never raise the caps yourself or edit `limits.json` to make a trade fit; tell the user which limit binds.
-- Never size a short or leveraged position — this pack sizes long, unleveraged trades only.
+- Never size a short. Leverage is used only when `limits.json` allows it (`allow_leverage` / `allow_margin`,
+  `max_leverage`, never past 2×, never for meme coins); it lifts the position cap, not the risk budget.

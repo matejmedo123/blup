@@ -639,3 +639,51 @@ every daily close that happened after the fill and closes with `"reason": "rule"
 Time Machine is skipped for them (it models stop / target / time only); the desk shows its gate as "not applicable"
 and relies on the lab's walk-forward record. Both setups need Bitcoin above its 200-day average
 (`setups.regime_map(btc_daily)`), and their ids use the bar date: `ETHUSDT-20261019T0000-trend_breakout`.
+
+## v3.2 — 2 % risk, small leverage (opt-in, at most 2×), the trend profile
+
+### `config.json` additions
+```json
+"leverage": {"stock": 1.0, "crypto": 1.0},  // wanted multiple of equity; only used when limits.json allows it
+"borrow_rate_pct": 10.0,                    // simulator: yearly interest on borrowed (negative) cash
+"autopilot": {"playbook": {
+  "max_risk_pct": null,                     // e.g. 2 = confidence sizing never goes past 2 % per trade
+  "setups": null,                           // e.g. ["trend_ema", "trend_breakout"] = trade only these from the playbook
+  "timeframes": null                        // e.g. ["1d"]; both also narrow the weekly lab run
+}}
+```
+`shared.config.leverage(cfg, limits, asset, broker)` → `(multiple, why)`: 1.0 unless `leverage.<asset>` > 1 **and**
+`limits.json` has `allow_margin` (stocks) / `allow_leverage` (crypto); then `min(wanted, max_leverage, 2.0)`.
+Never for meme coins, never for crypto at Alpaca (no crypto margin there). `LEVERAGE_HARD_CAP = 2.0` is code, not
+config. Leverage lifts `max_position_pct` and `max_total_exposure_pct` by the multiple and lets the autopilot use
+up to `cash + (leverage − 1) × equity` — never more than the broker's own buying power, and never borrowed money
+at 1× even when the broker would lend it. Risk per trade is unchanged: the stop decides it.
+
+### `limits.json` additions
+```json
+"stock":  {"max_leverage": 1.0, "max_risk_per_trade_pct": 2, "max_daily_loss_pct": 10},
+"crypto": {"max_leverage": 1.0, "max_risk_per_trade_pct": 2, "max_daily_loss_pct": 10},
+"global": {"max_daily_loss_pct": 10}
+```
+`max_leverage` is in the defaults (1.0); the `_pct` limits are optional and measured against the equity the order
+was sized on, so they grow with the account (the sizer caps the risk budget at `max_risk_per_trade_pct`; the risk
+check adds `max_risk_per_trade_pct`, `max_daily_loss_pct` and `max_daily_loss_global_pct`). Orders carry
+`"leverage"` (and `sizing.leverage`); `no_leverage` blocks anything over the allowed multiple. The risk check now
+measures % limits against `order.sizing.account_size` (the broker's equity for the autopilot), falling back to
+`account_size`.
+
+### Simulator and broker files
+`broker/sim.json` gains `"interest_at"` (unix time interest was last charged) and `"interest_paid"`;
+`account()` returns `"buying_power": cash + (leverage − 1) × equity`, `"borrowed"` and `"interest_paid"`.
+`broker/equity.jsonl` lines gain `"borrowed"` / `"interest_paid"` when they are not zero. `autopilot/book.json`
+items and the decision's `gates` (`"leverage"`) record the multiple used.
+
+### `autopilot.py profile --risk 2 --leverage 1.5 [--stock-leverage 1] [--capital 1000] [--write]`
+Dry run unless `--write`; then merges into your own `config.json` / `limits.json`:
+config — `risk_per_trade_pct`, `account_size`, `leverage`, `autopilot.sim_starting_cash`,
+`autopilot.playbook.{top: 10, setups: ["trend_ema", "trend_breakout"], timeframes: ["1d"], max_risk_pct}`,
+`autopilot.universe.crypto.top_n: 10`, `autopilot.adapt.{loss_streak: 7, symbol_loss_streak: 5, min_trades: 20,
+max_drawdown_pct: 35}`; limits — crypto `max_open_positions 5`, `max_position_pct 25`, `max_total_exposure_pct 100`,
+`allow_leverage`/`max_leverage`, stock `allow_margin`/`max_leverage`, `max_risk_per_trade_pct = risk`,
+`max_daily_loss_pct = 5 × risk` (crypto, stock, global) and dollar backstops at 4× the account. Risk is 0–5 %,
+leverage 1–2. Never touches `broker`, `mode`, `paper`, `live_confirmation`, keys or `autopilot.enabled`.

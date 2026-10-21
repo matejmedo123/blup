@@ -2,7 +2,8 @@
 """Position Sizer — turn an exit plan into an order proposal sized by risk.
 
 Size = (account × risk %) ÷ (entry − stop), then capped by the limits in
-trader/limits.json. Stocks round to whole shares (fractional if enabled),
+trader/limits.json. Leverage (only when limits.json allows it) lifts the
+position cap, never the risk: the stop still decides how much is at stake. Stocks round to whole shares (fractional if enabled),
 crypto to the exchange's lot step, meme coins become a USD amount capped by
 pool liquidity so the trade cannot move the price too much.
 
@@ -24,7 +25,7 @@ if not os.path.isdir(os.path.join(_ROOT, "shared")):
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from shared import cli, data, fmt, market_clock, state, symbols, trade_sim  # noqa: E402
+from shared import cli, config, data, fmt, market_clock, state, symbols, trade_sim  # noqa: E402
 
 
 def build_parser():
@@ -90,7 +91,7 @@ def rugcheck_info(sym: symbols.Symbol):
 # --- sizing --------------------------------------------------------------------------------------
 
 def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_pct: float = None,
-               size_usd: float = None) -> dict:
+               size_usd: float = None, leverage: float = None) -> dict:
     sym = symbol_of(plan)
     asset = plan.get("asset") or sym.asset
     lim = limits.get(asset) or {}
@@ -111,7 +112,16 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
     if max_risk is not None and budget > float(max_risk):
         budget = float(max_risk)
         caps.append("max_risk_per_trade_usd %s → risk budget %s" % (fmt.money(max_risk), fmt.money(budget)))
-    max_notional = account * float(lim.get("max_position_pct", 100)) / 100.0
+    max_risk_pct = lim.get("max_risk_per_trade_pct")
+    if max_risk_pct is not None and budget > account * float(max_risk_pct) / 100.0 + 1e-9:
+        budget = account * float(max_risk_pct) / 100.0
+        caps.append("max_risk_per_trade_pct %s%% → risk budget %s" % (_num(max_risk_pct), fmt.money(budget)))
+    if asset == "meme":
+        lev = 1.0
+    else:
+        lev = float(leverage) if leverage is not None else config.leverage(cfg, limits, asset)[0]
+        lev = max(1.0, min(lev, config.LEVERAGE_HARD_CAP))
+    max_notional = account * float(lim.get("max_position_pct", 100)) / 100.0 * lev
     order = {
         "id": "ord-%s-%s" % (sym.key, market_clock.now_utc().strftime("%Y%m%d-%H%M%S")),
         "plan_id": plan.get("id"),
@@ -131,10 +141,11 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
         "status": "proposed",
         "risk": None,
         "paper": bool(cfg.get("paper", True)),
+        "leverage": lev,
         "created_at": market_clock.iso(market_clock.now_utc()),
     }
     sizing = {"account_size": account, "risk_pct": risk_pct, "risk_budget_usd": round(budget, 2),
-              "caps": caps}
+              "caps": caps, "leverage": lev}
 
     if asset == "meme":
         pair = data.get_pair(sym)
@@ -180,7 +191,8 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
         qty = floor_to(qty, step)
         unit = "shares" if asset == "stock" else "coins"
         if capped_by_position:
-            caps.append("max_position_pct %s%% → %s %s" % (_num(lim.get("max_position_pct")), fmt.qty(qty), unit))
+            caps.append("max_position_pct %s%%%s → %s %s" % (_num(lim.get("max_position_pct")),
+                                                           " × %g leverage" % lev if lev > 1 else "", fmt.qty(qty), unit))
         if qty <= 0 or (lot.get("min_qty") and qty < float(lot["min_qty"]) - 1e-12):
             raise ValueError("position rounds to %s %s — below the minimum (%s); widen the risk budget or skip"
                              % (fmt.qty(qty), unit, fmt.qty(lot.get("min_qty") or step)))

@@ -26,7 +26,7 @@ if not os.path.isdir(os.path.join(_ROOT, "shared")):
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from shared import cli, data, fmt, market_clock, state, symbols, trade_sim  # noqa: E402
+from shared import cli, config, data, fmt, market_clock, state, symbols, trade_sim  # noqa: E402
 
 OPTION_SYMBOL = re.compile(r"^[A-Z]{1,6}\d{6}[CP]\d{8}$")
 HASH_FIELDS = ("symbol", "asset", "side", "qty", "qty_unit", "limit_price", "stop_price", "target_price")
@@ -170,7 +170,8 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
     asset = order.get("asset") or sym.asset
     lim = limits.get(asset) or {}
     glob = limits.get("global") or {}
-    account = float(cfg.get("account_size") or 0)
+    # the account the order was sized against (the broker's equity for the autopilot), else the configured size
+    account = float((order.get("sizing") or {}).get("account_size") or cfg.get("account_size") or 0)
     checks = []
     warnings = []
 
@@ -207,11 +208,19 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
     else:
         add("no_shorts", True, "long only")
     lev = float(order.get("leverage") or 1.0)
-    if lev > 1.0:
+    lev_ok = 1.0  # what the position and exposure caps may stretch to
+    if lev > 1.0 + 1e-9:
         key = "allow_margin" if asset == "stock" else "allow_leverage"
-        allowed = asset != "meme" and bool(lim.get(key))
-        add("no_leverage", allowed, "%.1fx %s %s" % (lev, "margin" if asset == "stock" else "leverage",
-                                                    "allowed by limits" if allowed else "is not allowed"))
+        cap = min(float(lim.get("max_leverage") or 1.0), config.LEVERAGE_HARD_CAP)
+        word = "margin" if asset == "stock" else "leverage"
+        if asset == "meme" or not lim.get(key):
+            add("no_leverage", False, "%g× %s is not allowed (limits.json %s.%s)" % (lev, word, asset, key))
+        elif lev > cap + 1e-9:
+            add("no_leverage", False, "%g× %s is over the %g× maximum (limits.json max_leverage, hard cap %g×)" % (
+                lev, word, cap, config.LEVERAGE_HARD_CAP))
+        else:
+            lev_ok = lev
+            add("no_leverage", True, "%g× %s allowed by limits (max %g×)" % (lev, word, cap))
     else:
         add("no_leverage", True, "no leverage / margin")
     if asset == "stock" and OPTION_SYMBOL.match(str(order.get("symbol") or sym.raw).replace(" ", "").upper()):
@@ -223,11 +232,18 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
         add("max_risk_per_trade", risk_usd <= float(max_risk) + 1e-9,
             "%s %s %s" % (fmt.money(risk_usd), "≤" if risk_usd <= float(max_risk) + 1e-9 else ">", fmt.money(max_risk)))
 
+    max_risk_pct = lim.get("max_risk_per_trade_pct")
+    if risk_usd is not None and max_risk_pct is not None and account > 0:
+        cap_usd = account * float(max_risk_pct) / 100.0
+        add("max_risk_per_trade_pct", risk_usd <= cap_usd + 1e-6, "%s = %s of account (max %s)" % (
+            fmt.money(risk_usd), fmt.pct(100.0 * risk_usd / account, 2), fmt.pct(float(max_risk_pct), 2)))
+
     if account > 0 and lim.get("max_position_pct") is not None:
         pos_pct = 100.0 * notional / account
-        cap = float(lim["max_position_pct"])
+        cap = float(lim["max_position_pct"]) * lev_ok
         add("max_position_pct", pos_pct <= cap + 1e-6,
-            "%s = %s of account (max %s)" % (fmt.money(notional), fmt.pct(pos_pct, 2), fmt.pct(cap, 0)))
+            "%s = %s of account (max %s%s)" % (fmt.money(notional), fmt.pct(pos_pct, 2), fmt.pct(cap, 0),
+                                               " with %g× leverage" % lev_ok if lev_ok > 1 else ""))
 
     book = open_book(now_iso)
     n_class = sum(1 for b in book if b["asset"] == asset)
@@ -238,13 +254,17 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
         cap = int(glob["max_open_positions"])
         add("max_open_positions_global", len(book) < cap, "%d open position(s) in total, max %d" % (len(book), cap))
 
-    for scope, lim_value, loss in (
-            (asset, lim.get("max_daily_loss_usd"), realized_loss_today(now_iso, asset)),
-            ("global", glob.get("max_daily_loss_usd"), realized_loss_today(now_iso))):
+    loss_asset, loss_all = realized_loss_today(now_iso, asset), realized_loss_today(now_iso)
+    pct_caps = [(scope, account * float(v) / 100.0, loss, "_pct")
+                for scope, v, loss in ((asset, lim.get("max_daily_loss_pct"), loss_asset),
+                                       ("global", glob.get("max_daily_loss_pct"), loss_all))
+                if v is not None and account > 0]
+    for scope, lim_value, loss, suffix in [(asset, lim.get("max_daily_loss_usd"), loss_asset, ""),
+                                           ("global", glob.get("max_daily_loss_usd"), loss_all, "")] + pct_caps:
         if lim_value is None:
             continue
         lim_value = float(lim_value)
-        name = "max_daily_loss" + ("" if scope == asset else "_global")
+        name = "max_daily_loss" + ("" if scope == asset else "_global") + suffix
         if loss >= lim_value:
             add(name, False, "already lost %s today (%s limit %s) — done for the day" % (
                 fmt.money(loss), scope, fmt.money(lim_value)))
@@ -263,7 +283,7 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
 
     if asset in ("crypto", "meme") and lim.get("max_total_exposure_pct") is not None and account > 0:
         exposure = sum(b["notional"] for b in book if b["asset"] == asset) + notional
-        cap = float(lim["max_total_exposure_pct"])
+        cap = float(lim["max_total_exposure_pct"]) * lev_ok
         pct = 100.0 * exposure / account
         add("max_total_exposure", pct <= cap + 1e-6, "%s exposure %s = %s of account (max %s)" % (
             asset, fmt.money(exposure), fmt.pct(pct, 2), fmt.pct(cap, 0)))

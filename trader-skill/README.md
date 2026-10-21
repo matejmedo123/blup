@@ -64,7 +64,8 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
      choosing the exit — and the size follows that certainty (more risk only with a high profit chance on
      many unseen trades, never past `limits.json`),
   6. its own record doesn't argue against it (setups that lost money for the bot are paused; a symbol
-     with three losses in a row sits out; a losing streak halves the size; a 10 % drawdown pauses the bot),
+     with three losses in a row sits out; a losing streak halves the size; a 10 % drawdown pauses the bot —
+     the trend profile below loosens these to fit a strategy that wins only 30–40 % of its trades),
   7. desk verdict GO — and, if you enable the optional **AI desk**, Claude doesn't veto it (it can only
      say no, never yes to something the rules rejected) — then sizing and a risk PASS against `limits.json`,
   8. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever).
@@ -72,6 +73,11 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
   It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries after 15:30 ET,
   kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a KILL
   button in the dashboard.
+* **Leverage is off.** It needs both `leverage.<asset>` in `config.json` and `allow_leverage` /
+  `allow_margin` + `max_leverage` in `limits.json`; no file can go past **2×**, meme coins never, and
+  crypto at Alpaca never (there is no crypto margin there). Leverage only lets more positions be open at
+  once — the risk per trade is still set by the stop. Borrowed cash costs `borrow_rate_pct` (10 % a year)
+  in the simulator.
 * **Where it trades.** `simulator` (default) fills orders against real market data in a local paper book — no
   account. `alpaca` + `paper` uses your free Alpaca paper account. **Live** requires *all* of: broker
   `alpaca`, `autopilot.mode: "live"`, top-level `"paper": false`, live keys, and
@@ -103,6 +109,7 @@ The first run creates `trader/config.json` and `trader/limits.json` (override th
 ```json
 {
   "account_size": 25000, "risk_per_trade_pct": 0.5, "paper": true,
+  "leverage": {"stock": 1.0, "crypto": 1.0},
   "watchlists": {"stocks": ["TSLA", "NVDA", "AAPL"], "crypto": ["BTCUSDT", "ETHUSDT"], "meme": []},
   "sec_user_agent": "Jane Doe jane@example.org",
   "autopilot": {"enabled": false, "broker": "simulator", "mode": "paper", "max_new_trades_per_day": 5,
@@ -215,6 +222,41 @@ costs included, EUR/USD moves ignored — the past, not a forecast):
 Last 12 months (Oct 2025 → Oct 2026): the mix €1,543, BTC buy & hold €768, SPY €1,146. The many-coin
 numbers are flattered by survivorship (today's top coins are the ones that survived); the BTC + ETH rows
 are the sober estimate. On stocks, none of the four beat simply holding an S&P 500 ETF.
+
+### 2 % risk and a little leverage — `autopilot.py profile`
+
+```bash
+python3 trader-autopilot/autopilot.py profile --risk 2 --leverage 1.5 --capital 1000          # shows the changes
+python3 trader-autopilot/autopilot.py profile --risk 2 --leverage 1.5 --capital 1000 --write  # saves them
+```
+
+One command sets the bot up exactly as the portfolio backtest below ran it: 2 % of equity at risk per
+trade (1 % when the lab is less than 70 % sure, never more than 2 %), only the two validated daily trend
+strategies on the 10 biggest coins, 5 positions, up to 25 % of equity in one coin and 100 % in crypto
+(both × leverage), crypto leverage 1.5× (stocks stay 1×), and learning rules that fit a strategy with
+30–40 % winners: setups judged after 20 trades, a coin sits out after 5 losses in a row, size halves
+after 7 losses in a row (at a 35 % win rate seven in a row happen by chance ≈ 5 % of the time, three
+≈ 27 %), and the bot pauses at a
+−35 % drawdown — just past the worst drop of eight years of history. Dollar limits stay as a backstop at
+4× the account; the % limits grow with it. It never touches the broker, live mode, keys or
+`autopilot.enabled`.
+
+**€1,000 with the bot's own rules** (2 % risk, BTC 200-day switch, 10 biggest coins, costs and 10 %/yr
+borrowing cost included — the past, not a forecast):
+
+| | 1× | 1.5× | 2× | worst drop |
+|---|---|---|---|---|
+| Since 1 Jan 2020 | €11,689 (+44 %/yr) | €12,332 (+45 %/yr) | €12,585 (+45 %/yr) | −30 % |
+| Last 3 years | €1,878 (+23 %/yr) | €1,954 (+25 %/yr) | €1,937 (+25 %/yr) | −30 % |
+| Last 12 months | €1,098 | €1,111 | €1,106 | −6 % |
+
+What did *not* make it into the profile: the default learning rules on this strategy (3-loss halving,
+pause at −10 %) cut the 2020 result to €8,367 with 12 pauses; 43 coins at 2 % risk and 10 positions
+fell −69 % at worst; adding the stock breakout with leverage deepened the worst drop to −38…−48 %, so
+stocks stay at 1×; on BTC + ETH alone leverage adds nothing (+15 %/yr, −16 %). Leverage helps a little
+here only because a tight stop sometimes wants a bigger position than the cash allows. The 10 biggest
+coins are picked with today's knowledge, which flatters the past. Not modelled: the bot also trades
+only the coin + setup pairs the lab validated and halves the size where it is less sure.
 
 In short: a high *win chance* is easy and loses money; the edge that survives is the oldest one in
 crypto — follow Bitcoin's trend and let the few big winners run. 40 % of its trades win, but the
@@ -452,6 +494,9 @@ format, so offline runs go through the same parsing code as live runs. `--now` p
   pre/after-market or overnight stock trading. It is as good as the edge in your rules — which you have
   to prove on paper first. "Learning" means pausing what lost and trading smaller after losses; it does
   not invent new strategies.
+* **Leverage magnifies a gap too.** A stop is a promise, not a guarantee: a crash through it at 1.5×
+  loses 1.5× as much of the account as the same gap without leverage. The simulator charges interest
+  but no margin calls.
 * **The backtest lab tests many ideas;** every extra idea raises the odds that one passes by luck.
   Walk-forward over three periods and pooling all coins make that much harder, not impossible — trade
   anything it validates on paper first. Costs and fills are modelled, not measured.
