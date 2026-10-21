@@ -279,23 +279,45 @@ On a GO, the Trader would hand you a manual swap checklist (contract address, ch
 slippage, links to verify the address, "use a wallet that holds only this trade's amount", "a DEX has no
 stop orders — set alerts"). Meme coins are never sent anywhere automatically.
 
-### 5 · Autopilot — the bot trades the whole day in the simulator
+### 5 · Autopilot — it picks its own symbols and trades the whole day in the simulator
 
 ```text
 $ python3 trader-autopilot/autopilot.py replay --from 2026-10-20T13:35:00Z --to 2026-10-20T20:00:00Z --step 5m --approve
-AUTOPILOT REPLAY · 78 cycles in 10.9 s
+AUTOPILOT REPLAY · 78 cycles in 14.4 s
+  13:45 UTC  skipped NVDA gap_and_go
   13:50 UTC  taken NVDA orb15
+  13:50 UTC  skipped PLTR orb15
   13:55 UTC  filled 32 NVDA @ $193.92
+  13:55 UTC  skipped XRP/USDT vwap_reclaim
   14:15 UTC  skipped TSLA orb15
   14:40 UTC  skipped BTC/USDT asia_range
+  …
   19:55 UTC  closed NVDA (time) @ $196.28 · P&L $75.52
-Decisions: 1 taken · 18 skipped · 0 errors
-  skipped TSLA     orb15          desk NO-GO: this rule lost money on TSLA: expectancy -0.12R after costs over 33 triggers
-  skipped META     orb15          desk NO-GO: thin sample: only 3 past triggers (want ≥ 10)
+Decisions: 1 taken · 23 skipped · 0 errors
   skipped NVDA     gap_and_go     desk NO-GO: the edge is too thin to pay for mistakes: expectancy +0.00R (want ≥ +0.05R)
-  skipped BTC/USDT vwap_reclaim   desk NO-GO: this rule lost money on BTC/USDT: expectancy -1.08R after costs over 26 triggers
+  skipped PLTR     orb15          desk NO-GO: this rule lost money on PLTR: expectancy -0.73R after costs over 3 triggers
+  skipped META     orb15          desk NO-GO: thin sample: only 3 past triggers (want ≥ 10)
+  skipped TSLA     orb15          desk NO-GO: this rule lost money on TSLA: expectancy -0.12R after costs over 33 triggers
+  trade NVDA 32 $193.92 → $196.28 (time) · +0.78R · $75.52
+Equity $25,075.52 · cash $25,075.52 · running · watching 6 stocks + 7 coins · 0 open, 0 pending
+
+$ python3 trader-autopilot/autopilot.py universe
+UNIVERSE · mode auto
+stock: 6 symbols · built-in liquid list ranked by Yahoo spark + Yahoo most actives / day gainers
+  TSLA       watchlist          …
+  PLTR       top mover: gap +0.8% · move +3.9%
+crypto: 7 symbols · CoinGecko top by 24h volume
+  BTCUSDT    watchlist          …
+  XRPUSDT    top 20 by 24h volume ($4.4B)
+excluded: BYND (market cap $490.0M below $2.0B), MULN (price $0.31 below min_price $2.00)
+
+$ python3 trader-autopilot/autopilot.py learned
+WHAT THE AUTOPILOT LEARNED FROM ITS OWN TRADES · on
+Risk × 1.0 · equity $25,075.52 · peak $25,088.32 · drawdown 0.1%
+  setup stock:orb15              1 trades · 1 wins · +0.78R · active
 ```
 
+The offline fixtures only cover a handful of symbols; live, the universe is ~40 stocks and 20 coins.
 Then open the dashboard on that day: `python3 app/server.py --home demo/autopilot --offline`.
 
 ### Arbitrage gap monitor
@@ -342,7 +364,7 @@ moves on to the mirror / OKX automatically.
 ## Offline mode, tests and the demo
 
 ```bash
-python3 -m unittest            # 288 tests, no network (fixtures only), Python 3.8+
+python3 -m unittest            # 369+ tests, no network (fixtures only), Python 3.8+
 python3 scripts/demo.py        # all walkthroughs; reports in demo/trader/reports/index.html
 ```
 

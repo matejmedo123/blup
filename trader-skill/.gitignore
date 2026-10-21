@@ -5,3 +5,7 @@ __pycache__/
 *.pyc
 *.tmp
 .DS_Store
+# real keys for the deploy kit — only trader.env.example belongs in git
+trader.env
+*.env
+!*.env.example

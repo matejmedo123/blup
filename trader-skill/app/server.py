@@ -833,7 +833,7 @@ class DashboardApp:
         self.autopilot = {"thread": False, "last_run": None, "last_error": None, "runs": 0, "available": None,
                           "deferred_to_daemon": False}
         self.news = {"thread": False, "last_run": None, "last_error": None, "runs": 0, "available": None,
-                     "refreshing": False}
+                     "refreshing": False, "deferred_to_daemon": False}
         self.threads = []
 
     # sessions
@@ -960,7 +960,11 @@ class DashboardApp:
     def news_loop(self):
         self.news["thread"] = True
         while not self.stop_event.is_set():
-            self.refresh_news()
+            if self.daemon_active():  # the daemon refreshes the feed itself — don't pay for X reads twice
+                self.news["deferred_to_daemon"] = True
+            else:
+                self.news["deferred_to_daemon"] = False
+                self.refresh_news()
             self.stop_event.wait(max(60.0, float(self.news_every or 15) * 60.0))
         self.news["thread"] = False
 

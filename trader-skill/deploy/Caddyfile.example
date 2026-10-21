@@ -1,0 +1,20 @@
+# Caddy: automatic HTTPS in front of the dashboard, for people who own a domain.
+#
+#   1. Point a DNS A record (e.g. trader.example.com) at this server's IP.
+#   2. sudo apt install -y caddy
+#   3. sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile   and replace trader.example.com
+#   4. Set TRADER_DASHBOARD_PASSWORD in /etc/trader/trader.env (a long one), then
+#      sudo systemctl restart trader-dashboard caddy
+#   5. sudo ufw allow 80,443/tcp
+#
+# Without a password the dashboard refuses every request that comes through a proxy (HTTP 403).
+# The dashboard itself keeps listening on 127.0.0.1:8765 only.
+
+trader.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8765
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

@@ -1,0 +1,59 @@
+# Trader on a VPS with Docker: the 24/7 autopilot + the dashboard, sharing one data volume.
+#
+#   cd trader-skill/deploy
+#   cp trader.env.example trader.env && nano trader.env     # set TRADER_DASHBOARD_PASSWORD at least
+#   docker compose up -d --build
+#   docker compose logs -f autopilot
+#
+# The dashboard is published on 127.0.0.1:8765 of the server only — open it through an SSH tunnel
+# (ssh -L 8765:127.0.0.1:8765 you@server) or put Caddy in front of it (Caddyfile.example).
+name: trader
+
+x-trader: &trader
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+    args:
+      WITH_AI: "${WITH_AI:-0}"
+  image: trader-skill:latest
+  env_file: trader.env
+  environment:
+    TRADER_HOME: /data/trader
+  volumes:
+    - trader-data:/data
+  init: true
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  autopilot:
+    <<: *trader
+    # remove --approve for a dry run: same analysis, no orders
+    command: ["python3", "trader-autopilot/autopilot.py", "daemon", "--approve"]
+    # a cycle can take 60–90 s (backtest + Time Machine for a fresh trigger); SIGTERM lets it finish
+    stop_signal: SIGTERM
+    stop_grace_period: 2m
+
+  dashboard:
+    <<: *trader
+    depends_on:
+      - autopilot
+    # 0.0.0.0 inside the container needs TRADER_DASHBOARD_PASSWORD; the daemon above trades and refreshes
+    # the news feed, so this one does neither (--no-autopilot, --news-every 0)
+    command: ["python3", "app/server.py", "--host", "0.0.0.0", "--port", "8765", "--home", "/data/trader",
+              "--no-autopilot", "--news-every", "0"]
+    ports:
+      - "127.0.0.1:8765:8765"
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/login', timeout=5)"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+
+volumes:
+  trader-data:

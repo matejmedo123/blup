@@ -147,9 +147,12 @@ def addons():
 
 def autopilot():
     end = MAN["default_now"]
-    banner("5 · Autopilot — the bot trades the whole day by itself in the local simulator (paper money, no account)")
+    banner("5 · Autopilot — the bot picks its own stocks and coins and trades the whole day by itself in the local "
+           "simulator (paper money, no account)")
     run("trader-autopilot", "autopilot.py", ["replay", "--from", "2026-10-20T13:35:00Z", "--to", end, "--step", "5m",
                                              "--approve"], end, home=AUTO_HOME)
+    run("trader-autopilot", "autopilot.py", ["universe"], end, home=AUTO_HOME)
+    run("trader-autopilot", "autopilot.py", ["learned"], end, home=AUTO_HOME)
     # the offline demo uses a placeholder token so the X fixtures show up; real use needs your own X_BEARER_TOKEN
     run("trader-news", "news.py", ["--feed", "--symbols", "TSLA,NVDA,BTC"], end, home=AUTO_HOME,
         env={"X_BEARER_TOKEN": "offline-demo-placeholder"})

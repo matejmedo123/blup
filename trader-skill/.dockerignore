@@ -1,0 +1,10 @@
+# build context for deploy/Dockerfile — keep state, demos and secrets out of the image
+.git
+**/__pycache__
+**/*.pyc
+*.tmp
+.DS_Store
+trader/
+demo/
+deploy/trader.env
+deploy/*.env

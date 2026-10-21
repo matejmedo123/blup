@@ -1,0 +1,49 @@
+# /etc/systemd/system/trader-autopilot.service — the 24/7 autopilot daemon (installed by install-vps.sh)
+[Unit]
+Description=Trader autopilot (24/7 daemon: crypto around the clock, US stocks in the regular session)
+Documentation=file:///opt/trader/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trader
+Group=trader
+WorkingDirectory=/opt/trader
+Environment=TRADER_HOME=/var/lib/trader
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/trader/trader.env
+# --approve = standing approval for orders that pass every gate; remove it for a dry run
+ExecStart=/usr/bin/python3 /opt/trader/trader-autopilot/autopilot.py daemon --approve --home /var/lib/trader
+Restart=always
+RestartSec=15
+# SIGTERM: the daemon finishes the cycle it is in (up to ~90 s with a backtest + Time Machine), then exits
+KillSignal=SIGTERM
+TimeoutStopSec=120
+UMask=0077
+
+# hardening: the bot can write only its state folder
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/trader
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

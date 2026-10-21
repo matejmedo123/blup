@@ -560,3 +560,19 @@ market-wide crypto items), newest first, max 15, each `{"id","title","source","k
 * `ai_desk.review(case, rule_result, cfg, client=None) -> dict` (trader-desk/ai_desk.py; never raises;
   `client` lets tests pass a fake) · `ai_desk.available(cfg) -> (bool, reason)`.
 * `Broker.tradable(asset) -> set | None` — base symbols the broker can trade (`None` = no restriction).
+
+### v3 implementation notes
+* `decisions.jsonl` lines gain `"ai": {"status", "model", "usd"} | null`; gates may include
+  `news refresh`, `news & filings`, `learned · risk multiplier` and `AI desk`; a skip because of the
+  autopilot's own record starts with `learned from its record:`.
+* `universe.current()` returns only the asset classes in `autopilot.assets`. Sections in
+  `universe.json` also carry internal bookkeeping (`picks`, `attempted_at`, `failed`, `fingerprint`,
+  `pick_excluded`, `warnings`); a section rebuilds early when its settings or the broker change, and a
+  failed refresh is retried after at most 15 minutes.
+* `adapt.json` keeps an internal `_equity` read offset; event kinds also include `symbol_resumed`;
+  `adapt.check()` refuses everything while `drawdown_pause` is true.
+* `ai_desk.review()` statuses: `GO | NO-GO | WAIT` (decided), `unavailable` (off, no SDK, no key, offline,
+  over budget), `error` (API error, refusal, truncated or malformed reply), or the rule-based status when
+  that was not GO (no API call). A review needs two calls, so the budget refuses when fewer than two remain.
+* `autopilot/state.json` gains `universe` (counts), `notes` (last 20 scan notes) and `summary_sent`
+  (New York date of the last daily summary). `autopilot/housekeeping.jsonl` logs background failures.

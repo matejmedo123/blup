@@ -1,0 +1,47 @@
+# /etc/systemd/system/trader-dashboard.service — the web dashboard (installed by install-vps.sh)
+# Listens on 127.0.0.1:8765 only: open it through an SSH tunnel, or put Caddy in front of it
+# (then TRADER_DASHBOARD_PASSWORD is mandatory — the dashboard refuses proxied requests without one).
+[Unit]
+Description=Trader dashboard (web app over the autopilot's state folder)
+Documentation=file:///opt/trader/deploy/README.md
+After=network-online.target trader-autopilot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trader
+Group=trader
+WorkingDirectory=/opt/trader
+Environment=TRADER_HOME=/var/lib/trader
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/trader/trader.env
+# the trader-autopilot service trades and refreshes the news feed; this one only shows and controls it
+ExecStart=/usr/bin/python3 /opt/trader/app/server.py --host 127.0.0.1 --port 8765 --home /var/lib/trader --no-autopilot --news-every 0
+Restart=always
+RestartSec=5
+UMask=0077
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/trader
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
