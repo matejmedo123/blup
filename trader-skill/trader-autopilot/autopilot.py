@@ -42,7 +42,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from shared import adapt, brokers, cli, config, data, fmt, market_clock, notify, setups, skills, state  # noqa: E402
-from shared import symbols, universe  # noqa: E402
+from shared import indicators, symbols, universe  # noqa: E402
 from shared.brokers import BrokerError, broker_symbol  # noqa: E402
 
 STATE = "autopilot/state.json"
@@ -265,12 +265,13 @@ def reconcile(broker, book: dict, positions: list, orders: list, cfg: dict, limi
 def rule_exit_due(it: dict) -> str:
     """'' or why a rule-exit position should close now: a bar that closed after the fill met the rule."""
     rule = it.get("exit_rule") or {}
-    if rule.get("type") not in ("close_above_sma", "close_below_low"):
+    if rule.get("type") not in ("close_above_sma", "close_below_low", "close_below_ema"):
         return ""
     interval, n = rule.get("interval") or "1d", int(rule.get("n") or 5)
     step = market_clock.interval_seconds(interval)
+    need = 4 * n if rule["type"] == "close_below_ema" else n + 3  # an EMA needs a run-in to settle
     try:
-        bars = data.get_candles(it["data_key"], interval, days=(n + 3) * step / 86400.0, asset="crypto").candles
+        bars = data.get_candles(it["data_key"], interval, days=need * step / 86400.0, asset="crypto").candles
     except (data.DataUnavailable, ValueError, KeyError):
         return ""
     if len(bars) <= n or bars[-1].t + step <= market_clock.ts(it.get("filled_at") or it["placed_at"]):
@@ -281,6 +282,9 @@ def rule_exit_due(it: dict) -> str:
     if rule["type"] == "close_above_sma":
         return "the %s close %s is above the %d-bar average %s" % (
             setups.bar_label(interval), fmt.price(closes[-1]), n, fmt.price(sum(closes[-n:]) / float(n)))
+    if rule["type"] == "close_below_ema":
+        return "the %s close %s is below the %d-bar EMA %s — the trend is broken" % (
+            setups.bar_label(interval), fmt.price(closes[-1]), n, fmt.price(indicators.ema(closes, n)[-1]))
     return "the %s close %s is below the lowest close of the previous %d bars (%s)" % (
         setups.bar_label(interval), fmt.price(closes[-1]), n, fmt.price(min(closes[-n - 1:-1])))
 
@@ -598,19 +602,21 @@ def make_plan(c: dict, cfg: dict) -> dict:
     pb = c.get("playbook")
     stop, atr_mult, target_r = "auto", 1.5, exit_mod.DEFAULT_TARGET_R[asset]
     rule = (pb or {}).get("exit_rule") or setups.exit_rule(c["setup"])
-    if pb:  # trade it exactly the way the backtest lab validated it
+    if rule:  # rule-exit setups: the setup's own stop rule, a far target cap, the rule's longest hold
+        stop_px = setups.rule_stop(c["setup"], until, len(until) - 1, levels, indicators.last_atr(until))
+        stop, target_r = repr(float(stop_px)), RULE_TARGET_CAP_R
+        horizon_s = int(rule.get("max_bars") or 10) * step
+    elif pb:  # trade it exactly the way the backtest lab validated it
         stop, atr_mult = pb["stop"], float(pb["atr_mult"])
         target_r = float(pb["target_r"]) if pb.get("target_r") is not None else RULE_TARGET_CAP_R
         horizon_s = market_clock.parse_horizon(pb["horizon"])
-    elif rule:
-        spec = setups.SETUPS[c["setup"]]
-        stop, atr_mult, target_r = "atr", float(spec.get("stop_atr") or 3.0), RULE_TARGET_CAP_R
-        horizon_s = int(rule.get("max_bars") or 10) * step
     lv = exit_mod.plan_levels(trig["price"], entry_ts, asset, until, stop_ref=levels.get("stop_ref"),
                               trigger_level=levels.get("trigger_level"), stop=stop, atr_mult=atr_mult,
                               target_r=target_r, tick=tick, horizon_s=horizon_s)
     if lv["stop"]["method"] == "range_low":
         lv["stop"]["note"] = exit_mod.structure_note(c["setup"])
+    if rule:
+        lv["stop"].update(method="rule", note=setups.stop_text(c["setup"]))
     plan = {"id": c["id"], "symbol": exit_mod._canonical(sym), "symbol_display": sym.display, "symbol_key": sym.key,
             "asset": asset, "setup": c["setup"], "label": r["label"], "direction": "long",
             "entry": {"price": float(trig["price"]), "time": market_clock.iso(entry_ts)},

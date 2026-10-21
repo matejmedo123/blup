@@ -66,7 +66,7 @@ class Grid(TraderTestCase):
             setups.evaluate("trend_pullback", w)
         self.assertEqual(set(setups.for_asset("crypto", "series")),
                          {"trend_pullback", "oversold_bounce", "band_bounce", "breakout_24", "dip_in_uptrend",
-                          "trend_breakout"})
+                          "trend_breakout", "trend_ema", "breakout_volume"})
 
 
 class Validation(TraderTestCase):
@@ -122,7 +122,7 @@ class OfflineRun(TraderTestCase):
         doc = state.read_json("backtests/lab-crypto.json")
         self.assertEqual(doc["timeframes"], ["5m", "1h", "4h", "1d"])
         self.assertEqual(doc["costs"]["round_trip_pct"], 0.26)
-        self.assertEqual(len(doc["families"]), 6 + 4 + 4 + 2)
+        self.assertEqual(len(doc["families"]), 6 + 4 + 4 + 4)
         pb = state.read_json("backtests/playbook.json")
         self.assertEqual(pb["entries"], {})  # 30 days of fixtures prove nothing
         self.assertTrue(all(not f["validated"] for f in doc["families"]))
@@ -344,7 +344,8 @@ class DailyDip(TraderTestCase):
         self.assertTrue(fam["validated"], fam["verdict"])
         self.assertEqual(fam["exit"]["exit_rule"]["n"], 5)
         self.assertIsNone(fam["exit"]["target_r"])
-        self.assertEqual((fam["exit"]["stop"], fam["exit"]["atr_mult"], fam["exit"]["horizon"]), ("atr", 3.0, "10d"))
+        self.assertEqual((fam["exit"]["stop"], fam["exit"]["horizon"]), ("rule", "10d"))
+        self.assertIn("3×ATR stop", fam["exit"]["text"])
         self.assertIsNone(fam["highest_win"])
         self.assertEqual(picks, [])
         pb = lab().write_playbook({"generated_at": "2026-10-20T00:00:00Z", "objective": "profit", "costs": {},
@@ -393,7 +394,8 @@ class DailyAutopilot(TraderTestCase):
         d = [x for x in state.read_jsonl("autopilot/decisions.jsonl") if x["id"] == did]
         self.assertEqual(len(d), 1, state.read_jsonl("autopilot/decisions.jsonl"))
         plan = state.read_json("plan.json")["plans"][did]
-        self.assertEqual((plan["interval"], plan["exit_rule"]["n"], plan["stop"]["method"]), ("1d", 5, "atr"))
+        self.assertEqual((plan["interval"], plan["exit_rule"]["n"], plan["stop"]["method"]), ("1d", 5, "rule"))
+        self.assertIn("3×ATR", plan["stop"]["note"])
         self.assertEqual(mc.ts(plan["time_stop"]["at"]) - mc.ts(plan["entry"]["time"]), 10 * 86400)
         self.assertIn("exit rule decides", plan["target"]["note"])
         self.assertFalse(list((self.home / "timemachine").glob("ETHUSDT-*")))  # no replay for a rule exit
@@ -487,3 +489,32 @@ class TrendBreakout(TraderTestCase):
         ap().manage_exits(b, book, b.pos, [])
         self.assertEqual(book["items"]["p"]["exit_reason"], "rule")
         self.assertIn("below the lowest close of the previous 10 bars", book["items"]["p"]["exit_note"])
+
+
+
+class UserStrategies(TraderTestCase):
+    def test_stop_rules(self):
+        bars = [Candle(i, 100, 101, 99 - (i == 5) * 4, 100, 1) for i in range(12)]
+        self.assertEqual(setups.rule_stop("trend_ema", bars, 11, {}, 2.0), 95)       # the swing low 95 is lower
+        self.assertEqual(setups.rule_stop("trend_ema", bars[6:], 5, {}, 2.0), 98)    # swing low 99 → at least 1 ATR
+        self.assertEqual(setups.rule_stop("breakout_volume", bars, 11, {"trigger_level": 104}, 2.0), 102)
+        self.assertEqual(setups.rule_stop("trend_breakout", bars, 11, {}, 2.0), 94)  # 3 × ATR
+
+    def test_close_below_ema_exit_with_and_without_cache(self):
+        from shared import indicators
+        closes = [100 + i for i in range(60)] + [120]
+        rule = {"type": "close_below_ema", "n": 50}
+        cache = {("ema", 50): indicators.ema(closes, 50)}
+        self.assertTrue(setups.rule_says_exit(rule, closes, 60, cache))
+        self.assertEqual(setups.rule_says_exit(rule, closes, 60), setups.rule_says_exit(rule, closes, 60, cache))
+        self.assertFalse(setups.rule_says_exit(rule, closes, 59, cache))
+
+    def test_trend_ema_fires_once_when_the_trend_is_confirmed(self):
+        coin = daily_uptrend(5, days=700)
+        ctx = {"btc_up": setups.regime_map(daily_uptrend(9, days=700))}
+        sigs = setups.series_signals("trend_ema", coin, "1d", context=ctx)
+        idx = [s["trigger"]["index"] for s in sigs]
+        self.assertTrue(idx)
+        self.assertEqual(len(idx), len(set(idx)))
+        trades = lab().rule_trades(coin, "trend_ema", "1d", 0.0, ctx)
+        self.assertTrue(all(len(t[1]) == 1 for t in trades))

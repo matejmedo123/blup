@@ -102,7 +102,7 @@ class RiskTest(TraderTestCase):
     def test_max_open_positions(self):
         self.size()
         trades = [{"id": "trd-%d" % i, "asset": "stock", "symbol": s, "status": "open", "qty": 1,
-                   "entry": {"time": "2026-10-20T13:45:00Z", "price": 100.0}} for i, s in enumerate(("A", "B", "C"))]
+                   "entry": {"time": "2026-10-20T13:45:00Z", "price": 100.0}} for i, s in enumerate("ABCDE")]
         self.write_state("journal.json", {"trades": trades})
         res = self.risk()
         self.assertIn("max_open_positions", check_names(res["risk"], False))
@@ -120,7 +120,7 @@ class RiskTest(TraderTestCase):
         self.size(BTC_ID)
         res = self.risk()
         self.assertEqual(res["risk"]["result"], "PASS", res["risk"]["reasons"])
-        open_trade = {"id": "trd-eth", "asset": "crypto", "symbol": "ETHUSDT", "status": "open", "qty": 2.0,
+        open_trade = {"id": "trd-eth", "asset": "crypto", "symbol": "ETHUSDT", "status": "open", "qty": 5.0,
                       "entry": {"time": "2026-10-20T10:00:00Z", "price": 2400.0}}
         self.write_state("journal.json", {"trades": [open_trade]})
         res = self.risk("--order", res["order_id"])

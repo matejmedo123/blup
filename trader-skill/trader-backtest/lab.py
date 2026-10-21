@@ -25,7 +25,7 @@ A high win chance alone means nothing — many small wins and a few big losses l
 shows the highest win chance each setup can reach and what it earned. All of it describes the past.
 
 Examples:
-  python3 lab.py                                    # top 25 coins, 5m (180 d) + 1h (365 d) + 4h (730 d)
+  python3 lab.py                                    # top 25 coins, 5m (180 d) + 1h (365 d) + 4h (730 d) + 1d (~8 y)
   python3 lab.py --symbols BTCUSDT,ETHUSDT,SOLUSDT --timeframes 1h
   python3 lab.py --top 40 --objective win            # highest share of winning trades instead
   python3 lab.py --min-target-r 2                      # only exits that aim for 2R or more
@@ -77,7 +77,7 @@ def build_parser():
     p.add_argument("--days", type=float, default=180, help="days of 5-minute history (default 180)")
     p.add_argument("--swing-days", type=float, default=365,
                    help="days of 1-hour history (default 365; 4-hour bars get twice as much)")
-    p.add_argument("--daily-days", type=float, default=2200, help="days of daily history (default 2200, ~6 years)")
+    p.add_argument("--daily-days", type=float, default=3000, help="days of daily history (default 3000, ~8 years)")
     p.add_argument("--setups", help="comma-separated crypto setups (default: every crypto setup)")
     p.add_argument("--folds", type=int, default=3,
                    help="walk-forward periods: the history is cut into FOLDS + 1 parts and every part after the first "
@@ -271,10 +271,9 @@ def exit_label(key, setup: str = None) -> dict:
     if key[0] == "rule":
         spec = setups.SETUPS.get(setup) or {}
         rule = spec.get("exit_rule") or {}
-        mult = float(spec.get("stop_atr") or 3.0)
-        return {"stop": "atr", "atr_mult": mult, "target_r": None, "horizon": "%dd" % int(rule.get("max_bars") or 10),
-                "exit_rule": rule, "text": "exit %s · %g×ATR stop" % (rule.get("short") or rule.get("text") or "rule",
-                                                                       mult)}
+        return {"stop": "rule", "atr_mult": float(spec.get("stop_atr") or 3.0), "target_r": None,
+                "horizon": "%dd" % int(rule.get("max_bars") or 10), "exit_rule": rule,
+                "text": "exit %s · %s" % (rule.get("short") or rule.get("text") or "rule", setups.stop_text(setup))}
     stop, target, hours = key
     atr = stop.startswith("atr:")
     return {"stop": "atr" if atr else "auto", "atr_mult": float(stop.split(":")[1]) if atr else 1.5,
@@ -329,20 +328,21 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
     """Trades of a rule-exit setup, one at a time per coin: [(entry_ts, {RULE_KEY: net R})].
 
     Entry at the signal close; exit at the first close that meets the rule, at the protective stop
-    (stop_atr × ATR, gaps fill at the open) or at the close of the last allowed bar.
+    (the setup's stop rule; gaps fill at the open) or at the close of the last allowed bar.
     """
     spec = setups.SETUPS[setup]
-    rule, mult = spec["exit_rule"], float(spec.get("stop_atr") or 3.0)
+    rule = spec["exit_rule"]
     step = market_clock.interval_seconds(interval)
     closes = [c.c for c in candles]
     atrs = indicators.atr(candles)
+    cache = {("ema", int(rule["n"])): indicators.ema(closes, int(rule["n"]))} if rule["type"] == "close_below_ema" else {}
     out, busy = [], -1
     for r in setups.series_signals(setup, candles, interval, context=context):
         i = r["trigger"]["index"]
         if i <= busy:
             continue
         entry = candles[i].c
-        stop = entry - mult * atrs[i]
+        stop = setups.rule_stop(setup, candles, i, r.get("levels") or {}, atrs[i])
         if stop <= 0 or stop >= entry:
             continue
         px, j = None, i
@@ -354,7 +354,7 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
             if b.l <= stop:
                 px = stop
                 break
-            if setups.rule_says_exit(rule, closes, j):
+            if setups.rule_says_exit(rule, closes, j, cache):
                 px = b.c
                 break
         else:

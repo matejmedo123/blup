@@ -94,12 +94,12 @@ BLOCK), 2 = bad input, 3 = data unavailable.
 ### `limits.json` (created with defaults on first run)
 ```json
 {
-  "global": {"max_daily_loss_usd": 750, "max_daily_trades": 8, "max_open_positions": 4},
-  "stock":  {"max_risk_per_trade_usd": 250, "max_daily_loss_usd": 500, "max_open_positions": 3,
+  "global": {"max_daily_loss_usd": 750, "max_daily_trades": 10, "max_open_positions": 10},
+  "stock":  {"max_risk_per_trade_usd": 250, "max_daily_loss_usd": 500, "max_open_positions": 5,
              "max_position_pct": 25, "max_daily_trades": 6,
              "allow_shorts": false, "allow_margin": false, "allow_options": false},
-  "crypto": {"max_risk_per_trade_usd": 200, "max_daily_loss_usd": 400, "max_open_positions": 2,
-             "max_position_pct": 15, "max_total_exposure_pct": 30, "max_daily_trades": 6,
+  "crypto": {"max_risk_per_trade_usd": 200, "max_daily_loss_usd": 400, "max_open_positions": 5,
+             "max_position_pct": 15, "max_total_exposure_pct": 50, "max_daily_trades": 6,
              "allow_shorts": false, "allow_leverage": false},
   "meme":   {"max_risk_per_trade_usd": 50, "max_daily_loss_usd": 100, "max_open_positions": 2,
              "max_position_pct": 2, "max_total_exposure_pct": 5, "max_daily_trades": 4,
@@ -351,7 +351,7 @@ Read by `shared/secrets.py` from environment variables first, then from `trader/
              "crypto": ["asia_range", "us_open_range", "vwap_reclaim", "momentum"]},
   "gates": {"min_backtest_triggers": 10, "min_backtest_expectancy_r": 0.05, "min_tm_ev_r": -0.05,
             "tm_paths": 2000, "max_trigger_age_bars": 1},
-  "max_new_trades_per_day": 3,
+  "max_new_trades_per_day": 5,
   "flatten_on_kill": true,
   "sim_starting_cash": 25000,
   "live_confirmation": ""           // must equal "I ACCEPT REAL MONEY RISK" for live
@@ -632,8 +632,9 @@ lab's test-period result (`"source": "backtest lab"`). Swing-setup ids use the b
 ### `cache/lab/<symbol>-<interval>.json` — the lab's candle store (only the new tail is downloaded on re-runs)
 
 ### Rule-exit plans (daily setups)
-Plans from `trend_breakout` / `dip_in_uptrend` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
-a 3×ATR protective stop, a far target cap (10R) and a time stop of `max_bars` days. The autopilot checks the rule after
+Plans from `trend_ema` / `trend_breakout` / `breakout_volume` / `dip_in_uptrend` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
+the setup's protective stop (`stop_rule`: 3×ATR, below the 10-day swing low, or 1 ATR under the broken
+high), a far target cap (10R) and a time stop of `max_bars` days. The autopilot checks the rule after
 every daily close that happened after the fill and closes with `"reason": "rule"` (journal exit reason `rule`). The
 Time Machine is skipped for them (it models stop / target / time only); the desk shows its gate as "not applicable"
 and relies on the lab's walk-forward record. Both setups need Bitcoin above its 200-day average

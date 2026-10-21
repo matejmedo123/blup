@@ -39,7 +39,7 @@ have only days of history — the tool warns when the sample is thin (< 10 trigg
 ## Backtest lab — many coins, every setup, honest validation
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/lab.py"                                  # top 25 coins · 5m 180 d · 1h 365 d · 4h 730 d · 1d ~6 y
+python3 "${CLAUDE_SKILL_DIR}/lab.py"                                  # top 25 coins · 5m 180 d · 1h 365 d · 4h 730 d · 1d ~8 y
 python3 "${CLAUDE_SKILL_DIR}/lab.py" --symbols BTCUSDT,ETHUSDT --timeframes 1h,4h
 python3 "${CLAUDE_SKILL_DIR}/lab.py" --objective win                  # highest share of winners instead of certainty
 python3 "${CLAUDE_SKILL_DIR}/lab.py" --min-target-r 2                 # only exits that aim for 2R or more
@@ -51,7 +51,10 @@ python3 "${CLAUDE_SKILL_DIR}/lab.py" --fee-bps 25                     # e.g. Alp
   200 EMA), and two daily rules with built-in exits, both active only while Bitcoin is above its 200-day
   average: **trend_breakout** (close above the 20-day high; out at the first close below the 10-day
   low, ≤ 60 days, 3×ATR stop) and **dip_in_uptrend** (3 lower closes, RSI(2) < 10, above the 50- and
-  200-day averages; out at the first close above the 5-day average, ≤ 10 days, 3×ATR stop).
+  200-day averages; out at the first close above the 5-day average, ≤ 10 days, 3×ATR stop), plus the
+  user's cheat-sheet strategies **trend_ema** (20 EMA > 50 EMA, higher highs and lows; out below the
+  50-day EMA; stop below the 10-day swing low) and **breakout_volume** (20-day high on 1.5× volume; out
+  below the 10-day low; stop 1 ATR under the broken high).
   Rule-exit setups skip the exit grid — the rule is the exit.
 * Exits: targets 0.5–5R × structure stop or 1/1.5/2/3×ATR × four time stops (5m: 1–24 h; 1h: 12–72 h;
   4h: 1–7 days) = 160 per setup and timeframe, fees and slippage on every trade.

@@ -51,6 +51,19 @@ SETUPS = {
                        "exit_rule": {"type": "close_below_low", "n": 10, "max_bars": 60,
                                      "text": "first daily close below the lowest close of the previous 10 days, at "
                                              "most 60 days", "short": "close < 10-day low (≤ 60 d)"}},
+    # the two strategies from the user's cheat sheet that held up on crypto, as exact rules
+    "trend_ema": {"label": "Trend following (20 EMA above the 50 EMA, higher highs and higher lows, BTC above its "
+                           "200-day average)", "assets": ("crypto",), "kind": "series", "intervals": ("1d",),
+                  "needs_btc": True, "cooldown": 1, "stop_rule": {"type": "swing_low", "n": 10, "min_atr": 1.0},
+                  "exit_rule": {"type": "close_below_ema", "n": 50, "max_bars": 250,
+                                "text": "first daily close below the 50-day EMA (the trend is broken)",
+                                "short": "close < 50-day EMA"}},
+    "breakout_volume": {"label": "Breakout (close above the 20-day high on 1.5× volume, BTC above its 200-day "
+                                 "average)", "assets": ("crypto",), "kind": "series", "intervals": ("1d",),
+                        "needs_btc": True, "cooldown": 1, "stop_rule": {"type": "level", "atr": 1.0},
+                        "exit_rule": {"type": "close_below_low", "n": 10, "max_bars": 120,
+                                      "text": "first daily close below the lowest close of the previous 10 days",
+                                      "short": "close < 10-day low (≤ 120 d)"}},
 }
 SERIES_INTERVALS = ("1h", "4h", "1d")
 SERIES_WARMUP = 210          # bars before the first signal (the 200-bar EMA needs them)
@@ -445,8 +458,11 @@ def exit_rule(setup: str):
     return (SETUPS.get(setup) or {}).get("exit_rule")
 
 
-def rule_says_exit(rule: dict, closes: list, j: int) -> bool:
-    """Does the close at index j meet the exit rule? closes = all closes up to and including j."""
+def rule_says_exit(rule: dict, closes: list, j: int, cache: dict = None) -> bool:
+    """Does the close at index j meet the exit rule? closes = all closes up to and including j.
+
+    cache: optional {("ema", n): ema list over the same closes} so a long backtest stays linear.
+    """
     n = int(rule.get("n") or 5)
     if j < n:
         return False
@@ -454,7 +470,34 @@ def rule_says_exit(rule: dict, closes: list, j: int) -> bool:
         return closes[j] > sum(closes[j - n + 1:j + 1]) / float(n)
     if rule.get("type") == "close_below_low":
         return closes[j] < min(closes[j - n:j])
+    if rule.get("type") == "close_below_ema":
+        ema = (cache or {}).get(("ema", n))
+        value = ema[j] if ema is not None else indicators.ema(closes[:j + 1], n)[-1]
+        return closes[j] < value
     return False
+
+
+def rule_stop(setup: str, candles, i: int, levels: dict, atr_value: float) -> float:
+    """The protective stop of a rule-exit setup that fired on the close of bar i."""
+    spec = SETUPS[setup]
+    sr = spec.get("stop_rule") or {"type": "atr", "mult": float(spec.get("stop_atr") or 3.0)}
+    entry = candles[i].c
+    if sr["type"] == "swing_low":  # below the swing low, but never closer than min_atr × ATR
+        n = int(sr.get("n") or 10)
+        return min(min(c.l for c in candles[max(0, i - n + 1):i + 1]), entry - float(sr.get("min_atr") or 1.0) * atr_value)
+    if sr["type"] == "level":  # back below the broken level = a false breakout
+        return float((levels or {}).get("trigger_level") or entry) - float(sr.get("atr") or 1.0) * atr_value
+    return entry - float(sr.get("mult") or 3.0) * atr_value
+
+
+def stop_text(setup: str) -> str:
+    spec = SETUPS.get(setup) or {}
+    sr = spec.get("stop_rule") or {"type": "atr", "mult": float(spec.get("stop_atr") or 3.0)}
+    if sr["type"] == "swing_low":
+        return "stop below the %d-day swing low (≥ %g ATR)" % (int(sr.get("n") or 10), float(sr.get("min_atr") or 1))
+    if sr["type"] == "level":
+        return "stop %g ATR under the broken high" % float(sr.get("atr") or 1)
+    return "%g×ATR stop" % float(sr.get("mult") or 3)
 
 
 def _series_context(candles) -> dict:
@@ -462,6 +505,7 @@ def _series_context(candles) -> dict:
     return {"close": cl, "ema20": indicators.ema(cl, 20), "ema50": indicators.ema(cl, 50),
             "ema200": indicators.ema(cl, 200), "rsi14": indicators.rsi(cl, 14), "rsi2": indicators.rsi(cl, 2),
             "sma5": indicators.sma(cl, 5), "sma50": indicators.sma(cl, 50), "sma200": indicators.sma(cl, 200),
+            "vol20": indicators.sma([c.v for c in candles], 20),
             "bb_low": indicators.bollinger_lower(cl, 20, 2.0)}
 
 
@@ -478,6 +522,26 @@ def _series_hit(setup: str, candles, i: int, x: dict, context: dict = None):
         return ("3 lower closes in a row, RSI(2) %.1f, above the 50- and 200-day averages, Bitcoin above its "
                 "200-day average" % x["rsi2"][i], {"trigger_level": cl[i], "stop_ref": None, "sma5": x["sma5"][i],
                                                    "sma50": x["sma50"][i], "sma200": x["sma200"][i]})
+    if setup in ("trend_ema", "breakout_volume"):
+        btc_up = (context or {}).get("btc_up")
+        if not btc_up or not btc_up.get(c.t):
+            return None
+        if setup == "breakout_volume":
+            res = max(b.h for b in candles[i - 20:i])
+            if not (cl[i] > res and c.v > 1.5 * x["vol20"][i - 1] and cl[i - 1] <= max(b.h for b in candles[i - 21:i - 1])):
+                return None
+            return ("daily close above the 20-day high %s on %.1f× average volume, Bitcoin above its 200-day average"
+                    % (fmt.price(res), c.v / x["vol20"][i - 1]), {"trigger_level": res, "stop_ref": None})
+
+        def trending(k):
+            return (x["ema20"][k] > x["ema50"][k] and cl[k] > x["ema20"][k]
+                    and max(b.h for b in candles[k - 9:k + 1]) > max(b.h for b in candles[k - 19:k - 9])
+                    and min(b.l for b in candles[k - 9:k + 1]) > min(b.l for b in candles[k - 19:k - 9]))
+        if not trending(i) or trending(i - 1):
+            return None  # only the day the trend is confirmed
+        return ("trend confirmed: 20 EMA above the 50 EMA, close above the 20 EMA, higher highs and higher lows, "
+                "Bitcoin above its 200-day average", {"trigger_level": cl[i], "stop_ref": min(b.l for b in candles[i - 9:i + 1]),
+                                                       "ema50": x["ema50"][i]})
     if setup == "trend_breakout":
         btc_up = (context or {}).get("btc_up")
         if not btc_up or not btc_up.get(c.t):

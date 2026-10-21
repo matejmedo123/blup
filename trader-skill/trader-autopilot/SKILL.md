@@ -41,8 +41,8 @@ stock universe for the next open.
    unseen trades ≥ 90 % → risk × 2, ≥ 80 % → × 1.5, ≥ 70 % → × 1, lower → × 0.5 (a boost needs ≥ 30
    unseen trades; `limits.json` caps always win). Daily setups close on their rule (e.g. the first daily
    close below the 10-day low), checked after every daily close, with a 3×ATR protective stop; when
-   several signals fire together, the most certain are taken first. Positions can last weeks — consider
-   raising `limits.crypto.max_open_positions` (default 2) if you want the trend strategy diversified.
+   several signals fire together, the most certain are taken first. Positions can last weeks, so the
+   defaults allow 5 crypto and 5 stock positions (10 in all, crypto exposure up to 50 %).
 8. **Fresh triggers** → entry → exit plan → backtest of that rule on that symbol → Time Machine →
    **latest news and SEC filings for that symbol, fetched right before judging** → rule-based desk
    (`desk.py auto`; a fresh dilution/offering, bankruptcy, delisting or restatement filing, or a hack /

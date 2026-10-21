@@ -105,7 +105,7 @@ The first run creates `trader/config.json` and `trader/limits.json` (override th
   "account_size": 25000, "risk_per_trade_pct": 0.5, "paper": true,
   "watchlists": {"stocks": ["TSLA", "NVDA", "AAPL"], "crypto": ["BTCUSDT", "ETHUSDT"], "meme": []},
   "sec_user_agent": "Jane Doe jane@example.org",
-  "autopilot": {"enabled": false, "broker": "simulator", "mode": "paper", "max_new_trades_per_day": 3,
+  "autopilot": {"enabled": false, "broker": "simulator", "mode": "paper", "max_new_trades_per_day": 5,
                 "universe": {"mode": "auto", "stocks": {"top_n": 40}, "crypto": {"top_n": 20}, "exclude": []}},
   "news": {"x": {"enabled": true, "max_reads_per_day": 300, "poll_minutes": 15}},
   "notify": {"enabled": false, "ntfy_topic": "", "telegram": false},
@@ -159,13 +159,14 @@ the SDK.
 ## Backtest lab — what actually worked, with how much certainty
 
 ```bash
-python3 trader-backtest/lab.py                       # top 25 coins · 5m (180 d) + 1h (365 d) + 4h (730 d)
+python3 trader-backtest/lab.py                       # top 25 coins · 5m (180 d) + 1h (365 d) + 4h (730 d) + 1d (~8 y)
 python3 trader-backtest/lab.py --min-target-r 2      # only exits that aim for 2R or more
 ```
 
 For every crypto setup — the one-day breakouts on 5-minute bars, four swing setups on 1-hour and 4-hour
-bars, and two daily strategies with their own exit rules (a trend breakout and a dip-in-uptrend, both
-switched on only while Bitcoin is above its 200-day average) — it tries 160 exits (targets 0.5–5R, structure or 1–3×ATR stops, four time stops), with
+bars, and four daily strategies with their own exit rules (trend following EMA20/50, trend breakout,
+breakout on volume and dip-in-uptrend, all switched on only while Bitcoin is above its 200-day average) —
+it tries 160 exits (targets 0.5–5R, structure or 1–3×ATR stops, four time stops), with
 fees and slippage. It works **walk-forward**: the history is cut into four periods, and for each of the
 last three the exit with the highest **profit chance** (certainty: how often 20 trades ended in profit)
 is picked on everything before it — all coins pooled — and then traded unchanged in that period, which
@@ -174,19 +175,46 @@ the choice never saw. A setup holds only if it made money in every one of those 
 become `trader/backtests/playbook.json`, the only crypto the autopilot trades — with those exits, and
 with more size the higher the certainty (never past `limits.json`). The daemon re-runs it weekly.
 
-**Real runs** (21 Oct 2026 · top 30–40 coins by volume · 5m 180 days, 1h 365 days, 4h 730 days, 1d ~6 years ·
+**Real runs** (21 Oct 2026 · top 30–40 coins by volume · 5m 180 days, 1h 365 days, 4h 730 days, 1d ~8 years ·
 0.26 % round-trip costs):
 
 | | Result |
 |---|---|
-| **Held in all three walk-forward periods** | **the daily trend breakout** (close above the 20-day high while BTC is above its 200-day average; out at the first close below the 10-day low, 3×ATR stop): +0.26R / +0.63R / +0.53R per trade, 40 % wins, +0.53R out of sample, 79 % chance that 20 trades end in profit — validated on 17 of 40 coins (BTC 93 %, SOL 99 %, XRP 95 %) |
+| **Held in all three walk-forward periods** (1d, ~8 years) | **trend following EMA20/50** (20 EMA above the 50 EMA, higher highs and higher lows, out below the 50-day EMA): +3.37R / +0.78R / +0.65R per trade, 30 % wins, 76 % chance that 20 trades end in profit · **trend breakout** (close above the 20-day high, out below the 10-day low): +0.82R / +0.36R / +0.71R, 41 % wins, 82 % — both only while BTC is above its 200-day average; 33 coin + setup combinations validated |
 | Everything intraday (5m, 1h, 4h) | nothing held — fees and noise eat it |
-| Daily dip in an uptrend | 67 % wins, but only +0.05R per trade since 2021 and negative in the earlier periods — not validated |
+| Breakout on 1.5× volume, daily | strong lately (+0.74R, +1.33R) but no edge in the earliest period — not validated |
+| Daily dip in an uptrend | 66 % wins but only +0.08R per trade, slightly negative in one period — not validated |
 | Closest | 24-bar breakout on 4h bars, 5R target, 1.5×ATR stop, 48 h: +0.34R / −0.34R / +0.18R per trade in the three periods (40 % wins, +0.13R overall) — works in trending stretches, loses in choppy ones |
 | Highest win chance | 64–73 % (0.5R target, 2–3×ATR stop) — and −0.09R to −0.17R per trade after costs; the best of them, the 4h band bounce, nets +0.02R |
 | A single train/test split | "validated" the 4h band bounce on 6 coins (profit chance up to 98 % on 10 trades) — a different split flipped it, which is why the lab now insists on every period |
 | Per-coin tuning | 109 per-coin "best settings" in training, 43 % still profitable in the latest period — worse than a coin flip |
 | One-day setups on 5-minute bars | no exit had an edge in any training period: 0.26 % costs are a whole 1R on many of these stops |
+
+**The four classic strategies, as exact daily rules** (crypto: 43 coins 2018–2026, BTC above its 200-day
+average; stocks: 162 liquid US names and ETFs 2016–2026; costs included; "chance" = 20 trades end in profit):
+
+| Strategy | Crypto | US stocks |
+|---|---|---|
+| Trend following (EMA20/50, higher highs/lows) | +1.22R/trade, 31 % wins, 77 % | +0.24R, 33 %, 64 % |
+| Breakout (20-day high on 1.5× volume) | +0.92R, 32 %, 73 % | +0.25R, 38 %, 63 % |
+| Pullback to the 20 EMA in an uptrend | +0.04R — no edge | +0.08R — weak |
+| Range trading (ADX < 20, buy the bottom of the range) | −0.17R to −0.36R — loses | +0.10R — weak |
+
+**What €1,000 would have become** (portfolio simulated day by day, 1 % risk per trade, up to 10 positions,
+costs included, EUR/USD moves ignored — the past, not a forecast):
+
+| Since 1 Jan 2020 | Result | per year | worst drop |
+|---|---|---|---|
+| Crypto trend breakout, 40 coins | €10,891 | +42 % | −30 % |
+| … BTC + ETH only (no survivorship bias), 2 % risk | €2,547 | +15 % | −16 % |
+| Crypto trend following EMA20/50, BTC + ETH only, 2 % risk | €4,063 | +23 % | −18 % |
+| Stock breakout, 162 names | €2,239 | +13 % | −36 % |
+| Mix: crypto trend breakout + stock breakout | €5,116 | +27 % | −39 % |
+| Buy & hold BTC · buy & hold SPY | €11,545 · €2,367 | | −77 % · −34 % |
+
+Last 12 months (Oct 2025 → Oct 2026): the mix €1,543, BTC buy & hold €768, SPY €1,146. The many-coin
+numbers are flattered by survivorship (today's top coins are the ones that survived); the BTC + ETH rows
+are the sober estimate. On stocks, none of the four beat simply holding an S&P 500 ETF.
 
 In short: a high *win chance* is easy and loses money; the edge that survives is the oldest one in
 crypto — follow Bitcoin's trend and let the few big winners run. 40 % of its trades win, but the

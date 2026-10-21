@@ -46,7 +46,7 @@ DEFAULT_CONFIG = {
                    "crypto": ["asia_range", "us_open_range", "vwap_reclaim", "momentum"]},
         "gates": {"min_backtest_triggers": 10, "min_backtest_expectancy_r": 0.05, "min_tm_ev_r": -0.05,
                   "tm_paths": 2000, "max_trigger_age_bars": 1},
-        "max_new_trades_per_day": 3,
+        "max_new_trades_per_day": 5,
         "flatten_on_kill": True,
         "sim_starting_cash": 25000,
         "live_confirmation": "",
@@ -125,11 +125,11 @@ DEFAULT_CONFIG = {
 }
 
 DEFAULT_LIMITS = {
-    "global": {"max_daily_loss_usd": 750, "max_daily_trades": 8, "max_open_positions": 4},
+    "global": {"max_daily_loss_usd": 750, "max_daily_trades": 10, "max_open_positions": 10},
     "stock": {
         "max_risk_per_trade_usd": 250,
         "max_daily_loss_usd": 500,
-        "max_open_positions": 3,
+        "max_open_positions": 5,
         "max_position_pct": 25,
         "max_daily_trades": 6,
         "allow_shorts": False,
@@ -139,9 +139,9 @@ DEFAULT_LIMITS = {
     "crypto": {
         "max_risk_per_trade_usd": 200,
         "max_daily_loss_usd": 400,
-        "max_open_positions": 2,
+        "max_open_positions": 5,
         "max_position_pct": 15,
-        "max_total_exposure_pct": 30,
+        "max_total_exposure_pct": 50,
         "max_daily_trades": 6,
         "allow_shorts": False,
         "allow_leverage": False,
