@@ -29,8 +29,7 @@ Paper trading is the default (`"paper": true` in `trader/config.json`).
    /trader-sizer → /trader-risk → `prepare`.
 6. If no brokerage MCP connector is installed, say so and stop at the ticket — the user can enter it by hand.
 
-**Live trading** needs all of: `"paper": false` in config, `prepare --live`, and the user's explicit yes for that LIVE
-ticket. Never switch config to live yourself.
+**Live trading** needs the full live opt-in — the same five steps as the autopilot: `autopilot.broker "alpaca"`, `autopilot.mode "live"`, top-level `"paper": false`, live keys, and `autopilot.live_confirmation "I ACCEPT REAL MONEY RISK"` (`autopilot.py check-live` lists what is missing) — plus `prepare --live` and the user's explicit yes for that LIVE ticket. When more than one ticket waits, approve with `--ticket ID` (the one the user answered). Never switch config to live yourself.
 
 **Meme coins:** `prepare` produces a manual execution checklist (contract address, chain, pool, amount, max slippage,
 where to verify the address, safety re-check link). There is no payload and nothing to approve — the user swaps in

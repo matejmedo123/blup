@@ -86,6 +86,10 @@ class LeverageRisk(TraderTestCase):
     def test_allowed_leverage_stretches_position_and_exposure_caps(self):
         cfg, limits = config.load_config(), allow(config.load_limits(), max_lev=1.5)
         order = self.sizer.size_order(plans()[BTC_ID], cfg, limits, account=25000, leverage=1.5)
+        manual = self.checks(order, cfg, limits)[0]  # by hand it goes to the connector — Alpaca: no crypto margin
+        self.assertFalse(manual["no_leverage"]["ok"])
+        self.assertIn("Alpaca has no crypto margin", manual["no_leverage"]["detail"])
+        order["origin"] = "autopilot"  # the autopilot's simulator may borrow
         ch, _ = self.checks(order, cfg, limits)
         self.assertTrue(ch["no_leverage"]["ok"], ch["no_leverage"])
         self.assertTrue(ch["max_position_pct"]["ok"], ch["max_position_pct"])
@@ -100,6 +104,7 @@ class LeverageRisk(TraderTestCase):
     def test_above_max_leverage_blocks(self):
         cfg, limits = config.load_config(), allow(config.load_limits(), max_lev=1.2)
         order = self.sizer.size_order(plans()[BTC_ID], cfg, limits, account=25000, leverage=1.5)
+        order["origin"] = "autopilot"
         ch, _ = self.checks(order, cfg, limits)
         self.assertFalse(ch["no_leverage"]["ok"])
         self.assertIn("over the 1.2× maximum", ch["no_leverage"]["detail"])

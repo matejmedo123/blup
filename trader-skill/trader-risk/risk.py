@@ -196,6 +196,10 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
         checks.append({"name": name, "ok": bool(ok), "detail": detail})
 
     entry = float(order.get("entry_price") or 0)
+    if (order.get("side") or "buy") == "buy" and order.get("limit_price") and \
+            ((order.get("sizing") or {}).get("entry_slack_pct")):
+        # a daily entry may fill up to its limit above the close (the sizer sized it there): measured at that price
+        entry = max(entry, float(order["limit_price"]))
     stop = order.get("stop_price")
     stop = float(stop) if stop is not None else None
     qty = float(order.get("qty") or 0)
@@ -206,9 +210,9 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
     else:
         risk_usd = None
 
-    blocked = {str(s).upper() for s in limits.get("blocked_symbols") or []}
+    blocked = list(limits.get("blocked_symbols") or [])
     names = {str(x).upper() for x in (order.get("symbol"), sym.key, sym.base, sym.display, sym.address) if x}
-    hit = sorted(names & blocked)
+    hit = symbols.blocked_hits(names, blocked)  # in any spelling: SOL/USD on the list blocks SOLUSDT
     add("blocked_symbols", not hit, "on the blocked list: %s" % ", ".join(hit) if hit else "not on the blocked list")
 
     side = order.get("side") or "buy"
@@ -230,8 +234,13 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
         key = "allow_margin" if asset == "stock" else "allow_leverage"
         cap = min(float(lim.get("max_leverage") or 1.0), config.LEVERAGE_HARD_CAP)
         word = "margin" if asset == "stock" else "leverage"
+        # where the order goes: the autopilot's broker for its own orders, the connector for a manual ticket
+        venue = ((cfg.get("autopilot") or {}).get("broker") if order.get("origin") == "autopilot"
+                 else cfg.get("connector")) or "simulator"
         if asset == "meme" or lim.get(key) is not True:
             add("no_leverage", False, "%g× %s is not allowed (limits.json %s.%s)" % (lev, word, asset, key))
+        elif asset == "crypto" and venue == "alpaca":
+            add("no_leverage", False, "%g× crypto leverage at Alpaca — Alpaca has no crypto margin" % lev)
         elif lev > cap + 1e-9:
             add("no_leverage", False, "%g× %s is over the %g× maximum (limits.json max_leverage, hard cap %g×)" % (
                 lev, word, cap, config.LEVERAGE_HARD_CAP))

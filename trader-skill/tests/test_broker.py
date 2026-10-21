@@ -1,6 +1,8 @@
 """Order executor: tickets, the explicit-yes protocol, verbatim approvals, never any network."""
 from __future__ import annotations
 
+import os
+
 import json
 import re
 import unittest
@@ -140,11 +142,18 @@ class BrokerTest(TraderTestCase):
         self.assertEqual(code, 2)
         self.assertIn("paper", err)
 
-    def test_live_needs_paper_false_and_yes(self):
+    def test_live_needs_the_full_opt_in_and_yes(self):
         self.passed_order()
         cfg = self.read_state("config.json")
-        cfg["paper"] = False
+        cfg["paper"] = False  # one step of five is not enough for real money
         self.write_state("config.json", cfg)
+        code, _, err = self.run_tool("trader-broker", "ticket", ["prepare", "--live"])
+        self.assertEqual(code, 2)
+        self.assertIn("full live opt-in", err)
+        cfg.setdefault("autopilot", {}).update(broker="alpaca", mode="live",
+                                               live_confirmation="I ACCEPT REAL MONEY RISK")
+        self.write_state("config.json", cfg)
+        os.environ["ALPACA_LIVE_KEY_ID"], os.environ["ALPACA_LIVE_SECRET_KEY"] = "AKTESTLIVE123456", "SKTESTLIVE123456"
         t = self.ticket("prepare", "--live")["ticket"]
         self.assertTrue(t["text"].endswith("— LIVE (real money)"))
         self.assertEqual(t["payload"]["account"], "live")

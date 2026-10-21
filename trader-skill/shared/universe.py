@@ -106,6 +106,8 @@ def _blocked(cfg: dict, quote: str) -> dict:
                          ("blocked in limits.json (blocked_symbols)", blocked)):
         for raw in rows:
             out[str(raw).strip().upper()] = reason
+            for k in symbols.block_keys(raw):  # SOL/USD blocks SOLUSDT too
+                out.setdefault(k, reason)
             _, key = _detect(raw, quote)
             if key:
                 out[key] = reason
@@ -254,7 +256,7 @@ def _crypto_picks(cfg: dict, broker):
         if sym.base in symbols.WRAPPED:
             excluded[sym.key] = "wrapped token"
             continue
-        if sym.base in symbols.MEME_BASES:
+        if symbols.is_meme_base(sym.base):
             excluded[sym.key] = "meme coin — never auto-traded"
             continue
         vol = row.get("volume_24h")
@@ -304,8 +306,8 @@ def _compose(cfg: dict, asset: str, picks: list, quote: str, blocked: dict, excl
     for k, reason in fixed + list(picks):
         if k in reasons:
             continue
-        why = blocked.get(k)
-        if not why and asset == "crypto" and k.endswith(quote) and k[: -len(quote)] in symbols.MEME_BASES:
+        why = blocked.get(k) or next((blocked[b] for b in symbols.block_keys(k) if b in blocked), None)
+        if not why and asset == "crypto" and k.endswith(quote) and symbols.is_meme_base(k[: -len(quote)]):
             why = "meme coin — never auto-traded (watch it with /trader-scanner)"
         if why:
             excluded[k] = why

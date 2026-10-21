@@ -86,7 +86,10 @@ def read_json(name: str, default=None):
                     except ValueError:
                         pass
                 else:
-                    p.with_name(p.name + ".broken").write_bytes(raw)
+                    broken = p.with_name(p.name + ".broken")
+                    fd = os.open(str(broken), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(fd, "wb") as fh_b:
+                        fh_b.write(raw)
                     config.atomic_write(p, text)
                     where = " — restored from its last good copy (the broken file is %s.broken)" % name
         except (OSError, StateError):
@@ -255,7 +258,8 @@ def append_jsonl_rows(name: str, rows: list) -> Path:
 def rotate_jsonl(name: str, max_bytes: int, keep_bytes: int, dest: Path) -> int:
     """Move all but the newest ``keep_bytes`` of a JSONL file into the gzip file ``dest`` (appended) once it is
     larger than ``max_bytes``; returns the bytes moved. Streams in chunks (a 400 MB log never sits in memory) and
-    holds the file's lock, so appends wait and then go to the new file."""
+    holds the file's lock, so appends wait and then go to the new file. The archive gets the old part only after
+    the file was replaced — a replace that fails (Windows, a full disk) archives nothing twice."""
     import gzip
     import tempfile
     p = home() / name
@@ -263,7 +267,8 @@ def rotate_jsonl(name: str, max_bytes: int, keep_bytes: int, dest: Path) -> int:
         fh = p.open("rb")
     except FileNotFoundError:
         return 0
-    with fh:
+    part, replaced = None, False
+    try:
         if fcntl is not None:
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
         size = os.fstat(fh.fileno()).st_size
@@ -277,9 +282,10 @@ def rotate_jsonl(name: str, max_bytes: int, keep_bytes: int, dest: Path) -> int:
             cut = fh.tell()
         if cut <= 0:
             return 0
-        fh.seek(0)
-        left = cut
-        with gzip.open(str(dest), "ab") as gz:
+        fd, part = tempfile.mkstemp(prefix="." + dest.name + ".", suffix=".part", dir=str(dest.parent))
+        with os.fdopen(fd, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb") as gz:
+            fh.seek(0)
+            left = cut
             while left > 0:
                 chunk = fh.read(min(1 << 20, left))
                 if not chunk:
@@ -297,13 +303,39 @@ def rotate_jsonl(name: str, max_bytes: int, keep_bytes: int, dest: Path) -> int:
                     out.write(chunk)
                 out.flush()
                 os.fsync(out.fileno())
+            if fcntl is None:  # Windows can't replace a file that is open
+                fh.close()
             os.replace(tmp, str(p))
+            replaced = True
         except BaseException:
             try:
                 os.unlink(tmp)
             except OSError:
                 pass
             raise
+    finally:
+        fh.close()
+        if part and not replaced:
+            try:
+                os.unlink(part)
+            except OSError:
+                pass
+    if not replaced:
+        return 0
+    # the file is replaced: now the old part joins the archive (gzip members simply follow one another)
+    try:
+        fd = os.open(str(dest), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "ab") as arc, open(part, "rb") as src:
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    break
+                arc.write(chunk)
+    finally:
+        try:
+            os.unlink(part)
+        except OSError:
+            pass
     return cut
 
 

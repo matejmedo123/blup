@@ -33,13 +33,15 @@ class FileCache:
             return entry.get("body", ""), age
         return None
 
-    def set(self, key: str, body: str) -> None:
+    def set(self, key: str, body: str, fetched_at: float = None) -> None:
+        """fetched_at: when the request was SENT — a bar that closed during a slow download was not in it."""
         f = self._file(key)
         # a name of its own: two threads fetching the same URL never write into one temp file
         tmp = f.with_name("%s.%d.%d.tmp" % (f.name, os.getpid(), threading.get_ident()))
         try:
             f.parent.mkdir(parents=True, exist_ok=True)
-            tmp.write_text(json.dumps({"url": key, "fetched_at": time.time(), "body": body}), encoding="utf-8")
+            tmp.write_text(json.dumps({"url": key, "fetched_at": fetched_at if fetched_at is not None else time.time(),
+                                       "body": body}), encoding="utf-8")
             os.replace(str(tmp), str(f))
         except OSError:  # a cache that can't write is just a slower cache — but no half-written file stays behind
             try:

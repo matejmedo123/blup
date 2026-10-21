@@ -60,10 +60,11 @@ install -d -o root -g root -m 700 "$ETC"
 if [ "$SRC" != "$PREFIX" ]; then
   echo "==> code → $PREFIX"
   STAGE="$(mktemp -d "${PREFIX}.new.XXXXXX")"
-  # never copy state, demo output, caches or real keys into the program folder
+  # never copy state, demo output, caches or real keys into the program folder — a trader/ folder or an
+  # .env file anywhere in the tree (a tool run from inside a skill folder makes one there), not only at the top
   tar -C "$SRC" \
-      --exclude='./trader' --exclude='./demo' --exclude='./.git' --exclude='__pycache__' --exclude='*.pyc' \
-      --exclude='./deploy/trader.env' -cf - . | tar -C "$STAGE" -xf -
+      --exclude='trader' --exclude='./demo' --exclude='./.git' --exclude='__pycache__' --exclude='*.pyc' \
+      --exclude='*.env' --exclude='.env' --exclude='secrets.env' -cf - . | tar -C "$STAGE" -xf -
   chown -R root:root "$STAGE"
   chmod -R u=rwX,go=rX "$STAGE"
   OLD="${PREFIX}.old.$$"

@@ -5,6 +5,10 @@
 *.tmp
 .DS_Store
 trader/
+**/trader/
 demo/
 deploy/trader.env
 deploy/*.env
+**/*.env
+**/.env
+**/secrets.env

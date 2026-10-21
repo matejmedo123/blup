@@ -13,6 +13,8 @@ interest out flatters leverage.
 """
 from __future__ import annotations
 
+import copy
+
 from .. import config, data, market_clock, state
 from .base import Broker, BrokerError, data_symbol, order_dict
 
@@ -37,6 +39,7 @@ class SimBroker(Broker):
         self._spans = {}  # (symbol, asset) → the oldest time the fetched series surely covers
         self.save_error = None
         self.book = state.read_json(BOOK) or self._new_book()
+        self._saved = copy.deepcopy(self.book)  # what is on disk — a refused order is rolled back to it
 
     # -- book -----------------------------------------------------------------------------------
     def _new_book(self) -> dict:
@@ -48,12 +51,14 @@ class SimBroker(Broker):
         try:
             state.write_json(BOOK, self.book)
             self.save_error = None
+            self._saved = copy.deepcopy(self.book)
         except OSError as exc:
             # a full disk: a sync goes on with the book in memory, so the stops and time stops still act — the
             # autopilot reports it and opens nothing new. A new order that can't be kept is refused instead: the
             # bot must not believe in a stop that the next cycle's book won't have
             self.save_error = "%s: %s" % (type(exc).__name__, exc)
             if strict:
+                self.book = copy.deepcopy(self._saved)  # as on disk: the order is gone here too, not filled later
                 raise BrokerError("the simulator could not save its book (%s) — the order is not kept" % self.save_error)
 
     def _next_id(self) -> str:

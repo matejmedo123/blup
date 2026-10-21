@@ -742,7 +742,9 @@ def etf_context(args, cfg, now_ts: int, notes: list) -> dict:
     except (data.DataUnavailable, ValueError) as exc:
         notes.append("Bitcoin's daily history is unavailable (%s) — the ETF trend is tested on every day" % exc)
         return {"when": "always"}
-    up = {t // 86400: v for t, v in setups.regime_map(btc).items()}  # by UTC day
+    regime = setups.regime_map(btc)
+    # by UTC day; the first 199 bars have no 200-day average yet — unknown, never counted as a bear market
+    up = {t // 86400: regime[t] for t in sorted(regime)[199:]}
 
     def entry_ok(ts: int) -> bool:
         # the newest Bitcoin daily bar closed before the entry is the previous UTC day's; bear = below its average
@@ -763,7 +765,7 @@ def universe(args, cfg) -> tuple:
             "your list"
     uni = data.crypto_universe(args.top + 20, quote)  # spares for the gold tokens and meme coins dropped below
     coins = [c["symbol"] for c in uni["coins"] if c["symbol"].base not in universe_mod.COMMODITY_BACKED
-             and c["symbol"].base not in symbols.MEME_BASES]   # the autopilot never trades them
+             and not symbols.is_meme_base(c["symbol"].base)]   # the autopilot never trades them
     return coins[:args.top], "top %d by 24h volume (%s)" % (args.top, uni["source"])
 
 
@@ -807,7 +809,8 @@ def run(args, ctx) -> dict:
         have = {s.key for s in syms}
         skip = set(symbols.STABLECOINS) | set(symbols.WRAPPED) | set(symbols.MEME_BASES) | \
             set(universe_mod.COMMODITY_BACKED)
-        past = [symbols.parse(b + quote, asset="crypto", quote=quote) for b in PAST_MAJORS if b not in skip]
+        past = [symbols.parse(b + quote, asset="crypto", quote=quote) for b in PAST_MAJORS
+                if b not in skip and not symbols.is_meme_base(b)]
         longest = max(tf_days(t, args) for t in tfs) + PIT_LOOKBACK_DAYS + 2
         for sym, got, err in fetch_all(syms + [s for s in past if s.key not in have], "1d", longest):
             if err or not got or not got[0]:

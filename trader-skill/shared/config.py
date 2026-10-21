@@ -310,7 +310,8 @@ def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = ""
         if kind == "bool" and not isinstance(value, bool):
             problems.append("%s must be true or false (without quotes), not %s" % (here, json.dumps(value)))
         elif kind == "number":
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value or \
+                    value in (float("inf"), float("-inf")):  # Infinity / 1e309 would mean "no limit" in disguise
                 problems.append("%s must be a number (like 5, not \"5%%\" or \"5\"), not %s" % (here, json.dumps(value)))
             elif key in _POSITIVE and value <= 0:
                 problems.append("%s must be above 0 (%s would not switch it off — use a large number instead)"

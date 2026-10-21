@@ -164,6 +164,17 @@ def _retry_after(err) -> float:
         return 0.0
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A request that carries a credential (the X bearer token) is never sent on to another server."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused (the request carries a credential)",
+                                     headers, fp)
+
+
+_NO_REDIRECT = urllib.request.build_opener(_NoRedirect)
+
+
 def track() -> None:
     """Start noting when the bodies this thread receives were downloaded (see ``oldest_fetch``)."""
     _FETCH.oldest = None
@@ -208,11 +219,12 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
         sent = time.time()
         try:
             req = urllib.request.Request(url, headers=hdrs)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            opener = _NO_REDIRECT.open if "Authorization" in hdrs else urllib.request.urlopen
+            with opener(req, timeout=timeout) as resp:
                 raw = read_body(resp, timeout * 2, MAX_BYTES)
                 body = _decode(raw, resp.headers)
             if ttl and ttl > 0:
-                cache.set(url, body)
+                cache.set(url, body, fetched_at=sent)
             _seen(sent)
             return body
         except urllib.error.HTTPError as err:

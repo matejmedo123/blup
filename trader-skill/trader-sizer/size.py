@@ -127,7 +127,9 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
     if asset == "meme":
         lev = 1.0
     else:
-        lev = float(leverage) if leverage is not None else config.leverage(cfg, limits, asset)[0]
+        # sized by hand, the order goes to the connector (Alpaca by default: no crypto margin there)
+        lev = float(leverage) if leverage is not None else \
+            config.leverage(cfg, limits, asset, cfg.get("connector") or "alpaca")[0]
         lev = max(1.0, min(lev, config.LEVERAGE_HARD_CAP))
     max_notional = account * float(lim.get("max_position_pct", 100)) / 100.0 * lev
     order = {
@@ -216,7 +218,8 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
                 fmt.money(qty * entry), fmt.money(lot["min_notional"])))
         if asset == "stock":
             tick = 0.01 if entry >= 1 else 0.0001
-            limit = round(math.floor(worst / tick + 1e-9) * tick if slack else
+            # a sub-cent close rounded down could put the limit under the entry — never below the price itself
+            limit = round(max(math.floor(worst / tick + 1e-9), math.ceil(entry / tick - 1e-9)) * tick if slack else
                           entry + max(tick, entry * 0.00005) + 1e-9, 2 if tick == 0.01 else 4)
             sizing["rounding"] = "fractional shares (4 dp)" if step < 1 else "whole shares"
         else:

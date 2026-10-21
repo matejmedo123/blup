@@ -214,6 +214,7 @@ class RideAtARealBroker(RideInTheSimulator):
                 return dict(o)
         b = Later()
         b.pos = [{"symbol": "ETH/USD", "asset": "crypto", "qty": 3.0, "last": 118.0}]
+        self.book["items"]["p"].update(broker=b.name, mode=b.mode)  # a trade of that broker's account
         return b
 
     def test_sells_a_third_rides_two_thirds_then_leaves_when_the_trend_breaks(self):

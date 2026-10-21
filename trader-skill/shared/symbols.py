@@ -26,7 +26,37 @@ STABLECOINS = {"USDT", "USDC", "BUSD", "FDUSD", "DAI", "TUSD", "USDE", "PYUSD", 
 MEME_BASES = {"DOGE", "SHIB", "PEPE", "BONK", "WIF", "FLOKI", "TRUMP", "MELANIA", "BOME", "POPCAT", "MEW", "PENGU",
               "FARTCOIN", "1000PEPE", "1000BONK", "1000SHIB", "1000SATS", "1000FLOKI", "1MBABYDOGE", "BABYDOGE",
               "NEIRO", "TURBO", "MOG", "BRETT", "PNUT", "ACT", "GOAT", "SPX", "MOODENG", "DOGS", "MEME", "PEOPLE",
-              "CHILLGUY", "AI16Z", "GIGA", "PONKE", "MYRO", "WEN", "SLERF", "BOOK", "LADYS", "COQ", "ELON", "SAMO"}
+              "CHILLGUY", "AI16Z", "GIGA", "PONKE", "MYRO", "WEN", "SLERF", "BOOK", "LADYS", "COQ", "ELON", "SAMO",
+              "CAT", "CHEEMS", "BROCCOLI714", "BROCCOLI", "MUBARAK", "TUT", "BANANAS31", "PUMP", "TROLL", "WOJAK",
+              "SUNDOG", "FWOG", "MICHI", "HIPPO", "RATS", "ORDI", "SATS", "LUNC", "USTC", "PEIPEI", "NEIROCTO",
+              "MOTHER", "DADDY", "KEKIUS", "SNEK", "MANEKI", "RETARDIO", "MOODENG", "GME", "AMC", "BODEN", "TREMP"}
+# exchanges list tiny-priced coins in lots of 1,000 or a million: 1000PEPE, 1MBABYDOGE, KPEPE (Hyperliquid's "kilo")
+_LOT_PREFIX = re.compile(r"^(?:1000000|100000|10000|1000|1M|K)(?=[A-Z])")
+
+
+def is_meme_base(base) -> bool:
+    """A meme coin, however the exchange spells its lot size — never auto-traded."""
+    b = str(base or "").strip().upper()
+    return b in MEME_BASES or _LOT_PREFIX.sub("", b) in MEME_BASES
+
+
+def block_keys(text) -> set:
+    """Every spelling a block list entry stands for: "SOL/USD", "SOL-USD", "solusd", "SOLUSDT" and "SOL" all mean
+    SOL — a blocked coin stays blocked whichever quote or separator the list or the order uses."""
+    t = re.sub(r"[\s/\-_:.]", "", str(text or "").upper())
+    out = {t} if t else set()
+    for q in QUOTES:
+        if t.endswith(q) and len(t) > len(q):
+            out.add(t[: -len(q)])
+    return out
+
+
+def blocked_hits(names, blocked) -> list:
+    """The names (an order's symbol, key, base, display…) that the block list covers, in any spelling."""
+    keys = set()
+    for b in blocked or []:
+        keys |= block_keys(b)
+    return sorted({str(n) for n in names if n and block_keys(n) & keys})
 WRAPPED = {"WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "RETH", "WBETH", "BTCB", "WSOL",
            "JITOSOL", "MSOL", "BSOL", "SUSDE", "LBTC", "SOLVBTC", "EZETH", "RSETH"}
 QUOTES = ("FDUSD", "USDT", "USDC", "BUSD", "USD", "EUR", "BTC", "ETH")

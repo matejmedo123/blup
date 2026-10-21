@@ -133,15 +133,19 @@ class AlpacaBroker(Broker):
                     continue
                 raise BrokerError("Alpaca GET %s failed: %s" % (path.split("?")[0], getattr(err, "reason", err)))
 
-    def _delete(self, path: str):
+    def _delete(self, path: str, places_order: bool = False):
+        """places_order: closing a position sends a sell — a lost answer or a 5xx means it may well have gone
+        out, and the caller must not act as if it had been refused (a stop put back would sell a second time)."""
+        unsure = "Alpaca order may or may not have been placed: " if places_order else ""
         try:
             return self._send("DELETE", path)
         except urllib.error.HTTPError as err:
             if err.code == 404:
                 return {}
-            raise BrokerError("Alpaca DELETE %s failed (HTTP %s): %s" % (path.split("?")[0], err.code, self._message(err)))
+            raise BrokerError("%sAlpaca DELETE %s failed (HTTP %s): %s" % (
+                unsure if err.code >= 500 or err.code == 429 else "", path.split("?")[0], err.code, self._message(err)))
         except (urllib.error.URLError, socket.timeout, ConnectionError) as err:
-            raise BrokerError("Alpaca DELETE %s failed: %s" % (path.split("?")[0], getattr(err, "reason", err)))
+            raise BrokerError("%sAlpaca DELETE %s failed: %s" % (unsure, path.split("?")[0], getattr(err, "reason", err)))
 
     def _lookup(self, client_order_id: str, tries: int = 3):
         """The order sent under this client id, or None when Alpaca has none (it can take a moment to show)."""
@@ -237,7 +241,8 @@ class AlpacaBroker(Broker):
         # opens nothing new (and Alpaca refuses what it can't do)
         why = [w for w, on in (("blocked from trading", a.get("trading_blocked") or a.get("account_blocked")),
                                ("trading suspended by you", a.get("trade_suspended_by_user")),
-                               ("account status %s" % a.get("status"), a.get("status") not in (None, "ACTIVE")))
+                               ("account status %s" % a.get("status"),
+                                a.get("status") not in (None, "ACTIVE", "ACCOUNT_UPDATED")))
                if on]
         return {"equity": _f(a.get("equity")), "cash": _f(a.get("cash")), "buying_power": _f(a.get("buying_power")),
                 "last_equity": _f(a.get("last_equity")), "currency": a.get("currency") or "USD", "mode": self.mode,
@@ -405,7 +410,7 @@ class AlpacaBroker(Broker):
         return {"id": order_id, "status": "canceled"}
 
     def close_position(self, symbol: str) -> dict:
-        res = self._delete("/v2/positions/%s" % urllib.parse.quote(symbol.replace("/", ""), safe=""))
+        res = self._delete("/v2/positions/%s" % urllib.parse.quote(symbol.replace("/", ""), safe=""), places_order=True)
         self.log("close_position", symbol=symbol, order_id=(res or {}).get("id"))
         return self._order(res, leg="exit") if res else {"symbol": symbol, "status": "flat"}
 

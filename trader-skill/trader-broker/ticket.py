@@ -20,7 +20,7 @@ import hashlib
 import json
 import os
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 _ROOT = os.environ.get("TRADER_PACK_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if not os.path.isdir(os.path.join(_ROOT, "shared")):
@@ -28,7 +28,7 @@ if not os.path.isdir(os.path.join(_ROOT, "shared")):
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from shared import cli, fmt, market_clock, skills, state, symbols  # noqa: E402
+from shared import brokers, cli, config, fmt, market_clock, skills, state, symbols  # noqa: E402
 
 TICKET_TTL_MIN = 15
 RISK_MAX_AGE_MIN = 30
@@ -169,6 +169,12 @@ def _pick_order(order_id: str = None) -> dict:
     return passed[-1]
 
 
+def _wall_clock():
+    """Expiry and risk age run on the real clock: --now pins prices and data for a replay, never an approval's
+    deadline (offline fixtures keep their pinned time)."""
+    return market_clock.now_utc() if config.is_offline() else datetime.now(timezone.utc)
+
+
 def _risk_problem(order: dict, now) -> str:
     risk = order.get("risk") or {}
     if risk.get("result") != "PASS":
@@ -200,7 +206,7 @@ def _set_order_status(order_id: str, status: str) -> None:
 
 
 def prepare(args, ctx) -> tuple:
-    now = market_clock.now_utc()
+    now = _wall_clock()
     order = _pick_order(args.order)
     problem = _risk_problem(order, now)
     if problem:
@@ -210,6 +216,9 @@ def prepare(args, ctx) -> tuple:
         raise ValueError("ticket %s was already approved — approvals are single-use; size a new order" % existing["id"])
     if args.live and ctx.cfg.get("paper", True) is not False:  # only a real false — not null, 0 or ""
         raise ValueError("live tickets are disabled: trader/config.json has \"paper\": true")
+    if args.live and not brokers.live_readiness(ctx.cfg)[0]:  # real money: the same five steps as the autopilot
+        raise ValueError("live tickets need the full live opt-in — missing: " +
+                         "; ".join(brokers.live_readiness(ctx.cfg)[1]))
     mode = "live" if args.live else "paper"
     ticket = build_ticket(order, mode)
     ticket["created_at"] = market_clock.iso(now)
@@ -240,6 +249,9 @@ def _pick_ticket(ticket_id: str = None) -> dict:
     waiting = [t for t in tickets if t.get("status") == "awaiting_approval"]
     if not waiting:
         raise ValueError("no ticket is awaiting approval — run ticket.py prepare first")
+    if len(waiting) > 1:  # a "yes" belongs to the ticket that was shown — never to whichever is newest
+        raise ValueError("%d tickets are waiting for an answer (%s) — name the one the user answered: --ticket ID"
+                         % (len(waiting), ", ".join(t["id"] for t in waiting)))
     return waiting[-1]
 
 
@@ -265,13 +277,20 @@ def _approval_problem(ticket: dict, order, ctx, now) -> str:
         return "the order no longer matches the ticket that was shown — prepare it again"
     if ticket["mode"] == "live" and ctx.cfg.get("paper", True) is not False:
         return "live ticket refused: trader/config.json has \"paper\": true"
+    if ticket["mode"] == "live" and not brokers.live_readiness(ctx.cfg)[0]:
+        return "live ticket refused — the live opt-in is incomplete: " + "; ".join(brokers.live_readiness(ctx.cfg)[1])
     return ""
 
 
 def approve(args, ctx, decline: bool = False) -> tuple:
     if args.reply is None:
         raise ValueError("pass the user's reply word for word with --reply")
-    now = market_clock.now_utc()
+    now = _wall_clock()
+    with state.locked("tickets.json"):  # two approvals at once: the second finds it approved already
+        return _approve_locked(args, ctx, decline, now)
+
+
+def _approve_locked(args, ctx, decline: bool, now) -> tuple:
     ticket = _pick_ticket(args.ticket)
     order = _find(_orders_doc().get("orders") or [], "id", ticket.get("order_id"))
     problem = "" if decline else _approval_problem(ticket, order, ctx, now)

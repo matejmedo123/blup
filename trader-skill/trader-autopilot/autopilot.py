@@ -348,20 +348,28 @@ def _cancel_own_sells(broker, it: dict, orders: list, live=None) -> str:
     are cancelled. '' when the way is clear for a sale; otherwise why it must wait: at Alpaca a cancel is pending
     for a moment and still holds the quantity (the sale would be refused), and a stop that filled in between has
     already sold — a second sale would come out of shares you hold yourself."""
-    ids = [o["id"] for o in orders if o.get("status") in OPEN_ORDER and o.get("side") == "sell"
+    own = [o for o in orders if o.get("status") in OPEN_STATUSES and o.get("side") == "sell"
            and (o is live or _mine(o, it))]
-    for oid in ids:
+    ids = [o["id"] for o in own]  # a cancel already pending (asked last cycle) is waited for, not asked again
+    for o in own:
+        if o.get("status") not in OPEN_ORDER:
+            continue
         try:
-            broker.cancel(oid)
+            broker.cancel(o["id"])
         except BrokerError:
             pass  # "not cancelable" — perhaps it just filled: the look below tells
     deadline = time.monotonic() + CANCEL_WAIT_SEC
     while ids:
-        status = {}
+        status, part = {}, set()
         for oid in ids:
             found = [o for o in broker.lookup(oid) if o.get("id") == oid]
             status[oid] = found[0].get("status") if found else None
-        sold = [oid for oid, st in status.items() if st in ("filled", "partially_filled")]
+            try:
+                if found and float(found[0].get("filled_qty") or 0) > 0:
+                    part.add(oid)  # partly filled, then cancelled: some of it is already sold
+            except (TypeError, ValueError):
+                part.add(oid)
+        sold = [oid for oid, st in status.items() if st in ("filled", "partially_filled") or oid in part]
         if sold:
             return "its sell order %s filled meanwhile — the next sync books it" % sold[0]
         waiting = [oid for oid, st in status.items() if st not in ("canceled", "expired", "rejected", "replaced")]
@@ -426,12 +434,49 @@ def _orphans(book: dict, orders: list, cfg: dict) -> None:
         _state(orphans_told=(seen + [o.get("id") for o in new])[-50:])
 
 
+def _here(it: dict, broker) -> bool:
+    """Was this trade opened at the broker and account this cycle talks to? A simulator or paper trade left in
+    the book must never be sold — or given a stop — out of the live account, where the same coin may be yours;
+    a live trade must never be "closed" by the simulator while the real one stays open."""
+    b, m = it.get("broker"), it.get("mode")
+    return (b is None or b == broker.name) and (m is None or m == broker.mode)
+
+
+def foreign_open(book: dict, broker=None) -> list:
+    """Open or waiting trades that belong to another broker or account than ``broker`` (or than each other)."""
+    live = [it for it in book["items"].values() if it.get("status") in LIVE_ITEM]
+    if broker is not None:
+        return [it for it in live if not _here(it, broker)]
+    return live
+
+
+def forget_foreign(cfg: dict) -> dict:
+    """Mark the book's open trades of another broker or account than the configured one as "left": after a switch
+    (simulator → paper → live) they are never managed from here, and they would hold up new entries forever."""
+    name = (cfg.get("autopilot") or {}).get("broker") or "simulator"
+    mode = brokers.mode_of(cfg)
+    gone = []
+    with state.locked("autopilot/cycle", timeout=CYCLE_LOCK_WAIT_SEC):
+        book = _book()
+        for key, it in book["items"].items():
+            if it.get("status") in LIVE_ITEM and (it.get("broker") or name, it.get("mode") or mode) != (name, mode):
+                it.update(status="left", left_at=market_clock.iso(market_clock.now_utc()),
+                          left_note="opened at %s/%s; the bot now trades at %s/%s" % (
+                              it.get("broker"), it.get("mode"), name, mode))
+                gone.append("%s (%s/%s)" % (it.get("symbol"), it.get("broker"), it.get("mode")))
+        if gone:
+            state.write_json(BOOK, book)
+    return {"forgotten": gone, "message": ("Forgot %d trade(s) of another broker or account: %s. Close them there "
+                                           "if they are still open." % (len(gone), ", ".join(gone))) if gone else
+            "Nothing to forget — every open trade in the book belongs to %s/%s." % (name, mode)}
+
+
 def _tracked(broker, book: dict, orders: list) -> list:
     """The bot's own orders missing from the broker's recent-orders list (a swing bracket placed weeks ago)."""
     seen = {o.get("id") for o in orders}
     extra = []
     for it in book["items"].values():
-        if it["status"] not in LIVE_ITEM:
+        if it["status"] not in LIVE_ITEM or not _here(it, broker):
             continue
         for oid in (it.get("broker_order_id"), it.get("stop_order_id"), it.get("exit_order_id"),
                     (it.get("runner") or {}).get("sell_order_id")):
@@ -517,6 +562,8 @@ def reconcile(broker, book: dict, positions: list, orders: list, cfg: dict, limi
     step = market_clock.interval_seconds(INTERVAL)
     pos_by = {p["symbol"]: p for p in positions}
     for it in book["items"].values():
+        if not _here(it, broker):  # another broker's or account's trade: its fills are not in these lists
+            continue
         try:
             actions += _reconcile_one(broker, it, pos_by, orders, cfg, limits, now, step)
         except Exception as exc:  # noqa: BLE001 — logged on the item and in the cycle's actions
@@ -651,6 +698,13 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
         trade = _close_trade(it, ex, reason, cfg)
         it.update(status="closed", closed_at=ex.get("filled_at"), exit_price=ex.get("filled_avg_price"),
                   exit_reason=reason, pnl_usd=(trade or {}).get("pnl_usd"))
+        for o in orders:  # a stop of its own still working (put back after a sale that did go through) must go
+            if o is not ex and o.get("side") == "sell" and o.get("status") in OPEN_ORDER and _mine(o, it):
+                try:
+                    broker.cancel(o["id"])
+                    actions.append("cancelled %s's leftover %s order" % (it["symbol"], o.get("type") or "sell"))
+                except BrokerError:
+                    pass
         _update_order(it["order_id"], status="closed")
         line = "closed %s (%s) @ %s · P&L %s" % (it["symbol"], reason, fmt.price(ex.get("filled_avg_price")),
                                                 fmt.money((trade or {}).get("pnl_usd")))
@@ -858,6 +912,8 @@ def manage_exits(broker, book: dict, positions: list, orders: list, cfg: dict = 
     stocks_open = market_clock.market_status(now)["state"] == "open"
     pos_by = {p["symbol"]: p for p in positions}
     for it in book["items"].values():
+        if not _here(it, broker):  # never sell or protect another account's trade out of this one
+            continue
         try:
             actions += _exit_one(broker, it, pos_by, orders, cfg, now, now_ts, stocks_open)
         except Exception as exc:  # noqa: BLE001 — the next position's stop must still be checked
@@ -904,7 +960,11 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
             reason = "rule"
             it["exit_note"] = "exit rule: " + why
     refused = it.get("exit_refused_at")
-    backing_off = bool(refused) and now_ts - market_clock.ts(refused) < EXIT_RETRY_SEC
+    # after a refused sale the stop is back and the sale waits — but a price through the stop sells at once
+    backing_off = bool(refused) and now_ts - market_clock.ts(refused) < EXIT_RETRY_SEC and reason != "stop"
+    if refused and not reason and not backing_off:
+        it.pop("exit_refused_at", None)  # the next refusal is news again
+        it.pop("exit_refused", None)
     if not reason or backing_off:
         # its stop is gone (Alpaca cancels GTC orders after 90 days, a fee left less to sell, a refused sale…):
         # put it back — an intraday stock's bracket legs are the stop, unless a refused sale cancelled them
@@ -951,7 +1011,13 @@ def kill(broker, book: dict, cfg: dict, reason: str, orders: list = None, positi
     orders = orders if orders is not None else broker.orders()
     pos_by = {p["symbol"]: p for p in (positions if positions is not None else broker.positions())}
     problems = []
+    away = foreign_open(book, broker)
+    if away:  # not reachable from here — said out loud, never "closed" by selling this account's holdings
+        actions.append("KILL cannot reach %d trade(s) opened at another broker or account: %s — close them there" % (
+            len(away), ", ".join("%s (%s/%s)" % (it.get("symbol"), it.get("broker"), it.get("mode")) for it in away)))
     for it in book["items"].values():
+        if not _here(it, broker):
+            continue
         try:  # one broken item must not keep the others from being flattened
             problems += _kill_one(broker, it, reason, orders, pos_by, flatten)
         except Exception as exc:  # noqa: BLE001
@@ -1043,18 +1109,18 @@ def add_playbook_coins(uni: dict, pbs: dict, cfg: dict, limits: dict, broker=Non
             have.add(data.as_symbol(raw, "crypto").key)
         except (symbols.SymbolError, ValueError):
             continue
-    blocked = {str(x).upper() for x in ((cfg.get("autopilot") or {}).get("universe") or {}).get("exclude") or []}
-    blocked |= {str(x).upper() for x in limits.get("blocked_symbols") or []}
+    banned = list(((cfg.get("autopilot") or {}).get("universe") or {}).get("exclude") or []) + \
+        list(limits.get("blocked_symbols") or [])
     try:
         tradable = broker.tradable("crypto") if broker is not None else None
     except Exception:
         tradable = None
     added = []
     for key, entries in sorted(pbs["by_coin"].items()):
-        if key in have or key in blocked:
+        if key in have:
             continue
         sym = data.as_symbol(key, "crypto")
-        if sym.base in blocked or sym.display.upper() in blocked or sym.base in symbols.MEME_BASES or \
+        if symbols.blocked_hits((key, sym.base, sym.display), banned) or symbols.is_meme_base(sym.base) or \
                 (tradable is not None and sym.base not in tradable):
             continue
         uni["crypto"].append(key)
@@ -1558,7 +1624,7 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     base = {"id": c["id"], "symbol": sym.display, "asset": asset, "setup": c["setup"]}
     if c.get("skip"):
         return _decision(reasons=[c["skip"]], **base)
-    if asset == "meme" or (asset == "crypto" and sym.base in symbols.MEME_BASES):  # DOGE, SHIB… (not WEN stock)
+    if asset == "meme" or (asset == "crypto" and symbols.is_meme_base(sym.base)):  # DOGE, 1000PEPE… (not WEN stock)
         return _decision(reasons=["%s is a meme coin — meme coins are never auto-traded" % sym.display], **base)
     if c["id"] in book["items"]:  # one signal, one trade — its record in the book is never overwritten
         return _decision(reasons=["this signal was already traded (%s)" % book["items"][c["id"]].get("status")],
@@ -1824,9 +1890,12 @@ def daily_summary(cfg: dict, st: dict, learned: dict, now) -> None:
     day = et.date().isoformat()
     if st.get("summary_sent") == day:
         return
-    # the New York day it is named after — midnight to midnight there, not the UTC date (a stock trade closed at
-    # 4 p.m. ET would otherwise fall into no summary at all)
-    start = market_clock.et_to_utc(et.date(), 0, 0).timestamp()
+    # everything since the last summary went out (the first one: the last 24 hours) — a crypto exit at 00:00 UTC,
+    # after one summary and before the next New York day, belongs to the next summary, never to none
+    try:
+        start = market_clock.ts(st.get("summary_sent_at")) if st.get("summary_sent_at") else now.timestamp() - 86400
+    except (TypeError, ValueError):
+        start = now.timestamp() - 86400
     since = market_clock.iso(start)
 
     def today(at) -> bool:
@@ -1860,7 +1929,7 @@ def daily_summary(cfg: dict, st: dict, learned: dict, now) -> None:
     if paused:
         lines.append("paused setups: " + ", ".join(paused))
     notify.send("daily_summary", "Trader %s: %s" % (day, fmt.money(pnl)), "\n".join(lines), cfg)
-    _state(summary_sent=day)
+    _state(summary_sent=day, summary_sent_at=market_clock.iso(now))
 
 
 def compact_equity(keep_days: int = 7) -> int:
@@ -1955,6 +2024,13 @@ def _cycle(approved=None) -> dict:
     acct, positions, orders = sync()
     if acct.get("blocked"):
         errors.append("broker account: %s — nothing new opens" % acct["blocked"])
+    away = foreign_open(book, broker)
+    if away:
+        errors.append("%d open trade(s) in the book belong to another broker or account (%s) — the bot does not "
+                      "manage them from %s/%s and opens nothing new: switch back and close them, or run "
+                      "`autopilot.py forget --confirm FORGET` once they are closed there" % (
+                          len(away), ", ".join(sorted({"%s %s/%s" % (it.get("symbol"), it.get("broker"), it.get("mode"))
+                                                      for it in away})), broker.name, broker.mode))
     actions += reconcile(broker, book, positions, orders, cfg, limits)
     best_effort("saving the book", lambda: state.write_json(BOOK, book))  # what reached the broker, on disk first
     best_effort("orphan orders", lambda: _orphans(book, orders, cfg))
@@ -1997,8 +2073,8 @@ def _cycle(approved=None) -> dict:
         acct, positions, orders = sync()
         actions += reconcile(broker, book, positions, orders, cfg, limits)
         held = {p["symbol"] for p in positions if float(p.get("qty") or 0) > 1e-9}
-        left = [it for it in book["items"].values() if it["status"] in ("pending", "submitting")
-                or (flatten and it["status"] == "open" and it["symbol"] in held)]
+        left = [it for it in book["items"].values() if _here(it, broker) and (it["status"] in ("pending", "submitting")
+                or (flatten and it["status"] == "open" and it["symbol"] in held))]
         done = not left and not any(a.startswith("kill incomplete") for a in actions)
         # not done (the broker still holds cancelled legs, an entry filled in the race): the KILL stays on and the
         # next cycle tries again — it is never quietly dropped
@@ -2765,7 +2841,8 @@ def daemon(args, cfg) -> int:
 def build_parser():
     p = cli.parser("autopilot.py", __doc__)
     p.add_argument("action", choices=("status", "run", "loop", "daemon", "pause", "resume", "kill", "replay",
-                                      "check-live", "universe", "learned", "notify-test", "profile", "check"))
+                                      "check-live", "universe", "learned", "notify-test", "profile", "check",
+                                      "forget"))
     p.add_argument("--once", action="store_true", help="run: a single cycle (default)")
     p.add_argument("--refresh", action="store_true", help="universe: rebuild it now instead of showing the cached one")
     p.add_argument("--approve", action="store_true",
@@ -2773,7 +2850,7 @@ def build_parser():
     p.add_argument("--interval", type=int,
                    help="loop/daemon: seconds between cycles (default config autopilot.interval_sec)")
     p.add_argument("--max-cycles", type=int, help="loop/daemon: stop after N cycles")
-    p.add_argument("--confirm", help='kill: must be "KILL"')
+    p.add_argument("--confirm", help='kill: must be "KILL"; forget: must be "FORGET"')
     p.add_argument("--from", dest="start", help="replay: start time (ISO)")
     p.add_argument("--to", dest="end", help="replay: end time (ISO)")
     p.add_argument("--step", default="5m", help="replay: clock step (default 5m)")
@@ -3112,6 +3189,13 @@ def main(argv=None) -> int:
         return 0
     if args.action == "daemon":
         return daemon(args, cfg)
+    if args.action == "forget":
+        if args.confirm != "FORGET":
+            cli.fail("forget needs --confirm FORGET — it drops the book's open trades of another broker or account "
+                     "(close them there first: the bot will never manage them again)")
+        res = forget_foreign(cfg)
+        cli.emit(args, res["message"], res)
+        return 0
     if args.action == "kill":
         if args.confirm != "KILL":
             cli.fail('kill needs --confirm KILL (it cancels every order and closes every position)')

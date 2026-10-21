@@ -39,6 +39,19 @@ def live_readiness(cfg: dict) -> tuple:
             missing.append("%s must be set (environment or trader/secrets.env)" % name)
     if (ap.get("live_confirmation") or "") != LIVE_PHRASE:
         missing.append('config autopilot.live_confirmation must be exactly "%s"' % LIVE_PHRASE)
+    # trades still open in the simulator or the paper account would sit in the book of a live bot — never acted on
+    # there (the live account may hold the same coins, and they are yours), but never closed either
+    from .. import state
+    try:
+        items = ((state.read_json("autopilot/book.json", {}) or {}).get("items") or {}).values()
+    except ValueError:
+        items = []
+    away = [it for it in items if it.get("status") in ("submitting", "pending", "open")
+            and (it.get("broker"), it.get("mode")) != ("alpaca", "live")]
+    if away:
+        missing.append("%d trade(s) from the simulator or the paper account are still open in autopilot/book.json "
+                       "(%s) — close them there first (KILL), then `autopilot.py forget --confirm FORGET`" % (
+                           len(away), ", ".join(sorted({str(it.get("symbol")) for it in away}))))
     return (not missing), missing
 
 
