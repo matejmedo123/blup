@@ -15,7 +15,7 @@ class BrokerError(Exception):
 
 ORDER_FIELDS = ("id", "client_order_id", "symbol", "asset", "side", "type", "qty", "limit_price", "stop_price",
                 "status", "filled_qty", "filled_avg_price", "submitted_at", "filled_at", "leg", "parent_id",
-                "time_in_force")
+                "time_in_force", "updated_at")
 # Alpaca's still-working states ("replaced" is final: a new order took its place)
 OPEN_STATUSES = ("new", "accepted", "pending_new", "partially_filled", "held", "accepted_for_bidding",
                  "pending_replace", "calculated", "done_for_day", "pending_cancel")
