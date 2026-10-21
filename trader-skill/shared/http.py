@@ -43,6 +43,8 @@ MIN_INTERVAL = {
     "api.exchange.coinbase.com": 0.15,
     "api.kraken.com": 1.0,
     "stooq.com": 1.0,
+    "api.stocktwits.com": 1.0,   # public stream: roughly 200 requests/hour per IP
+    "api.x.com": 1.0,            # pay-per-use: the budget matters more than the rate
 }
 DEFAULT_INTERVAL = 0.2
 

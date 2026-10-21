@@ -1,0 +1,109 @@
+{
+ "data": [
+  {
+   "id": "1848000000000000203",
+   "text": "*FED'S WALLER: OPEN TO A DECEMBER CUT IF LABOR DATA SOFTENS",
+   "author_id": "101",
+   "created_at": "2026-10-20T13:20:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000203"
+   ],
+   "public_metrics": {
+    "retweet_count": 400,
+    "reply_count": 90,
+    "like_count": 1500,
+    "quote_count": 30,
+    "bookmark_count": 0,
+    "impression_count": 60000
+   }
+  },
+  {
+   "id": "1848000000000000002",
+   "text": "*TESLA BOARD SAID TO WEIGH SPACEX COMBINATION, DECISION SEEN BEFORE EARNINGS: SOURCES $TSLA",
+   "author_id": "101",
+   "created_at": "2026-10-20T12:58:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000002"
+   ],
+   "public_metrics": {
+    "retweet_count": 1300,
+    "reply_count": 310,
+    "like_count": 4200,
+    "quote_count": 220,
+    "bookmark_count": 0,
+    "impression_count": 168000
+   }
+  },
+  {
+   "id": "1848000000000000202",
+   "text": "U.S. SEC delays decision on spot XRP ETF applications by 45 days",
+   "author_id": "110",
+   "created_at": "2026-10-20T12:31:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000202"
+   ],
+   "public_metrics": {
+    "retweet_count": 210,
+    "reply_count": 35,
+    "like_count": 700,
+    "quote_count": 9,
+    "bookmark_count": 0,
+    "impression_count": 28000
+   }
+  },
+  {
+   "id": "1848000000000000201",
+   "text": "Large exchange to list SOL perpetual futures next week, per notice $SOL",
+   "author_id": "110",
+   "created_at": "2026-10-20T10:16:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000201"
+   ],
+   "public_metrics": {
+    "retweet_count": 70,
+    "reply_count": 12,
+    "like_count": 260,
+    "quote_count": 3,
+    "bookmark_count": 0,
+    "impression_count": 10400
+   }
+  }
+ ],
+ "includes": {
+  "users": [
+   {
+    "id": "101",
+    "name": "Fixture Squawk",
+    "username": "FixtureSquawk",
+    "verified": true,
+    "public_metrics": {
+     "followers_count": 880000,
+     "following_count": 100,
+     "tweet_count": 5000,
+     "listed_count": 50
+    }
+   },
+   {
+    "id": "110",
+    "name": "Fixture Crypto Wire",
+    "username": "FixtureCryptoWire",
+    "verified": true,
+    "public_metrics": {
+     "followers_count": 330000,
+     "following_count": 100,
+     "tweet_count": 5000,
+     "listed_count": 50
+    }
+   }
+  ]
+ },
+ "meta": {
+  "newest_id": "1848000000000000203",
+  "oldest_id": "1848000000000000201",
+  "result_count": 4
+ }
+}

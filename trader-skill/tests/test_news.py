@@ -98,5 +98,26 @@ class NewsMemeTest(TraderTestCase):
         self.assertIn("no meme tokens", err)
 
 
+class NewsSocialCliTest(TraderTestCase):
+    NOW = DEMOS["tsla"]["now"]
+
+    def test_help_lists_social_flags(self):
+        code, out, _ = self.run_tool(SKILL, TOOL, ["--help"])
+        self.assertEqual(code, 0)
+        for flag in ("--feed", "--social", "--no-social"):
+            self.assertIn(flag, out)
+
+    def test_crowd_line_and_no_social(self):
+        code, out, _ = self.run_tool(SKILL, TOOL, ["--symbols", "TSLA", "--no-html"])
+        self.assertEqual(code, 0)
+        self.assertIn("TSLA on StockTwits:", out)
+        self.assertIn("X: no token", out)  # without X_BEARER_TOKEN, X is skipped with a note
+        r = self.run_json(SKILL, TOOL, ["--symbols", "TSLA", "--no-html", "--all"])
+        self.assertIn("TSLA", r["crowd"])
+        code, out, _ = self.run_tool(SKILL, TOOL, ["--symbols", "TSLA", "--no-html", "--no-social", "--all"])
+        self.assertNotIn("StockTwits", out)
+        self.assertNotIn("X: ", out)
+
+
 if __name__ == "__main__":
     unittest.main()

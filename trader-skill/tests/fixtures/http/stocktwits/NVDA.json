@@ -1,0 +1,978 @@
+{
+ "symbol": {
+  "id": 7406,
+  "symbol": "NVDA",
+  "symbol_display": "NVDA",
+  "exchange": "NASDAQ",
+  "region": "US",
+  "title": "NVIDIA Corp",
+  "aliases": [],
+  "instrument_class": "Stock",
+  "watchlist_count": 1000000,
+  "has_pricing": true
+ },
+ "cursor": {
+  "more": true,
+  "since": 610000019,
+  "max": 610000000
+ },
+ "regions": [],
+ "filters": [],
+ "messages": [
+  {
+   "id": 610000019,
+   "body": "$NVDA volume check",
+   "created_at": "2026-10-20T14:43:13Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9019,
+    "username": "fixture_nvda_08",
+    "name": "Fixture Nvda 08",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 753,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000019,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000018,
+   "body": "$NVDA volume is huge today, this is going higher",
+   "created_at": "2026-10-20T14:36:06Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9018,
+    "username": "fixture_nvda_07",
+    "name": "Fixture Nvda 07",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 716,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000018,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000017,
+   "body": "$NVDA what time is the earnings call",
+   "created_at": "2026-10-20T14:29:59Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9017,
+    "username": "fixture_nvda_06",
+    "name": "Fixture Nvda 06",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 679,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000017,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000016,
+   "body": "$NVDA rumor pump, selling into it",
+   "created_at": "2026-10-20T14:22:52Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9016,
+    "username": "fixture_nvda_05",
+    "name": "Fixture Nvda 05",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 642,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000016,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000015,
+   "body": "$NVDA squeeze setup into earnings",
+   "created_at": "2026-10-20T14:15:45Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9015,
+    "username": "fixture_nvda_04",
+    "name": "Fixture Nvda 04",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 605,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000015,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000014,
+   "body": "$NVDA wild tape today",
+   "created_at": "2026-10-20T14:08:38Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9014,
+    "username": "fixture_nvda_03",
+    "name": "Fixture Nvda 03",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 568,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000014,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000013,
+   "body": "$NVDA what time is the earnings call",
+   "created_at": "2026-10-20T14:01:31Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9013,
+    "username": "fixture_nvda_02",
+    "name": "Fixture Nvda 02",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 531,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000013,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000012,
+   "body": "$NVDA rumor pump, selling into it",
+   "created_at": "2026-10-20T13:54:24Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9012,
+    "username": "fixture_nvda_01",
+    "name": "Fixture Nvda 01",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 494,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000012,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000011,
+   "body": "$NVDA volume check",
+   "created_at": "2026-10-20T13:47:17Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9011,
+    "username": "fixture_nvda_00",
+    "name": "Fixture Nvda 00",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 457,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000011,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000010,
+   "body": "$NVDA wild tape today",
+   "created_at": "2026-10-20T13:40:10Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9010,
+    "username": "fixture_nvda_10",
+    "name": "Fixture Nvda 10",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 420,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000010,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000009,
+   "body": "$NVDA opening range break, adding on the retest",
+   "created_at": "2026-10-20T13:33:03Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9009,
+    "username": "fixture_nvda_09",
+    "name": "Fixture Nvda 09",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 383,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000009,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000008,
+   "body": "$NVDA rumor pump, selling into it",
+   "created_at": "2026-10-20T13:26:56Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9008,
+    "username": "fixture_nvda_08",
+    "name": "Fixture Nvda 08",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 346,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000008,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000007,
+   "body": "$NVDA volume check",
+   "created_at": "2026-10-20T13:19:49Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9007,
+    "username": "fixture_nvda_07",
+    "name": "Fixture Nvda 07",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 309,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000007,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000006,
+   "body": "$NVDA higher lows all morning, long",
+   "created_at": "2026-10-20T13:12:42Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9006,
+    "username": "fixture_nvda_06",
+    "name": "Fixture Nvda 06",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 272,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000006,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000005,
+   "body": "$NVDA what time is the earnings call",
+   "created_at": "2026-10-20T13:05:35Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9005,
+    "username": "fixture_nvda_05",
+    "name": "Fixture Nvda 05",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 235,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000005,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000004,
+   "body": "$NVDA rumor pump, selling into it",
+   "created_at": "2026-10-20T12:58:28Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9004,
+    "username": "fixture_nvda_04",
+    "name": "Fixture Nvda 04",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 198,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000004,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000003,
+   "body": "$NVDA strong close incoming",
+   "created_at": "2026-10-20T12:51:21Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9003,
+    "username": "fixture_nvda_03",
+    "name": "Fixture Nvda 03",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 161,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000003,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000002,
+   "body": "$NVDA wild tape today",
+   "created_at": "2026-10-20T12:44:14Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9002,
+    "username": "fixture_nvda_02",
+    "name": "Fixture Nvda 02",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 124,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000002,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000001,
+   "body": "$NVDA what time is the earnings call",
+   "created_at": "2026-10-20T12:37:07Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9001,
+    "username": "fixture_nvda_01",
+    "name": "Fixture Nvda 01",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 87,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000001,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 610000000,
+   "body": "$NVDA rumor pump, selling into it",
+   "created_at": "2026-10-20T12:30:00Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9000,
+    "username": "fixture_nvda_00",
+    "name": "Fixture Nvda 00",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 50,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 7406,
+     "symbol": "NVDA",
+     "symbol_display": "NVDA",
+     "title": "NVIDIA Corp",
+     "exchange": "NASDAQ",
+     "region": "US"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 610000000,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  }
+ ],
+ "response": {
+  "status": 200
+ }
+}

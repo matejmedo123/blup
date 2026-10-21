@@ -1,0 +1,193 @@
+{
+ "data": [
+  {
+   "id": "1848000000000000006",
+   "text": "Tesla shares extend gains after the open $TSLA",
+   "author_id": "106",
+   "created_at": "2026-10-20T14:30:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000006"
+   ],
+   "public_metrics": {
+    "retweet_count": 6,
+    "reply_count": 3,
+    "like_count": 40,
+    "quote_count": 0,
+    "bookmark_count": 0,
+    "impression_count": 1600
+   }
+  },
+  {
+   "id": "1848000000000000005",
+   "text": "Short $TSLA here, the merger chatter is just a rumor until filed",
+   "author_id": "105",
+   "created_at": "2026-10-20T14:10:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000005"
+   ],
+   "public_metrics": {
+    "retweet_count": 0,
+    "reply_count": 4,
+    "like_count": 9,
+    "quote_count": 0,
+    "bookmark_count": 0,
+    "impression_count": 360
+   }
+  },
+  {
+   "id": "1848000000000000004",
+   "text": "$TSLA weekly 380 calls trading 4x average volume into earnings",
+   "author_id": "104",
+   "created_at": "2026-10-20T13:55:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000004"
+   ],
+   "public_metrics": {
+    "retweet_count": 20,
+    "reply_count": 6,
+    "like_count": 85,
+    "quote_count": 2,
+    "bookmark_count": 0,
+    "impression_count": 3400
+   }
+  },
+  {
+   "id": "1848000000000000003",
+   "text": "$TSLA to the moon, calls loaded, see you at 500",
+   "author_id": "103",
+   "created_at": "2026-10-20T13:40:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000003"
+   ],
+   "public_metrics": {
+    "retweet_count": 1,
+    "reply_count": 2,
+    "like_count": 12,
+    "quote_count": 0,
+    "bookmark_count": 0,
+    "impression_count": 480
+   }
+  },
+  {
+   "id": "1848000000000000001",
+   "text": "Tesla–SpaceX merger mania strikes Wall Street ahead of earnings https://t.co/fixture1",
+   "author_id": "102",
+   "created_at": "2026-10-20T13:07:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000001"
+   ],
+   "public_metrics": {
+    "retweet_count": 95,
+    "reply_count": 40,
+    "like_count": 310,
+    "quote_count": 12,
+    "bookmark_count": 0,
+    "impression_count": 12400
+   }
+  },
+  {
+   "id": "1848000000000000002",
+   "text": "*TESLA BOARD SAID TO WEIGH SPACEX COMBINATION, DECISION SEEN BEFORE EARNINGS: SOURCES $TSLA",
+   "author_id": "101",
+   "created_at": "2026-10-20T12:58:00.000Z",
+   "lang": "en",
+   "edit_history_tweet_ids": [
+    "1848000000000000002"
+   ],
+   "public_metrics": {
+    "retweet_count": 1300,
+    "reply_count": 310,
+    "like_count": 4200,
+    "quote_count": 220,
+    "bookmark_count": 0,
+    "impression_count": 168000
+   }
+  }
+ ],
+ "includes": {
+  "users": [
+   {
+    "id": "106",
+    "name": "Fixture Late",
+    "username": "fixture_late",
+    "verified": false,
+    "public_metrics": {
+     "followers_count": 3000,
+     "following_count": 100,
+     "tweet_count": 5000,
+     "listed_count": 50
+    }
+   },
+   {
+    "id": "105",
+    "name": "Fixture Trader",
+    "username": "fixture_trader",
+    "verified": false,
+    "public_metrics": {
+     "followers_count": 1200,
+     "following_count": 100,
+     "tweet_count": 5000,
+     "listed_count": 50
+    }
+   },
+   {
+    "id": "104",
+    "name": "Fixture Options Flow",
+    "username": "fixture_options",
+    "verified": false,
+    "public_metrics": {
+     "followers_count": 45000,
+     "following_count": 100,
+     "tweet_count": 5000,
+     "listed_count": 50
+    }
+   },
+   {
+    "id": "103",
+    "name": "Moon Boy (fixture)",
+    "username": "moonboy_fixture",
+    "verified": false,
+    "public_metrics": {
+     "followers_count": 900,
+     "following_count": 100,
+     "tweet_count": 5000,
+     "listed_count": 50
+    }
+   },
+   {
+    "id": "102",
+    "name": "Fixture Wire",
+    "username": "fixture_wire",
+    "verified": true,
+    "public_metrics": {
+     "followers_count": 210000,
+     "following_count": 100,
+     "tweet_count": 5000,
+     "listed_count": 50
+    }
+   },
+   {
+    "id": "101",
+    "name": "Fixture Squawk",
+    "username": "FixtureSquawk",
+    "verified": true,
+    "public_metrics": {
+     "followers_count": 880000,
+     "following_count": 100,
+     "tweet_count": 5000,
+     "listed_count": 50
+    }
+   }
+  ]
+ },
+ "meta": {
+  "newest_id": "1848000000000000006",
+  "oldest_id": "1848000000000000002",
+  "result_count": 6
+ }
+}

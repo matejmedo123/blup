@@ -7,8 +7,15 @@ and The Block (listings, delistings, ETF flows, hacks, unlocks, regulation,
 macro). Meme coins: DexScreener profile updates, boosts, new social links and
 sudden liquidity changes.
 
+Social: X posts (official API, pay-per-use — needs X_BEARER_TOKEN and stays
+inside a daily read budget) for the watchlist cashtags plus a breaking feed from
+curated wire-style accounts, and StockTwits crowd sentiment (free). `--feed`
+refreshes trader/news_feed.json — every source merged, near-duplicates folded,
+ranked — which the dashboard also uses.
+
 Examples:
   python3 news.py --asset stock --symbols TSLA,NVDA
+  python3 news.py --feed                         # best news across all sources
   python3 news.py --asset crypto
   python3 news.py --asset meme --symbols SOL:<mint>
   python3 news.py --asset stock --symbols TSLA --offline --now 2026-10-20T14:15:00Z
@@ -16,9 +23,11 @@ Examples:
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import re
 import sys
+import threading
 
 _ROOT = os.environ.get("TRADER_PACK_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if not os.path.isdir(os.path.join(_ROOT, "shared")):
@@ -27,7 +36,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from shared import cli, config, data, html, http, market_clock, state, symbols  # noqa: E402
-from shared.sources import dexscreener, rss, sec, yahoo  # noqa: E402
+from shared.sources import dexscreener, rss, sec, stocktwits, x, yahoo  # noqa: E402
 
 MAX_SEEN = 600
 FIRST_RUN_HOURS = 24
@@ -257,6 +266,390 @@ def meme_items(tokens, snapshots: dict, now, notes: list) -> list:
     return items
 
 
+# --- social: X and StockTwits -------------------------------------------------------------------
+
+CRYPTO_WORDS = re.compile(r"\b(crypto|token|blockchain|defi|stablecoin|altcoin|on-?chain|exchange outflow)\b", re.I)
+SOCIAL_WHY = "social chatter — crowd mood, not information"
+_NAME_SUFFIX = re.compile(r"[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|holdings|group|technologies|platforms)\.?$",
+                          re.I)
+
+
+def _short_name(name: str) -> str:
+    n = (name or "").strip()
+    for _ in range(3):
+        n = _NAME_SUFFIX.sub("", n).strip(" ,.")
+    return n.title() if n.isupper() else n
+
+
+def _stock_names(tickers, cfg) -> dict:
+    """Company names for X queries ('Tesla' for TSLA); best effort, silent on failure."""
+    try:
+        rows = data.stock_universe(cfg)["tickers"]
+    except Exception:
+        return {}
+    want = set(tickers)
+    return {r["ticker"]: _short_name(r["name"]) for r in rows if r["ticker"] in want}
+
+
+def _x_item(post, symbol, asset, rules, wire=False) -> dict:
+    text = post["text"]
+    tags, why, imp = classify(text, rules)
+    title = text if len(text) <= 280 else text[:277] + "…"
+    extra = {"asset": asset, "kind": "social", "author": post["author"], "metrics": dict(post["metrics"]),
+             "sentiment": None, "x_id": post["id"], "wire": wire, "followers": post.get("followers", 0),
+             "verified": post.get("verified", False)}
+    it = _item(symbol, "X", title, post["url"], post["published"], tags,
+               why or ("wire-style account — confirm before acting" if wire else SOCIAL_WHY), imp, extra)
+    it["id"] = hashlib.sha1(("x|%s" % post["id"]).encode("utf-8")).hexdigest()[:16]
+    cred = credibility(it)
+    if wire:
+        it["importance"] = max(imp, 2)
+    elif cred <= 2:
+        # a keyword in a small account's post is chatter about the story, not the story
+        it["importance"] = min(imp, cred)
+        if tags:
+            it["why"] = "%s (talks about %s)" % (SOCIAL_WHY, " + ".join(tags[:2]))
+    return it
+
+
+def _assign(text: str, stocks, coins):
+    """Which watched symbol (and asset) a breaking post is about; 'market' if none."""
+    for tag in re.findall(r"\$([A-Za-z]{1,6})\b", text or ""):
+        t = tag.upper()
+        if t in stocks:
+            return t, "stock"
+        if t in coins:
+            return t, "crypto"
+    mentioned = _coin_mentions(text, coins)
+    if mentioned:
+        return mentioned[0], "crypto"
+    low = (text or "").lower()
+    for t in stocks:
+        if re.search(r"(?<![a-z])%s(?![a-z])" % re.escape(t.lower()), low):
+            return t, "stock"
+    crypto = bool(_coin_mentions(text, list(COIN_WORDS)) or CRYPTO_WORDS.search(text or ""))
+    return "market", "crypto" if crypto else "stock"
+
+
+def x_items(stocks, coins, cfg, status: dict, breaking_assets=("stock", "crypto")) -> list:
+    """Cashtag search per watched symbol + one breaking query over the curated accounts."""
+    xs = x.settings(cfg)
+    items = []
+    names = _stock_names(stocks, cfg) if stocks else {}
+    queries = [(t, "stock", x.cashtag_query(t, "stock", names.get(t, ""))) for t in stocks]
+    queries += [(c, "crypto", x.cashtag_query(c, "crypto", (COIN_WORDS.get(c) or [""])[0])) for c in coins]
+    try:
+        for sym, asset, q in queries:
+            for post in x.search_recent(q, max_results=10, sort="relevancy", cfg=cfg):
+                items.append(_x_item(post, sym, asset, STOCK_RULES if asset == "stock" else CRYPTO_RULES))
+        accounts = []
+        for a in breaking_assets:
+            accounts += [n for n in (xs.get("accounts") or {}).get(a) or [] if n not in accounts]
+        if accounts:
+            for post in x.breaking(accounts, max_results=20, cfg=cfg):
+                sym, asset = _assign(post["text"], stocks, coins)
+                rules = CRYPTO_RULES if asset == "crypto" else STOCK_RULES
+                it = _x_item(post, sym, asset, rules, wire=True)
+                if sym == "market":
+                    it["tags"] = ["market"] + it["tags"]
+                items.append(it)
+        status["X"] = x.ST_OK
+    except x.XUnavailable as exc:
+        status["X"] = exc.status
+    except (ValueError, http.SourceError) as exc:
+        status["X"] = "error: %s" % exc
+    return items
+
+
+def crowd_summary(symbol: str, asset: str, now) -> dict:
+    """StockTwits stream → {"summary": {...}, "messages": [...]} for one symbol."""
+    return stocktwits.stream(symbol, asset, now_ts=now.timestamp())
+
+
+def _crowd_line(sym: str, summ: dict, suffix: bool = True) -> str:
+    n = summ["last_hour"]
+    count = ("%d+" % n) if summ.get("capped") else str(n)
+    if summ.get("bullish_pct") is None:
+        mood = "no bullish/bearish tags"
+    else:
+        mood = "%.0f%% bullish" % summ["bullish_pct"]
+    return "%s on StockTwits: %s messages in the last hour, %s%s" % (
+        sym, count, mood, " — crowd mood, not information" if suffix else "")
+
+
+def _substantive(text: str) -> bool:
+    words = [w for w in re.sub(r"https?://\S+|\$[A-Za-z.]+", " ", text or "").split() if re.search(r"[a-z]", w, re.I)]
+    return len(words) >= 5
+
+
+def stocktwits_items(sym: str, asset: str, crowd: dict, now) -> list:
+    summ = crowd["summary"]
+    pct = summ.get("bullish_pct")
+    sentiment = "bullish" if pct is not None and pct >= 60 else ("bearish" if pct is not None and pct <= 40 else None)
+    hour = market_clock.iso(now)[:13]
+    st_url = "https://stocktwits.com/symbol/%s" % stocktwits.st_symbol(sym, asset)
+    head = _item(sym, "StockTwits", _crowd_line(sym, summ, suffix=False), st_url, market_clock.iso(now), ["crowd"],
+                 SOCIAL_WHY, 1, {"asset": asset, "kind": "social", "author": None, "sentiment": sentiment,
+                                  "metrics": {"messages": summ["count"], "last_hour": summ["last_hour"],
+                                              "bullish_pct": pct}, "crowd_summary": True})
+    head["id"] = hashlib.sha1(("stsum|%s|%s" % (sym, hour)).encode("utf-8")).hexdigest()[:16]
+    out = [head]
+    msgs = [m for m in crowd["messages"] if _substantive(m["text"])]
+    msgs.sort(key=lambda m: -(m["likes"] * 2 + math.log10(max(m["followers"], 1))))
+    for m in msgs[:2]:
+        it = _item(sym, "StockTwits", m["text"][:280], m["url"], m["published"], [], SOCIAL_WHY, 1,
+                   {"asset": asset, "kind": "social", "author": "@" + m["author"], "sentiment": m["sentiment"],
+                    "metrics": {"likes": m["likes"]}, "followers": m["followers"]})
+        it["id"] = hashlib.sha1(("st|%s" % m["id"]).encode("utf-8")).hexdigest()[:16]
+        out.append(it)
+    return out
+
+
+# --- the aggregated feed (news_feed.json) ----------------------------------------------------------
+
+FEED_FILE = "news_feed.json"
+FEED_MAX_AGE_DAYS = 7
+FEED_SEEN_IDS = 5000
+DUP_JACCARD = 0.6
+_FEED_LOCK = threading.Lock()
+_STOP = {"the", "and", "for", "with", "from", "that", "this", "into", "after", "ahead", "over", "amid", "says",
+         "said", "its", "are", "was", "has", "have", "will", "per", "new", "via"}
+OUTLETS = {"Yahoo Finance", "Google News", "CoinDesk", "Cointelegraph", "The Block"}
+
+
+def _tokens(text: str) -> set:
+    t = re.sub(r"https?://\S+|\$[A-Za-z]+|[*]", " ", (text or "").lower())
+    t = t.replace("–", " ").replace("—", " ")
+    return {w for w in re.findall(r"[a-z0-9]+", t) if len(w) >= 3 and w not in _STOP}
+
+
+def similar(a: str, b: str) -> bool:
+    ta, tb = _tokens(a), _tokens(b)
+    if len(ta) < 4 or len(tb) < 4:
+        return False
+    return len(ta & tb) / float(len(ta | tb)) >= DUP_JACCARD
+
+
+def credibility(it: dict) -> int:
+    """SEC filing and wire-style accounts > major outlets > social chatter."""
+    src = it.get("source") or ""
+    if src == "SEC EDGAR":
+        return 5
+    if src == "X":
+        if it.get("wire"):
+            return 4
+        if it.get("verified") and (it.get("followers") or 0) >= 100000:
+            return 3
+        return 2 if (it.get("followers") or 0) >= 10000 else 1
+    if src in OUTLETS or "(via Google News)" in src:
+        return 3
+    if src == "DexScreener":
+        return 2
+    return 1  # StockTwits and anything unknown
+
+
+def source_label(it: dict) -> str:
+    if it.get("source") in ("X", "StockTwits") and it.get("author"):
+        return "%s %s" % (it["source"], it["author"])
+    return it.get("source") or "?"
+
+
+def fold_duplicates(items: list) -> list:
+    """Keep one copy of a story told by several sources: the most credible (then the earliest)."""
+    keep = []
+    for it in sorted(items, key=lambda i: (-credibility(i), i.get("published") or "")):
+        dup = None
+        for k in keep:
+            if k["id"] == it["id"]:
+                dup = k
+                break
+            if it.get("crowd_summary") or k.get("crowd_summary"):
+                continue
+            if similar(k["title"], it["title"]):
+                dup = k
+                break
+        if dup is None:
+            keep.append(it)
+            continue
+        if dup["id"] != it["id"]:
+            label = source_label(it)
+            also = dup.setdefault("also", [])
+            if label not in also and label != source_label(dup):
+                also.append(label)
+            dup["importance"] = max(dup.get("importance") or 1, it.get("importance") or 1)
+            for t in it.get("tags") or []:
+                if t not in dup.setdefault("tags", []):
+                    dup["tags"].append(t)
+    return keep
+
+
+def _engagement(it: dict) -> int:
+    m = it.get("metrics") or {}
+    return int(m.get("likes") or 0) + 2 * int(m.get("reposts") or 0)
+
+
+def score(it: dict, now_ts: float, baselines: dict) -> float:
+    """credibility, then importance, then unusual engagement for that author, then recency."""
+    s = credibility(it) * 10 + (it.get("importance") or 1) * 8
+    if it.get("source") == "X":
+        eng = _engagement(it)
+        base = baselines.get(it.get("author")) or baselines.get("*") or 0
+        ratio = (eng + 1.0) / (base + 1.0)
+        if eng >= 50 and ratio > 1:
+            s += min(10.0, 3 * math.log(ratio, 2))
+    pub = it.get("published")
+    if pub:
+        age_h = max(0.0, (now_ts - market_clock.parse_iso(pub).timestamp()) / 3600.0)
+        s += 10 * max(0.0, 1 - age_h / 24.0)
+    return round(s, 2)
+
+
+def _baselines(items: list) -> dict:
+    by = {}
+    for it in items:
+        if it.get("source") == "X":
+            by.setdefault(it.get("author"), []).append(_engagement(it))
+    out = {}
+    allv = []
+    for author, vals in by.items():
+        allv += vals
+        if len(vals) >= 2:
+            out[author] = sorted(vals)[len(vals) // 2]
+    if allv:
+        out["*"] = sorted(allv)[len(allv) // 2]
+    return out
+
+
+def _normalise(it: dict, asset: str) -> dict:
+    it.setdefault("asset", asset)
+    it.setdefault("kind", "filing" if it.get("source") == "SEC EDGAR" else "news")
+    it.setdefault("author", None)
+    it.setdefault("sentiment", None)
+    it.setdefault("metrics", {})
+    if it.get("symbol") == "market" and asset == "crypto":
+        it["asset"] = "crypto"
+    return it
+
+
+def _watch(cfg: dict, assets, raw_symbols):
+    stocks, coins, memes = [], [], []
+    if raw_symbols:
+        for raw in raw_symbols:
+            try:
+                sym = data.as_symbol(raw)
+            except (symbols.SymbolError, ValueError):
+                continue
+            (stocks if sym.asset == "stock" else coins if sym.asset == "crypto" else memes).append(
+                sym.key if sym.asset == "stock" else sym.base if sym.asset == "crypto" else raw)
+    else:
+        wl = cfg.get("watchlists") or {}
+        stocks = [symbols.parse(t, asset="stock").key for t in wl.get("stocks") or []]
+        coins = [symbols.parse(c, asset="crypto").base for c in wl.get("crypto") or []]
+        memes = list(wl.get("meme") or [])
+    want = set(assets or ("stock", "crypto", "meme"))
+    return ([s for s in stocks if "stock" in want], [c for c in coins if "crypto" in want],
+            [m for m in memes if "meme" in want])
+
+
+def _status_from_notes(notes: list, names, status: dict) -> None:
+    for name in names:
+        hit = [n for n in notes if name in n]
+        if name == "SEC EDGAR" and any("SEC 8-K filings skipped" in n for n in notes):
+            status[name] = "skipped — set sec_user_agent in trader/config.json"
+        elif hit:
+            status[name] = "error: %s" % hit[0][:160]
+        else:
+            status.setdefault(name, "ok")
+
+
+def refresh_feed(assets=None, symbols=None, now=None) -> dict:
+    """Fetch every source once, fold duplicates, rank, merge into trader/news_feed.json.
+
+    Safe to call from a background thread: one refresh at a time, every source fails
+    on its own (its status says why), and nothing but news_feed.json and x_usage.json
+    is written. Returns {"new": n, "items": total, "sources": {name: status}, "updated_at": iso}.
+    """
+    with _FEED_LOCK:
+        return _refresh_feed(assets, symbols, now)
+
+
+def _refresh_feed(assets, raw_symbols, now) -> dict:
+    cfg = config.load_config()
+    now = market_clock.parse_iso(now) if now else market_clock.now_utc()
+    now_ts = now.timestamp()
+    stocks, coins, memes = _watch(cfg, assets, raw_symbols)
+    doc = state.read_json(FEED_FILE, {}) or {}
+    status, notes, fresh = {}, [], []
+    news_cfg = cfg.get("news") or {}
+    try:
+        for t in stocks:
+            fresh += [_normalise(it, "stock") for it in stock_items(t, cfg, notes)]
+        if stocks:
+            _status_from_notes(notes, ("Yahoo Finance", "Google News", "SEC EDGAR"), status)
+    except Exception as exc:  # keep the other sources alive
+        status["news"] = "error: %s" % exc
+    try:
+        if coins:
+            before = len(notes)
+            fresh += [_normalise(it, "crypto") for it in crypto_items(coins, notes)]
+            _status_from_notes(notes[before:], list(rss.CRYPTO_FEEDS), status)
+    except Exception as exc:
+        status["crypto news"] = "error: %s" % exc
+    if stocks or coins:
+        if (news_cfg.get("x") or {}).get("enabled", True):
+            try:
+                bassets = [a for a in ("stock", "crypto") if (a == "stock" and stocks) or (a == "crypto" and coins)]
+                fresh += [it for it in x_items(stocks, coins, cfg, status, bassets) if it["asset"] in bassets]
+            except Exception as exc:
+                status["X"] = "error: %s" % exc
+        else:
+            status["X"] = x.ST_DISABLED
+        if (news_cfg.get("stocktwits") or {}).get("enabled", True):
+            errs = []
+            for sym, asset in [(t, "stock") for t in stocks] + [(c, "crypto") for c in coins]:
+                try:
+                    fresh += stocktwits_items(sym, asset, crowd_summary(sym, asset, now), now)
+                except Exception as exc:
+                    errs.append("%s: %s" % (sym, exc))
+            status["StockTwits"] = ("error: " + "; ".join(errs)[:200]) if errs else "ok"
+    if memes:
+        snaps = doc.setdefault("meme_snapshots", {})
+        before = len(notes)
+        try:
+            fresh += [_normalise(it, "meme") for it in meme_items(memes, snaps, now, notes)]
+            status["DexScreener"] = ("error: %s" % notes[before][:160]) if len(notes) > before else "ok"
+        except Exception as exc:
+            status["DexScreener"] = "error: %s" % exc
+    cutoff = now_ts - FEED_MAX_AGE_DAYS * 86400
+    fresh = [it for it in fresh if not it.get("published")
+             or cutoff <= market_clock.parse_iso(it["published"]).timestamp() <= now_ts]
+    old = [it for it in doc.get("items") or []
+           if not (it.get("published") and market_clock.parse_iso(it["published"]).timestamp() < cutoff)]
+    # the crowd summary is a snapshot: the newest one per symbol replaces the previous
+    summary_syms = {it["symbol"] for it in fresh if it.get("crowd_summary")}
+    old = [it for it in old if not (it.get("crowd_summary") and it["symbol"] in summary_syms)]
+    # ids already reported — kept beyond the item cap so capped-out stories are not "new" again next time
+    seen_ids = set(doc.get("seen_ids") or []) | {it["id"] for it in old}
+    merged = fold_duplicates(old + fresh)
+    new_ids = [it["id"] for it in merged if it["id"] not in seen_ids]
+    new = len(new_ids)
+    base = _baselines(merged)
+    for it in merged:
+        it["score"] = score(it, now_ts, base)
+        it["credibility"] = credibility(it)
+    merged.sort(key=lambda it: it.get("published") or "", reverse=True)
+    cap = int(news_cfg.get("feed_max_items") or 500)
+    seen_list = [i for i in doc.get("seen_ids") or [] if i] + new_ids
+    doc.update({"updated_at": market_clock.iso(now), "items": merged[:cap], "sources": status,
+                "seen_ids": seen_list[-FEED_SEEN_IDS:]})
+    state.write_json(FEED_FILE, doc)
+    return {"new": new, "items": len(doc["items"]), "sources": status, "updated_at": doc["updated_at"]}
+
+
+def best(items: list, limit: int = 20) -> list:
+    return sorted(items, key=lambda it: -(it.get("score") or 0))[:limit]
+
+
 # --- seen-tracking -----------------------------------------------------------------------------
 
 def _scope(asset: str, symbol: str) -> str:
@@ -302,7 +695,7 @@ def _when(it, asset) -> str:
     return t.strftime("%H:%M UTC") if t.date() == market_clock.now_utc().date() else t.strftime("%b %d %H:%M UTC")
 
 
-def render(asset, groups, new, notes, last_checks) -> str:
+def render(asset, groups, new, notes, last_checks, crowd=None) -> str:
     lines = ["News Monitor · %s · checked %s" % ({"stock": "stocks", "crypto": "crypto", "meme": "meme coins"}[asset],
                                                  (_et(market_clock.now_utc(), True) + " ET")
                                                  if asset == "stock" else market_clock.fmt_utc(market_clock.now_utc(),
@@ -314,15 +707,35 @@ def render(asset, groups, new, notes, last_checks) -> str:
             prev = last_checks.get(sym)
             lines.append("%s — no new items%s" % (label, (" since %s" % _when({"published": prev}, asset))
                                                    if prev else ""))
-            continue
-        lines.append("%s — %d new since last check" % (label, len(mine)))
-        for it in mine:
-            mark = {3: "[!!!]", 2: "[!! ]"}.get(it["importance"], "[!  ]")
-            also = (" (also: %s)" % ", ".join(it["also"])) if it.get("also") else ""
-            lines.append("  %s %s  %s — %s%s — %s" % (mark, _when(it, asset), it["title"], it["source"], also,
-                                                      it["why"]))
+        else:
+            lines.append("%s — %d new since last check" % (label, len(mine)))
+            for it in mine:
+                lines.append(_line(it, asset))
+        if crowd and crowd.get(sym):
+            lines.append("  ~ " + _crowd_line(sym, crowd[sym]))
     for n in notes:
         lines.append("  note: " + n)
+    return "\n".join(lines)
+
+
+def _line(it, asset, with_symbol=False) -> str:
+    mark = {3: "[!!!]", 2: "[!! ]"}.get(it.get("importance"), "[!  ]")
+    also = (" (also: %s)" % ", ".join(it["also"])) if it.get("also") else ""
+    title = it["title"] if len(it["title"]) <= 160 else it["title"][:157] + "…"
+    sym = ("%-6s " % it["symbol"]) if with_symbol else ""
+    return "  %s %s  %s%s — %s%s — %s" % (mark, _when(it, asset), sym, title, source_label(it), also, it["why"])
+
+
+def render_feed(doc: dict, limit: int) -> str:
+    items = best(doc.get("items") or [], limit)
+    lines = ["News feed · best %d of %d · updated %s" % (len(items), len(doc.get("items") or []),
+                                                         market_clock.fmt_utc(doc.get("updated_at") or
+                                                                              market_clock.now_utc(), True))]
+    for it in items:
+        lines.append(_line(it, it.get("asset") or "stock", with_symbol=True))
+    srcs = doc.get("sources") or {}
+    if srcs:
+        lines.append("  sources: " + " · ".join("%s %s" % (k, v) for k, v in sorted(srcs.items())))
     return "\n".join(lines)
 
 
@@ -331,7 +744,7 @@ def write_report(asset, new, now):
     for it in new:
         rows.append([{3: "!!!", 2: "!!", 1: "!"}.get(it["importance"], ""), _when(it, asset), it["symbol"] if
                      it["symbol"] != "market" else "market", html.link(it["url"], it["title"]) if it.get("url")
-                     else it["title"], it["source"], it["why"]])
+                     else it["title"], source_label(it), it["why"]])
     body = html.card("New since last check", html.table(["", "When", "Symbol", "Headline", "Source", "Why it matters"],
                                                         rows) if rows else "<p class='muted'>Nothing new.</p>")
     page = html.page("News Monitor · %s" % asset, body, subtitle="checked %s" % market_clock.iso(now), asset=asset)
@@ -345,6 +758,11 @@ def build_parser():
     p.add_argument("--all", action="store_true", help="also show items you have already seen")
     p.add_argument("--since", metavar="ISO", help="only items published after this time")
     p.add_argument("--limit", type=int, default=12, help="max items per symbol (default 12)")
+    p.add_argument("--social", dest="social", action="store_true", default=True,
+                   help="include X posts (needs X_BEARER_TOKEN, pay-per-use) and StockTwits crowd mood (default)")
+    p.add_argument("--no-social", dest="social", action="store_false", help="headlines and filings only")
+    p.add_argument("--feed", action="store_true",
+                   help="refresh trader/news_feed.json from every source and print the best items")
     return p
 
 
@@ -352,8 +770,17 @@ def build_parser():
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     ctx = cli.init(args)
-    asset = args.asset or "stock"
     now = market_clock.now_utc()
+    if args.feed:
+        raw = [s.strip() for s in (args.symbols or "").split(",") if s.strip()]
+        res = refresh_feed([args.asset] if args.asset else None, raw or None, now)
+        doc = state.read_json(FEED_FILE, {}) or {}
+        text = render_feed(doc, max(1, args.limit if args.limit != 12 else 20))
+        text += "\n  %d new item(s) this refresh · saved %s" % (res["new"], FEED_FILE)
+        cli.emit(args, text, {"refresh": res, "best": best(doc.get("items") or [], 20)},
+                 sorted({it.get("asset") for it in doc.get("items") or [] if it.get("asset")}) or None)
+        return 0
+    asset = args.asset or "stock"
     seen_doc = state.read_json("news_seen.json", {}) or {}
     scopes = seen_doc.setdefault("scopes", {})
     snapshots = seen_doc.setdefault("meme_snapshots", {})
@@ -388,6 +815,24 @@ def main(argv=None) -> int:
                 groups.append("%s:%s" % (s.chain, s.address) if s.address else t)
             except symbols.SymbolError:
                 groups.append(t)
+    crowd = {}
+    if args.social and asset in ("stock", "crypto"):
+        social_syms = [g for g in groups if g != "market"]
+        status = {}
+        stocks_ = social_syms if asset == "stock" else []
+        coins_ = social_syms if asset == "crypto" else []
+        xs = [it for it in x_items(stocks_, coins_, ctx.cfg, status, (asset,)) if it["asset"] == asset]
+        if status.get("X") not in (x.ST_OK, None):
+            notes.append("X: %s" % status["X"])
+        items = fold_duplicates(items + xs)
+        if any(it["symbol"] == "market" for it in xs) and "market" not in groups:
+            groups.append("market")
+        if ((ctx.cfg.get("news") or {}).get("stocktwits") or {}).get("enabled", True):
+            for g in social_syms:
+                try:
+                    crowd[g] = crowd_summary(g, asset, now)["summary"]
+                except Exception as exc:
+                    notes.append("StockTwits %s: %s" % (g, exc))
     last_checks = {g: (scopes.get(_scope(asset, g)) or {}).get("last_check") for g in groups}
     new = filter_new(items, scopes, asset, now, args.since, args.all)
     trimmed = []
@@ -399,9 +844,9 @@ def main(argv=None) -> int:
         scopes.setdefault(_scope(asset, g), {"ids": [], "last_check": None})["last_check"] = market_clock.iso(now)
     state.write_json("news_seen.json", seen_doc)
     payload = {"checked_at": market_clock.iso(now), "asset": asset, "scope": "%s:%s" % (asset, ",".join(groups)),
-               "items": trimmed, "notes": notes}
+               "items": trimmed, "notes": notes, "crowd": crowd}
     state.write_json("news.json", payload)
-    text = render(asset, groups, trimmed, notes, last_checks)
+    text = render(asset, groups, trimmed, notes, last_checks, crowd)
     path = None
     if not args.no_html:
         path = write_report(asset, trimmed, now)

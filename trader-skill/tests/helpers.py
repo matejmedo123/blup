@@ -27,7 +27,8 @@ MEME_FAIL = "SOL:" + TOKENS["MLAMBO"]["address"]
 MEME_NEW = "base:" + TOKENS["NEWT"]["address"]
 
 _ENV_KEYS = ("TRADER_HOME", "TRADER_OFFLINE", "TRADER_FIXTURES", "TRADER_NOW", "TRADER_OFFLINE_FAIL",
-             "TRADER_OFFLINE_BLOCK", "SEC_USER_AGENT")
+             "TRADER_OFFLINE_BLOCK", "SEC_USER_AGENT", "X_BEARER_TOKEN", "ALPACA_PAPER_KEY_ID",
+             "ALPACA_PAPER_SECRET_KEY", "ALPACA_LIVE_KEY_ID", "ALPACA_LIVE_SECRET_KEY", "TRADER_DASHBOARD_PASSWORD")
 
 
 class NetworkBlocked(AssertionError):
@@ -53,7 +54,7 @@ class TraderTestCase(unittest.TestCase):
         os.environ["TRADER_OFFLINE"] = "1"
         os.environ["TRADER_FIXTURES"] = str(FIXTURES)
         os.environ["TRADER_NOW"] = self.NOW or MANIFEST["default_now"]
-        for k in ("TRADER_OFFLINE_FAIL", "TRADER_OFFLINE_BLOCK", "SEC_USER_AGENT"):
+        for k in _ENV_KEYS[4:]:  # never let a real key from the developer's shell leak into a test
             os.environ.pop(k, None)
         http.reset()
         self._urlopen = urllib.request.urlopen

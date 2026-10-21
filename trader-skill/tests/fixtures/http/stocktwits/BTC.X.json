@@ -1,0 +1,1266 @@
+{
+ "symbol": {
+  "id": 11418,
+  "symbol": "BTC.X",
+  "symbol_display": "BTC",
+  "exchange": "CRYPTO",
+  "region": "X",
+  "title": "Bitcoin",
+  "aliases": [],
+  "instrument_class": "CRYPTO",
+  "watchlist_count": 1000000,
+  "has_pricing": true
+ },
+ "cursor": {
+  "more": true,
+  "since": 620000024,
+  "max": 620000000
+ },
+ "regions": [],
+ "filters": [],
+ "messages": [
+  {
+   "id": 620000024,
+   "body": "$BTC rumor pump, selling into it",
+   "created_at": "2026-10-20T14:34:48Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9024,
+    "username": "fixture_btc_02",
+    "name": "Fixture Btc 02",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 938,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000024,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000023,
+   "body": "$BTC volume check",
+   "created_at": "2026-10-20T14:28:41Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9023,
+    "username": "fixture_btc_01",
+    "name": "Fixture Btc 01",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 901,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000023,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000100,
+   "body": "$BTC funding still neutral while open interest climbs into the US open, real spot demand",
+   "created_at": "2026-10-20T14:25:00Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 8900,
+    "username": "fixture_onchain",
+    "name": "Fixture Onchain",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 18000,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 41,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000100,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000022,
+   "body": "$BTC higher lows all morning, long",
+   "created_at": "2026-10-20T14:22:34Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9022,
+    "username": "fixture_btc_00",
+    "name": "Fixture Btc 00",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 864,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000022,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000021,
+   "body": "$BTC what time is the earnings call",
+   "created_at": "2026-10-20T14:16:27Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9021,
+    "username": "fixture_btc_10",
+    "name": "Fixture Btc 10",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 827,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000021,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000020,
+   "body": "$BTC buy the dip, same as always",
+   "created_at": "2026-10-20T14:10:20Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9020,
+    "username": "fixture_btc_09",
+    "name": "Fixture Btc 09",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 790,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000020,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000019,
+   "body": "$BTC volume check",
+   "created_at": "2026-10-20T14:04:13Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9019,
+    "username": "fixture_btc_08",
+    "name": "Fixture Btc 08",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 753,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000019,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000018,
+   "body": "$BTC valuation makes no sense, short",
+   "created_at": "2026-10-20T13:58:06Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9018,
+    "username": "fixture_btc_07",
+    "name": "Fixture Btc 07",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 716,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000018,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000017,
+   "body": "$BTC what time is the earnings call",
+   "created_at": "2026-10-20T13:52:59Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9017,
+    "username": "fixture_btc_06",
+    "name": "Fixture Btc 06",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 679,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000017,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000016,
+   "body": "$BTC merger talk is real, holding calls through earnings",
+   "created_at": "2026-10-20T13:46:52Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9016,
+    "username": "fixture_btc_05",
+    "name": "Fixture Btc 05",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 642,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000016,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000015,
+   "body": "$BTC volume check",
+   "created_at": "2026-10-20T13:40:45Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9015,
+    "username": "fixture_btc_04",
+    "name": "Fixture Btc 04",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 605,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000015,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000014,
+   "body": "$BTC higher lows all morning, long",
+   "created_at": "2026-10-20T13:34:38Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9014,
+    "username": "fixture_btc_03",
+    "name": "Fixture Btc 03",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 568,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000014,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000013,
+   "body": "$BTC what time is the earnings call",
+   "created_at": "2026-10-20T13:28:31Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9013,
+    "username": "fixture_btc_02",
+    "name": "Fixture Btc 02",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 531,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000013,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000012,
+   "body": "$BTC rumor pump, selling into it",
+   "created_at": "2026-10-20T13:22:24Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9012,
+    "username": "fixture_btc_01",
+    "name": "Fixture Btc 01",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 494,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000012,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000011,
+   "body": "$BTC volume check",
+   "created_at": "2026-10-20T13:16:17Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9011,
+    "username": "fixture_btc_00",
+    "name": "Fixture Btc 00",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 457,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000011,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000010,
+   "body": "$BTC volume is huge today, this is going higher",
+   "created_at": "2026-10-20T13:10:10Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9010,
+    "username": "fixture_btc_10",
+    "name": "Fixture Btc 10",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 420,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000010,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000009,
+   "body": "$BTC what time is the earnings call",
+   "created_at": "2026-10-20T13:04:03Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9009,
+    "username": "fixture_btc_09",
+    "name": "Fixture Btc 09",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 383,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000009,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000008,
+   "body": "$BTC merger talk is real, holding calls through earnings",
+   "created_at": "2026-10-20T12:58:56Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9008,
+    "username": "fixture_btc_08",
+    "name": "Fixture Btc 08",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 346,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000008,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000007,
+   "body": "$BTC volume check",
+   "created_at": "2026-10-20T12:52:49Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9007,
+    "username": "fixture_btc_07",
+    "name": "Fixture Btc 07",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 309,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000007,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000006,
+   "body": "$BTC valuation makes no sense, short",
+   "created_at": "2026-10-20T12:46:42Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9006,
+    "username": "fixture_btc_06",
+    "name": "Fixture Btc 06",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 272,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000006,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000005,
+   "body": "$BTC what time is the earnings call",
+   "created_at": "2026-10-20T12:40:35Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9005,
+    "username": "fixture_btc_05",
+    "name": "Fixture Btc 05",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 235,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000005,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000004,
+   "body": "$BTC buy the dip, same as always",
+   "created_at": "2026-10-20T12:34:28Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9004,
+    "username": "fixture_btc_04",
+    "name": "Fixture Btc 04",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 198,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000004,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000003,
+   "body": "$BTC volume check",
+   "created_at": "2026-10-20T12:28:21Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9003,
+    "username": "fixture_btc_03",
+    "name": "Fixture Btc 03",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 161,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000003,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000002,
+   "body": "$BTC volume is huge today, this is going higher",
+   "created_at": "2026-10-20T12:22:14Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bullish"
+    }
+   },
+   "user": {
+    "id": 9002,
+    "username": "fixture_btc_02",
+    "name": "Fixture Btc 02",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 124,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 6,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000002,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000001,
+   "body": "$BTC what time is the earnings call",
+   "created_at": "2026-10-20T12:16:07Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": null
+   },
+   "user": {
+    "id": 9001,
+    "username": "fixture_btc_01",
+    "name": "Fixture Btc 01",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 87,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "likes": {
+    "total": 3,
+    "user_ids": []
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000001,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  },
+  {
+   "id": 620000000,
+   "body": "$BTC rumor pump, selling into it",
+   "created_at": "2026-10-20T12:10:00Z",
+   "discussion": false,
+   "source": {
+    "id": 2269,
+    "title": "StockTwits Web",
+    "url": "https://stocktwits.com"
+   },
+   "mentioned_users": [],
+   "entities": {
+    "sentiment": {
+     "basic": "Bearish"
+    }
+   },
+   "user": {
+    "id": 9000,
+    "username": "fixture_btc_00",
+    "name": "Fixture Btc 00",
+    "join_date": "2021-01-01",
+    "official": false,
+    "identity": "User",
+    "classification": [],
+    "followers": 50,
+    "following": 10,
+    "ideas": 100,
+    "like_count": 50
+   },
+   "symbols": [
+    {
+     "id": 11418,
+     "symbol": "BTC.X",
+     "symbol_display": "BTC",
+     "title": "Bitcoin",
+     "exchange": "CRYPTO",
+     "region": "X"
+    }
+   ],
+   "conversation": {
+    "parent_message_id": 620000000,
+    "in_reply_to_message_id": null,
+    "parent": true,
+    "replies": 0
+   }
+  }
+ ],
+ "response": {
+  "status": 200
+ }
+}

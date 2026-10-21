@@ -403,4 +403,7 @@ orders: `[{"id": "...", "client_order_id": "...", "symbol": "...", "side": "buy|
   "author": "@DeItaone|null", "title": "...", "url": "https://...", "published": "...", "tags": ["merger"],
   "why": "...", "importance": 1, "sentiment": "bullish|bearish|null", "metrics": {"likes": 0, "reposts": 0}}],
   "sources": {"X": "ok|no token|budget exhausted|error: …", "StockTwits": "ok"}}`
+`news_feed.json` also keeps `seen_ids` (rolling 5,000 ids, so stories that fell off the end don't come back
+as "new") and `meme_snapshots`; items may carry `score`, `credibility`, `also`, `x_id`, `wire`, `followers`,
+`verified` and `crowd_summary` (one StockTwits mood line per symbol).
 ### `x_usage.json` — `{"date": "2026-10-20", "reads": 120, "requests": 12, "max_reads_per_day": 300}`

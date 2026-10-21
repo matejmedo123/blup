@@ -338,3 +338,47 @@ def _cointelegraph(m, q, url):
 @route(r"www\.theblock\.co", r"/rss\.xml")
 def _theblock(m, q, url):
     return _read("rss/theblock.xml", url)
+
+
+# --- social: X recent search and StockTwits streams ---------------------------------------------
+
+def _before_now(stamp: str, now) -> bool:
+    if now is None or not stamp:
+        return True
+    from .market_clock import parse_iso
+    return parse_iso(stamp).timestamp() <= now
+
+
+@route(r"api\.x\.com", r"/2/tweets/search/recent")
+def _x_search(m, q, url):
+    query = q.get("query", "")
+    if "from:" in query:
+        name = "x/breaking.json"
+    else:
+        tag = re.search(r"\$([A-Za-z0-9]+)", query)
+        name = "x/cashtag_%s.json" % _safe(tag.group(1).upper()) if tag else ""
+    if not name or not _file(name).exists():
+        return json.dumps({"meta": {"result_count": 0}})  # what X answers for a query with no matches
+    data = _json(name, url)
+    now = _pinned_ts()
+    posts = [t for t in data.get("data") or [] if _before_now(t.get("created_at"), now)]
+    if q.get("sort_order") == "relevancy":
+        posts.sort(key=lambda t: -(t["public_metrics"]["like_count"] + 2 * t["public_metrics"]["retweet_count"]))
+    else:
+        posts.sort(key=lambda t: t.get("created_at") or "", reverse=True)
+    posts = posts[:max(10, min(100, int(q.get("max_results", 10))))]
+    if not posts:
+        return json.dumps({"meta": {"result_count": 0}})
+    authors = {t["author_id"] for t in posts}
+    users = [u for u in (data.get("includes") or {}).get("users") or [] if u["id"] in authors]
+    return json.dumps({"data": posts, "includes": {"users": users},
+                       "meta": {"newest_id": posts[0]["id"], "oldest_id": posts[-1]["id"],
+                                "result_count": len(posts)}})
+
+
+@route(r"api\.stocktwits\.com", r"/api/2/streams/symbol/(?P<sym>[^/]+)\.json")
+def _stocktwits(m, q, url):
+    data = _json("stocktwits/%s.json" % _safe(unquote(m.group("sym")).upper()), url)
+    now = _pinned_ts()
+    data["messages"] = [x for x in data.get("messages") or [] if _before_now(x.get("created_at"), now)][:30]
+    return json.dumps(data)
