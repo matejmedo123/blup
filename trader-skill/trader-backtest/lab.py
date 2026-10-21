@@ -895,6 +895,9 @@ def load_playbook(now=None, max_age_days: float = PLAYBOOK_DAYS, path: str = PLA
             " --etf" if path == PLAYBOOK_ETF else "")
     now_ts = market_clock.ts(now or market_clock.now_utc())
     age_d = (now_ts - market_clock.ts(pb["generated_at"])) / 86400.0
+    if age_d < -1 / 24.0:  # chosen with data from after "now": a replay of an earlier day would see the future
+        return None, "the backtest-lab playbook was made %s, after %s — it would trade with hindsight" % (
+            pb["generated_at"][:16], market_clock.iso(now_ts)[:16])
     if age_d > max_age_days:
         return None, "the backtest-lab playbook is %.0f days old (limit %g) — run trader-backtest/lab.py" % (
             age_d, max_age_days)

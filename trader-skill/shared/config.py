@@ -258,9 +258,10 @@ def _write_default(path: Path, obj: dict) -> None:
 
 def ensure_home() -> Path:
     home = trader_home()
-    home.mkdir(parents=True, exist_ok=True)
+    # yours alone when it is created: keys, journal and approvals are nobody else's business on a shared host
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
     for sub in SUBDIRS:
-        (home / sub).mkdir(exist_ok=True)
+        (home / sub).mkdir(exist_ok=True, mode=0o700)
     _write_default(home / "config.json", DEFAULT_CONFIG)
     _write_default(home / "limits.json", DEFAULT_LIMITS)
     return home

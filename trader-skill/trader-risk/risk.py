@@ -66,6 +66,11 @@ def symbol_of(obj: dict) -> symbols.Symbol:
     return data.as_symbol(obj["symbol"], obj.get("asset"))
 
 
+# the global limits count one day for everything — the UTC day the autopilot's own daily-loss kill uses: a stock
+# loss after the US close must not block the next UTC day's crypto signals until 4 a.m. (they are judged once)
+GLOBAL_DAY = "global"
+
+
 def day_of(ts_value, asset: str) -> str:
     """Trading day: New York date for stocks, UTC date for 24/7 markets."""
     dt = market_clock.parse_iso(ts_value)
@@ -122,7 +127,8 @@ def realized_loss_today(now_iso: str, asset: str = None) -> float:
         if t.get("status") != "closed" or (asset and t.get("asset") != asset):
             continue
         ex = (t.get("exit") or {}).get("time")
-        if not ex or day_of(ex, t.get("asset")) != day_of(now_iso, t.get("asset")):
+        cal = t.get("asset") if asset else GLOBAL_DAY
+        if not ex or day_of(ex, cal) != day_of(now_iso, cal):
             continue
         pnl = float(t.get("pnl_usd") or 0)
         if pnl < 0:
@@ -145,7 +151,8 @@ def trades_today(now_iso: str, asset: str = None) -> int:
         a_asset = a_asset or "stock"
         if asset and a_asset != asset:
             continue
-        if day_of(a.get("ts"), a_asset) == day_of(now_iso, a_asset):
+        cal = a_asset if asset else GLOBAL_DAY
+        if day_of(a.get("ts"), cal) == day_of(now_iso, cal):
             n += 1
     return n
 

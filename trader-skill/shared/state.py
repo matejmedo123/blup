@@ -45,7 +45,7 @@ def home() -> Path:
 
 def path(*parts: str) -> Path:
     p = home().joinpath(*parts)
-    p.parent.mkdir(parents=True, exist_ok=True)
+    p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     return p
 
 
@@ -210,7 +210,9 @@ def append_jsonl_rows(name: str, rows: list) -> Path:
     """Append several records in one write — all of them or, on a full disk, none."""
     p = path(name)
     line = "".join(json.dumps(obj, ensure_ascii=False) + "\n" for obj in rows).encode("utf-8")
-    with p.open("ab") as fh:
+    # created owner-only like every other state file (a plain open() would follow the umask: 0644)
+    fd = os.open(str(p), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "ab") as fh:
         size = fh.tell()
         try:
             fh.write(line)

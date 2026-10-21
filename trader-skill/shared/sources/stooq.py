@@ -38,8 +38,16 @@ def parse_csv(text: str, interval: str = "5m") -> list:
                         float(r["Close"]), float(r.get("Volume") or 0)))
         except (KeyError, ValueError):
             continue
-    if interval == "1d" or not raw:
-        return [Candle(*x) for x in raw]
+    if interval == "1d":
+        # a daily row is one New York session: stamp it at that session's open like Yahoo does — Warsaw midnight
+        # would make Monday's bar Sunday in New York (another signal id, a time stop a session early)
+        out = []
+        for t, o, h, l, c, v in raw:
+            d = market_clock.from_ts(t + 86400 // 2).date()  # the row's own date, whatever the offset
+            out.append(Candle(int(market_clock.et_to_utc(d, 9, 30).timestamp()), o, h, l, c, v))
+        return out
+    if not raw:
+        return []
     # end-stamped feeds put the first bar at 9:35 ET instead of 9:30 → shift back one bar
     firsts = {}
     for t, *_ in raw:

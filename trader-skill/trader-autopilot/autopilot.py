@@ -1053,8 +1053,11 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None, pbs: dict
             for e in [e for e in entries or [] if e["interval"] != INTERVAL]:
                 # only the newest closed bar, as in the backtest: a day-old signal would buy at yesterday's close
                 found += _series_candidates(sym, e, memo, handled, holding, now_ts, 0, notes)
-            w = setups.window_at(series.candles, asset, INTERVAL, now_ts - 1)
-            if not w or not (w.start <= now_ts - 1 < w.end):
+            # crypto: the window of the newest CLOSED bar — just after 00:00 UTC that is yesterday's, and its last
+            # bar (23:55) is judged like any other; stocks: only while the session runs
+            probe = bar if asset == "crypto" else now_ts - 1
+            w = setups.window_at(series.candles, asset, INTERVAL, probe)
+            if not w or not (w.start <= probe < w.end):
                 continue
             seen_bar = None
             if entries is None:
@@ -1235,7 +1238,7 @@ def make_plan(c: dict, cfg: dict) -> dict:
             d = market_clock.et_date(market_clock.from_ts(trig["t"]))
             for _ in range(int(rule.get("max_bars") or 10)):
                 d = market_clock.next_trading_day(d)
-            horizon_s = int(market_clock.ts(market_clock.et_to_utc(d, 15, 55))) - entry_ts
+            horizon_s = int(market_clock.flat_by(d).timestamp()) - entry_ts  # 12:55 on an early-close day
     elif pb:  # trade it exactly the way the backtest lab validated it
         stop, atr_mult = pb["stop"], float(pb["atr_mult"])
         target_r = float(pb["target_r"]) if pb.get("target_r") is not None else RULE_TARGET_CAP_R
@@ -1707,12 +1710,19 @@ def daily_summary(cfg: dict, st: dict, learned: dict, now) -> None:
     day = et.date().isoformat()
     if st.get("summary_sent") == day:
         return
-    utc_day = _today(now)
+    # the New York day it is named after — midnight to midnight there, not the UTC date (a stock trade closed at
+    # 4 p.m. ET would otherwise fall into no summary at all)
+    start = market_clock.et_to_utc(et.date(), 0, 0).timestamp()
+    since = market_clock.iso(start)
+
+    def today(at) -> bool:
+        try:
+            return bool(at) and market_clock.ts(at) >= start
+        except (TypeError, ValueError):
+            return False
     trades = [t for t in (state.read_json("journal.json", {}) or {}).get("trades") or []
-              if t.get("source") == "autopilot" and t.get("status") == "closed"
-              and ((t.get("exit") or {}).get("time") or "")[:10] == utc_day]
-    looked = [d for d in state.tail_jsonl(DECISIONS, stop=lambda d: bool(d.get("at")) and d["at"][:10] < utc_day)
-              if (d.get("at") or "")[:10] == utc_day]
+              if t.get("source") == "autopilot" and t.get("status") == "closed" and today((t.get("exit") or {}).get("time"))]
+    looked = [d for d in state.tail_jsonl(DECISIONS, stop=lambda d: bool(d.get("at")) and d["at"] < since)]
     why = {}
     for d in looked:
         if d.get("action") == "skipped" and d.get("reasons"):
@@ -2573,6 +2583,10 @@ def daemon(args, cfg) -> int:
                     ap.get("broker") or "simulator",
                     "standing approval" if (approved or ap.get("enabled")) else "DRY RUN (not enabled)",
                     os.getpid(), socket.gethostname()), cfg)
+    from shared import secrets
+    if secrets.file_warning():  # your keys, readable by every account on the machine
+        _say("WARNING: " + secrets.file_warning())
+        notify.send("error", "secrets.env is readable by other users", secrets.file_warning(), cfg, priority="high")
     house = Housekeeping()
     errors_in_row, n = 0, 0
     threading.Thread(target=_watchdog, name="trader-watchdog", daemon=True).start()
@@ -2874,6 +2888,13 @@ def replay(args, cfg) -> dict:
     step = market_clock.parse_horizon(args.step)
     if step <= 0:
         raise ValueError("--step must be longer than zero (e.g. 5m, 1h, 1d)")
+    # a folder that already lived past --from would have its simulator, its day counters and its records sent
+    # back in time (a year of interest credited at the next live cycle) — the past belongs in a folder of its own
+    seen = [x for x in ((state.read_json("broker/sim.json", {}) or {}).get("last_sync"),
+                        (state.read_json(STATE, {}) or {}).get("last_cycle")) if x]
+    if seen and max(market_clock.ts(x) for x in seen) > t:
+        raise ValueError("this trader/ folder already ran until %s, after --from — replay into a new folder: "
+                         "--home /tmp/replay" % max(seen))
     approved = True if args.approve else None
     started = time.time()
     n = 0

@@ -77,6 +77,14 @@ def as_symbol(symbol, asset: str = None, quote: str = None) -> symbols.Symbol:
     return symbols.parse(symbol, asset=asset, quote=quote)
 
 
+def _asof(end_ts: int) -> int:
+    """The latest moment the data just read can speak for: a body downloaded (or cached) before ``end_ts`` holds
+    the bars that had closed by then — the next one was still forming in it. Pinned clocks (replays, tests) and
+    offline fixtures keep ``end_ts``."""
+    fetched = http.oldest_fetch()
+    return min(end_ts, int(fetched)) if fetched and not pinned_clock() else end_ts
+
+
 def _clean(candles: list, step: int, end_ts: int, start_ts: int = None) -> list:
     seen = {}
     for c in candles:
@@ -131,11 +139,12 @@ def _stock_candles(sym, interval, sessions, end_ts) -> Series:
     errors, warnings = [], []
     for name, mod in (("Yahoo Finance", yahoo), ("Stooq", stooq)):
         try:
+            http.track()
             raw, info = mod.get_candles(sym, interval, calendar_days)
         except http.SourceError as exc:
             errors.append((name, exc))
             continue
-        candles = _clean(raw, step, end_ts)
+        candles = _clean(raw, step, _asof(end_ts))
         if interval != "1d":
             candles = _regular_hours(candles)
         dates = []
@@ -172,11 +181,12 @@ def _crypto_candles(sym, interval, days, end_ts) -> Series:
         attempts[1], attempts[2] = attempts[2], attempts[1]
     for name, fn in attempts:
         try:
+            http.track()
             raw = fn()
         except (http.SourceError, KeyError) as exc:
             errors.append((name, exc))
             continue
-        candles = _clean(raw, step, end_ts, start_ts)
+        candles = _clean(raw, step, _asof(end_ts), start_ts)
         if not candles:
             errors.append((name, "no candles in window"))
             continue
@@ -198,12 +208,13 @@ def _meme_candles(sym, interval, days, end_ts) -> Series:
                       if p.get("pair_address") != pair.get("pair_address")][:1]
     for p in pools:
         try:
+            http.track()
             raw = geckoterminal.ohlcv(symbols.GT_NETWORK.get(p["chain"], p["chain"]), p["pair_address"],
                                       interval, days, end_ts)
         except http.SourceError as exc:
             errors.append(("GeckoTerminal", exc))
             continue
-        candles = _clean(raw, step, end_ts)
+        candles = _clean(raw, step, _asof(end_ts))
         if not candles:
             errors.append(("GeckoTerminal", "no candles before %s" % market_clock.iso(end_ts)))
             continue

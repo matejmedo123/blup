@@ -17,6 +17,7 @@ and never re-enables anything early. State lives in ``autopilot/adapt.json``.
 from __future__ import annotations
 
 import json
+import os
 from datetime import timedelta
 
 from . import config, market_clock, state
@@ -132,8 +133,8 @@ def _equity(prev: dict, now_ts: float) -> dict:
                 offset = fh.tell()
                 continue
             ts = market_clock.ts(at)
-            if ts > now_ts:  # leave it for when the (pinned) clock gets there
-                break
+            if ts > now_ts and os.environ.get("TRADER_NOW"):  # a replay: leave it for when its clock gets there
+                break  # (a real clock that stepped back must not hide the drawdown until it catches up)
             offset = fh.tell()
             if basis_ts is not None and ts < basis_ts:
                 continue

@@ -212,8 +212,10 @@ class SimBroker(Broker):
     def _charge_interest(self, now_ts: int) -> None:
         """Borrowed cash costs borrow_rate_pct; idle cash earns cash_yield_pct (T-bills), both by the second."""
         last = self.book.get("interest_at")
+        if last is not None and now_ts <= int(last):
+            return  # time went back (a clock step, a replay): the next interest runs from the latest time seen
         self.book["interest_at"] = now_ts
-        if last is None or now_ts <= int(last):
+        if last is None:
             return
         years = (now_ts - int(last)) / (365.0 * 86400)
         cash = self.book["cash"]

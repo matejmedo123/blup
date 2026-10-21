@@ -146,7 +146,7 @@ def _log_error(where: str, exc: Exception) -> None:
     if os.environ.get("TRADER_DEBUG"):
         traceback.print_exc()
     else:
-        sys.stderr.write("dashboard: %s failed: %s: %s\n" % (where, type(exc).__name__, exc))
+        sys.stderr.write(redact("dashboard: %s failed: %s: %s\n" % (where, type(exc).__name__, exc)))
 
 
 def safe_url(u) -> str:
@@ -1038,6 +1038,7 @@ class DashboardApp:
         self.csrf = _pysecrets.token_urlsafe(32)
         self.login_lock = threading.Lock()
         self.login_fails = {}  # client → recent wrong-password times
+        self.login_fails_all = []  # every client's, for the overall ceiling
         self._house = None  # the autopilot module's Housekeeping, for the loop without a daemon
         self.password = password or ""
         self.sessions = {}
@@ -1096,13 +1097,16 @@ class DashboardApp:
         self._ap_mod = mod
         return mod
 
-    LOGIN_WINDOW_SEC, LOGIN_MAX_FAILS = 600, 10
+    # per client, and for everyone together: guesses spread over many addresses (a botnet, or a proxy header
+    # an attacker makes up) still meet a ceiling — your open sessions and the CLI keep working meanwhile
+    LOGIN_WINDOW_SEC, LOGIN_MAX_FAILS, LOGIN_MAX_FAILS_ALL = 600, 10, 50
 
     def login_failed(self, who: str) -> None:
         with self.login_lock:
             now = time.time()
             recent = [t for t in self.login_fails.get(who, []) if now - t < self.LOGIN_WINDOW_SEC]
             self.login_fails[who] = recent + [now]
+            self.login_fails_all = [t for t in self.login_fails_all if now - t < self.LOGIN_WINDOW_SEC] + [now]
             if len(self.login_fails) > 1000:  # many addresses: forget the quiet ones
                 for k in [k for k, v in self.login_fails.items() if now - v[-1] > self.LOGIN_WINDOW_SEC]:
                     del self.login_fails[k]
@@ -1110,8 +1114,9 @@ class DashboardApp:
     def login_blocked(self, who: str) -> bool:
         with self.login_lock:
             now = time.time()
-            return sum(1 for t in self.login_fails.get(who, []) if now - t < self.LOGIN_WINDOW_SEC) >= \
-                self.LOGIN_MAX_FAILS
+            mine = sum(1 for t in self.login_fails.get(who, []) if now - t < self.LOGIN_WINDOW_SEC)
+            everyone = sum(1 for t in self.login_fails_all if now - t < self.LOGIN_WINDOW_SEC)
+            return mine >= self.LOGIN_MAX_FAILS or everyone >= self.LOGIN_MAX_FAILS_ALL
 
     def daemon_active(self) -> bool:
         """A separate autopilot daemon holds the lock or is beating — this server must not trade the folder too."""
@@ -1344,8 +1349,10 @@ def make_handler(app: DashboardApp):
 
         def _client_ip(self) -> str:
             ip = self.client_address[0] if self.client_address else "?"
-            fwd = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
-            return fwd if fwd and is_loopback(ip) else ip  # behind Caddy every request comes from 127.0.0.1
+            # behind Caddy every request comes from 127.0.0.1; Caddy APPENDS the real address to whatever the
+            # client sent, so only the last entry can be trusted — the first is whatever an attacker typed
+            fwd = (self.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
+            return fwd if fwd and is_loopback(ip) else ip
 
         def _same_origin(self) -> bool:
             host = self.headers.get("Host") or ""
@@ -1544,7 +1551,7 @@ def make_handler(app: DashboardApp):
             pw = (parse_qs(raw).get("password") or [""])[-1]
             who = self._client_ip()
             if app.login_blocked(who):
-                return self._send(429, (LOGIN_PAGE % "<p class='login-error'>Too many wrong passwords from here — "
+                return self._send(429, (LOGIN_PAGE % "<p class='login-error'>Too many wrong passwords — "
                                                      "wait 10 minutes.</p>").encode("utf-8"), "text/html; charset=utf-8")
             ok = app.check_password(pw)
             if not ok:
@@ -1645,6 +1652,8 @@ def main(argv=None) -> int:
     loop_txt = "on (idles while a separate daemon is running)" if run_ap else "off"
     print("  autopilot loop: %s · news refresh: %s" % (loop_txt, ("every %g min" % news_every) if news_every else "off"))
     print("  Ctrl+C to stop. Educational tool, not financial advice.")
+    if secrets.file_warning():
+        print("  WARNING: " + secrets.file_warning())
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

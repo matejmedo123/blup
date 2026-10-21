@@ -3,14 +3,12 @@ none of it may stop the stops, trade by accident or take what is yours."""
 from __future__ import annotations
 
 import json
-import os
-import threading
 import time
 
 from tests.helpers import TraderTestCase, load
 from tests.test_app import DashboardCase
 from tests.test_autopilot import FakeBroker, OnlyWhatTheBotOwns, Seller
-from shared import config, data, market_clock as mc, state
+from shared import config, data, state
 
 
 def ap():
@@ -263,6 +261,24 @@ class LoginThrottle(DashboardCase):
                                   dict(hdrs, **{"X-Forwarded-For": "203.0.113.7"}))[0], 429)
         self.assertEqual(self.req("POST", "/login", "password=pw-for-test-1",
                                   dict(hdrs, **{"X-Forwarded-For": "198.51.100.2"}))[0], 303)
+
+    def test_a_made_up_forwarded_address_does_not_reset_the_count(self):
+        # Caddy appends the real address: "<whatever the client sent>, <real address>"
+        self.start(password="pw-for-test-1")
+        hdrs = {"Content-Type": "application/x-www-form-urlencoded", "Origin": "http://127.0.0.1:%d" % self.port}
+        for i in range(10):
+            self.req("POST", "/login", "password=wrong", dict(hdrs, **{"X-Forwarded-For": "10.9.9.%d, 203.0.113.7" % i}))
+        self.assertEqual(self.req("POST", "/login", "password=pw-for-test-1",
+                                  dict(hdrs, **{"X-Forwarded-For": "10.1.1.1, 203.0.113.7"}))[0], 429)
+
+    def test_guesses_from_many_addresses_meet_a_ceiling(self):
+        self.start(password="pw-for-test-1")
+        self.app.LOGIN_MAX_FAILS_ALL = 5  # 50 in real life; each wrong guess waits half a second
+        hdrs = {"Content-Type": "application/x-www-form-urlencoded", "Origin": "http://127.0.0.1:%d" % self.port}
+        for i in range(5):
+            self.req("POST", "/login", "password=wrong", dict(hdrs, **{"X-Forwarded-For": "198.18.0.%d" % i}))
+        self.assertEqual(self.req("POST", "/login", "password=pw-for-test-1",
+                                  dict(hdrs, **{"X-Forwarded-For": "192.0.2.1"}))[0], 429)
 
 
 class RightAsset(TraderTestCase):

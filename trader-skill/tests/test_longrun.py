@@ -77,6 +77,22 @@ class Files(TraderTestCase):
             state.write_json("x.json", {"a": 2})
         self.assertEqual(w.call_count, 2)  # the file and its spare copy
 
+    @unittest.skipUnless(os.name == "posix", "file modes are POSIX")
+    def test_new_files_and_folders_are_yours_alone(self):
+        old = os.umask(0o022)
+        try:
+            state.append_jsonl("notifications.jsonl", {"a": 1})
+            state.append_jsonl("desk/i9/log.jsonl", {"a": 1})
+        finally:
+            os.umask(old)
+        home = config.ensure_home()
+        self.assertEqual(os.stat(str(home / "notifications.jsonl")).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(str(home / "desk" / "i9")).st_mode & 0o777, 0o700)
+        (home / "secrets.env").write_text("X=1")
+        os.chmod(str(home / "secrets.env"), 0o644)
+        from shared import secrets
+        self.assertIn("chmod 600", secrets.file_warning())
+
     def test_desk_reviews_get_no_spare_copy(self):
         state.write_json("desk/i1/case.json", {"a": 1})
         self.assertFalse((self.tmp / "trader" / "desk" / "i1" / "case.json.bak").exists())

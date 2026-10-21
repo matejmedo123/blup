@@ -16,6 +16,7 @@ import http.client
 import json
 import random
 import socket
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -69,6 +70,7 @@ class OfflineMiss(SourceError):
 
 _last_call = {}
 _blocked_hosts = {}
+_FETCH = threading.local()  # per thread: when the oldest body handed out since track() was downloaded
 _cache = None
 stats = {"requests": 0, "cache_hits": 0, "retries": 0, "stale": 0}
 warnings = []
@@ -162,6 +164,22 @@ def _retry_after(err) -> float:
         return 0.0
 
 
+def track() -> None:
+    """Start noting when the bodies this thread receives were downloaded (see ``oldest_fetch``)."""
+    _FETCH.oldest = None
+
+
+def oldest_fetch():
+    """Unix time the oldest body since ``track()`` was downloaded (a cached copy is as old as its download), or
+    None. A bar that closed after that moment was still forming in the data — it must not count as closed."""
+    return getattr(_FETCH, "oldest", None)
+
+
+def _seen(fetched_at: float) -> None:
+    old = getattr(_FETCH, "oldest", None)
+    _FETCH.oldest = fetched_at if old is None else min(old, fetched_at)
+
+
 def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
              timeout: float = 20, allow_stale: bool = True) -> str:
     if config.is_offline():
@@ -177,6 +195,7 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
     hit = cache.get(url, ttl) if ttl and ttl > 0 else None
     if hit is not None:
         stats["cache_hits"] += 1
+        _seen(time.time() - hit[1])
         return hit[0]
 
     hdrs = {"User-Agent": USER_AGENT, "Accept": "*/*", "Accept-Encoding": "gzip"}
@@ -186,6 +205,7 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
     for attempt in range(retries + 1):
         _throttle(host)
         stats["requests"] += 1
+        sent = time.time()
         try:
             req = urllib.request.Request(url, headers=hdrs)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -193,6 +213,7 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
                 body = _decode(raw, resp.headers)
             if ttl and ttl > 0:
                 cache.set(url, body)
+            _seen(sent)
             return body
         except urllib.error.HTTPError as err:
             last_error = err
@@ -219,6 +240,7 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
         stale = cache.get(url, 0, allow_stale=True)
         if stale is not None and stale[1] <= STALE_MAX_AGE:
             stats["stale"] += 1
+            _seen(time.time() - stale[1])
             note("served a cached copy of %s (%d min old) — live request failed" % (host, stale[1] // 60))
             return stale[0]
     status = getattr(last_error, "code", None)
