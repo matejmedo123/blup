@@ -329,3 +329,78 @@ order, `missing` steps with the exact command to run), `research.md`, `skeptic.m
 * `html.page(...)`, `html.candle_chart(...)`, `html.mini_chart(...)`, `html.histogram(...)`, `html.fan_chart(...)`,
   `html.write_report(name, html) -> Path`.
 * `cli.parser(...)`, `cli.init(args) -> Context`, `cli.disclaimer(asset)`, `cli.emit(...)`.
+
+## v2 — autopilot, brokers, dashboard, social news
+
+### Secrets (never in git, never printed, never returned by the dashboard)
+Read by `shared/secrets.py` from environment variables first, then from `trader/secrets.env`
+(`KEY=value` lines; `trader/` is git-ignored; the file should be chmod 600):
+`ALPACA_PAPER_KEY_ID`, `ALPACA_PAPER_SECRET_KEY`, `ALPACA_LIVE_KEY_ID`, `ALPACA_LIVE_SECRET_KEY`,
+`X_BEARER_TOKEN`, `TRADER_DASHBOARD_PASSWORD`.
+
+### `config.json` additions (defaults merged in by shared/config.py)
+```json
+"autopilot": {
+  "enabled": false,
+  "broker": "simulator",            // "simulator" (local paper, no account) | "alpaca"
+  "mode": "paper",                  // "paper" | "live" — live needs everything listed under "Live mode"
+  "interval_sec": 60,
+  "assets": ["stock", "crypto"],    // meme coins are never auto-traded
+  "watchlist": null,                // null = config watchlists
+  "setups": {"stock": ["orb15", "orb30", "gap_and_go", "vwap_reclaim", "bull_flag"],
+             "crypto": ["asia_range", "us_open_range", "vwap_reclaim", "momentum"]},
+  "gates": {"min_backtest_triggers": 10, "min_backtest_expectancy_r": 0.05, "min_tm_ev_r": 0.0,
+            "tm_paths": 2000, "max_trigger_age_bars": 1},
+  "max_new_trades_per_day": 3,
+  "flatten_on_kill": true,
+  "sim_starting_cash": 25000,
+  "live_confirmation": ""           // must equal "I ACCEPT REAL MONEY RISK" for live
+},
+"news": {
+  "x": {"enabled": true, "max_reads_per_day": 300, "poll_minutes": 15,
+        "accounts": {"stock": ["DeItaone", "FirstSquawk", "LiveSquawk", "unusual_whales", "WSJmarkets", "Reuters"],
+                     "crypto": ["tier10k", "WatcherGuru", "WuBlockchain", "lookonchain", "whale_alert", "CoinDesk"]}},
+  "stocktwits": {"enabled": true},
+  "feed_max_items": 500
+}
+```
+**Live mode** = `autopilot.broker "alpaca"` AND `autopilot.mode "live"` AND top-level `paper: false`
+AND live keys present AND `autopilot.live_confirmation == "I ACCEPT REAL MONEY RISK"`. Anything missing →
+the autopilot refuses to start in live mode and says exactly what is missing (it never silently falls back
+to live, and never silently "upgrades" paper to live).
+
+### `autopilot/state.json` — written by the autopilot every cycle
+```json
+{"status": "running|paused|stopped|killed|error", "mode": "simulator|paper|live", "broker": "simulator|alpaca",
+ "started_at": "...", "last_cycle": "...", "next_cycle": "...", "cycles": 42, "interval_sec": 60,
+ "today": {"date": "2026-10-20", "trades_opened": 1, "realized_pnl": 0.0, "skipped": 7, "kill_reason": null},
+ "last_errors": [{"at": "...", "error": "..."}], "message": "watching 8 symbols · 1 open position"}
+```
+### `autopilot/control.json` — written by the dashboard / CLI, read by the autopilot each cycle
+`{"paused": false, "kill": false, "run_once": false, "updated_at": "...", "by": "dashboard|cli"}`
+(`kill` = cancel all open orders and, if `flatten_on_kill`, close all positions; then status `killed`
+until someone resumes.)
+### `autopilot/decisions.jsonl` — one line per trigger the autopilot looked at
+`{"at": "...", "id": "NVDA-20261020-orb15", "symbol": "NVDA", "asset": "stock", "setup": "orb15",
+  "action": "taken|skipped|error", "reasons": ["backtest expectancy -0.12R over 33 triggers"],
+  "desk": {"status": "GO|NO-GO|...", "objections": 2}, "gates": [{"name": "...", "ok": true, "detail": "..."}],
+  "order_id": "ord-…|null", "broker_order_id": "…|null", "entry": 194.49, "stop": 190.9, "target": 201.67, "qty": 32}`
+### `broker/equity.jsonl` — one snapshot per cycle
+`{"at": "...", "equity": 25123.4, "cash": 18000.0, "unrealized": 23.4, "realized_today": 100.0, "mode": "simulator"}`
+### `broker/positions.json` and `broker/orders.json` — latest sync from the broker
+positions: `[{"symbol": "NVDA", "asset": "stock", "qty": 32, "avg_entry": 194.49, "last": 195.1,
+"market_value": 6243.2, "unrealized_pl": 19.5, "opened_at": "...", "plan_id": "..."}]`;
+orders: `[{"id": "...", "client_order_id": "...", "symbol": "...", "side": "buy|sell", "type": "limit|stop|...",
+"qty": 32, "limit_price": 194.5, "stop_price": null, "status": "new|filled|canceled|...", "filled_avg_price": 194.49,
+"submitted_at": "...", "filled_at": "...", "leg": "entry|stop|target"}]`
+### `broker/sim.json` — the local simulator's book (cash, positions, orders, fills)
+### Journal entries written by the autopilot add `"source": "autopilot"`, `"broker": "simulator|alpaca"`,
+`"broker_order_id"` and use real fill prices.
+
+### `news_feed.json` — rolling aggregated feed (newest first, max `feed_max_items`)
+`{"updated_at": "...", "items": [{"id": "...", "symbol": "TSLA|BTC|market|...", "asset": "stock|crypto|meme",
+  "source": "X|StockTwits|Yahoo Finance|SEC EDGAR|CoinDesk|DexScreener|...", "kind": "news|filing|social",
+  "author": "@DeItaone|null", "title": "...", "url": "https://...", "published": "...", "tags": ["merger"],
+  "why": "...", "importance": 1, "sentiment": "bullish|bearish|null", "metrics": {"likes": 0, "reposts": 0}}],
+  "sources": {"X": "ok|no token|budget exhausted|error: …", "StockTwits": "ok"}}`
+### `x_usage.json` — `{"date": "2026-10-20", "reads": 120, "requests": 12, "max_reads_per_day": 300}`

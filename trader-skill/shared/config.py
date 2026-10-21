@@ -35,6 +35,31 @@ DEFAULT_CONFIG = {
         "crypto": {"fee_bps": 10, "slippage_bps": 3},
         "meme": {"fee_bps": 30, "slippage_bps": 100},
     },
+    "autopilot": {
+        "enabled": False,
+        "broker": "simulator",
+        "mode": "paper",
+        "interval_sec": 60,
+        "assets": ["stock", "crypto"],
+        "watchlist": None,
+        "setups": {"stock": ["orb15", "orb30", "gap_and_go", "vwap_reclaim", "bull_flag"],
+                   "crypto": ["asia_range", "us_open_range", "vwap_reclaim", "momentum"]},
+        "gates": {"min_backtest_triggers": 10, "min_backtest_expectancy_r": 0.05, "min_tm_ev_r": 0.0,
+                  "tm_paths": 2000, "max_trigger_age_bars": 1},
+        "max_new_trades_per_day": 3,
+        "flatten_on_kill": True,
+        "sim_starting_cash": 25000,
+        "live_confirmation": "",
+    },
+    "news": {
+        "x": {"enabled": True, "max_reads_per_day": 300, "poll_minutes": 15,
+              "accounts": {"stock": ["DeItaone", "FirstSquawk", "LiveSquawk", "unusual_whales", "WSJmarkets",
+                                     "Reuters"],
+                           "crypto": ["tier10k", "WatcherGuru", "WuBlockchain", "lookonchain", "whale_alert",
+                                      "CoinDesk"]}},
+        "stocktwits": {"enabled": True},
+        "feed_max_items": 500,
+    },
     "scanner": {
         "interval": "5m",
         "max_symbols": 300,
@@ -85,7 +110,7 @@ DEFAULT_LIMITS = {
     "blocked_symbols": [],
 }
 
-SUBDIRS = ("cache", "reports", "rugcheck", "timemachine", "backtests")
+SUBDIRS = ("cache", "reports", "rugcheck", "timemachine", "backtests", "autopilot", "broker")
 
 
 def trader_home() -> Path:

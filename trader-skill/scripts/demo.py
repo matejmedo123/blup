@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Run the three README walkthroughs end to end on the offline fixtures (no network, no keys).
+"""Run the README walkthroughs end to end on the offline fixtures (no network, no keys).
+
+The desk (rule-based mode) runs before every Trader step: only a GO leads to sizing, a risk check
+and a ticket. Anything else and the walkthrough stops there — no money moves.
 
     python3 scripts/demo.py            # writes demo/trader/ and demo/trader/reports/index.html
     python3 scripts/demo.py --open     # … and opens the report index in your browser
@@ -50,46 +53,73 @@ def banner(title):
     print("\n" + "=" * 100 + "\n" + title + "\n" + "=" * 100)
 
 
+def desk(symbol, now):
+    """The desk runs before every Trader step; anything but GO stops the walkthrough there."""
+    out = run("trader-desk", "desk.py", ["auto", symbol], now)
+    m = re.search(r"^Status: (\S+)", out, re.M)
+    status = m.group(1) if m else "INCOMPLETE"
+    if status != "GO":
+        print("\n  [desk] %s → the Trader stands down: no sizing, no ticket, no money moves." % status)
+    return status == "GO"
+
+
+def nvda():
+    now, close = "2026-10-20T13:50:00Z", MAN["demos"]["tsla"]["after_close"]
+    idea = "NVDA-20261020-orb15"
+    banner("1 · NVDA opening-range breakout — the desk says GO "
+           "(scanner → news → entry → exit → backtest → timemachine → DESK → sizer → risk → broker → journal)")
+    run("trader-scanner", "scan.py", ["--asset", "stock", "--top", "6"], now)
+    run("trader-news", "news.py", ["--symbols", "NVDA"], now)
+    run("trader-entry", "entry.py", ["NVDA", "--setup", "orb15"], now)
+    run("trader-exit", "exit.py", ["--id", idea], now)
+    run("trader-backtest", "backtest.py", ["NVDA", "--setup", "orb15"], now)
+    run("trader-timemachine", "replay.py", ["--id", idea, "--seed", "7"], now)
+    if not desk("NVDA", now):
+        return
+    run("trader-sizer", "size.py", ["--id", idea], now)
+    run("trader-risk", "risk.py", [], now)
+    t = ticket_id(run("trader-broker", "ticket.py", ["prepare"], now))
+    print("\n  [demo] simulating the user typing: yes")
+    run("trader-broker", "ticket.py", ["approve", "--ticket", t, "--reply", "yes"], now)
+    run("trader-alerts", "alerts.py", ["add", "--from-plan", idea], now)
+    run("trader-journal", "journal.py", ["add", "--plan", idea, "--auto"], close)
+
+
 def tsla():
     d = MAN["demos"]["tsla"]
-    banner("1 · TSLA opening-range breakout — scanner → news → entry → exit → timemachine → sizer → risk → broker → journal")
-    run("trader-scanner", "scan.py", ["--asset", "stock", "--top", "6"], d["now"])
+    idea = "TSLA-20261020-orb15"
+    banner("2 · TSLA opening-range breakout — a real catalyst, but the desk says NO-GO")
     run("trader-news", "news.py", ["--symbols", "TSLA"], d["now"])
-    run("trader-entry", "entry.py", ["--id", "TSLA-20261020-orb15"], "2026-10-20T14:05:00Z")
-    run("trader-entry", "entry.py", ["--id", "TSLA-20261020-orb15"], d["now"])
-    run("trader-exit", "exit.py", ["--id", "TSLA-20261020-orb15"], d["now"])
+    run("trader-entry", "entry.py", ["--id", idea], "2026-10-20T14:05:00Z")
+    run("trader-entry", "entry.py", ["--id", idea], d["now"])
+    run("trader-exit", "exit.py", ["--id", idea], d["now"])
     run("trader-backtest", "backtest.py", ["TSLA", "--setup", "orb15"], d["now"])
-    run("trader-timemachine", "replay.py", ["--id", "TSLA-20261020-orb15", "--seed", "7"], d["now"])
-    run("trader-sizer", "size.py", ["--id", "TSLA-20261020-orb15"], d["now"])
-    run("trader-risk", "risk.py", [], d["now"])
-    t = ticket_id(run("trader-broker", "ticket.py", ["prepare"], d["now"]))
-    print("\n  [demo] simulating the user typing: yes")
-    run("trader-broker", "ticket.py", ["approve", "--ticket", t, "--reply", "yes"], d["now"])
-    run("trader-alerts", "alerts.py", ["add", "--from-plan", "TSLA-20261020-orb15"], d["now"])
-    run("trader-journal", "journal.py", ["add", "--plan", "TSLA-20261020-orb15", "--auto"], d["after_close"])
+    run("trader-timemachine", "replay.py", ["--id", idea, "--seed", "7"], d["now"])
+    if not desk("TSLA", d["now"]):
+        return
+    run("trader-sizer", "size.py", ["--id", idea], d["now"])
 
 
 def btc():
     d = MAN["demos"]["btc"]
     idea = "BTCUSD-20261020-asia_range"
-    banner("2 · BTC/USD Asia-range breakout at the US open with rising open interest — 4h horizon, Alpaca crypto paper ticket")
+    banner("3 · BTC/USD breakout of the Asia range at the US open with rising open interest — 4h horizon")
     run("trader-scanner", "scan.py", ["--asset", "crypto", "--top", "5"], d["now"])
     run("trader-news", "news.py", ["--asset", "crypto", "--symbols", "BTC"], d["now"])
     run("trader-entry", "entry.py", ["BTC-USD", "--setup", "asia_range"], d["now"])
     run("trader-exit", "exit.py", ["--id", idea, "--horizon", "4h"], d["now"])
     run("trader-backtest", "backtest.py", ["BTC-USD", "--setup", "asia_range", "--horizon", "4h"], d["now"])
     run("trader-timemachine", "replay.py", ["--id", idea, "--seed", "7"], d["now"])
+    if not desk("BTC-USD", d["now"]):
+        return
     run("trader-sizer", "size.py", ["--id", idea], d["now"])
     run("trader-risk", "risk.py", [], d["now"])
-    t = ticket_id(run("trader-broker", "ticket.py", ["prepare"], d["now"]))
-    print("\n  [demo] simulating the user typing: yes")
-    run("trader-broker", "ticket.py", ["approve", "--ticket", t, "--reply", "yes"], d["now"])
-    run("trader-journal", "journal.py", ["add", "--plan", idea, "--auto"], d["later"])
+    run("trader-broker", "ticket.py", ["prepare"], d["now"])
 
 
 def meme():
     d = MAN["demos"]["meme"]
-    banner("3 · Solana meme coin from DexScreener — scanner → rugcheck (pass + BLOCK) → entry → exit → timemachine → sizer → risk → manual checklist → journal")
+    banner("4 · Solana meme coin from DexScreener — rugcheck passes one and BLOCKS the other, then the desk decides")
     run("trader-scanner", "scan.py", ["--asset", "meme"], d["now"])
     run("trader-rugcheck", "rugcheck.py", [PUP], d["now"])
     run("trader-rugcheck", "rugcheck.py", [LAMBO], d["now"])
@@ -99,39 +129,17 @@ def meme():
     run("trader-entry", "entry.py", [PUP, "--setup", "momentum"], d["now"])
     run("trader-exit", "exit.py", [], d["now"])
     run("trader-timemachine", "replay.py", ["--seed", "7"], d["now"])
+    if not desk(PUP, d["now"]):
+        return
     run("trader-sizer", "size.py", [], d["now"])
     run("trader-risk", "risk.py", [], d["now"])
     run("trader-broker", "ticket.py", ["prepare"], d["now"])
-    run("trader-alerts", "alerts.py", ["add", "--from-plan"], d["now"])
-    run("trader-journal", "journal.py", ["add", "--auto"], d["later"])
-    run("trader-journal", "journal.py", ["stats"], d["later"], quiet_disclaimer=False)
 
 
 def addons():
-    banner("Add-ons · arbitrage gap monitor (read-only) and the four-role trading desk")
+    banner("Add-on · arbitrage gap monitor (read-only) · and the journal after the day")
     run("trader-arb", "arb.py", [PUP, "BTCUSDT"], MAN["demos"]["meme"]["now"])
-    now = MAN["demos"]["tsla"]["now"]
-    idea = "TSLA-20261020-orb15"
-    run("trader-desk", "desk.py", ["brief", "TSLA"], now)
-    print("\n  [demo] canned memos — in real use the trader-researcher / trader-skeptic / trader-lead subagents write them")
-    memos = {
-        "researcher": "## Thesis\nOpening-range breakout on 2.8x relative volume with a merger headline before the open.\n"
-                      "## Evidence\n- setups.json: orb15 triggered on the 10:10 candle at $364.18 (score 85)\n"
-                      "- news.json: 'Tesla–SpaceX merger mania strikes Wall Street ahead of earnings' 9:05 ET\n"
-                      "## What would make this wrong\nA close back inside the opening range; earnings tomorrow.",
-        "skeptic": "O1 [critical] Earnings land tomorrow after the close and the plan holds until 3:55 p.m. — evidence: news.json "
-                   "'Tesla Q3 earnings preview'\nO2 [major] This rule lost money on TSLA: backtest expectancy is negative "
-                   "after costs — evidence: backtests/TSLA-orb15.json\nO3 [major] Time Machine: stop first is about twice as "
-                   "likely as target — evidence: timemachine/TSLA-20261020.json\n## Verdict\nI would pass: the edge is not there.",
-        "lead": "O1: mitigated — the plan is flat by 3:55 p.m. today, before the report; size stays at 0.4% risk\n"
-                "O2: accepted — 33 triggers, negative expectancy; the rule has not earned trust on TSLA\n"
-                "O3: accepted — P(stop) 56% vs P(target) 24% with EV close to zero\n"
-                "DECISION: NO-GO\nThe catalyst is real but the numbers do not pay for the risk. Revisit only with a "
-                "tighter stop that the Time Machine likes.",
-    }
-    for role, text in memos.items():
-        run("trader-desk", "desk.py", ["record", "--id", idea, "--role", role, "--text", text], now)
-    run("trader-desk", "desk.py", ["verify", "--id", idea], now)
+    run("trader-journal", "journal.py", ["stats"], MAN["demos"]["tsla"]["after_close"], quiet_disclaimer=False)
 
 
 def index():
@@ -150,11 +158,11 @@ def index():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--open", action="store_true", help="open the report index when done")
-    ap.add_argument("--only", choices=("tsla", "btc", "meme", "addons"), help="run one walkthrough")
+    ap.add_argument("--only", choices=("nvda", "tsla", "btc", "meme", "addons"), help="run one walkthrough")
     args = ap.parse_args()
     if HOME.exists():
         shutil.rmtree(str(HOME))
-    for name, fn in (("tsla", tsla), ("btc", btc), ("meme", meme), ("addons", addons)):
+    for name, fn in (("nvda", nvda), ("tsla", tsla), ("btc", btc), ("meme", meme), ("addons", addons)):
         if not args.only or args.only == name:
             fn()
     idx = index()

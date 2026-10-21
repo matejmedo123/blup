@@ -11,7 +11,8 @@ addresses are random strings, not real contracts.
 | Fixture | Stands in for | Demo moment (2026-10-20) |
 |---|---|---|
 | `yahoo/chart/TSLA.json` | Yahoo chart, 60 sessions of 5-min bars + today | Opening range 9:30–9:45 ET high $362.18 / low $358.32; the 10:10 candle closes above at $364.18 |
-| `yahoo/chart/{NVDA,PLTR,AAPL,META}.json`, `stooq/amd.us_5.csv` | Yahoo / Stooq (AMD only on Stooq → fallback) | NVDA gap-and-go, PLTR bull flag, AMD VWAP reclaim |
+| `yahoo/chart/NVDA.json` | Yahoo chart, 60 sessions + today | Opening-range breakout on the 9:45 ET candle at $193.92. Its history is generated with a built-in opening-range **follow-through**, so this is the one setup whose backtest shows an edge — the demo's GO case. Real edges are rarely this clean. |
+| `yahoo/chart/{PLTR,AAPL,META}.json`, `stooq/amd.us_5.csv` | Yahoo / Stooq (AMD only on Stooq → fallback) | PLTR bull flag, AMD VWAP reclaim |
 | `binance/klines/BTCUSDT_5m.json` | Binance klines, 30 days | Asia range high $67,420; the 14:35 UTC candle closes above it |
 | `binance_futures/*` | funding + open interest | OI rising into the breakout, ETH funding extreme |
 | `coinbase/*`, `kraken/*` | crypto fallbacks | — |

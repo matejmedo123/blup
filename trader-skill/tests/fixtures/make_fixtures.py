@@ -110,21 +110,30 @@ def sigma_profile(k: int, n: int) -> float:
     return 0.72 + 1.45 * math.exp(-k / 8.0) + 0.45 * math.exp(-(n - 1 - k) / 10.0)
 
 
-def random_session(rng, d, open_px, sigma_bar, base_vol):
+def random_session(rng, d, open_px, sigma_bar, base_vol, orb_follow=0.0):
+    """One regular session. ``orb_follow`` > 0 builds in an opening-range follow-through: after the first
+    5-min close above the 15-min opening range, the next bars drift up with that probability — a
+    synthetic edge so the demo has one setup whose history genuinely supports it."""
     o_t, c_t = mc.session_bounds(d)
     n = (ts(c_t) - ts(o_t)) // 300
     day_sig = sigma_bar * math.exp(rng.gauss(0, 0.25))
     drift = rng.gauss(0, 0.6 * day_sig)
     bars, px = [], open_px
+    broke, boost = False, 0
     for k in range(n):
         s = day_sig * sigma_profile(k, n)
-        r = drift / n * 3 + s * student_t(rng)
+        r = drift / n * 3 + s * student_t(rng) + (0.3 * s if boost > 0 else 0.0)
+        boost = max(0, boost - 1)
         o = px
         c = o * math.exp(r)
         o, h, l, c = ohlc_from(rng, o, c, s)
         v = base_vol * vol_profile(k, n) * math.exp(rng.gauss(0, 0.35)) * (1 + 18 * abs(r))
         bars.append([ts(o_t) + 300 * k, o, h, l, c, v])
         px = c
+        if orb_follow and k >= 3 and not broke and c > max(b[2] for b in bars[:3]):
+            broke = True
+            if k < 24 and rng.random() < orb_follow:
+                boost = 24
     return bars
 
 
@@ -156,13 +165,14 @@ def scale_bars(bars, factor):
     return [[b[0], b[1] * factor, b[2] * factor, b[3] * factor, b[4] * factor, b[5]] for b in bars]
 
 
-def make_stock(ticker, sessions, rng, start_px, sigma_bar, base_vol, prev_close_target, today_bars_fn):
+def make_stock(ticker, sessions, rng, start_px, sigma_bar, base_vol, prev_close_target, today_bars_fn,
+               orb_follow=0.0):
     days = mc.trading_days(DEMO, sessions + 1)
     hist_days, today = days[:-1], days[-1]
     bars, px = [], start_px
     for d in hist_days:
         gap = math.exp(rng.gauss(0, 0.011))
-        sess = random_session(rng, d, px * gap, sigma_bar, base_vol)
+        sess = random_session(rng, d, px * gap, sigma_bar, base_vol, orb_follow)
         bars.extend(sess)
         px = sess[-1][4]
     bars = scale_bars(bars, prev_close_target / bars[-1][4])
@@ -268,7 +278,7 @@ def stooq_csv(bars):
 def build_stocks():
     specs = [
         ("TSLA", "Tesla, Inc.", 60, 11, 318.0, 0.0031, 1.15e6, 359.40, tsla_today),
-        ("NVDA", "NVIDIA Corporation", 5, 12, 180.0, 0.0024, 2.2e6, 182.40, nvda_today),
+        ("NVDA", "NVIDIA Corporation", 60, 12, 168.0, 0.0024, 2.2e6, 182.40, nvda_today),
         ("PLTR", "Palantir Technologies Inc.", 5, 13, 178.0, 0.0029, 1.6e6, 181.70, pltr_today),
         ("AAPL", "Apple Inc.", 5, 14, 246.0, 0.0016, 0.8e6, 248.90, plain_today(0.0016, 0.8e6)),
         ("META", "Meta Platforms, Inc.", 5, 15, 702.0, 0.0019, 0.25e6, 707.30, plain_today(0.0019, 0.25e6)),
@@ -277,7 +287,9 @@ def build_stocks():
     spark = {}
     for ticker, name, sessions, seed, start, sig, vol, prev, today_fn in specs:
         rng = random.Random(seed)
-        bars = make_stock(ticker, sessions, rng, start, sig, vol, prev, today_fn)
+        # NVDA's history carries a synthetic opening-range follow-through (the demo's one GO case)
+        bars = make_stock(ticker, sessions, rng, start, sig, vol, prev, today_fn,
+                          orb_follow=0.6 if ticker == "NVDA" else 0.0)
         prev_close = [b for b in bars if mc.et_date(b[0]) < DEMO][-1][4]
         if ticker == "AMD":  # AMD is only on Stooq in the fixtures → exercises the fallback
             write("stooq/amd.us_5.csv", stooq_csv(bars))

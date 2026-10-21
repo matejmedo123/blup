@@ -28,7 +28,11 @@ if _ROOT not in sys.path:
 from shared import cli, data, fmt, html, market_clock, state, symbols  # noqa: E402
 
 ROLES = ("researcher", "skeptic", "lead")
-DEFAULTS = {"min_ev_r": 0.0, "max_idea_age_hours": {"stock": 2, "crypto": 4, "meme": 1}, "min_backtest_triggers": 10}
+# The replay resamples ordinary bars, so an honest replay of a fair 2:1 bracket centres on 0R: the hard gate
+# only rejects geometry that is clearly negative. The edge itself has to come from the backtest.
+DEFAULTS = {"min_ev_r": -0.05, "max_idea_age_hours": {"stock": 2, "crypto": 4, "meme": 1}, "min_backtest_triggers": 10,
+            "min_backtest_expectancy_r": 0.05}
+AUTO_TAG = "(auto — rule-based desk, not an AI review)"
 OBJECTION = re.compile(r"^\s*(?:[-*]\s*)?\**\s*O(\d+)\s*\**\s*[\[(]\s*(critical|major|minor)\s*[\])]\s*:?\s*(.*)$",
                        re.I | re.M)
 RESPONSE = re.compile(r"\bO(\d+)\b\s*\**\s*(?::|—|–|-)+\s*\**\s*(accepted|rebutted|mitigated)\b", re.I)
@@ -37,7 +41,9 @@ DECISION = re.compile(r"^\s*\**\s*DECISION\s*\**\s*:\s*\**\s*(GO|NO-GO|NO GO|WAI
 
 def build_parser():
     p = cli.parser("desk.py", __doc__)
-    p.add_argument("action", choices=("brief", "record", "verify", "show"), help="what to do")
+    p.add_argument("action", choices=("brief", "record", "verify", "show", "auto"),
+                   help="what to do (auto = rule-based Researcher/Skeptic/Lead memos + verify)")
+    p.add_argument("--force", action="store_true", help="auto: overwrite memos that already exist")
     p.add_argument("symbol", nargs="?", help="symbol (brief) — or use --id")
     p.add_argument("--id", help="trade idea id (plan / entry / setup id)")
     p.add_argument("--role", choices=ROLES, help="record: whose memo this is")
@@ -109,7 +115,8 @@ def build_case(idea_id: str, symbol: str = None) -> dict:
         sym = data.as_symbol(raw)
     except (symbols.SymbolError, ValueError):
         sym = None
-    case["symbol"] = sym.display if sym else raw
+    shown = (case.get("plan") or case.get("entry") or {}).get("symbol_display")
+    case["symbol"] = shown or (sym.display if sym else raw)
     case["symbol_arg"] = raw
     case["asset"] = sym.asset if sym else (case.get("plan") or {}).get("asset")
     key = sym.key if sym else idea_id.rsplit("-", 2)[0]
@@ -167,8 +174,7 @@ def _gate(name, ok, detail, hard=True):
 
 
 def gates(case: dict, cfg: dict, limits: dict) -> list:
-    desk_cfg = dict(DEFAULTS)
-    desk_cfg.update(cfg.get("desk") or {})
+    desk_cfg = _desk_cfg(cfg)
     out = []
     plan = case.get("plan")
     if plan:
@@ -291,6 +297,127 @@ def verify(idea_id: str, case: dict, cfg: dict, limits: dict) -> dict:
             "trader_next": trader_next(case, status)}
 
 
+def _desk_cfg(cfg: dict) -> dict:
+    out = dict(DEFAULTS)
+    gates_cfg = ((cfg.get("autopilot") or {}).get("gates") or {})
+    for k in ("min_backtest_triggers", "min_backtest_expectancy_r"):
+        if k in gates_cfg:
+            out[k] = gates_cfg[k]
+    out.update(cfg.get("desk") or {})
+    return out
+
+
+def auto_memos(case: dict, cfg: dict, limits: dict) -> dict:
+    """Mechanical Researcher / Skeptic / Lead: the same checks every time, written as desk memos.
+
+    The Skeptic turns every weak number into a numbered objection; the Lead accepts what the data
+    says and only decides GO when there is nothing critical or major left.
+    """
+    d = _desk_cfg(cfg)
+    plan, bt, tm, rc = case.get("plan"), case.get("backtest"), case.get("timemachine"), case.get("rugcheck")
+    sym, asset = case.get("symbol"), case.get("asset")
+    # Researcher
+    r = ["## Thesis %s" % AUTO_TAG]
+    src = case.get("entry") or case.get("setup") or {}
+    if plan:
+        r.append("%s on %s: %s. Entry %s · stop %s · target %s." % (
+            plan.get("label") or plan.get("setup"), sym, src.get("rule") or "setup triggered",
+            fmt.price(plan["entry"]["price"]), fmt.price(plan["stop"]["price"]), fmt.price(plan["target"]["price"])))
+    else:
+        r.append("%s: no exit plan yet." % sym)
+    r.append("## Evidence")
+    if case.get("setup"):
+        h = case["setup"]
+        m = h.get("metrics") or {}
+        r.append("- setups.json: %s, score %s%s" % (h.get("status"), h.get("score"),
+                                                     ", relvol %.1f×" % m["relvol"] if m.get("relvol") else ""))
+    if bt:
+        r.append("- backtests: %s expectancy %s after costs" % (bt.get("summary"), fmt.r(bt.get("expectancy_r"))))
+    if tm:
+        p = tm.get("probabilities") or {}
+        r.append("- timemachine: target first %s, stop first %s, EV %s" % (
+            fmt.prob(p.get("target")), fmt.prob(p.get("stop")), fmt.r((tm.get("expected_value") or {}).get("r"))))
+    if rc:
+        r.append("- rugcheck: %s (score %s)" % (rc.get("verdict"), rc.get("score")))
+    for n in (case.get("news") or [])[:3]:
+        r.append("- news %s: %s — %s" % (n.get("published") or "", n.get("title"), n.get("source")))
+    r.append("## Data gaps")
+    r.append("- a rule-based desk reads only the numbers above; it cannot judge context the way a human or AI reviewer can")
+    # Skeptic
+    obj = []
+
+    def o(sev, text):
+        obj.append("O%d [%s] %s" % (len(obj) + 1, sev, text))
+    if not plan:
+        o("critical", "no exit plan — nothing to size or protect")
+    if not bt:
+        o("major", "this rule was never backtested on %s" % sym)
+    else:
+        exp, n = bt.get("expectancy_r"), bt.get("triggers") or 0
+        if exp is None or exp < 0:
+            o("critical", "this rule lost money on %s: expectancy %s after costs over %d triggers — evidence: %s"
+              % (sym, fmt.r(exp), n, bt.get("summary")))
+        elif exp < d["min_backtest_expectancy_r"]:
+            o("major", "the edge is too thin to pay for mistakes: expectancy %s (want ≥ %s)"
+              % (fmt.r(exp), fmt.r(d["min_backtest_expectancy_r"])))
+        if n < d["min_backtest_triggers"]:
+            o("major", "thin sample: only %d past triggers (want ≥ %d)" % (n, d["min_backtest_triggers"]))
+    if not tm:
+        o("critical", "no Time Machine replay of this plan")
+    else:
+        ev = (tm.get("expected_value") or {}).get("r")
+        p = tm.get("probabilities") or {}
+        if ev is None or ev < d["min_ev_r"]:
+            o("critical", "the replay says this geometry loses: EV %s (minimum %s)" % (fmt.r(ev), fmt.r(d["min_ev_r"])))
+        if (p.get("rug") or 0) >= 0.05:
+            o("major", "%s of replays end in a rug pull" % fmt.prob(p.get("rug")))
+        if p.get("target") is not None and p.get("stop") is not None and p["stop"] >= 2 * max(p["target"], 1e-9):
+            o("minor", "stop first is %s vs target first %s — fine only if the backtest edge is real"
+              % (fmt.prob(p["stop"]), fmt.prob(p["target"])))
+    if asset == "meme":
+        allowed = (limits.get("meme") or {}).get("required_rugcheck_verdicts") or ["SAFE"]
+        if not rc or rc.get("verdict") not in allowed:
+            o("critical", "rugcheck is %s — meme coins need %s" % ((rc or {}).get("verdict") or "missing", "/".join(allowed)))
+    if plan:
+        age_h = (market_clock.now_utc() - market_clock.parse_iso(plan["entry"]["time"])).total_seconds() / 3600.0
+        if age_h > d["max_idea_age_hours"].get(asset or "stock", 2):
+            o("major", "the idea is stale: entry was %.1f h ago" % age_h)
+    if any("earnings" in (n.get("tags") or []) for n in case.get("news") or []):
+        o("minor", "earnings headlines in the feed — event risk inside or right after the holding window")
+    o("minor", "the replay resamples ordinary bars — it cannot see news shocks, halts or gaps")
+    sk = obj + ["## Verdict %s" % AUTO_TAG]
+    severities = [x.split("[", 1)[1].split("]", 1)[0] for x in obj]
+    blocking = [x for x, sev in zip(obj, severities) if sev in ("critical", "major")]
+    sk.append("Blocking objections: %d." % len(blocking) if blocking else "Nothing blocking found in the numbers.")
+    # Lead
+    lead = []
+    for x, sev in zip(obj, severities):
+        tag = x.split(" ", 1)[0]
+        lead.append("%s: accepted — %s" % (tag, "the numbers say so" if sev != "minor" else "noted"))
+    decision = "NO-GO" if blocking else "GO"
+    lead.append("DECISION: %s" % decision)
+    lead.append(("Rule-based call: %d blocking objection(s) — the Trader stands down." % len(blocking)) if blocking else
+                "Rule-based call: the backtest shows an edge, the replay does not reject the geometry, nothing "
+                "critical or major is open. The Trader may size, risk-check and prepare a ticket.")
+    lead.append(AUTO_TAG)
+    return {"researcher": "\n".join(r), "skeptic": "\n".join(sk), "lead": "\n".join(lead)}
+
+
+def auto_review(idea_id: str, cfg: dict, limits: dict, force: bool = True, symbol: str = None) -> dict:
+    """Write rule-based memos for all three roles and verify — used by the demo and the autopilot."""
+    case = build_case(idea_id, symbol)
+    memos = auto_memos(case, cfg, limits)
+    for role, text in memos.items():
+        p = memo_path(idea_id, role)
+        if force or not p.exists():
+            p.write_text(text + "\n", encoding="utf-8")
+    state.append_jsonl("desk/%s/log.jsonl" % idea_id, {"at": market_clock.iso(market_clock.now_utc()), "role": "auto"})
+    result = verify(idea_id, case, cfg, limits)
+    state.write_json("desk/%s/case.json" % idea_id, case)
+    state.write_json("desk/%s/desk.json" % idea_id, result)
+    return result
+
+
 def trader_next(case: dict, status: str) -> list:
     if status != "GO":
         return []
@@ -406,6 +533,8 @@ def main(argv=None) -> int:
         cli.emit(args, "Recorded the %s memo for %s → %s%s" % (args.role, idea_id, p, extra),
                  {"id": idea_id, "role": args.role, "file": state.rel(p)})
         return 0
+    if args.action == "auto":
+        auto_review(idea_id, ctx.cfg, ctx.limits, force=args.force or True, symbol=args.symbol)
     case = build_case(idea_id, args.symbol)
     state.write_json("desk/%s/case.json" % idea_id, case)
     if args.action == "brief":
