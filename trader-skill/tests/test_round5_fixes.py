@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 from unittest import mock
 
-from shared import config, data, market_clock as mc, setups, state
+from shared import brokers, config, data, market_clock as mc, notify, setups, state, symbols
 from shared.brokers import BrokerError
 from shared.brokers.simulator import SimBroker
 from shared.indicators import Candle
@@ -149,27 +149,177 @@ class Simulator(TraderTestCase):
         self.assertEqual([o["status"] for o in b.book["orders"] if o["id"] == yours["id"]], ["new"])
 
 
-class YourOwnCoinsAndTheBotsEquity(TraderTestCase):
-    def book(self, status="open"):
-        return {"handled": {}, "items": {"p": {"symbol": "ETH/USD", "qty": 2.0, "status": status,
-                                               "broker": "alpaca", "mode": "paper"}}}
+class YourOwnCoinsAndTheBotsDailyLoss(TraderTestCase):
+    """Only the daily-loss check takes your own holdings' moves out; equity, sizing and the drawdown stay the broker's."""
+    NOW = "2026-10-20T15:00:00Z"
+
+    def setUp(self):
+        super().setUp()
+        config.ensure_home()
+        self.book = {"handled": {}, "items": {"p": {"symbol": "ETH/USD", "qty": 2.0, "status": "open",
+                                                    "broker": "alpaca", "mode": "paper"}}}
+
+    def day(self, equity, btc_qty, btc_last, eth_last=3000.0, book=None, orders=()):
+        pos = [{"symbol": "ETH/USD", "qty": 2.0, "last": eth_last}]
+        if btc_qty:
+            pos.append({"symbol": "BTC/USD", "qty": btc_qty, "last": btc_last})
+        yours = ap().yours_today(mc.now_utc(), pos, book or self.book, list(orders), _ta.FakeBroker())
+        return ap()._day_loss(mc.now_utc(), equity, yours)[0], yours
 
     def test_your_btc_falling_is_not_the_bots_loss(self):
-        acct = {"equity": 24000.0, "cash": 10000.0}
-        pos = [{"symbol": "BTC/USD", "qty": 0.1, "avg_entry": 60000.0, "last": 50000.0},  # yours: −$1,000
-               {"symbol": "ETH/USD", "qty": 2.0, "avg_entry": 3000.0, "last": 2900.0}]    # the bot's
-        out = ap().bot_account(acct, pos, self.book(), _ta.FakeBroker())
-        self.assertEqual((out["equity"], out["account_equity"], out["yours_pl_usd"]), (25000.0, 24000.0, -1000.0))
+        self.assertEqual(self.day(100000.0, 1.0, 60000.0), (0.0, 0.0))
+        self.assertEqual(self.day(90000.0, 1.0, 50000.0), (0.0, -10000.0))     # all of it your BTC
+        self.assertEqual(self.day(89800.0, 1.0, 50000.0, 2900.0), (200.0, -10000.0))  # the bot's ETH: −$200
 
-    def test_buying_some_yourself_changes_nothing(self):
-        acct = {"equity": 25000.0, "cash": 20000.0}
-        pos = [{"symbol": "BTC/USD", "qty": 0.1, "avg_entry": 50000.0, "last": 50000.0}]
-        self.assertEqual(ap().bot_account(acct, pos, self.book(), _ta.FakeBroker())["equity"], 25000.0)
+    def test_selling_or_buying_yours_moves_nothing(self):
+        self.day(100000.0, 1.0, 60000.0)
+        self.day(90000.0, 1.0, 50000.0)
+        self.assertEqual(self.day(90000.0, 0.0, None), (0.0, -10000.0))      # you sold at a loss: no jump
+        self.assertEqual(self.day(90000.0, 0.5, 45000.0), (0.0, -10000.0))   # you bought some back: nothing
 
-    def test_the_bots_entry_that_just_filled_is_the_bots(self):
-        acct = {"equity": 24800.0}
-        pos = [{"symbol": "ETH/USD", "qty": 2.0, "avg_entry": 3000.0, "last": 2900.0}]
-        self.assertEqual(ap().bot_account(acct, pos, self.book("pending"), _ta.FakeBroker())["equity"], 24800.0)
+    def test_the_bots_own_fill_is_not_yours(self):
+        book = {"handled": {}, "items": {"p": {"symbol": "ETH/USD", "qty": 2.0, "status": "pending",
+                                               "broker": "alpaca", "mode": "paper", "order_id": "ord-p",
+                                               "broker_order_id": "e1"}}}
+        orders = [{"id": "e1", "client_order_id": "ord-p", "status": "partially_filled", "filled_qty": "1.5"}]
+        for last, yours in ((3000.0, 0.0), (2000.0, 0.0)):  # all 1.5 of it the bot's: its loss, not yours
+            pos = [{"symbol": "ETH/USD", "qty": 1.5, "last": last}]
+            self.assertEqual(ap().yours_today(mc.now_utc(), pos, book, orders, _ta.FakeBroker()), yours)
+        pos = [{"symbol": "ETH/USD", "qty": 2.5, "last": 2000.0}]  # you bought 1 yourself
+        ap().yours_today(mc.now_utc(), pos, book, orders, _ta.FakeBroker())
+        pos[0]["last"] = 1900.0
+        self.assertEqual(ap().yours_today(mc.now_utc(), pos, book, orders, _ta.FakeBroker()), -100.0)
+
+    def test_a_new_day_starts_counting_again(self):
+        self.day(100000.0, 1.0, 60000.0)
+        self.day(90000.0, 1.0, 50000.0)
+        self.set_now("2026-10-21T00:05:00Z")
+        self.assertEqual(self.day(90000.0, 1.0, 50000.0), (0.0, 0.0))
+
+
+class APartFilledStop(_ta.OnlyWhatTheBotOwns):
+    """The stop sold 0.4 of the bot's 1.0 BTC and was cancelled: the next sale is 0.6, never your coins."""
+    NOW = "2026-10-20T15:00:00Z"
+
+    def test_the_part_is_booked_and_only_the_rest_is_sold(self):
+        journal = load("trader-journal", "journal")
+        journal.save_trade({"id": "t1", "plan_id": "p1", "asset": "crypto", "symbol": "BTC/USD", "qty": 1.0,
+                            "entry": {"price": 100.0, "time": "2026-10-20T14:00:00Z"}, "risk_per_unit": 5.0,
+                            "status": "open", "source": "autopilot"})
+        self.it.update(status="open", filled_at="2026-10-20T14:02:00Z", symbol="BTC/USD", asset="crypto", qty=1.0,
+                       stop_order_id="s1", trade_id="t1", time_stop="2027-01-01T00:00:00Z")
+        part = [{"id": "s1", "client_order_id": "ord-p1-stop", "symbol": "BTC/USD", "side": "sell",
+                 "type": "stop_limit", "status": "canceled", "filled_qty": "0.4", "filled_avg_price": "95.0",
+                 "updated_at": "2026-10-20T14:50:00Z"}]
+        pos = [{"symbol": "BTC/USD", "asset": "crypto", "qty": 2.6, "last": 94.0}]  # 2.0 of them are yours
+        acts = ap().reconcile(self.b, self.book, pos, part, self.cfg, self.limits)
+        self.assertAlmostEqual(self.it["qty"], 0.6)
+        self.assertTrue(any("booked" in a for a in acts), acts)
+        first, rest = journal.get_trade("t1"), journal.get_trade(self.it["trade_id"])
+        self.assertEqual((first["status"], first["qty"], first["exit"]["reason"]), ("closed", 0.4, "stop"))
+        self.assertEqual((rest["status"], rest["qty"]), ("open", 0.6))
+        self.assertEqual(ap().reconcile(self.b, self.book, pos, part, self.cfg, self.limits), [])  # booked once
+        ap().manage_exits(self.b, self.book, pos, part, self.cfg)
+        self.assertIn(("exit", "BTC/USD", 0.6), self.b.calls)
+
+
+class AWashLimitThePriceLeftBehind(_ta.OnlyWhatTheBotOwns):
+    def test_is_sent_again_at_the_new_price(self):
+        b = Washy()
+        self.it.update(status="open", filled_at="2026-10-20T14:02:00Z", time_stop="2026-10-20T14:30:00Z")
+        ap().manage_exits(b, self.book, [{"symbol": "NVDA", "asset": "stock", "qty": 10.0, "last": 101.0}], [],
+                          self.cfg)
+        resting = [{"id": self.it["exit_order_id"], "symbol": "NVDA", "side": "sell", "type": "limit",
+                    "limit_price": 99.99, "status": "new"}]
+        b.ords = resting
+        ap().manage_exits(b, self.book, [{"symbol": "NVDA", "asset": "stock", "qty": 10.0, "last": 100.5}], resting,
+                          self.cfg)  # still above its limit: it waits
+        self.assertEqual(len([c for c in b.calls if c[0] == "exit"]), 1)
+        ap().manage_exits(b, self.book, [{"symbol": "NVDA", "asset": "stock", "qty": 10.0, "last": 90.0}], resting,
+                          self.cfg)
+        self.assertIn(("cancel", resting[0]["id"]), b.calls)
+        self.assertAlmostEqual([c for c in b.calls if c[0] == "exit"][-1][4], 90.0 * ap().WASH_LIMIT)
+
+    def test_the_kill_does_not_wait_on_it_either(self):
+        b = Washy()
+        self.it.update(status="open", filled_at="2026-10-20T14:02:00Z", exit_order_id="x9", exit_limit=99.99,
+                       exit_limit_at="2026-10-20T14:00:00Z")
+        resting = [{"id": "x9", "symbol": "NVDA", "side": "sell", "type": "limit", "limit_price": 99.99,
+                    "status": "new"}]
+        b.ords = resting
+        ap().kill(b, self.book, self.cfg, "test", resting, [{"symbol": "NVDA", "asset": "stock", "qty": 10.0,
+                                                             "last": 101.0}])  # waited 1 h: sent again
+        self.assertIn(("cancel", "x9"), b.calls)
+        self.assertTrue([c for c in b.calls if c[0] == "exit"])
+
+
+for _cls in (APartFilledStop, AWashLimitThePriceLeftBehind):
+    for _name in dir(_ta.OnlyWhatTheBotOwns):
+        if _name.startswith("test") and _name not in _cls.__dict__:
+            setattr(_cls, _name, None)
+
+
+class SmallerThings(TraderTestCase):
+    def test_a_paper_trade_in_the_book_never_stops_a_running_live_bot(self):
+        config.ensure_home()
+        state.write_json("autopilot/book.json", {"handled": {}, "items": {"x": {
+            "symbol": "NVDA", "status": "open", "broker": "alpaca", "mode": "paper"}}})
+        cfg = config.load_config()
+        cfg["autopilot"].update(broker="alpaca", mode="live", live_confirmation=brokers.LIVE_PHRASE)
+        cfg["paper"] = False
+        os.environ["ALPACA_LIVE_KEY_ID"], os.environ["ALPACA_LIVE_SECRET_KEY"] = "AKTESTLIVE123456", "SKTESTLIVE123456"
+        self.assertFalse(brokers.live_readiness(cfg)[0])           # the opt-in check says so
+        self.assertTrue(brokers.live_readiness(cfg, book=False)[0])  # the running bot keeps its exits
+
+    def test_a_rotated_part_the_archive_could_not_take_is_kept(self):
+        config.ensure_home()
+        state.write_json("x.json", {})  # the folder
+        for i in range(100):
+            state.append_jsonl("events.jsonl", {"i": i, "pad": "x" * 100})
+        dest = state.path("archive", "events-2026-10-20.jsonl.gz")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with mock.patch.object(state, "_archive_part", side_effect=OSError(28, "No space left on device")):
+            state.rotate_jsonl("events.jsonl", 1000, 0, dest)
+        self.assertEqual(state.read_jsonl("events.jsonl"), [])
+        later = state.path("archive", "events-2026-10-21.jsonl.gz")
+        for i in range(100, 200):
+            state.append_jsonl("events.jsonl", {"i": i, "pad": "x" * 100})
+        state.rotate_jsonl("events.jsonl", 1000, 0, later)
+        import gzip
+        with gzip.open(str(dest), "rt") as fh:
+            self.assertEqual(len(fh.read().splitlines()), 100)  # yesterday's part, in yesterday's archive
+        with gzip.open(str(later), "rt") as fh:
+            self.assertEqual(len(fh.read().splitlines()), 100)
+        self.assertFalse(list(dest.parent.glob(".*.pending")))
+
+    def test_a_manual_ticket_goes_to_alpaca_unless_told_otherwise(self):
+        risk = load("trader-risk", "risk")
+        self.assertIn("venue = (((cfg.get(\"autopilot\") or {}).get(\"broker\") or \"simulator\")",
+                      open(risk.__file__).read())
+
+    def test_the_ntfy_token_never_follows_a_redirect(self):
+        sent = []
+
+        class Resp:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self, n):
+                return b""
+        with mock.patch("urllib.request.urlopen", lambda req, timeout=0: sent.append(req) or Resp()):
+            notify._post("https://ntfy.sh/t", b"x", {"Authorization": "Bearer tk", "Title": "t"})
+        self.assertIn("Authorization", sent[0].unredirected_hdrs)
+        self.assertNotIn("Authorization", sent[0].headers)
+
+    def test_a_pair_on_the_block_list_is_that_pair(self):
+        self.assertEqual(symbols.blocked_hits(["ETHUSDT"], ["ETH/BTC"]), [])
+        self.assertEqual(symbols.blocked_hits(["WUSDT"], ["WBTC"]), [])
+        self.assertEqual(symbols.blocked_hits(["SOLUSDT"], ["SOL/USD"]), ["SOLUSDT"])
 
 
 class CrashRightAfterTheSale(_ta.OnlyWhatTheBotOwns):

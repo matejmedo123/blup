@@ -278,6 +278,10 @@ def rotate_jsonl(name: str, max_bytes: int, keep_bytes: int, dest: Path) -> int:
     import tempfile
     p = home() / name
     try:
+        _archive_pending(dest)
+    except OSError:
+        pass
+    try:
         fh = p.open("rb")
     except FileNotFoundError:
         return 0
@@ -336,21 +340,61 @@ def rotate_jsonl(name: str, max_bytes: int, keep_bytes: int, dest: Path) -> int:
                 pass
     if not replaced:
         return 0
-    # the file is replaced: now the old part joins the archive (gzip members simply follow one another)
+    # the file is replaced: now the old part joins the archive (gzip members simply follow one another). If that
+    # fails (a full disk), the part is kept as ``.pending`` and joins it on a later rotation — never deleted
     try:
-        fd = os.open(str(dest), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        with os.fdopen(fd, "ab") as arc, open(part, "rb") as src:
-            while True:
-                chunk = src.read(1 << 20)
-                if not chunk:
-                    break
-                arc.write(chunk)
-    finally:
+        _archive_part(dest, part)
+    except OSError:
         try:
-            os.unlink(part)
+            os.replace(part, part[:-len(".part")] + ".pending")
         except OSError:
             pass
     return cut
+
+
+def _archive_part(dest: Path, part: str) -> None:
+    """Append a gzip part to the archive and delete it; on failure the archive is cut back to what it was."""
+    fd = os.open(str(dest), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        size = os.fstat(fd).st_size
+        try:
+            with open(part, "rb") as src:
+                while True:
+                    chunk = src.read(1 << 20)
+                    if not chunk:
+                        break
+                    done = 0
+                    while done < len(chunk):
+                        done += os.write(fd, chunk[done:])
+        except OSError:
+            try:
+                os.ftruncate(fd, size)  # no half gzip member left behind
+            except OSError:
+                pass
+            raise
+    finally:
+        os.close(fd)
+    os.unlink(part)
+
+
+def _archive_pending(dest: Path) -> None:
+    """Old parts a full disk kept out of their archives (in ``dest``'s folder). Each is claimed by a rename first, so two
+    rotations never add the same one twice."""
+    for old in sorted(dest.parent.glob(".*.gz.*.pending")):  # ".<archive name>.<random>.pending"
+        target = dest.parent / old.name[1:-len(".pending")].rsplit(".", 1)[0]  # yesterday's archive, perhaps
+        mine = str(old)[:-len(".pending")] + ".%d.claimed" % os.getpid()
+        try:
+            os.rename(str(old), mine)
+        except OSError:
+            continue  # taken by another rotation
+        try:
+            _archive_part(target, mine)
+        except OSError:
+            try:
+                os.replace(mine, str(old))
+            except OSError:
+                pass
+            return
 
 
 def tail_jsonl(name: str, n: int = None, stop=None) -> list:

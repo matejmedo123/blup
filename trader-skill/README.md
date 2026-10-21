@@ -722,9 +722,10 @@ format, so offline runs go through the same parsing code as live runs. `--now` p
   missed the strongest moves — 17–32 % of the lab's total R), and the runner rides after a time stop as in
   the lab. Since v3.9 a signal that comes while the previous trade's two thirds still ride counts only for
   "sell everything" (the bot holds that coin and would not take it): 394 of 476 trades get the runner.
-* **Your own coins at the same broker:** the bot counts its equity with the open P&L of what you hold
-  yourself taken out, so your BTC falling doesn't trip its daily-loss limit. Cash can't be told apart: a
-  deposit, a withdrawal or a loss you realise yourself still moves the bot's equity.
+* **Your own coins at the same broker:** the daily-loss limit takes out what your own holdings moved today,
+  so your BTC falling doesn't trip it. Cash can't be told apart: a deposit or a withdrawal still moves it, and
+  the drawdown pause (equity against its peak) still sees your own holdings — keep them in another account if
+  they are large next to the bot's.
 * **Small accounts can't hold most ETFs.** Alpaca brackets need whole shares and the stock cap is 25 % of
   the account: with €1,000, SPY, QQQ, IWM, DIA, GLD and SMH round to 0 shares and are skipped, and the rest
   risk 0.1–1.5 % instead of 2 %. The ETF projections above assume the full 2 %.

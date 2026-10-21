@@ -196,10 +196,10 @@ def _write_broker_files(broker, acct, positions, orders, book, realized_today):
     return line
 
 
-def _day_loss(now, equity) -> tuple:
+def _day_loss(now, equity, yours: float = 0.0) -> tuple:
     """(loss today in $, equity at the start of the UTC day). Positions are held for days, so their whole unrealized
-    P&L is not today's: the loss is how far equity fell since the day began (closed trades included), and never less
-    than what closed at a loss today."""
+    P&L is not today's: the loss is how far equity fell since the day began (closed trades included) less what your
+    own holdings lost today (``yours``, from ``yours_today``), and never less than what closed at a loss today."""
     doc = state.read_json(DAY, {}) or {}
     day = _today(now)
     if equity is not None:
@@ -207,11 +207,11 @@ def _day_loss(now, equity) -> tuple:
             yesterday = (market_clock.parse_iso(now).date() - timedelta(days=1)).isoformat()
             # after downtime the last equity seen is days old — those days' losses are not today's
             start = doc.get("last_equity", equity) if doc.get("day") == yesterday else equity
-            doc = {"day": day, "start_equity": start}
+            doc = dict({k: doc[k] for k in ("yours", "yours_day") if k in doc}, day=day, start_equity=start)
         doc["last_equity"] = float(equity)
         state.write_json(DAY, doc)
     start = doc.get("start_equity") if doc.get("day") == day else None
-    drop = float(start) - float(equity) if start is not None and equity is not None else 0.0
+    drop = float(start) - float(equity) + float(yours or 0) if start is not None and equity is not None else 0.0
     return max(drop, -_realized_today(now), 0.0), start
 
 
@@ -343,14 +343,34 @@ def _sell_own(broker, it: dict, held: float = None, limit_price: float = None) -
         qty = float(it["qty"]) if held is None else min(float(it["qty"]), float(held))
         o = broker.place_exit(it["symbol"], qty, "limit", limit_price=limit_price, asset=it["asset"],
                               client_order_id="%s-x%d" % (it["order_id"], int(time.time() * 1000)))
+        it.update(exit_limit=float(limit_price), exit_limit_at=market_clock.iso(market_clock.now_utc()))
     elif held is not None and float(held) <= float(it["qty"]) * (1 + room):
         o = broker.close_position(it["symbol"])  # all ours — also clears crypto fee dust a sized sell would leave
+        it.pop("exit_limit", None), it.pop("exit_limit_at", None)
     else:
         qty = float(it["qty"]) if held is None else min(float(it["qty"]), float(held))
         o = broker.place_exit(it["symbol"], qty, "market", asset=it["asset"],
                               client_order_id="%s-x%d" % (it["order_id"], int(time.time() * 1000)))
+        it.pop("exit_limit", None), it.pop("exit_limit_at", None)
     it["exit_order_id"] = o.get("id")
     return o
+
+
+def _stale_exit(queued: dict, it: dict, last, now) -> bool:
+    """A limit sale (sent because a market one was refused) that the price has fallen below, or that has waited
+    EXIT_RETRY_SEC: it is cancelled and sent again at today's price — never left resting while the position has
+    no stop. A queued market sale (a stock after hours) is left to wait for the open."""
+    if queued.get("type") != "limit" and (queued.get("type") or not it.get("exit_limit_at")):
+        return False
+    try:
+        limit = float(queued.get("limit_price") or it.get("exit_limit") or 0)
+        last = float(last) if last is not None else None
+    except (TypeError, ValueError):
+        limit, last = 0.0, None
+    if last is not None and limit > 0 and last < limit:
+        return True
+    at = it.get("exit_limit_at")
+    return bool(at) and now.timestamp() - market_clock.ts(at) >= EXIT_RETRY_SEC
 
 
 CANCEL_WAIT_SEC = 6     # how long an exit waits for the broker to confirm a cancelled stop
@@ -495,34 +515,58 @@ def forget_foreign(cfg: dict) -> dict:
             "Nothing to forget — every open trade in the book belongs to %s/%s." % (name, mode)}
 
 
-def bot_account(acct: dict, positions: list, book: dict, broker=None) -> dict:
-    """The account as the bot may count it: your own coins and shares at what they cost you, not at today's price.
-    Your BTC falling must not trip the bot's daily-loss kill, nor rising make it size its trades bigger — and buying
-    some yourself (cash into coins) must not look like a loss either, so only their open P&L is taken out.
-    ``account_equity`` keeps the broker's figure."""
-    if not acct or acct.get("equity") is None:
-        return acct
-    bot_qty = {}
-    for it in book["items"].values():  # a pending entry that filled since the last cycle is the bot's too
-        if it.get("status") in LIVE_ITEM and (broker is None or _here(it, broker)):
-            bot_qty[it["symbol"]] = bot_qty.get(it["symbol"], 0.0) + float(it.get("qty") or 0)
-    pl = 0.0
+def _bot_qty(book: dict, orders: list, broker=None) -> dict:
+    """symbol → how much of it the bot holds: its open trades, and what of a pending entry already filled."""
+    out = {}
+    for it in book["items"].values():
+        if it.get("status") not in LIVE_ITEM or (broker is not None and not _here(it, broker)):
+            continue
+        qty = float(it.get("qty") or 0)
+        if it["status"] != "open":
+            o = _find(orders, it.get("broker_order_id")) or _find(orders, cid=it.get("order_id")) or {}
+            try:
+                qty = float(o.get("filled_qty") or 0)
+            except (TypeError, ValueError):
+                qty = 0.0
+        out[it["symbol"]] = out.get(it["symbol"], 0.0) + qty
+    return out
+
+
+def yours_today(now, positions: list, book: dict, orders: list, broker=None) -> float:
+    """How much the coins and shares you hold yourself at this broker made (+) or lost (−) since the UTC day began,
+    from their price moves alone: your own BTC falling is not the bot's daily loss. Buying or selling them yourself
+    moves nothing (cash ↔ coins); what they moved before you sold stays counted for the day."""
+    doc = state.read_json(DAY, {}) or {}
+    day = _today(now)
+    mine = doc.get("yours") if doc.get("yours_day") == day else None
+    fresh = mine is None  # a new day (or the first cycle since the upgrade): counting starts now
+    mine = mine or {}
+    bot = _bot_qty(book, orders, broker)
+    seen = set()
     for p in positions or []:
+        sym = p.get("symbol")
         try:
-            qty = float(p.get("qty") or 0)
-            extra = qty - bot_qty.get(p.get("symbol"), 0.0)
-            if extra <= 1e-9 or qty <= 0:
-                continue
-            if p.get("avg_entry") is not None and p.get("last") is not None:
-                pl += extra * (float(p["last"]) - float(p["avg_entry"]))
-            else:
-                pl += float(p.get("unrealized_pl") or 0) * extra / qty
+            qty = max(0.0, float(p.get("qty") or 0) - bot.get(sym, 0.0))
+            last = float(p.get("last") or 0)
         except (TypeError, ValueError):
             continue
-    if abs(pl) < 0.005:
-        return acct
-    return dict(acct, account_equity=acct["equity"], yours_pl_usd=round(pl, 2),
-                equity=round(float(acct["equity"]) - pl, 2))
+        if not last > 0:
+            continue
+        seen.add(sym)
+        was = mine.get(sym) or {}
+        move = float(was.get("move") or 0)
+        q0, p0 = float(was.get("qty") or 0), float(was.get("last") or 0)
+        if not fresh and q0 > 0 and p0 > 0:
+            split = qty > 0 and abs(last / p0 - 1) > 0.3 and abs(qty * last / (q0 * p0) - 1) < 0.02
+            if not split:  # a split scales quantity and price together: no gain, no loss
+                move += q0 * (last - p0)
+        mine[sym] = {"qty": round(qty, 10), "last": last, "move": round(move, 2)}
+    for sym, was in mine.items():
+        if sym not in seen:  # sold (or gone): what it moved today stays, nothing more
+            was["qty"] = 0.0
+    doc.update(yours_day=day, yours=mine)
+    state.write_json(DAY, doc)
+    return round(sum(float(v.get("move") or 0) for v in mine.values()), 2)
 
 
 def _tracked(broker, book: dict, orders: list) -> list:
@@ -717,6 +761,8 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
                         pass
                 # its protective stop is already cancelled, so sell everything now rather than wait
                 ride["status"] = "failed"
+                if o and _part_sold(o, it):  # what of the part did sell is sold: only the rest goes now
+                    actions += _book_part_sale(it, o, cfg)
                 what = o["status"] if o else "not seen at the broker after %d min" % (6 * step // 60)
                 it["exit_note"] = (it.get("exit_note") or "exit rule") + " · the partial sale was %s" % what
                 it["exit_reason"], it["stop_order_id"] = "rule", None
@@ -729,11 +775,16 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
                                    % (it["symbol"], what, exc))
             return actions
         p = pos_by.get(it["symbol"])
+        for o in orders:
+            if _part_sold(o, it) and _mine(o, it) and float(o["filled_qty"]) < float(it["qty"]) * (1 - 1e-9):
+                actions += _book_part_sale(it, o, cfg)
         since = ride.get("sold_at") or it.get("filled_at") or ""
         sells = [o for o in orders if o.get("symbol") == it["symbol"] and o.get("side") == "sell"
                  and o.get("status") == "filled" and (o.get("filled_at") or "") >= since
                  and o.get("id") != ride.get("sell_order_id")]
-        own = [o for o in sells if _mine(o, it)]
+        own = [o for o in sells if _mine(o, it)] + [
+            o for o in orders if _part_sold(o, it) and _mine(o, it) and float(o["filled_qty"]) >= float(it["qty"]) *
+            (1 - 1e-9)]
         if own:  # its own stop, leg or exit filled — whatever else of the symbol you still hold
             ex = sorted(own, key=lambda o: o.get("filled_at") or "")[-1]
         elif p and float(p.get("qty") or 0) > 1e-9:
@@ -750,7 +801,8 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
         else:
             reason = it.get("exit_reason") or "manual"
         trade = _close_trade(it, ex, reason, cfg)
-        it.update(status="closed", closed_at=ex.get("filled_at"), exit_price=ex.get("filled_avg_price"),
+        it.update(status="closed", closed_at=ex.get("filled_at") or ex.get("updated_at") or market_clock.iso(now),
+                  exit_price=ex.get("filled_avg_price"),
                   exit_reason=reason, pnl_usd=(trade or {}).get("pnl_usd"))
         for o in orders:  # a stop of its own still working (put back after a sale that did go through) must go
             if o is not ex and o.get("side") == "sell" and o.get("status") in OPEN_ORDER and _mine(o, it):
@@ -870,6 +922,46 @@ def sell_part(broker, it: dict, orders: list, cfg: dict = None) -> list:
         return start_ride(broker, it, o, cfg)
     return ["%s: selling %s of %s — %s will ride on" % (it["symbol"], setups.keep_text(1 - ride["keep"]),
                                                        fmt.qty(it["qty"]), setups.keep_text(ride["keep"]))]
+
+
+def _book_part_sale(it: dict, o: dict, cfg: dict = None) -> list:
+    """A sell order of this trade that filled in part and then was cancelled or expired: that part is sold. It is
+    booked as its own closed trade and the rest stays open with the smaller quantity — the next sale, sized on the
+    whole, would otherwise come out of coins or shares you hold yourself."""
+    sold = float(o.get("filled_qty") or 0)
+    left = round(float(it["qty"]) - sold, 10)
+    it.setdefault("parts_booked", []).append(o.get("id"))
+    price = float(o.get("filled_avg_price") or 0) or float(it["stop"])
+    at = o.get("filled_at") or o.get("updated_at") or o.get("canceled_at") or market_clock.iso(market_clock.now_utc())
+    reason = "stop" if (o.get("leg") == "stop" or o.get("id") == it.get("stop_order_id")) else (
+        it.get("exit_reason") or "manual")
+    journal = _mod("trader-journal", "journal")
+    first = journal.get_trade(it.get("trade_id"))
+    if first:
+        rest = copy.deepcopy(first)
+        first["qty"] = sold
+        journal.finalize(first, cfg or config.load_config(), price, at, reason)
+        first["exit"]["broker_order_id"] = o.get("id")
+        rest.update(id="%s-%d" % (first["id"], len(it["parts_booked"])), qty=left)
+        first["notes"] = (first.get("notes") or "") + " · its %s order filled %s of %s, then was %s; the rest " \
+            "stays open as %s" % (o.get("type") or "sell", fmt.qty(sold), fmt.qty(it["qty"]), o.get("status"),
+                                  rest["id"])
+        journal.save_trade(first)
+        journal.save_trade(rest)
+        it["trade_id"] = rest["id"]
+    it["qty"] = left
+    return ["%s: %s of its %s order filled before it was %s — booked, %s left" % (
+        it["symbol"], fmt.qty(sold), o.get("type") or "sell", o.get("status"), fmt.qty(left))]
+
+
+def _part_sold(o: dict, it: dict) -> bool:
+    """A sell order of this trade that ended (cancelled, expired) with part of it filled, not booked yet."""
+    try:
+        filled = float(o.get("filled_qty") or 0)
+    except (TypeError, ValueError):
+        return False
+    return (o.get("side") == "sell" and o.get("status") in ("canceled", "expired", "rejected", "done_for_day")
+            and filled > 1e-12 and o.get("id") not in (it.get("parts_booked") or ()))
 
 
 def start_ride(broker, it: dict, sold: dict, cfg: dict = None) -> list:
@@ -1042,8 +1134,8 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
             it["runner"]["status"] = "skipped"
             it["exit_note"] = it.get("exit_note", "") + " · sold everything: " + why_not
     queued = _find(orders, it.get("exit_order_id")) if it.get("exit_order_id") else None
-    if queued and queued.get("status") in OPEN_ORDER:  # its sale is on its way (sent earlier this cycle)
-        return actions
+    if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(queued, it, last, now):
+        return actions  # its sale is on its way (sent earlier, or a stock's waiting for the open)
     wait = _cancel_own_sells(broker, it, orders, live)
     if wait:
         actions.append("%s exit for %s waits: %s" % (reason, it["symbol"], wait))
@@ -1112,8 +1204,9 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
         it["exit_reason"], it["exit_note"] = "manual", "kill switch: %s" % reason
         p = pos_by.get(it["symbol"])
         queued = _find(orders, it.get("exit_order_id")) if it.get("exit_order_id") else None
-        if queued and queued.get("status") in OPEN_ORDER:  # after hours a stock sale waits for the open: leave it
-            problems.append("%s: its sale is queued at the broker" % it["symbol"])
+        if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(
+                queued, it, (p or {}).get("last"), market_clock.now_utc()):
+            problems.append("%s: its sale is queued at the broker" % it["symbol"])  # a stock after hours: the open
             return problems
         wait = _cancel_own_sells(broker, it, orders, _live_stop(it, orders))
         if wait:  # the KILL stays on and the next cycle sells — never a sale out of your own shares
@@ -2090,7 +2183,7 @@ def _cycle(approved=None) -> dict:
             if note not in errors:
                 errors.append(note)
         acct, pos, ords = broker.account(), broker.positions(), broker.orders()
-        return bot_account(acct, pos, book, broker), pos, ords + _tracked(broker, book, ords)
+        return acct, pos, ords + _tracked(broker, book, ords)
 
     def best_effort(what, fn, fallback=None):
         """Bookkeeping (files, learning, health) that fails stops new entries — never the exits."""
@@ -2136,7 +2229,8 @@ def _cycle(approved=None) -> dict:
     if control["kill"]:
         kill_reason = "kill switch (%s)" % (control.get("by") or "control")
     else:
-        loss, start = best_effort("daily loss", lambda: _day_loss(now, acct.get("equity"))) or (0.0, None)
+        yours = best_effort("your own holdings", lambda: yours_today(now, positions, book, orders, broker)) or 0.0
+        loss, start = best_effort("daily loss", lambda: _day_loss(now, acct.get("equity"), yours)) or (0.0, None)
         glob = limits.get("global") or {}
         caps = [float(glob["max_daily_loss_usd"])] if glob.get("max_daily_loss_usd") is not None else []
         if glob.get("max_daily_loss_pct") is not None and start:
@@ -2242,7 +2336,7 @@ def _cycle(approved=None) -> dict:
             decisions.append(d)
             if d["action"] == "taken":
                 try:
-                    acct = bot_account(broker.account(), positions, book, broker)
+                    acct = broker.account()
                 except BrokerError as exc:  # the order is booked; the next candidates wait for the next cycle
                     errors.append("account after an order: %s" % exc)
                     break

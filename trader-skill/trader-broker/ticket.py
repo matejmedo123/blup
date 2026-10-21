@@ -216,9 +216,9 @@ def prepare(args, ctx) -> tuple:
         raise ValueError("ticket %s was already approved — approvals are single-use; size a new order" % existing["id"])
     if args.live and ctx.cfg.get("paper", True) is not False:  # only a real false — not null, 0 or ""
         raise ValueError("live tickets are disabled: trader/config.json has \"paper\": true")
-    if args.live and not brokers.live_readiness(ctx.cfg)[0]:  # real money: the same five steps as the autopilot
+    if args.live and not brokers.live_readiness(ctx.cfg, book=False)[0]:  # real money: the same five steps as the autopilot
         raise ValueError("live tickets need the full live opt-in — missing: " +
-                         "; ".join(brokers.live_readiness(ctx.cfg)[1]))
+                         "; ".join(brokers.live_readiness(ctx.cfg, book=False)[1]))
     mode = "live" if args.live else "paper"
     ticket = build_ticket(order, mode)
     ticket["created_at"] = market_clock.iso(now)
@@ -277,8 +277,8 @@ def _approval_problem(ticket: dict, order, ctx, now) -> str:
         return "the order no longer matches the ticket that was shown — prepare it again"
     if ticket["mode"] == "live" and ctx.cfg.get("paper", True) is not False:
         return "live ticket refused: trader/config.json has \"paper\": true"
-    if ticket["mode"] == "live" and not brokers.live_readiness(ctx.cfg)[0]:
-        return "live ticket refused — the live opt-in is incomplete: " + "; ".join(brokers.live_readiness(ctx.cfg)[1])
+    if ticket["mode"] == "live" and not brokers.live_readiness(ctx.cfg, book=False)[0]:
+        return "live ticket refused — the live opt-in is incomplete: " + "; ".join(brokers.live_readiness(ctx.cfg, book=False)[1])
     return ""
 
 

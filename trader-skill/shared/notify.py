@@ -47,7 +47,11 @@ def _scrub(text: str) -> str:
 
 
 def _post(url: str, body: bytes, headers: dict) -> int:
-    req = urllib.request.Request(url, data=body, method="POST", headers=headers)
+    keep = {k: v for k, v in headers.items() if k.lower() != "authorization"}
+    req = urllib.request.Request(url, data=body, method="POST", headers=keep)
+    for k, v in headers.items():
+        if k.lower() == "authorization":  # never sent on to the server a redirect points at
+            req.add_unredirected_header(k, v)
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:  # looked up at call time: tests patch it
         resp.read(4096)
         return getattr(resp, "status", 200)

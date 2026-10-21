@@ -1055,16 +1055,27 @@ background thread (and to its last hour when the disk is low).
   to Alpaca is never sold, given a stop or "killed" out of the new account: the cycle reports it, opens nothing
   new, and `brokers.live_readiness` refuses the live switch until it is closed there and forgotten
   (`autopilot.py forget --confirm FORGET` sets such items to `"left"`).
-* **Bot equity** (`bot_account`): the daily-loss kill, the drawdown pause and the sizing see the account with
-  the open P&L of your own coins and shares taken out (`account_equity` = the broker's figure, `yours_pl_usd`
-  = what was taken out). Your BTC falling is not the bot's loss; buying some yourself changes nothing (only
-  the P&L is taken out, not the value). An entry that filled since the last cycle counts as the bot's.
+* **Your own holdings and the daily-loss limit** (`yours_today`, `day.json` → `yours`, `yours_day`): the daily
+  loss is how far equity fell since the UTC day began **plus what your own coins and shares at the broker made
+  today** — so your BTC falling is not the bot's loss. Only price moves count (quantity × change between cycles);
+  buying or selling them yourself moves nothing, and what they moved before you sold stays counted for the day.
+  The bot's share of a symbol is its open trades plus what of a pending entry already filled (`filled_qty`).
+  Equity, sizing, `equity.jsonl` and the drawdown pause keep the broker's figure.
+* A live bot is no longer stopped by a simulator or paper trade left in the book: `brokers.get` checks the five
+  opt-in steps only (`live_readiness(cfg, book=False)`); the cycle keeps exits and the KILL of the live trades
+  and opens nothing new until the old trade is forgotten. `check-live` and `status` still list it.
 
 ### Exits next to your own orders
 * Alpaca refuses a market sale and a plain stop while you have your own buy order open on the symbol (the
   wash-trade guard). The sale is sent again once as a **limit 1 % under the last price** (`WASH_LIMIT`), the
   stop goes back as a **stop-limit 3 % under the stop** (`WASH_STOP_LIMIT`, client id `…l`); the KILL does the
   same. `broker.place_stop(..., limit_price=None)` is new in all adapters.
+* A limit sale like that which the price fell below, or that waited `EXIT_RETRY_SEC`, is cancelled and sent again
+  at the new price — by the exits and by the KILL (`exit_limit`, `exit_limit_at` in the book item). A queued
+  market sale (a stock after hours) still waits for the open.
+* A sell order of the trade that filled in part and then was cancelled or expired is booked (`parts_booked`):
+  the part becomes its own closed journal trade, the rest stays open under `<trade id>-<n>` with the smaller
+  quantity — the next sale never comes out of your own coins.
 * The exit reason (`exit_reason`) is on disk before the sale goes out: a crash right after it still journals
   the trade as time / stop / rule, not "manual".
 * A closed position whose answer was lost (timeout, 5xx) is "may or may not have been placed", never "refused" —
@@ -1086,6 +1097,8 @@ background thread (and to its last hour when the disk is low).
 ### State and files
 * `state.append_jsonl_rows` writes unbuffered (`os.write`) and on failure truncates back to where it began: a
   full disk loses only the record that did not fit, and the next one lands on a clean line.
+* `state.rotate_jsonl`: a part the archive could not take (a full disk) is kept as `.<archive>.<id>.pending`
+  next to it and added to its own archive on a later rotation.
 * `state.write_json` writes files that keep a `.bak` under their lock (10 s), so two writers never leave the
   copy and the file from different moments.
 * `keep`, `min_sma`, `max_bars`, `top_n`, `top` must be numbers in `config.json`, even without a default.
@@ -1102,5 +1115,8 @@ background thread (and to its last hour when the disk is low).
   Manual crypto at Alpaca gets no leverage (sizer and risk check).
 * Meme coins in lot spellings (`1000PEPE`, `KPEPE`, `1MBABYDOGE`) are meme coins (`symbols.is_meme_base`); the
   block list matches any spelling (`SOL/USD` blocks `SOLUSDT`) in risk, universe and the playbook step.
-* Deploy never ships a nested `trader/` folder or `.env`; a request carrying a credential follows no redirect;
+* The block list strips only dollar and euro quotes: `ETH/BTC` blocks that pair, not all of ETH; `WBTC` is not
+  the coin `W`. A manual ticket's leverage check assumes Alpaca unless `connector` says otherwise.
+* Deploy never ships a nested `trader/` folder or `.env`; a request carrying a credential (the X token, the
+  ntfy token) follows no redirect;
   an infinite limit in `limits.json` is refused; the risk of a daily entry is measured at its slack limit.

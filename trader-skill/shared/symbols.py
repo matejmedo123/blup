@@ -45,7 +45,7 @@ def block_keys(text) -> set:
     SOL — a blocked coin stays blocked whichever quote or separator the list or the order uses."""
     t = re.sub(r"[\s/\-_:.]", "", str(text or "").upper())
     out = {t} if t else set()
-    for q in QUOTES:
+    for q in MONEY_QUOTES:  # never BTC or ETH: "ETH/BTC" is that pair, not all of ETH; "WBTC" is no coin "W"
         if t.endswith(q) and len(t) > len(q):
             out.add(t[: -len(q)])
     return out
@@ -60,6 +60,7 @@ def blocked_hits(names, blocked) -> list:
 WRAPPED = {"WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "RETH", "WBETH", "BTCB", "WSOL",
            "JITOSOL", "MSOL", "BSOL", "SUSDE", "LBTC", "SOLVBTC", "EZETH", "RSETH"}
 QUOTES = ("FDUSD", "USDT", "USDC", "BUSD", "USD", "EUR", "BTC", "ETH")
+MONEY_QUOTES = QUOTES[:6]  # the dollar and euro quotes
 
 CHAIN_ALIASES = {
     "sol": "solana", "solana": "solana",

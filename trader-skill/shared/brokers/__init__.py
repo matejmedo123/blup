@@ -25,7 +25,9 @@ def mode_of(cfg: dict) -> str:
     return "live" if ap.get("mode") == "live" else "paper"
 
 
-def live_readiness(cfg: dict) -> tuple:
+def live_readiness(cfg: dict, book: bool = True) -> tuple:
+    """book=False: the five opt-in steps alone. A running live bot is checked that way — a paper trade left in the
+    book then holds up new entries (the cycle says why), never the exits and the KILL of the live trades."""
     ap = _ap(cfg)
     missing = []
     if (ap.get("broker") or "simulator") != "alpaca":
@@ -41,6 +43,8 @@ def live_readiness(cfg: dict) -> tuple:
         missing.append('config autopilot.live_confirmation must be exactly "%s"' % LIVE_PHRASE)
     # trades still open in the simulator or the paper account would sit in the book of a live bot — never acted on
     # there (the live account may hold the same coins, and they are yours), but never closed either
+    if not book:
+        return (not missing), missing
     from .. import state
     try:
         items = ((state.read_json("autopilot/book.json", {}) or {}).get("items") or {}).values()
@@ -69,7 +73,7 @@ def get(cfg: dict) -> Broker:
     if kind not in ("simulator", "alpaca"):
         raise BrokerError('unknown autopilot.broker %r — use "simulator" or "alpaca"' % kind)
     if ap.get("mode") == "live":
-        ok, missing = live_readiness(cfg)
+        ok, missing = live_readiness(cfg, book=False)
         if not ok:
             raise BrokerError("live trading refused — missing: " + "; ".join(missing))
         from .alpaca import AlpacaBroker
