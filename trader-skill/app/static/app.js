@@ -5,6 +5,7 @@
 
   var CSRF = (document.querySelector('meta[name="trader-csrf"]') || {}).content || '';
   var TABS = ['overview', 'trades', 'bot', 'checks', 'brain', 'news', 'setups', 'reports'];
+  var MORE_TABS = ['brain', 'news', 'setups', 'reports'];  // behind "More" in the phone tab bar
   var SVGNS = 'http://www.w3.org/2000/svg';
   var ASSET_LABEL = { stock: 'Stocks', crypto: 'Crypto', meme: 'Meme coins' };
   var REFRESH_MS = 10000;
@@ -51,6 +52,12 @@
   }
   function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
   function $(id) { return document.getElementById(id); }
+  function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
+  function cssVar(name, fallback) {
+    var v = '';
+    try { v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) { /* old browser */ }
+    return v || fallback;
+  }
   function safeUrl(u) { u = String(u || '').trim(); return /^https?:\/\//i.test(u) ? u : ''; }
   function link(url, text, cls) {
     var u = safeUrl(url);
@@ -66,6 +73,7 @@
     return href ? h('a', { href: href, target: '_blank', rel: 'noopener' }, text || 'Open report') : null;
   }
   function setWidth(el, pct) { el.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%'; return el; }
+  function setLeft(el, pct) { el.style.left = Math.max(0, Math.min(100, pct)).toFixed(1) + '%'; return el; }
 
   // ---------------------------------------------------------------- formatting
   function num(v) {
@@ -169,7 +177,7 @@
   function empty(text, code) {
     return h('div', { class: 'empty' }, text, code ? [' ', h('code', { text: code })] : null);
   }
-  function st(text, color) { return h('span', { class: 'st ' + (color || ''), text: text }); }
+  function st(text, color) { return h('span', { class: 'st ' + (color || ''), text: cap(text) }); }
   function statusColor(s) {
     return ({ triggered: 'green', taken: 'green', running: 'green', go: 'green', closed: '', open: 'blue', watching: 'blue',
       forming: 'amber', paused: 'amber', wait: 'amber', flag: 'purple', skipped: '', extended: '', invalidated: 'red',
@@ -247,9 +255,10 @@
     var rising = ys[ys.length - 1] >= ys[0];
     var color = o.color || (rising ? 'var(--green)' : 'var(--red)');
     var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', 'aria-label': o.label || 'chart' });
+    var shade = cssVar(rising ? '--profit' : '--loss', rising ? '#3ddc97' : '#ff5c6c');
     var defs = sv('defs', null, sv('linearGradient', { id: id, x1: 0, y1: 0, x2: 0, y2: 1 },
-      sv('stop', { offset: '0%', 'stop-color': rising ? '#2ec27e' : '#f2555a', 'stop-opacity': 0.28 }),
-      sv('stop', { offset: '100%', 'stop-color': rising ? '#2ec27e' : '#f2555a', 'stop-opacity': 0 })));
+      sv('stop', { offset: '0%', 'stop-color': shade, 'stop-opacity': 0.26 }),
+      sv('stop', { offset: '100%', 'stop-color': shade, 'stop-opacity': 0 })));
     svg.appendChild(defs);
     niceTicks(lo, hi, 4).forEach(function (v) {
       svg.appendChild(sv('line', { class: 'grid', x1: pad.l, x2: W - pad.r, y1: Y(v), y2: Y(v) }));
@@ -316,7 +325,7 @@
     rows.forEach(function (r, i) {
       var x = pad.l + i * bw + bw * 0.18, w = Math.max(2, bw * 0.64);
       var y = Math.min(Y(r.pnl), Y(0)), hgt = Math.max(1.5, Math.abs(Y(r.pnl) - Y(0)));
-      var rect = sv('rect', { x: x, y: y, width: w, height: hgt, rx: 3, fill: r.pnl >= 0 ? 'var(--green)' : 'var(--red)', opacity: 0.85 },
+      var rect = sv('rect', { x: x, y: y, width: w, height: hgt, rx: 4, fill: r.pnl >= 0 ? 'var(--profit)' : 'var(--loss)', opacity: 0.9 },
         sv('title', null, r.date + ': ' + money(r.pnl, true)));
       svg.appendChild(rect);
     });
@@ -407,30 +416,33 @@
   function renderTop() {
     var s = S.summary || {};
     var m = s.mode || {};
-    var badge = $('mode-badge');
-    badge.textContent = m.mode === 'live' ? 'LIVE · real money' : (m.mode === 'paper' ? 'Paper' : 'Simulator');
-    badge.className = 'badge' + (m.mode === 'live' ? ' live' : '');
-    badge.title = m.mode === 'live' ? 'Real-money orders are enabled in your config files'
+    var modeText = m.mode === 'live' ? 'LIVE · real money' : (m.mode === 'paper' ? 'Paper' : 'Simulator');
+    var modeTitle = m.mode === 'live' ? 'Real-money orders are enabled in your config files'
       : (m.mode === 'paper' ? 'Paper account at ' + (m.broker || 'the broker') + ' — no real money' : 'Local simulator — no account, no real money');
+    each('.js-mode', function (b) { b.textContent = modeText; b.className = 'badge js-mode' + (m.mode === 'live' ? ' live' : ''); b.title = modeTitle; });
     $('live-stripe').hidden = m.mode !== 'live';
     document.body.classList.toggle('live', m.mode === 'live');
     var bot = s.bot || {};
     var p = pillState(s);
-    $('bot-dot').className = 'dot ' + p[0];
-    $('bot-txt').textContent = p[1];
-    $('bot-pill').title = 'Autopilot: ' + p[1] + (bot.message ? ' — ' + bot.message : '');
-    var a = s.account || {};
-    $('top-equity').textContent = a.equity !== undefined && a.equity !== null ? money(a.equity) : '—';
-    var today = $('top-today');
-    today.textContent = money(a.pnl_today, true);
-    today.className = 'v ' + tone(a.pnl_today);
+    each('.js-bot-dot', function (d) { d.className = 'dot js-bot-dot ' + p[0]; });
+    each('.js-bot-txt', function (t) { t.textContent = p[1]; });
+    each('.js-bot', function (b) { b.title = 'Autopilot: ' + p[1] + (bot.message ? ' — ' + bot.message : ''); });
+    $('bot-sub').textContent = botSub(s);
     var disc = $('disclaimer');
     disc.textContent = s.disclaimer || 'Educational tool, not financial advice.';
     disc.className = 'disc' + (s.has_meme ? ' meme' : '');
     $('foot-meta').textContent = 'State folder: ' + (s.home || '?') + (s.offline ? ' · offline fixtures, clock pinned to ' + s.now : '');
-    var st_ = s.stats || {};
+    var st_ = s.stats || {}, ck = s.checks || {};
     $('count-trades').textContent = st_.closed ? String(st_.closed) : '';
     $('count-bot').textContent = bot.today && bot.today.trades_opened ? String(bot.today.trades_opened) : '';
+    var bad = (ck.health || {}).status === 'alarm' || (ck.shadow || {}).verdict === 'check';
+    $('count-checks').textContent = bad ? '!' : '';
+    $('count-checks').title = bad ? 'A check needs your attention' : '';
+  }
+  function botSub(s) {
+    var hl = s.health || {}, m = s.mode || {}, sc = hl.scan || {};
+    var scanned = Object.keys(sc).map(function (k) { return k + ' ' + sc[k]; }).join(', ');
+    return (scanned ? 'Scanned ' + scanned + ' · ' : '') + (m.mode === 'live' ? 'real money' : 'no real money');
   }
   // heartbeat first: a "running" state.json means nothing if nobody has written it for an hour
   function continuous(hl) { return hl.runner === 'daemon' || hl.runner === 'dashboard'; }
@@ -468,24 +480,80 @@
   }
 
   // ---------------------------------------------------------------- views
+  // every page header carries the account: equity and today's P&L, on the right
   function head(title, sub, right) {
-    return h('div', { class: 'view-head' }, h('div', null, h('h1', { text: title }), sub ? h('div', { class: 'sub', text: sub }) : null), right || null);
+    var a = (S.summary || {}).account || {};
+    var acct = h('div', { class: 'acct' },
+      h('div', { class: 'kv' }, h('span', { class: 'k', text: 'Equity' }), h('span', { class: 'v', text: money(a.equity) })),
+      h('div', { class: 'kv' }, h('span', { class: 'k', text: 'Today' }), h('span', { class: 'v ' + tone(a.pnl_today), text: money(a.pnl_today, true) })));
+    return h('div', { class: 'view-head' }, h('div', null, h('h1', { text: title }), sub ? h('div', { class: 'sub', text: sub }) : null),
+      h('div', { class: 'right' }, right || null, acct));
   }
 
-  function positionRows(list) {
+  // stop on the left, target on the right, a tick at the entry and a dot where the price is now
+  function rangeBar(p) {
+    var stop = num(p.stop), tgt = num(p.target), entry = num(p.avg_entry), last = num(p.last);
+    if (stop === null || tgt === null || entry === null || !(tgt > stop) || tgt > entry * 5) return null;
+    var lo = Math.min(stop, last === null ? stop : last), hi = Math.max(tgt, last === null ? tgt : last);
+    function at(v) { return 100 * (v - lo) / (hi - lo); }
+    var bar = h('div', { class: 'range', role: 'img', 'aria-label': 'stop ' + price(stop) + ', entry ' + price(entry) + ', target ' + price(tgt) +
+      (last !== null ? ', now ' + price(last) : '') },
+      setWidth(h('span', { class: 'risk' }), at(entry)), setWidth(h('span', { class: 'reward' }), 100 - at(entry)),
+      setLeft(h('span', { class: 'entry' }), at(entry)),
+      last !== null ? setLeft(h('span', { class: 'now ' + (last >= entry ? 'up' : 'down') }), at(last)) : null);
+    return [bar, h('div', { class: 'levels' }, h('span', { class: 'stop', text: 'stop ' + price(stop) }),
+      h('span', { class: 'entry', text: 'entry ' + price(entry) }), h('span', { class: 'target', text: 'target ' + price(tgt) }))];
+  }
+  function positionCards(list) {
     if (!list.length) return empty('No open positions.');
-    return h('div', { class: 'rows' }, list.map(function (p) {
+    return h('div', null, h('div', { class: 'positions' }, list.map(function (p) {
       var unit = p.qty_unit || (p.asset === 'stock' ? 'sh' : '');
-      return h('div', { class: 'row' },
-        h('div', { class: 'title' }, st(ASSET_LABEL[p.asset] ? p.asset : 'pos', p.asset === 'meme' ? 'purple' : 'blue'),
-          h('span', { class: 'sym', text: p.symbol || '?' }), p.riding ? st('riding the trend', 'green') : null),
-        h('div', { class: 'right' }, h('div', { class: 'big ' + tone(p.unrealized_pl), text: money(p.unrealized_pl, true) }),
-          h('div', { class: 'sm', text: 'last ' + price(p.last) })),
-        h('div', { class: 'detail', text: qty(p.qty, unit === 'usd' ? 'usd' : unit) + ' @ ' + price(p.avg_entry) +
-          (p.stop ? ' · stop ' + price(p.stop) : '') + (p.target ? ' · target ' + price(p.target) : '') +
-          (p.opened_at ? ' · since ' + hm(p.opened_at) : '') }),
-        p.story ? h('div', { class: 'detail', text: p.story }) : null);
-    }));
+      return h('div', { class: 'pos' },
+        h('div', { class: 'ph' }, st(ASSET_LABEL[p.asset] ? p.asset : 'position', p.asset === 'meme' ? 'purple' : (p.asset === 'crypto' ? 'accent' : 'blue')),
+          h('span', { class: 'sym', text: p.symbol || '?' }), p.riding ? st('riding the trend', 'green') : null,
+          h('span', { class: 'pnl ' + tone(p.unrealized_pl), text: money(p.unrealized_pl, true) })),
+        h('div', { class: 'ps' }, h('span', { text: qty(p.qty, unit === 'usd' ? 'usd' : unit) + ' @ ' + price(p.avg_entry) + (p.opened_at ? ' · since ' + hm(p.opened_at) : '') }),
+          h('span', { class: 'last', text: 'last ' + price(p.last) })),
+        rangeBar(p),
+        p.story ? h('div', { class: 'story', text: p.story }) : null);
+    })), h('div', { class: 'hint', text: 'The bar runs from the stop (left) to the target (right) — the dot is where the price is now.' }));
+  }
+
+  // the answers on top of the Overview: is the bot up, is it normal, did it follow its rules, how much risk is in use
+  function okCard(s) {
+    var ck = s.checks || {}, hd = ck.health || {}, sd = ck.shadow || {}, rk = ck.risk || {};
+    var p = pillState(s), bot = s.bot || {}, hl = s.health || {};
+    var botTone = ({ running: 'ok', paused: 'watch', killed: 'alarm', stale: 'alarm', error: 'alarm' })[p[0]] || '';
+    var botVal = p[0] === 'stale' ? 'No heartbeat' : (p[0] === 'idle' ? 'Idle' : cap(bot.status || 'unknown'));
+    var botNote = hl.at ? 'last check-in ' + ago(hl.at) + (hl.cycle !== undefined && hl.cycle !== null ? ' · cycle ' + hl.cycle : '') : 'has not run yet';
+    var n = hd.trades || 0;
+    var HV = { normal: ['ok', 'Normal', n + ' closed trades look like the backtest'],
+      watch: ['watch', 'Worth watching', 'results on the weak side of the backtest'],
+      alarm: ['alarm', 'Alarm', 'worse than 9 of 10 backtest histories — new entries pause'],
+      early: ['info', 'Too early', n + ' closed trade' + (n === 1 ? '' : 's') + ' — judged from the ' + (hd.min_trades || 10) + 'th on'],
+      unknown: ['', 'No lab data', 'run the backtest lab first'], off: ['', 'Off', 'switched off in the config'] };
+    var hv = HV[hd.status] || ['', 'Not checked yet', 'checked every cycle once trades close'];
+    var c = sd.counts || {};
+    var signals = Object.keys(c).reduce(function (t, k) { return t + (c[k] || 0); }, 0);
+    var missed = (c.missed || 0) + (c.extra || 0) + (c.error || 0);
+    var sv_ = sd.verdict === 'ok' ? ['ok', 'OK', signals + ' signal' + (signals === 1 ? '' : 's') + ' in ' + (sd.days || 30) + ' days · none missed']
+      : (sd.verdict === 'check' ? ['alarm', 'Check', (sd.problems || missed) + ' problem' + ((sd.problems || missed) === 1 ? '' : 's') + ' — see Checks']
+        : ['', 'Not checked yet', 'runs once a day after the daily close']);
+    var loss = num(rk.loss_today) || 0, capUsd = num(rk.max_daily_loss_usd);
+    var used = capUsd ? loss / capUsd : 0;
+    var rTone = used >= 1 ? 'alarm' : (used >= 0.8 || (rk.max_open && rk.open >= rk.max_open) ? 'watch' : 'ok');
+    var rVal = rk.max_open ? rk.open + ' of ' + rk.max_open + ' positions' : (rk.open || 0) + ' open';
+    var rNote = capUsd ? (loss > 0 ? 'lost ' + money(loss) + ' of the ' + money(capUsd) + ' daily limit' : 'no loss today · daily limit ' + money(capUsd)) : 'no daily loss limit set';
+    function answer(tab, label, v) {
+      return h('a', { class: 'answer ' + v[0], href: '#tab=' + tab },
+        h('span', { class: 'k', text: label }), h('span', { class: 'v', text: v[1] }), h('span', { class: 's', text: v[2] }));
+    }
+    var tones = [botTone, hv[0], sv_[0], rTone];
+    var overall = tones.indexOf('alarm') >= 0 ? st('needs attention', 'red') : (tones.indexOf('watch') >= 0 ? st('worth a look', 'amber')
+      : (tones.every(function (t) { return t === 'ok'; }) ? st('all clear', 'green') : st('partly checked', '')));
+    return card('Is everything OK?', overall, h('div', { class: 'answers' },
+      answer('bot', 'Bot', [botTone, botVal, botNote]), answer('checks', 'Is it normal?', hv),
+      answer('checks', 'Rules followed', sv_), answer('bot', 'Risk used', [rTone, rVal, rNote])));
   }
 
   function reasonKind(r) {
@@ -501,14 +569,23 @@
     var k = reasonKind(r);
     return h('li', null, k ? h('span', { class: 'rk ' + k[1], text: k[0] }) : null, String(r));
   }
+  // taken · blocked (a check said no: risk, news, the desk, the AI) · skipped (nothing wrong, just not now) · error
+  function decisionKind(d) {
+    var action = String(d.action || '?');
+    if (action === 'taken' || action === 'error') return action;
+    var k = reasonKind((d.reasons || [])[0]);
+    return k && ['AI', 'news', 'risk', 'desk'].indexOf(k[0]) >= 0 ? 'blocked' : 'skipped';
+  }
+  var KIND_COLOR = { taken: 'green', blocked: 'red', error: 'red', skipped: '' };
   function decisionRow(d, compact) {
     var action = String(d.action || '?');
-    var color = action === 'taken' ? 'green' : (action === 'error' ? 'red' : '');
+    var kind = decisionKind(d);
+    var color = KIND_COLOR[kind] || '';
     var reasons = (d.reasons || []).slice(0, compact ? 1 : 6);
     var right = d.entry ? h('div', { class: 'right' }, h('div', { class: 'big', text: price(d.entry) }),
       h('div', { class: 'sm', text: (d.stop ? 'stop ' + price(d.stop) : '') + (d.target ? ' · tgt ' + price(d.target) : '') })) : h('div', { class: 'right' });
     var mid = h('div', null,
-      h('div', { class: 'title' }, h('span', { class: 'sym', text: d.symbol || '?' }), h('span', { class: 'muted', text: d.setup || '' }), st(action, color),
+      h('div', { class: 'title' }, h('span', { class: 'sym', text: d.symbol || '?' }), h('span', { class: 'muted', text: d.setup || '' }), st(kind === 'blocked' ? 'blocked' : action, color),
         d.desk && d.desk.status ? st('desk ' + d.desk.status, statusColor(d.desk.status)) : null),
       reasons.length ? h('ul', { class: 'reasons' }, reasons.map(reasonItem)) : null,
       !compact && d.gates && d.gates.length ? h('details', { class: 'gates' }, h('summary', { text: 'Gates (' + d.gates.length + ')' }),
@@ -520,13 +597,14 @@
     if (compact) {
       var first = (d.reasons || [])[0] || '';
       var fk = reasonKind(first);
-      return h('div', { class: 'row' },
-        h('div', { class: 'title' }, h('span', { class: 'sym', text: d.symbol || '?' }), h('span', { class: 'muted', text: d.setup || '' }), st(action, color)),
+      return h('div', { class: 'row dec ' + kind },
+        h('div', { class: 'title' }, h('span', { class: 'sym', text: d.symbol || '?' }), h('span', { class: 'muted', text: d.setup || '' }),
+          st(kind === 'blocked' ? 'blocked' : action, color)),
         h('div', { class: 'right' }, h('div', { class: 'sm', text: hm(d.at) })),
         h('div', { class: 'detail' }, fk ? h('span', { class: 'rk ' + fk[1], text: fk[0] }) : null, first + ((d.reasons || []).length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '') +
           (d.entry ? ' · entry ' + price(d.entry) : '')));
     }
-    return h('div', { class: 'row' }, h('div', { class: 'time', text: hm(d.at) }), mid, right);
+    return h('div', { class: 'row dec ' + kind }, h('div', { class: 'time', text: hm(d.at) }), mid, right);
   }
 
   function newsCard(i) {
@@ -554,32 +632,35 @@
         var s = S.summary, a = s.account || {}, st_ = s.stats || {};
         var unreal = pos.reduce(function (acc, p) { return acc + (num(p.unrealized_pl) || 0); }, 0);
         var frag = [head('Overview', s.bot && s.bot.message ? s.bot.message : 'Account, trades and what the bot is doing')];
+        frag.push(okCard(s));
         frag.push(h('div', { class: 'tiles' },
           tile('Equity', money(a.equity), (a.starting_cash ? 'start ' + money(a.starting_cash) : '') +
             (a.borrowed ? ' · borrowed ' + money(a.borrowed) : '') + (a.interest_paid ? ' · interest ' + money(a.interest_paid) : '') || null),
           tile('P&L today', money(a.pnl_today, true), a.equity && a.pnl_today !== null ? pct(100 * a.pnl_today / (a.equity - a.pnl_today), true, 2) : null, tone(a.pnl_today)),
           tile('P&L total', money(a.pnl_total, true), a.starting_cash && a.pnl_total !== null ? pct(100 * a.pnl_total / a.starting_cash, true, 2) : null, tone(a.pnl_total)),
-          tile('Win rate', st_.win_rate === null || st_.win_rate === undefined ? '—' : pct(100 * st_.win_rate, false, 0), (st_.wins || 0) + 'W · ' + (st_.losses || 0) + 'L of ' + (st_.closed || 0)),
-          tile('Expectancy', rr(st_.expectancy_r), 'per closed trade, after costs', tone(st_.expectancy_r)),
+          tile('Win rate', st_.win_rate === null || st_.win_rate === undefined ? '—' : pct(100 * st_.win_rate, false, 0),
+            (st_.wins || 0) + (st_.wins === 1 ? ' win · ' : ' wins · ') + (st_.losses || 0) + (st_.losses === 1 ? ' loss' : ' losses')),
+          tile('Expectancy', rr(st_.expectancy_r), 'per trade, after costs', tone(st_.expectancy_r)),
           tile('Open positions', String(pos.length), pos.length ? money(unreal, true) + ' unrealized' : 'flat', pos.length ? tone(unreal) : '')));
         var pts = (eq.points || []).filter(function (p) { return num(p.v) !== null; });
         var eqBody = pts.length >= 2 ? lineChart(pts, { base: eq.start, label: 'equity curve' })
           : empty('No equity history yet — start the autopilot (python3 app/server.py --autopilot) or run the demo:', 'python3 scripts/demo.py');
         var daily = eq.daily || [];
         var dayBody = daily.length ? barChart(daily) : empty('Daily P&L appears after the first closed trade.');
-        var rangeChips = h('div', { class: 'chips mini', role: 'group', 'aria-label': 'Equity range' },
+        var rangeChips = h('div', { class: 'chips seg', role: 'group', 'aria-label': 'Equity range' },
           [['1d', '1D'], ['1w', '1W'], ['1m', '1M'], ['all', 'All']].map(function (o) {
             return h('button', { class: 'chip', type: 'button', 'aria-pressed': String(S.filters.range === o[0]),
               onclick: function () { S.filters.range = o[0]; refresh(); } }, o[1]);
           }));
         frag.push(h('div', { class: 'grid-2' },
-          card('Equity', rangeChips, h('div', null, eqBody, h('div', { class: 'small faint', text: eq.source === 'broker' ? 'Broker snapshots · ' + pts.length + ' points' : 'Built from closed journal trades' }))),
+          card('Equity', rangeChips, h('div', null, eqBody, h('div', { class: 'chart-note', text: eq.source === 'broker' ? 'Broker snapshots · ' + pts.length + ' points' : 'Built from closed journal trades' }))),
           card('Daily P&L', daily.length ? daily.length + (daily.length === 1 ? ' day' : ' days') : null, dayBody)));
         var decBody = dec.length ? h('div', { class: 'rows' }, dec.map(function (d) { return decisionRow(d, true); }))
           : empty(s.bot && s.bot.installed ? 'The autopilot has not looked at any setup yet.' : 'The autopilot is not installed yet.');
+        var posMeta = pos.length ? h('span', { class: 'meta ' + tone(unreal), text: pos.length + ' open · ' + money(unreal, true) }) : null;
         frag.push(h('div', { class: 'grid-even' },
-          card('Open positions', pos.length ? pos.length + ' open' : null, positionRows(pos)),
-          card('Latest bot decisions', null, decBody)));
+          card('Open positions', posMeta, positionCards(pos)),
+          card('Latest bot decisions', h('a', { class: 'meta', href: '#tab=bot', text: 'all decisions →' }), decBody)));
         var top = news.slice().sort(function (x, y) {
           return (num(y.importance) || 0) - (num(x.importance) || 0) || String(y.published || '').localeCompare(String(x.published || ''));
         }).slice(0, 5);
@@ -843,63 +924,103 @@
       L.report ? reportLink(L.report, 'Open the full lab report') : null));
   }
   // ---------------------------------------------------------------- checks: six desks per decision, is it normal, backtest vs reality
-  var VERDICT = { normal: ['NORMAL', 'green'], watch: ['WATCH', 'amber'], alarm: ['ALARM', 'red'], early: ['TOO EARLY', 'blue'],
-    unknown: ['NO LAB DATA', ''], off: ['OFF', ''], ok: ['OK', 'green'], check: ['CHECK', 'red'], error: ['ERROR', 'red'] };
-  var CALL = { BUY: 'green', 'WOULD BUY': 'blue', REJECT: 'red', ERROR: 'red' };
+  var VERDICT = { normal: ['normal', 'green'], watch: ['worth watching', 'amber'], alarm: ['alarm', 'red'], early: ['too early', 'blue'],
+    unknown: ['no lab data', ''], off: ['off', ''], ok: ['OK', 'green'], check: ['check', 'red'], error: ['error', 'red'] };
+  var CALL = { BUY: ['bought', 'green'], 'WOULD BUY': ['would buy', 'blue'], REJECT: ['rejected', 'red'], ERROR: ['error', 'red'] };
   var OUTCOME = { taken: 'green', ordered: 'green', skipped: '', missed: 'red', extra: 'red', error: 'red', pending: 'blue', 'not expected': '' };
-  function verdictPill(v) { var x = VERDICT[v] || [String(v || '—').toUpperCase(), '']; return st(x[0], x[1]); }
-  function deskBox(c) {
-    var mark = c.state === 'pass' ? '✓' : (c.state === 'fail' ? '✗' : '–');
-    var items = c.items || [];
-    var shown = items.filter(function (i) { return !i.ok; }).concat(items.filter(function (i) { return i.ok; })).slice(0, 2);
-    return h('div', { class: 'desk ' + c.state },
-      h('div', { class: 'dk' }, h('span', { class: 'mark', text: mark }), h('span', { text: c.label })),
-      items.length ? h('ul', null, shown.map(function (i) {
-        return h('li', { class: i.ok ? '' : 'bad', title: i.detail || '', text: i.name + (i.detail ? ' — ' + i.detail : '') });
-      })) : h('div', { class: 'small muted', text: 'no check recorded' }),
-      items.length > 2 ? h('details', { class: 'gates' }, h('summary', { text: 'all ' + items.length }),
-        h('ul', null, items.map(function (i) { return h('li', { class: i.ok ? '' : 'bad', text: (i.ok ? '✓ ' : '✗ ') + i.name + (i.detail ? ' — ' + i.detail : '') }); }))) : null);
+  var MARK = { pass: 'M6.5 12.5l3.5 3.5 7.5-8', fail: 'M7.5 7.5l9 9M16.5 7.5l-9 9', none: 'M8 12h8' };
+  function verdictPill(v) { var x = VERDICT[v] || [String(v || '—'), '']; return st(x[0], x[1]); }
+  function verdictTone(v) { return ({ green: 'up', red: 'down', amber: 'warnc', blue: '' })[(VERDICT[v] || [])[1]] || ''; }
+  // the six desks in order; the first red one is where the idea stopped
+  function pipeline(cols) {
+    var out = [];
+    cols.forEach(function (c, i) {
+      if (i) out.push(h('span', { class: 'link' + (cols[i - 1].state === 'pass' && c.state === 'pass' ? ' done' : '') }));
+      var label = c.label + ': ' + ({ pass: 'passed', fail: 'stopped it', none: 'not checked' })[c.state];
+      out.push(h('div', { class: 'step ' + c.state, title: label, role: 'listitem', 'aria-label': label },
+        h('span', { class: 'mk', 'aria-hidden': 'true' }, sv('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.4,
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, sv('path', { d: MARK[c.state] || MARK.none }))),
+        h('span', { class: 'nm', 'aria-hidden': 'true', text: c.label })));
+    });
+    return h('div', { class: 'pipe', role: 'list', 'aria-label': 'six desks' }, out);
+  }
+  function deskInfo(cols) {
+    var n = cols.reduce(function (t, c) { return t + (c.items || []).length; }, 0);
+    if (!n) return null;
+    return h('details', { class: 'gates' }, h('summary', { text: 'What each desk checked (' + n + ')' }),
+      h('div', { class: 'deskinfo' }, cols.filter(function (c) { return (c.items || []).length; }).map(function (c) {
+        return h('div', null, h('div', { class: 'dk ' + c.state, text: c.label }),
+          h('ul', null, c.items.map(function (i) { return h('li', { class: i.ok ? '' : 'bad', text: (i.ok ? '✓ ' : '✗ ') + i.name + (i.detail ? ' — ' + i.detail : '') }); })));
+      })));
   }
   function boardRow(b) {
+    var call = CALL[b.call] || [String(b.call || '?'), ''];
+    var cols = b.columns || [];
+    var stopped = cols.filter(function (c) { return c.state === 'fail'; })[0];
     return h('div', { class: 'decision' },
-      h('div', { class: 'dh' }, h('span', { class: 'sym', text: b.symbol || '?' }), st(b.asset || '', 'blue'),
-        h('span', { class: 'muted', text: (b.setup || '') + (b.at ? ' · ' + ago(b.at) : '') }),
-        h('span', { class: 'call' }, st(b.call, CALL[b.call] || ''))),
-      h('div', { class: 'board' }, (b.columns || []).map(deskBox)),
-      b.reason ? h('div', { class: 'small muted reason', text: b.reason }) : null);
+      h('div', { class: 'dh' }, h('span', { class: 'sym', text: b.symbol || '?' }), b.asset ? st(b.asset, b.asset === 'crypto' ? 'accent' : 'blue') : null,
+        h('span', { class: 'muted', text: b.setup || '' }), b.at ? h('span', { class: 'faint small', text: '· ' + ago(b.at) }) : null,
+        h('span', { class: 'call' }, st(call[0], call[1]))),
+      pipeline(cols),
+      b.reason ? h('div', { class: 'reason' + (b.call === 'BUY' ? ' ok' : '') },
+        b.call !== 'BUY' && stopped ? h('b', { text: stopped.label + ': ' }) : null, b.reason) : null,
+      deskInfo(cols));
+  }
+  function healthCheck(c) {
+    var p = num(c.p);
+    var share = p === null ? '' : (p >= 0.995 ? 'almost every history was this bad' : (p < 0.005 ? 'almost no history was this bad' : Math.round(100 * p) + '% of histories were this bad'));
+    var detail = String(c.text || '').split(' — ')[0];
+    return h('div', { class: 'hcheck' },
+      h('div', { class: 'hh' }, h('b', { text: cap(c.name) }), verdictPill(c.verdict), h('span', { class: 'share', text: share })),
+      h('div', { class: 'pbar', role: 'img', 'aria-label': share || 'no data' }, h('span', { class: 'z-alarm' }), h('span', { class: 'z-watch' }), h('span', { class: 'z-normal' }),
+        p !== null ? setLeft(h('span', { class: 'you' }), Math.max(0.6, Math.min(99.4, 100 * p))) : null),
+      detail ? h('div', { class: 'detail', text: detail }) : null);
   }
   function renderChecks() {
     return api('/api/checks').then(function (d) {
       var hd = d.health || {}, sd = d.shadow || {}, board = d.board || [];
-      var frag = [head('Checks', 'Every decision through six desks · is it normal? · did the bot do what the rules say?')];
+      var frag = [head('Checks', 'Is it normal? · Did the bot do what the rules say? · Why each idea was bought or skipped')];
+      var bought = board.filter(function (b) { return b.call === 'BUY'; }).length;
       frag.push(h('div', { class: 'tiles' },
-        tile('Is it normal?', (VERDICT[hd.status] || [hd.status ? String(hd.status).toUpperCase() : '—'])[0], hd.trades !== undefined ? hd.trades + ' closed trades' : 'not checked yet',
-          hd.status === 'alarm' ? 'down' : (hd.status === 'normal' ? 'up' : '')),
-        tile('Backtest vs reality', (VERDICT[sd.verdict] || [sd.verdict ? String(sd.verdict).toUpperCase() : '—'])[0], sd.days ? 'last ' + sd.days + ' days' : 'checked once a day',
-          sd.verdict === 'check' ? 'down' : (sd.verdict === 'ok' ? 'up' : '')),
-        tile('Decisions shown', String(board.length), board.filter(function (b) { return b.call === 'BUY'; }).length + ' bought')));
-      var hBody = hd.status ? h('div', null, h('p', { text: hd.text || '' }),
-        (hd.checks || []).length ? h('ul', { class: 'reasons' }, hd.checks.map(function (c) {
-          return h('li', null, verdictPill(c.verdict), ' ', c.text);
-        })) : null,
-        h('p', { class: 'small muted', text: 'Your closed trades, replayed thousands of times with results the backtest lab saw on unseen data. ALARM = worse than 9 of 10 of those histories — the bot pauses new entries until you resume it. Calibrated on 2018–2026: a false alarm about once in 5–8 years; a clearly losing strategy is caught after ~16 trades.' }))
+        tile('Is it normal?', cap((VERDICT[hd.status] || [hd.status || '—'])[0]), hd.trades !== undefined ? hd.trades + ' closed trades' : 'not checked yet', verdictTone(hd.status)),
+        tile('Backtest vs reality', cap((VERDICT[sd.verdict] || [sd.verdict || '—'])[0]), sd.days ? 'every daily signal of the last ' + sd.days + ' days' : 'checked once a day', verdictTone(sd.verdict)),
+        tile('Ideas judged', String(board.length), bought + ' bought · ' + (board.length - bought) + ' stopped by a desk')));
+      var hBody = hd.status ? h('div', null, h('p', { class: 'lead', text: hd.text || '' }),
+        (hd.checks || []).length ? h('div', { class: 'hchecks' }, hd.checks.map(healthCheck)) : null,
+        (hd.checks || []).length ? h('div', { class: 'legend' }, h('span', null, h('i', { class: 'sw ra' }), 'Alarm — under 10 %: new entries pause'),
+          h('span', null, h('i', { class: 'sw aa' }), 'Watch — under 25 %'), h('span', null, h('i', { class: 'sw ga' }), 'Normal'),
+          h('span', null, h('i', { class: 'sw you' }), 'the mark is your bot')) : null,
+        h('p', { class: 'small faint', text: 'Your closed trades, replayed thousands of times with results the backtest lab saw on unseen data. Calibrated on 2018–2026: a false alarm about once in 5–8 years; a clearly losing strategy is caught after ~16 trades.' }))
         : empty('Checked every cycle once the bot has closed trades:', 'python3 trader-autopilot/autopilot.py check');
-      frag.push(card('Is it normal?', hd.updated_at ? ago(hd.updated_at) : null, hBody));
-      var rows = (sd.rows || []).slice(-25).reverse();
-      var sBody = sd.verdict ? h('div', null, h('p', { text: sd.text || '' }),
-        (sd.problems || []).length ? h('ul', { class: 'reasons warnlist' }, sd.problems.map(function (p) { return h('li', { class: 'warnc', text: p }); })) : null,
-        rows.length ? h('div', { class: 'rows' }, rows.map(function (r) {
+      frag.push(card('Is it normal?', hd.status ? verdictPill(hd.status) : null, hBody));
+      var rows = (sd.rows || []).slice(-25).reverse(), c = sd.counts || {};
+      var groups = [['o-ok', (c.taken || 0) + (c.ordered || 0)], ['o-skip', (c.skipped || 0) + (c['not expected'] || 0)],
+        ['o-bad', (c.missed || 0) + (c.extra || 0) + (c.error || 0)], ['o-wait', c.pending || 0]];
+      var total = groups.reduce(function (t, g) { return t + g[1]; }, 0);
+      var stack = total ? h('div', { class: 'outcomes', role: 'img', 'aria-label': 'signal outcomes' }, groups.filter(function (g) { return g[1]; }).map(function (g) {
+        var el = h('span', { class: g[0] }); el.style.flexGrow = String(g[1]); return el;
+      })) : null;
+      var sBody = sd.verdict ? h('div', null, h('p', { class: 'lead', text: sd.text || '' }), stack,
+        total ? h('div', { class: 'legend' }, h('span', null, h('i', { class: 'sw g' }), groups[0][1] + ' taken'),
+          h('span', null, h('i', { class: 'sw' }), groups[1][1] + ' skipped with a reason'), h('span', null, h('i', { class: 'sw r' }), groups[2][1] + ' missed or extra'),
+          groups[3][1] ? h('span', null, h('i', { class: 'sw b' }), groups[3][1] + ' pending') : null) : null,
+        (sd.problems || []).length ? h('ul', { class: 'problems' }, sd.problems.map(function (p) { return h('li', { text: p }); })) : null,
+        rows.length ? h('div', { class: 'rows sigs gap-t' }, rows.map(function (r) {
           return h('div', { class: 'row' },
-            h('div', { class: 'title' }, st(r.outcome, OUTCOME[r.outcome] || ''), h('span', { class: 'sym', text: r.symbol || '?' }), h('span', { class: 'muted', text: r.setup || '' })),
+            h('div', null, st(r.outcome, OUTCOME[r.outcome] || '')),
+            h('div', { class: 'title' }, h('span', { class: 'sym', text: r.symbol || '?' }), h('span', { class: 'muted', text: r.setup || '' })),
             h('div', { class: 'right' }, h('div', { class: 'sm', text: (r.signal_at || '').slice(0, 10) }),
               r.slippage_bps !== undefined && r.slippage_bps !== null ? h('div', { class: 'sm', text: (r.slippage_bps >= 0 ? '+' : '') + r.slippage_bps + ' bps' }) : null),
             r.reason ? h('div', { class: 'detail', text: r.reason }) : null);
         })) : null)
         : empty('Runs once a day after the daily close, or now:', 'python3 trader-autopilot/autopilot.py check');
-      frag.push(card('Backtest vs reality', sd.updated_at ? ago(sd.updated_at) : null, sBody));
-      frag.push(card('Decisions — six desks', 'Research · News · Strategy · Execution · Risk · Boss',
+      frag.push(card('Backtest vs reality', sd.verdict ? verdictPill(sd.verdict) : null, sBody));
+      var deskHead = h('div', null, h('h2', { text: 'Why each idea was bought or skipped' }),
+        h('span', { class: 'sub', text: 'Every idea passes six desks in order — Research → News → Strategy → Execution → Risk → Boss. The first red one is where it stopped.' }));
+      var deskCard = h('section', { class: 'card' }, h('div', { class: 'card-h' }, deskHead),
         board.length ? h('div', { class: 'decisions' }, board.map(boardRow))
-          : empty('No decisions yet — every signal the bot judges shows up here with all its checks.')));
+          : empty('No decisions yet — every signal the bot judges shows up here with all its checks.'));
+      frag.push(deskCard);
       return frag;
     });
   }
@@ -1091,7 +1212,7 @@
       frag.push(chips([['', 'All'], ['stock', 'Stocks'], ['crypto', 'Crypto'], ['meme', 'Meme']], f.asset, function (v) { f.asset = v; refresh(); }));
       frag.push(chips([['', 'Everything'], ['news', 'News'], ['social', 'Social'], ['filing', 'Filings']], f.kind, function (v) { f.kind = v; refresh(); }));
       if ((d.symbols || []).length) frag.push(chips([['', 'All symbols']].concat(d.symbols.map(function (x) { return [x, x.length > 14 ? x.slice(0, 12) + '…' : x]; })), f.symbol, function (v) { f.symbol = v; refresh(); }));
-      frag.push(items.length ? h('div', { class: 'feed' }, items.map(newsCard)) : card('Feed', null, empty('Nothing here yet — press Refresh, or run', 'python3 trader-news/news.py')));
+      frag.push(items.length ? h('div', { class: 'feed cards' }, items.map(newsCard)) : card('Feed', null, empty('Nothing here yet — press Refresh, or run', 'python3 trader-news/news.py')));
       return frag;
     });
   }
@@ -1159,9 +1280,14 @@
     return m && TABS.indexOf(m[1]) >= 0 ? m[1] : 'overview';
   }
   function markTabs() {
-    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) {
+    each('.tab[data-tab]', function (b) {
       if (b.getAttribute('data-tab') === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
+    $('more-btn').classList.toggle('current', MORE_TABS.indexOf(S.tab) >= 0);
+  }
+  function setMore(open) {
+    $('tabs').classList.toggle('open', open);
+    $('more-btn').setAttribute('aria-expanded', String(open));
   }
   function refresh() {
     if (S.busy) { S.again = true; return Promise.resolve(); }
@@ -1198,20 +1324,29 @@
     try { t = localStorage.getItem('trader-theme') || 'dark'; } catch (e) { /* private mode */ }
     var forced = /theme=(light|dark)/.exec(location.hash || '');
     if (forced) t = forced[1];
-    document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
-    $('theme-btn').addEventListener('click', function () {
-      var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', next);
-      try { localStorage.setItem('trader-theme', next); } catch (e) { /* ignore */ }
-      S.charts.forEach(function (c) { if (c.box.isConnected) c.draw(c.box); });
+    function apply(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      each('.js-theme-label', function (l) { l.textContent = theme === 'light' ? 'Dark theme' : 'Light theme'; });
+    }
+    apply(t === 'light' ? 'light' : 'dark');
+    each('.js-theme', function (btn) {
+      btn.addEventListener('click', function () {
+        var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+        apply(next);
+        try { localStorage.setItem('trader-theme', next); } catch (e) { /* ignore */ }
+        S.charts.forEach(function (c) { if (c.box.isConnected) c.draw(c.box); });
+      });
     });
   }
 
   function init() {
     initTheme();
-    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) {
-      b.addEventListener('click', function () { go(b.getAttribute('data-tab')); window.scrollTo(0, 0); });
+    each('.tab[data-tab]', function (b) {
+      b.addEventListener('click', function () { setMore(false); go(b.getAttribute('data-tab')); window.scrollTo(0, 0); });
     });
+    $('more-btn').addEventListener('click', function (ev) { ev.stopPropagation(); setMore(!$('tabs').classList.contains('open')); });
+    document.addEventListener('click', function (ev) { if (!ev.target.closest('#tabs')) setMore(false); });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') setMore(false); });
     window.addEventListener('hashchange', function () { S.tab = tabFromHash(); markTabs(); window.scrollTo(0, 0); refresh(); });
     document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
     S.tab = tabFromHash();

@@ -141,6 +141,13 @@ class WithData(DashboardCase):
         self.assertEqual(s["positions"], 2)
         self.assertGreater(s["account"]["equity"], 0)
         self.assertEqual(s["account"]["source"], "broker")
+        # the Overview's "Is everything OK?" strip
+        ck = s["checks"]
+        self.assertEqual((ck["health"]["status"], ck["shadow"]["verdict"], ck["shadow"]["problems"]), ("normal", "ok", 0))
+        self.assertEqual(ck["risk"]["open"], 2)
+        self.assertEqual(ck["risk"]["max_open"], 10)  # 5 stock + 5 crypto, the global cap is 10 too
+        self.assertGreaterEqual(ck["risk"]["loss_today"], 0)
+        self.assertEqual(ck["risk"]["max_daily_loss_usd"], 750)
         eq = self.get_json("/api/equity")
         self.assertGreater(len(eq["points"]), 10)
         self.assertLessEqual(len(eq["points"]), 500)

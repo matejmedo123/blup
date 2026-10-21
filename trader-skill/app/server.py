@@ -310,6 +310,7 @@ def summary_view(app) -> dict:
         "account": acct,
         "stats": stats,
         "positions": len(positions),
+        "checks": checks_brief(cfg, positions, acct),
         "open_orders": sum(1 for o in orders["broker"] if str(o.get("status")) in
                            ("new", "accepted", "pending_new", "partially_filled", "held", "open")),
         "x_usage": read_json("x_usage.json", None),
@@ -523,6 +524,29 @@ def checks_view(limit: int = 12) -> dict:
     judged = [r for r in rows if r.get("gates") or r.get("action") == "taken"][:limit]
     return {"health": read_json("autopilot/health.json", {}) or {}, "shadow": read_json("autopilot/shadow.json", {}) or {},
             "board": [board_view(d) for d in judged]}
+
+
+def checks_brief(cfg: dict, positions: list, acct: dict) -> dict:
+    """The answers on the Overview's "Is everything OK?" strip — the full story is on /api/checks."""
+    h = read_json("autopilot/health.json", {}) or {}
+    s = read_json("autopilot/shadow.json", {}) or {}
+    lim = config.load_limits()
+    glob = lim.get("global") or {}
+    assets = [a for a in ((cfg.get("autopilot") or {}).get("assets") or []) if isinstance(lim.get(a), dict)]
+    caps = [int(lim[a]["max_open_positions"]) for a in assets if lim[a].get("max_open_positions") is not None]
+    max_open = sum(caps) if caps else None
+    if glob.get("max_open_positions") is not None:
+        max_open = min(max_open, int(glob["max_open_positions"])) if max_open else int(glob["max_open_positions"])
+    eq = _num(acct.get("equity"))
+    loss_cap = _num(glob.get("max_daily_loss_usd"))
+    pct_cap = _num(glob.get("max_daily_loss_pct"))
+    if pct_cap is not None and eq:
+        loss_cap = min(loss_cap, eq * pct_cap / 100.0) if loss_cap is not None else eq * pct_cap / 100.0
+    return {"health": {k: h.get(k) for k in ("status", "text", "trades", "min_trades", "updated_at")},
+            "shadow": {"verdict": s.get("verdict"), "text": s.get("text"), "counts": s.get("counts") or {},
+                       "days": s.get("days"), "problems": len(s.get("problems") or []), "updated_at": s.get("updated_at")},
+            "risk": {"open": len(positions), "max_open": max_open, "loss_today": max(0.0, -(_num(acct.get("pnl_today"), 0.0) or 0.0)),
+                     "max_daily_loss_usd": loss_cap}}
 
 
 def news_view(asset: str = "", symbol: str = "", kind: str = "") -> dict:

@@ -447,11 +447,16 @@ kill switch, drawdown pause, what it learned, repeated errors and a daily summar
 ## Dashboard
 
 A local web app over the `trader/` folder (stdlib server, no CDN, dark/light, built for phones):
-Overview (equity curve, P&L today/total, win rate, expectancy, positions, latest decisions, top news,
-desk verdicts, bot heartbeat and trading sessions) · Trades (every trade with a candle chart, entry/exit, stop/target, R, fees) · Bot
+Overview (**Is everything OK?** — is the bot running, is it normal, did it follow its rules, how much
+risk is in use — then equity curve, P&L today/total, win rate, expectancy, open positions with a
+stop → entry → target bar, latest decisions, top news, desk verdicts) · Trades (every trade with a candle chart, entry/exit, stop/target, R, fees) · Bot
 (status, pause / resume / run once / KILL, mode and what live would need, gates, decision timeline,
-the universe with reasons, what it learned, notifications, AI desk spend) ·
-News (X, StockTwits, news, SEC with importance and sentiment) · Setups · Reports.
+the universe with reasons, what it learned, notifications, AI desk spend) · Checks (where the bot's
+results sit among the backtest's histories, every daily signal matched with what the bot did, each
+idea through the six desks) · Brain · News (X, StockTwits, news, SEC with importance and sentiment) ·
+Setups · Reports. On a phone: a tab bar with Overview, Trades, Bot, Checks and More.
+The design lives in Figma ("Trader — dashboard redesign": tokens, components, desktop and phone
+screens); `app/static/app.css` uses the same tokens.
 
 Security: binds to 127.0.0.1 unless you give a password; every button needs a per-session CSRF token;
 no response ever contains a key; reports are served sandboxed; live trading cannot be switched on from

@@ -11,38 +11,50 @@
 </head>
 <body>
 <div class="live-stripe" id="live-stripe" hidden></div>
-<header class="topbar">
-  <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Trader</span></div>
-  <span id="mode-badge" class="badge">…</span>
-  <span id="bot-pill" class="pill" title="Autopilot"><span class="dot" id="bot-dot"></span><span class="txt" id="bot-txt">…</span></span>
-  <div class="top-right">
-    <div class="kv"><span class="k">Equity</span><span id="top-equity" class="v">—</span></div>
-    <div class="kv"><span class="k">Today</span><span id="top-today" class="v">—</span></div>
-    <button id="theme-btn" class="icon-btn" type="button" aria-label="Switch light / dark theme">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
-    </button>
-  </div>
+<header class="appbar">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Trader</span></div>
+  <span class="badge js-mode">…</span>
+  <span class="pill js-bot" title="Autopilot"><span class="dot js-bot-dot"></span><span class="txt js-bot-txt">…</span></span>
+  <button class="icon-btn js-theme" type="button" aria-label="Switch light / dark theme">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+  </button>
 </header>
 <div class="shell">
-  <nav class="tabs" id="tabs" aria-label="Sections">
-    <button class="tab" type="button" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/></svg><span>Overview</span></button>
-    <button class="tab" type="button" data-tab="trades"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 4v16M17 4v16"/><rect x="4.5" y="8" width="5" height="7" rx="1"/><rect x="14.5" y="6" width="5" height="9" rx="1"/></svg><span>Trades</span><span class="count" id="count-trades"></span></button>
-    <button class="tab" type="button" data-tab="bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M2 13v2M22 13v2"/></svg><span>Bot</span><span class="count" id="count-bot"></span></button>
-    <button class="tab" type="button" data-tab="checks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Checks</span></button>
-    <button class="tab" type="button" data-tab="brain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l5.6-5.6"/></svg><span>Brain</span></button>
-    <button class="tab" type="button" data-tab="news"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v8a2 2 0 0 1-2 2"/><path d="M8 9h5M8 13h5"/></svg><span>News</span><span class="count" id="count-news"></span></button>
-    <button class="tab" type="button" data-tab="setups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span>Setups</span></button>
-    <button class="tab" type="button" data-tab="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span>Reports</span></button>
-  </nav>
+  <aside class="side" aria-label="Navigation">
+    <div class="brand side-brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Trader</span><span class="badge js-mode">…</span></div>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <button class="tab" type="button" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/></svg><span>Overview</span></button>
+      <button class="tab" type="button" data-tab="trades"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 4v16M17 4v16"/><rect x="4.5" y="8" width="5" height="7" rx="1"/><rect x="14.5" y="6" width="5" height="9" rx="1"/></svg><span>Trades</span><span class="count" id="count-trades"></span></button>
+      <button class="tab" type="button" data-tab="bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M2 13v2M22 13v2"/></svg><span>Bot</span><span class="count" id="count-bot"></span></button>
+      <button class="tab" type="button" data-tab="checks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Checks</span><span class="count warn" id="count-checks"></span></button>
+      <div class="more-sheet" id="more-sheet">
+        <button class="tab" type="button" data-tab="brain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l5.6-5.6"/></svg><span>Brain</span></button>
+        <button class="tab" type="button" data-tab="news"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v8a2 2 0 0 1-2 2"/><path d="M8 9h5M8 13h5"/></svg><span>News</span><span class="count" id="count-news"></span></button>
+        <button class="tab" type="button" data-tab="setups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span>Setups</span></button>
+        <button class="tab" type="button" data-tab="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span>Reports</span></button>
+      </div>
+      <button class="tab tab-more" type="button" id="more-btn" aria-expanded="false" aria-controls="more-sheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span></button>
+    </nav>
+    <div class="side-foot">
+      <div class="botcard js-bot" title="Autopilot">
+        <div class="botcard-h"><span class="k">Autopilot</span><span class="pill"><span class="dot js-bot-dot"></span><span class="txt js-bot-txt">…</span></span></div>
+        <div class="botcard-s" id="bot-sub"></div>
+      </div>
+      <button class="theme-btn js-theme" type="button" aria-label="Switch light / dark theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+        <span class="js-theme-label">Light theme</span>
+      </button>
+    </div>
+  </aside>
   <main id="main">
     <div id="banner" class="banner" hidden></div>
     <section id="view" class="view" aria-live="polite"></section>
+    <footer class="foot">
+      <p class="disc" id="disclaimer">Educational tool, not financial advice.</p>
+      <p id="foot-meta" class="faint"></p>
+    </footer>
   </main>
 </div>
-<footer class="foot">
-  <p class="disc" id="disclaimer">Educational tool, not financial advice.</p>
-  <p id="foot-meta" class="faint"></p>
-</footer>
 <script src="/static/app.js" defer></script>
 </body>
 </html>
