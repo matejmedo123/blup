@@ -1847,7 +1847,8 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
                   etf: bool = True, cash_yield: float = 4.0) -> tuple:
     """(config changes, limits changes) for daily trend following on the biggest coins.
 
-    Every number is what the portfolio backtest used. The learning rules are loosened to fit a strategy that
+    Every number is what the portfolio backtest used, and only what it tested trades: the intraday stock setups
+    are switched off (the ETF trend still trades stocks, on daily bars). The learning rules are loosened to fit a strategy that
     wins 30–40 % of trades: three losses in a row happen in a quarter of all stretches there, so they are no
     warning; seven (≈ 5 %) are. The drawdown pause sits above the worst drop of the backtest (−30 %), so it
     fires only when reality is worse than eight years of history.
@@ -1864,6 +1865,7 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
                          "etf_trend": {"enabled": bool(etf), "when": "crypto_bear"},
                          "playbook": {"top": 10, "setups": TREND_SETUPS, "timeframes": ["1d"], "max_risk_pct": risk},
                          "universe": {"crypto": {"top_n": 10}},
+                         "setups": {"stock": []},
                          "adapt": {"loss_streak": 7, "symbol_loss_streak": 5, "min_trades": 20,
                                    "max_drawdown_pct": 35}}}
     day = 5 * risk  # five full losses in one day, then no new entries until tomorrow

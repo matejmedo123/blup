@@ -232,7 +232,8 @@ python3 trader-autopilot/autopilot.py profile --risk 2 --leverage 1.5 --capital 
 
 One command sets the bot up exactly as the portfolio backtest below ran it: 2 % of equity at risk per
 trade (1 % when the lab is less than 70 % sure, never more than 2 %), only the two validated daily trend
-strategies on the 10 biggest coins, 5 positions, up to 25 % of equity in one coin and 100 % in crypto
+strategies on the 10 biggest coins (the intraday stock setups are switched off — nothing trades that this
+backtest did not test; stocks come in only through the ETF trend below), 5 positions, up to 25 % of equity in one coin and 100 % in crypto
 (both × leverage), crypto leverage 1.5× (stocks stay 1×), and learning rules that fit a strategy with
 30–40 % winners: setups judged after 20 trades, a coin sits out after 5 losses in a row, size halves
 after 7 losses in a row (at a 35 % win rate seven in a row happen by chance ≈ 5 % of the time, three

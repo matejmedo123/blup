@@ -51,7 +51,12 @@ def _ucfg(cfg: dict) -> dict:
 
 
 def _assets(cfg: dict) -> list:
-    return [a for a in (_ap(cfg).get("assets") or ["stock", "crypto"]) if a in ("stock", "crypto")]
+    ap = _ap(cfg)
+    out = [a for a in (ap.get("assets") or ["stock", "crypto"]) if a in ("stock", "crypto")]
+    # no intraday stock setups (the trend profile): no stocks to pick — the ETF trend has its own short list
+    if isinstance(ap.get("setups"), dict) and ap["setups"].get("stock") == []:
+        out = [a for a in out if a != "stock"]
+    return out
 
 
 def _quote(cfg: dict) -> str:

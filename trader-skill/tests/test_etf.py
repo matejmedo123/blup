@@ -177,6 +177,9 @@ class CashYield(TraderTestCase):
         self.assertTrue(c["autopilot"]["etf_trend"]["enabled"])
         self.assertEqual(c["autopilot"]["etf_trend"]["when"], "crypto_bear")
         self.assertEqual(c["cash_yield_pct"], 4.0)
+        self.assertEqual(c["autopilot"]["setups"]["stock"], [])  # only what the trend backtest tested trades
+        from shared import universe
+        self.assertNotIn("stock", universe._assets(c))            # so no stocks are picked for nothing
         res = self.run_json("trader-autopilot", "autopilot", ["profile", "--capital", "1000", "--no-etf",
                                                               "--cash-yield", "3"])
         self.assertFalse(res["config"]["autopilot"]["etf_trend"]["enabled"])
