@@ -245,7 +245,7 @@ class DeskNews(TraderTestCase):
 class DeskNewsCrypto(TraderTestCase):
     NOW = DEMOS["btc"]["now"]
 
-    def test_coin_hack_critical_market_hack_major(self):
+    def test_coin_hack_critical_market_hack_only_noted(self):
         desk = load("trader-desk", "desk")
         from shared import config
         pid = "BTCUSDT-20261020-us_open_range"
@@ -264,8 +264,14 @@ class DeskNewsCrypto(TraderTestCase):
         res = desk.auto_review(pid, config.load_config(), config.load_limits())
         case = self.read_state("desk/%s/case.json" % pid)
         self.assertEqual([f["id"] for f in case["feed"]], ["mh"])  # market items only count for 6 h
-        majors = [o for o in res["objections"] if o["severity"] == "major"]
-        self.assertTrue(any("market-wide hack" in o["text"] for o in majors), res["objections"])
+        # another project's hack is shown, but it is not about BTC: noted, never blocking (the real feed of
+        # 21 Oct 2026 had three such headlines — all about small projects)
+        noted = [o for o in res["objections"] if "market-wide hack" in o["text"]]
+        self.assertEqual([o["severity"] for o in noted], ["minor"], res["objections"])
+        self.assertFalse([o for o in res["objections"] if o["severity"] in ("critical", "major")], res["objections"])
+        cfg = config.load_config()
+        cfg["autopilot"]["news_gate"]["market_blocks"] = True  # the old behaviour is one switch away
+        res = desk.auto_review(pid, cfg, config.load_limits())
         self.assertEqual(res["status"], "NO-GO")
         items.append(feed_item("ch", "Bitcoin network bug: nodes hacked in exploit", symbol="BTC", asset="crypto",
                                source="CoinDesk", tags=["hack"], published="2026-10-20T14:00:00Z"))
@@ -273,3 +279,32 @@ class DeskNewsCrypto(TraderTestCase):
         res = desk.auto_review(pid, config.load_config(), config.load_limits())
         self.assertTrue(any(o["severity"] == "critical" and "Bitcoin network bug" in o["text"]
                             for o in res["objections"]))
+
+
+class DeskNewsTrend(TraderTestCase):
+    """A daily trend trade was validated by the lab without any news filter: only a delisting stops it."""
+    NOW = DEMOS["btc"]["now"]
+
+    def review(self, items):
+        desk = load("trader-desk", "desk")
+        from shared import config
+        pid = "ETHUSDT-20261020T0000-trend_breakout"
+        plan = dict(PLAN, id=pid, symbol="ETHUSDT", asset="crypto", setup="trend_breakout", interval="1d",
+                    entry={"price": 2400.0, "time": "2026-10-20T14:30:00Z"}, stop={"price": 2200.0, "method": "rule"},
+                    target={"price": 2400.0 + 1000 * 200.0, "r_multiple": 1000.0}, risk_per_unit=200.0,
+                    exit_rule={"type": "close_below_low", "n": 10, "max_bars": 60, "text": "close < 10-day low"})
+        self.write_state("plan.json", {"plans": {pid: plan}, "latest": pid})
+        self.write_state("backtests/ETHUSDT-trend_breakout.json", {"summary": "s", "triggers": 30, "expectancy_r": 0.6})
+        self.write_state("news_feed.json", {"items": items, "refreshed": {"crypto:ETH": self.NOW}})
+        res = desk.auto_review(pid, config.load_config(), config.load_limits())
+        return [o for o in res["objections"] if "news" in o["text"]]
+
+    def test_a_hack_headline_is_noted_a_delisting_stops_it(self):
+        exploiter = feed_item("dx", "Drift exploiter sends $109M in Ether to Tornado Cash in 2 days", symbol="ETH",
+                              asset="crypto", source="CoinDesk", tags=["hack"], published="2026-10-20T14:00:00Z")
+        news = self.review([exploiter])
+        self.assertEqual([o["severity"] for o in news], ["minor"], news)
+        delist = feed_item("dl", "Major exchange to delist ETH margin pairs", symbol="ETH", asset="crypto",
+                           source="CoinDesk", tags=["delisting"], published="2026-10-20T14:10:00Z")
+        news = self.review([exploiter, delist])
+        self.assertIn("critical", [o["severity"] for o in news])

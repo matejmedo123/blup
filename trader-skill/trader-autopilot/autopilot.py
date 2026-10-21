@@ -52,6 +52,7 @@ CONTROL = "autopilot/control.json"
 DECISIONS = "autopilot/decisions.jsonl"
 BOOK = "autopilot/book.json"
 SCAN = "autopilot/scan.json"
+DAY = "autopilot/day.json"   # equity when the UTC day began — the daily-loss limit measures from there
 HEARTBEAT = "autopilot/heartbeat.json"
 LOCK = "autopilot/daemon.lock"
 INTERVAL = "5m"
@@ -86,6 +87,7 @@ def write_control(by: str = "cli", **changes) -> dict:
     c.update(changes)
     c.update(updated_at=market_clock.iso(market_clock.now_utc()), by=by)
     state.write_json(CONTROL, c)
+    shadow.note_control(c)
     return c
 
 
@@ -140,6 +142,22 @@ def _write_broker_files(broker, acct, positions, orders, book, realized_today):
             line[k] = acct[k]
     state.append_jsonl("broker/equity.jsonl", line)
     return line
+
+
+def _day_loss(now, equity) -> tuple:
+    """(loss today in $, equity at the start of the UTC day). Positions are held for days, so their whole unrealized
+    P&L is not today's: the loss is how far equity fell since the day began (closed trades included), and never less
+    than what closed at a loss today."""
+    doc = state.read_json(DAY, {}) or {}
+    day = _today(now)
+    if equity is not None:
+        if doc.get("day") != day:
+            doc = {"day": day, "start_equity": doc.get("last_equity", equity)}
+        doc["last_equity"] = float(equity)
+        state.write_json(DAY, doc)
+    start = doc.get("start_equity") if doc.get("day") == day else None
+    drop = float(start) - float(equity) if start is not None and equity is not None else 0.0
+    return max(drop, -_realized_today(now), 0.0), start
 
 
 def _realized_today(now) -> float:
@@ -1396,11 +1414,13 @@ def _cycle(approved=None) -> dict:
     if control["kill"]:
         kill_reason = "kill switch (%s)" % (control.get("by") or "control")
     else:
-        unreal = sum(float(p.get("unrealized_pl") or 0) for p in positions)
-        realized = _realized_today(now)
-        cap = (limits.get("global") or {}).get("max_daily_loss_usd")
-        if cap is not None and realized + unreal <= -float(cap):
-            kill_reason = "daily loss %s reached the %s limit" % (fmt.money(realized + unreal), fmt.money(cap))
+        loss, start = _day_loss(now, acct.get("equity"))
+        glob = limits.get("global") or {}
+        caps = [float(glob["max_daily_loss_usd"])] if glob.get("max_daily_loss_usd") is not None else []
+        if glob.get("max_daily_loss_pct") is not None and start:
+            caps.append(float(start) * float(glob["max_daily_loss_pct"]) / 100.0)
+        if caps and loss >= min(caps):
+            kill_reason = "daily loss %s reached the %s limit" % (fmt.money(-loss), fmt.money(min(caps)))
     if kill_reason:
         actions += kill(broker, book, cfg, kill_reason)
         notify.send("kill", "KILL — %s" % kill_reason, "Open orders cancelled%s. The autopilot stays stopped until "
@@ -1499,14 +1519,16 @@ def _sessions(now) -> dict:
     return {"crypto": "open 24/7", "stock": stock}
 
 
-def heartbeat(runner: str, status: str) -> dict:
-    """Proof of life for the dashboard: written after every cycle, whoever runs it."""
+def heartbeat(runner: str, status: str, wait_sec: int = None) -> dict:
+    """Proof of life for the dashboard: written when a cycle starts ("cycling"), after it, and while the daemon waits
+    longer than usual after errors (``wait_sec``) — so a slow cycle or a back-off never looks like a dead bot."""
     st = state.read_json(STATE, {}) or {}
     scan = state.read_json(SCAN, {}) or {}
     now = market_clock.now_utc()
     hb = {"at": market_clock.iso(now), "pid": os.getpid(), "host": socket.gethostname(), "runner": runner,
           "started_at": _PROCESS["started_at"] or market_clock.iso(now), "cycle": st.get("cycles"), "status": status,
-          "interval_sec": st.get("interval_sec"), "next_cycle": st.get("next_cycle"),
+          "interval_sec": wait_sec or st.get("interval_sec"),
+          "next_cycle": market_clock.iso(now.timestamp() + wait_sec) if wait_sec else st.get("next_cycle"),
           "universe": st.get("universe") or {},
           "scan": {a: "%d/%d" % (len(v.get("done") or []), v.get("total") or 0) for a, v in sorted(scan.items())
                    if isinstance(v, dict)},
@@ -1529,6 +1551,11 @@ def run_cycle(now=None, approved=None, runner: str = "cli") -> dict:
             os.environ["TRADER_NOW"] = market_clock.iso(market_clock.parse_iso(now))
         config.ensure_home()
         _PROCESS["started_at"] = _PROCESS["started_at"] or market_clock.iso(market_clock.now_utc())
+        if runner != "replay":
+            try:
+                heartbeat(runner, "cycling")
+            except Exception:
+                pass
         res = _cycle(approved)
         return res
     except Exception as exc:  # never let the dashboard thread die
@@ -1754,6 +1781,10 @@ def daemon(args, cfg) -> int:
             interval = int(args.interval or (cfg.get("autopilot") or {}).get("interval_sec") or 60)
             if errors_in_row:
                 interval = min(MAX_BACKOFF_SEC, interval * (2 ** min(errors_in_row - 1, 4)))
+                try:  # waiting longer than usual is not being dead — say how long
+                    heartbeat("daemon", "error", wait_sec=interval)
+                except Exception:
+                    pass
             waited = 0
             while waited < interval and stop["signal"] is None:
                 time.sleep(1)

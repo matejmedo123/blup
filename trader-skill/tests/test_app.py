@@ -240,6 +240,10 @@ class V3Views(DashboardCase):
         self.assertEqual(self.health()["state"], "stale")
         self.beat(status="stopped")
         self.assertEqual(self.health()["state"], "stopped")
+        self.beat(at="2026-10-20T13:50:00Z", status="cycling")  # 10 min into one slow cycle: alive
+        self.assertEqual(self.health()["state"], "alive")
+        self.beat(at="2026-10-20T13:44:00Z", status="cycling")  # 16 min: hung
+        self.assertEqual(self.health()["state"], "stale")
         self.beat(at="not a time")
         self.assertEqual(self.health()["state"], "stale")
 
@@ -601,4 +605,6 @@ class Deploy(TraderTestCase):
         self.assertFalse(beat("2026-10-20T13:56:59Z"))
         self.assertTrue(beat("2026-10-20T13:50:00Z", interval_sec=300))
         self.assertFalse(beat("2026-10-20T13:59:59Z", status="stopped"))
+        self.assertTrue(beat("2026-10-20T13:50:00Z", status="cycling"))   # a slow cycle, not a dead bot
+        self.assertFalse(beat("2026-10-20T13:44:00Z", status="cycling"))  # 16 min in one cycle: hung
         self.assertEqual(hc.main(["--home", str(self.home), "--quiet"]), 1)  # real clock: 2026-10-20 is long gone

@@ -2,7 +2,7 @@
 """Is the autopilot alive? Exit 0 = yes, 1 = no heartbeat / stale / stopped. Stdlib only.
 
 Reads <TRADER_HOME>/autopilot/heartbeat.json — the same rule as the dashboard: alive while the last
-beat is younger than 3 × interval_sec, and never less than 3 minutes.
+beat is younger than 3 × interval_sec, and never less than 3 minutes (15 while a cycle is running).
 
     python3 deploy/healthcheck.py                    # uses $TRADER_HOME (default ./trader)
     python3 deploy/healthcheck.py --home /var/lib/trader
@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MIN_STALE_SEC = 180
+CYCLE_MAX_SEC = 900   # a cycle that started this long ago and never finished is a hung bot
 
 
 def check(home: Path, now: datetime = None):
@@ -33,6 +34,8 @@ def check(home: Path, now: datetime = None):
     except (TypeError, ValueError):
         interval = 60.0
     limit = max(MIN_STALE_SEC, 3 * interval)
+    if hb.get("status") == "cycling":  # mid-cycle: a slow data source is not a dead bot
+        limit = max(limit, CYCLE_MAX_SEC)
     age = (now - at).total_seconds()
     if hb.get("status") == "stopped":
         return False, "the autopilot stopped at %s" % hb["at"]

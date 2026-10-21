@@ -47,7 +47,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from shared import cli, data, fmt, html, market_clock, setups, skills, state, symbols, trade_sim  # noqa: E402
-from shared import indicators, universe as universe_mod  # noqa: E402
+from shared import indicators, shadow, universe as universe_mod  # noqa: E402
 from shared.indicators import Candle  # noqa: E402
 
 LAB_FILE = "backtests/lab-crypto.json"
@@ -708,6 +708,7 @@ def write_playbook(doc: dict, now, path: str = PLAYBOOK) -> dict:
           "objective": doc["objective"], "costs": doc["costs"], "days": doc["days"],
           "families_validated": doc["summary"]["families_validated"], "entries": entries}
     state.write_json(path, pb)
+    shadow.note_playbook(path, pb)  # backtest vs reality judges each signal by the playbook of its day
     return pb
 
 

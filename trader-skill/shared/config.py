@@ -88,6 +88,9 @@ DEFAULT_CONFIG = {
             "critical_tags": {"stock": ["offering", "dilution", "bankruptcy", "delisting", "restatement"],
                               "crypto": ["hack", "delisting"]},
             "major_tags": {"stock": ["merger", "fda", "control"], "crypto": ["token_unlock"]},
+            # daily trend trades were validated by the lab without any news filter: only these stop them
+            "trend_block_tags": ["delisting", "bankruptcy"],
+            "market_blocks": False,  # news about the whole market (mostly other projects' hacks) is shown, never blocks
         },
         "adapt": {
             "enabled": True,

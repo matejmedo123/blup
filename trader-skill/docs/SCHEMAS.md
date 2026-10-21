@@ -445,7 +445,9 @@ hard gate rejected.
     "min_credibility": 2,           // StockTwits / small X accounts (credibility 1) never block a trade
     "critical_tags": {"stock": ["offering", "dilution", "bankruptcy", "delisting", "restatement"],
                       "crypto": ["hack", "delisting"]},
-    "major_tags": {"stock": ["merger", "fda", "control"], "crypto": ["token_unlock"]}
+    "major_tags": {"stock": ["merger", "fda", "control"], "crypto": ["token_unlock"]},
+    "trend_block_tags": ["delisting", "bankruptcy"],  // a daily trend trade (exit rule) stops only for these
+    "market_blocks": false          // market-wide items are shown as notes; true restores the old blocking
   },
   "adapt": {
     "enabled": true,
@@ -517,12 +519,24 @@ Only closed journal trades with `"source": "autopilot"` count, scored by `r_net`
 A paused setup or cooling symbol is skipped with the reason in `decisions.jsonl`; after the cooldown only
 trades closed after `until` count toward the next decision. `events` keeps the last 100.
 
-### `autopilot/heartbeat.json` — written at the end of every cycle (daemon, dashboard thread or CLI)
+### `autopilot/heartbeat.json` — written when a cycle starts (`"cycling"`), at its end, and while the daemon backs off
 `{"at": "...", "pid": 1234, "host": "vps-1", "runner": "daemon|dashboard|cli|replay", "started_at": "...",
-  "cycle": 812, "status": "running|paused|killed|error|stopped", "interval_sec": 60, "next_cycle": "...",
+  "cycle": 812, "status": "cycling|running|paused|killed|error|stopped", "interval_sec": 60, "next_cycle": "...",
   "universe": {"stock": 40, "crypto": 20}, "scan": {"stock": "32/40", "crypto": "20/20"},
   "sessions": {"crypto": "open 24/7", "stock": "open|closed|pre-market|after-hours|holiday|weekend"}}`
-The dashboard calls the bot **alive** when `at` is younger than 3 × `interval_sec` (minimum 3 minutes).
+The dashboard calls the bot **alive** when `at` is younger than 3 × `interval_sec` (minimum 3 minutes; 15 minutes
+while `"cycling"`). During an error back-off the daemon beats with the real wait as `interval_sec`.
+
+### `autopilot/day.json` — `{"day": "2026-10-20", "start_equity", "last_equity"}`; the daily-loss kill measures
+how far equity fell since the UTC day began (never less than today's realized losses), capped by
+`global.max_daily_loss_usd` and `global.max_daily_loss_pct` of the start equity.
+
+### `autopilot/control_log.jsonl` — a line each time the bot is paused, killed or resumed
+`{"at", "paused", "kill", "by"}` — backtest vs reality does not count signals from those spans as missed.
+
+### `backtests/playbook-history.jsonl` — every playbook the lab wrote
+`{"generated_at", "path", "entries": {"ETHUSDT:trend_breakout@1d": {"symbol", "setup", "interval"}}}` — backtest vs
+reality judges each signal by the playbook in force that day.
 
 ### `autopilot/daemon.lock` — `{"pid": 1234, "host": "vps-1", "started_at": "..."}`; one daemon per `trader/` folder
 A lock whose pid is gone, or whose heartbeat is older than 10 minutes, is stale and gets taken over.
@@ -541,7 +555,8 @@ sources were last fetched (the autopilot's just-in-time refresh reads it).
 ### `desk/{id}/case.json` gains `"feed"` — the symbol's news-feed items inside the lookback (plus recent
 market-wide crypto items), newest first, max 15, each `{"id","title","source","kind","published","tags",
 "importance","credibility","sentiment","url","symbol"}`; `desk.json` gates gain a non-hard
-`"news & filings"` gate. Critical/major tags from `news_gate` become critical/major Skeptic objections.
+`"news & filings"` gate. Critical/major tags from `news_gate` about the symbol itself become critical/major Skeptic
+objections; market-wide items, and anything but `trend_block_tags` on a daily trend trade, become minor notes.
 
 ### `desk/{id}/ai.json`, `ai_skeptic.md`, `ai_lead.md` — written by the optional AI desk
 ```json
@@ -779,8 +794,8 @@ on); `rule_trades(..., exits={})` records when each trade (and its ride) ended.
 "checks": [{"name": "losing streak|recent result|drawdown", "value", "p" (share of histories at least this bad),
 "verdict", "text"}], "since" (control.dd_reset_at — resume starts the record over), "alarm_since", "history"}`.
 Live trades come from the journal (autopilot, closed); a runner split (`sold` + `<id>-ride`) counts once, as the
-summed P&L over the original risk. Wins count up to `cap_r`. A new alarm pauses new entries
-(`autopilot.check_health`) and notifies.
+summed P&L over the original risk. Wins count up to `cap_r`. Only setups with lab trades are judged; the others
+are counted in `"not_judged": {setup: n}`. A new alarm pauses new entries (`autopilot.check_health`) and notifies.
 
 ### `autopilot/shadow.json` — once a UTC day (housekeeping thread) and on `autopilot.py check`
 `{"updated_at", "days": 30, "since", "verdict": "ok|check", "counts", "avg_slippage_bps", "problems": [...], "text",

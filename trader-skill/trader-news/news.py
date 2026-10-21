@@ -50,7 +50,11 @@ STOCK_RULES = [
     ("guidance", r"guidance|outlook|forecast|reg(ulation)? fd", 2, "guidance changes reset expectations"),
     ("management", r"\bceo\b|\bcfo\b|chief executive|steps down|resign|appoint|depart", 2,
      "leadership changes can reprice the stock fast"),
-    ("offering", r"offering|dilut|share sale|convertible|\batm\b program", 3, "new shares usually pressure the price"),
+    # "offering" alone is also a product or a discount — only a sale of shares or notes counts
+    ("offering", r"\b(public|secondary|follow-on|direct|underwritten|private|stock|share|shares|equity|at-the-market|atm"
+                 r"|convertible|notes?|bond|debt|warrant) offering\b|\boffering of\b.{0,40}\b(shares|stock|notes|units"
+                 r"|warrants)\b|\bdilut|\bshare sale\b|\bconvertible (senior )?(notes|bonds|debentures)\b|\batm\b program",
+     3, "new shares usually pressure the price"),
     ("fda", r"\bfda\b|approval|clinical|trial data|phase [123]", 3, "binary event — huge gap risk"),
     ("analyst", r"upgrade|downgrade|price target|initiat(es|ed) coverage|\brating\b", 1,
      "analyst calls move price for a session or two"),
@@ -63,7 +67,9 @@ CRYPTO_RULES = [
     ("listing", r"(?<!de)\blist(s|ing|ed)?\b|\blaunch(es)? (perpetual|futures|spot)", 2,
      "new listings bring fresh demand — often front-run"),
     ("etf_flows", r"\betfs?\b|inflow|outflow", 2, "ETF flows drive spot demand"),
-    ("hack", r"hack|exploit|drain(ed)?|stolen|breach|attacker", 3, "hacks trigger fast sell-offs and contagion"),
+    # whole words only: "breaches $100K" is a price, "hackathon" is an event
+    ("hack", r"\bhack(s|ed|er|ers|ing)?\b|\bexploit(s|ed|er|ers)?\b|\bstolen\b|\bdrained\b|\b(security|data) breach"
+             r"|\battackers?\b", 3, "hacks trigger fast sell-offs and contagion"),
     ("token_unlock", r"unlock|vesting|enters circulation", 2, "unlocked supply often gets sold"),
     ("regulation", r"\bsec\b|\bcftc\b|regulat|\bmica\b|lawsuit|court|\bban\b|approv", 2,
      "regulatory news reprices the whole sector"),

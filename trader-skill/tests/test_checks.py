@@ -64,7 +64,9 @@ class IsItNormal(TraderTestCase):
             {"setup": "asia_range", "validated": False, "test_trades": [[5, -9.0]]}]})  # not traded, not compared
         self.write_state("backtests/lab-etf.json", {"families": [{"setup": "etf_trend", "test_trades": [[25, 0.5]]}]})
         cfg = config.load_config()
-        self.assertEqual(health.reference(cfg), [1.0, 2.0, 0.5, -0.5, -0.4])
+        covered = set()
+        self.assertEqual(health.reference(cfg, covered), [1.0, 2.0, 0.5, -0.5, -0.4])
+        self.assertEqual(covered, {"trend_breakout", "trend_ema", "etf_trend"})
         cfg["autopilot"]["runner"]["enabled"] = True
         self.assertEqual(health.reference(cfg), [3.0, 2.0, 0.5, -0.5, -0.4])
 
@@ -87,6 +89,18 @@ class IsItNormal(TraderTestCase):
         cfg["autopilot"]["health"]["pause_on_alarm"] = False
         state.write_json(health.FILE, {})
         self.assertFalse(ap().check_health(cfg, {"dd_reset_at": None}, mc.parse_iso(NOW), []).get("pause"))
+
+    def test_only_setups_the_lab_tested_are_judged(self):
+        """An intraday stock setup (orb15) has no lab reference — its losses must not raise a trend alarm."""
+        self.write_state("backtests/lab-crypto.json", LAB)
+        journal = load("trader-journal", "journal")
+        for i in range(20):
+            journal.save_trade({"id": "trd-o%d" % i, "source": "autopilot", "setup": "orb15", "status": "closed",
+                                "r_net": -0.5, "exit": {"time": "2026-10-%02dT15:00:00Z" % (1 + i)}})
+        doc = health.update(config.load_config(), mc.parse_iso(NOW))
+        self.assertEqual(doc["status"], "early")
+        self.assertEqual(doc["not_judged"], {"orb15": 20})
+        self.assertIn("not judged", doc["text"])
 
 
 class BacktestVsReality(TraderTestCase):
@@ -111,7 +125,7 @@ class BacktestVsReality(TraderTestCase):
             return data.Series(sym, interval, bars, "test", [], {})
         data.get_candles = fake
         self.addCleanup(setattr, data, "get_candles", real)
-        self.write_state("backtests/playbook.json", {"generated_at": "2026-10-19T00:00:00Z", "entries": {
+        self.write_state("backtests/playbook.json", {"generated_at": "2026-09-01T00:00:00Z", "entries": {
             "ETHUSDT:trend_breakout@1d": {"symbol": "ETHUSDT", "setup": "trend_breakout", "interval": "1d"}}})
         sig = setups.series_signals("trend_breakout", self.eth, "1d",
                                     context={"btc_up": setups.regime_map(self.btc)})
@@ -157,6 +171,42 @@ class BacktestVsReality(TraderTestCase):
         self.assertIn("max 5", doc["rows"][0]["reason"])  # why it was not taken while fresh, not the next day's look
         state.append_jsonl("autopilot/decisions.jsonl", {"id": self.sid, "action": "taken", "reasons": []})
         self.assertEqual(shadow.run(self.cfg)["rows"][0]["outcome"], "ordered")
+
+    def test_the_playbook_of_the_day_decides(self):
+        """The weekly lab run changes the list: a coin added later was not missed, one dropped later was no extra."""
+        eth = {"ETHUSDT:trend_breakout@1d": {"symbol": "ETHUSDT", "setup": "trend_breakout", "interval": "1d"}}
+        self.write_state("backtests/playbook.json", {"generated_at": "2026-10-18T00:00:00Z", "entries": {}})
+        state.append_jsonl(shadow.HISTORY, {"generated_at": "2026-09-01T00:00:00Z", "path": "backtests/playbook.json",
+                                            "entries": eth})
+        state.append_jsonl(shadow.HISTORY, {"generated_at": "2026-10-18T00:00:00Z", "path": "backtests/playbook.json",
+                                            "entries": {}})
+        self.assertEqual([r["outcome"] for r in shadow.run(self.cfg)["rows"]], ["missed"])  # ETH was on the list then
+        self.write_state("autopilot/book.json", {"items": {self.sid: {
+            "plan_id": self.sid, "symbol": "ETH/USD", "data_key": "ETHUSDT", "asset": "crypto", "interval": "1d",
+            "status": "open", "entry_fill": self.price, "placed_at": "2026-10-15T00:01:00Z", "setup": "trend_breakout"}}})
+        doc = shadow.run(self.cfg)
+        self.assertEqual(([r["outcome"] for r in doc["rows"]], doc["verdict"]), (["taken"], "ok"))  # not "extra"
+        # the other way round: added after the signal → not expected, and buying it then was outside the playbook
+        (self.home / shadow.HISTORY).unlink()
+        state.append_jsonl(shadow.HISTORY, {"generated_at": "2026-09-01T00:00:00Z", "path": "backtests/playbook.json",
+                                            "entries": {}})
+        self.write_state("backtests/playbook.json", {"generated_at": "2026-10-18T00:00:00Z", "entries": eth})
+        doc = shadow.run(self.cfg)
+        self.assertEqual(doc["rows"][0]["outcome"], "taken")
+        self.assertIn("OUTSIDE ETH/USDT", doc["problems"][0])
+        self.write_state("autopilot/book.json", {"items": {}})
+        doc = shadow.run(self.cfg)
+        self.assertEqual((doc["rows"][0]["outcome"], doc["rows"][0]["reason"], doc["verdict"]),
+                         ("not expected", "not in the playbook that day", "ok"))
+
+    def test_signals_while_paused_are_not_missed(self):
+        shadow.note_control({"paused": True, "updated_at": "2026-10-10T00:00:00Z", "by": "dashboard"})
+        shadow.note_control({"paused": True, "updated_at": "2026-10-11T00:00:00Z", "by": "dashboard"})  # no change
+        self.assertEqual(len(state.read_jsonl(shadow.CONTROL_LOG)), 1)
+        doc = shadow.run(self.cfg)
+        self.assertEqual((doc["rows"][0]["outcome"], doc["rows"][0]["reason"]), ("not expected", "the bot was paused"))
+        shadow.note_control({"paused": False, "updated_at": "2026-10-12T00:00:00Z", "by": "dashboard"})
+        self.assertEqual(shadow.run(self.cfg)["rows"][0]["outcome"], "missed")  # resumed before the signal
 
     def test_a_trade_the_rules_do_not_explain_is_extra(self):
         state.append_jsonl("autopilot/decisions.jsonl", {"id": self.sid, "action": "skipped", "reasons": ["x"]})
@@ -226,3 +276,44 @@ class SixDesks(TraderTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EtfSignalTiming(TraderTestCase):
+    """A Friday ETF signal is judged on Monday at 9:45 ET — over the weekend it is pending, not missed."""
+    NOW = "2026-10-18T12:00:00Z"   # Sunday
+
+    def setUp(self):
+        super().setUp()
+        from tests.test_etf import series
+        config.ensure_home()
+        self.cfg = config.load_config()
+        self.cfg["autopilot"]["etf_trend"].update(enabled=True, when="always", symbols=["GLD"])
+        bars = series(700, 0.0012, seed=4)
+        sig = setups.series_signals("etf_trend", bars, "1d")
+        i = sig[-1]["trigger"]["index"]
+        friday = mc.ts("2026-10-16T13:30:00Z")
+        bars = [Candle(friday - (i - k) * 86400, c.o, c.h, c.l, c.c, c.v) for k, c in enumerate(bars[:i + 1])]
+        real = data.get_candles
+
+        def fake(symbol, interval="5m", days=None, asset=None, end=None, quote=None):
+            sym = data.as_symbol(symbol, asset)
+            if sym.key == "GLD":
+                return data.Series(sym, interval, bars, "test", [], {})
+            if sym.key == "BTCUSDT":
+                return data.Series(sym, interval, [], "test", [], {})
+            return real(symbol, interval, days=days, asset=asset, end=end, quote=quote)
+        data.get_candles = fake
+        self.addCleanup(setattr, data, "get_candles", real)
+        self.write_state("backtests/playbook-etf.json", {"generated_at": "2026-09-01T00:00:00Z", "entries": {
+            "GLD:etf_trend@1d": {"symbol": "GLD", "setup": "etf_trend", "interval": "1d"}}})
+
+    def friday(self):
+        return [r for r in shadow.run(self.cfg)["rows"] if r["signal_at"].startswith("2026-10-17")][0]
+
+    def test_pending_until_monday_then_missed(self):
+        row = self.friday()
+        self.assertEqual((row["symbol"], row["outcome"]), ("GLD", "pending"))
+        self.set_now("2026-10-19T14:00:00Z")   # Monday 10:00 ET: inside the hour after 9:45
+        self.assertEqual(self.friday()["outcome"], "pending")
+        self.set_now("2026-10-19T15:00:00Z")   # still no record an hour later
+        self.assertEqual(self.friday()["outcome"], "missed")

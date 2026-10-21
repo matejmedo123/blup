@@ -53,8 +53,22 @@ class NewsStockTest(TraderTestCase):
         news = load(SKILL, TOOL)
         tags, why, imp = news.classify("Company announces $500M share offering", news.STOCK_RULES)
         self.assertEqual(tags, ["offering"])
+        for title in ("Prices public offering of 10,000,000 shares", "Announces proposed offering of common stock",
+                      "Files for $300M at-the-market offering", "Announces $1B convertible senior notes due 2031"):
+            self.assertIn("offering", news.classify(title, news.STOCK_RULES)[0], title)
+        for title in ("Apple offering discounts on the new iPhone", "Bank expands its product offering in Asia"):
+            self.assertNotIn("offering", news.classify(title, news.STOCK_RULES)[0], title)
         self.assertEqual(imp, 3)
         self.assertEqual(news.norm_title("Big news - Reuters"), news.norm_title("Big news"))
+
+    def test_hack_needs_the_whole_word(self):
+        news = load(SKILL, TOOL)
+        for title in ("Bitcoin breaches $100K for the first time", "Ethereum hackathon draws 2,000 builders",
+                      "Bridge liquidity drains as traders rotate"):
+            self.assertNotIn("hack", news.classify(title, news.CRYPTO_RULES)[0], title)
+        for title in ("Exchange hacked, $200M stolen", "DeFi protocol drained in flash-loan exploit",
+                      "Drift exploiter sends $109M in Ether to Tornado Cash", "Wallet provider reports security breach"):
+            self.assertIn("hack", news.classify(title, news.CRYPTO_RULES)[0], title)
 
 
 class NewsCryptoTest(TraderTestCase):

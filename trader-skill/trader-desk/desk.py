@@ -254,6 +254,19 @@ def _news_flags_for(items: list, asset: str, ng: dict, now_ts: float) -> list:
     return out
 
 
+def news_blocks(f: dict, ng: dict, rule_exit: bool) -> bool:
+    """Does this flag stop the trade? Only critical/major news about this very symbol does — news about the whole
+    market is mostly another project's hack (real feed, 21 Oct 2026: 3 of 3), and a daily trend trade, which the
+    lab validated without any news filter, stops only for ``trend_block_tags`` (a delisting)."""
+    if f["severity"] not in ("critical", "major"):
+        return False
+    if f["market"] and not ng.get("market_blocks"):
+        return False
+    if rule_exit and f["tag"] not in set(ng.get("trend_block_tags") or []):
+        return False
+    return True
+
+
 def news_flags(case: dict, cfg: dict) -> list:
     """Critical / major news and filings for this idea: [{"severity","tag","item","age_h","market"}]."""
     ng = news_gate_cfg(cfg)
@@ -363,11 +376,11 @@ def gates(case: dict, cfg: dict, limits: dict) -> list:
                          "%s triggers (want ≥ %s)" % (bt.get("triggers"), desk_cfg["min_backtest_triggers"]), hard=False))
     else:
         out.append(_gate("backtest", False, "setup not backtested", hard=False))
-    out.append(_news_gate(case, cfg, desk_cfg))
+    out.append(_news_gate(case, cfg, desk_cfg, plan))
     return out
 
 
-def _news_gate(case: dict, cfg: dict, desk_cfg: dict) -> dict:
+def _news_gate(case: dict, cfg: dict, desk_cfg: dict, plan: dict = None) -> dict:
     ng = desk_cfg.get("news_gate") or news_gate_cfg(cfg)
     feed = case.get("feed") or []
     asset = case.get("asset") or "stock"
@@ -375,10 +388,14 @@ def _news_gate(case: dict, cfg: dict, desk_cfg: dict) -> dict:
     if not ng.get("enabled", True):
         return _gate("news & filings", True, "news gate off (autopilot.news_gate.enabled)", hard=False)
     flags = news_flags(case, cfg)
-    if flags:
-        f = flags[0]
+    stop = [f for f in flags if news_blocks(f, ng, bool(plan and plan.get("exit_rule")))]
+    if stop:
+        f = stop[0]
         return _gate("news & filings", False, "%d alarming item(s) — worst: %s %s (%s, %s)" % (
-            len(flags), f["severity"], f["tag"], f["item"].get("source"), _ago(f["age_h"])), hard=False)
+            len(stop), f["severity"], f["tag"], f["item"].get("source"), _ago(f["age_h"])), hard=False)
+    if flags:
+        return _gate("news & filings", True, "%d item(s) noted (%s), none that stops this trade" % (
+            len(flags), ", ".join(sorted({("market-wide " if f["market"] else "") + f["tag"] for f in flags}))), hard=False)
     if not feed and not _feed_refreshed(case):
         return _gate("news & filings", False, "never fetched for this symbol", hard=False)
     extra = " · SEC filings not checked (set sec_user_agent)" if _filings_skipped(case, cfg) else ""
@@ -565,14 +582,17 @@ def auto_memos(case: dict, cfg: dict, limits: dict) -> dict:
         if age_h > max_idea_age(d, asset, plan):
             o("major", "the idea is stale: entry was %.1f h ago" % age_h)
     shown = {}
+    ng = news_gate_cfg(cfg)
     for f in news_flags(case, cfg):
-        if shown.get(f["severity"], 0) >= 3:
+        sev = f["severity"] if news_blocks(f, ng, bool(plan and plan.get("exit_rule"))) else "minor"
+        if shown.get(sev, 0) >= 3:
             continue
-        shown[f["severity"]] = shown.get(f["severity"], 0) + 1
+        shown[sev] = shown.get(sev, 0) + 1
         it = f["item"]
         what = "market-wide %s news" % f["tag"] if f["market"] else "%s %s" % (
             "filing" if it.get("kind") == "filing" else "news", f["tag"])
-        o(f["severity"], "%s: \"%s\" — %s, %s" % (what, it.get("title"), it.get("source"), _ago(f["age_h"])))
+        o(sev, "%s: \"%s\" — %s, %s%s" % (what, it.get("title"), it.get("source"), _ago(f["age_h"]),
+                                           "" if sev != "minor" else " (noted — it does not stop this trade)"))
     if d["news_gate"].get("enabled", True):
         if not (case.get("feed") or []) and not _feed_refreshed(case):
             o("minor", "news and filings were never fetched for %s — the desk is blind to headlines" % sym)

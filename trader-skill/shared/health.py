@@ -18,7 +18,8 @@ ordinary stretch look poor). Calibrated on the bot's own simulated trade sequenc
 signal orders): false alarms 0.2–0.7 % of the time; a strategy that loses (20 % winners) is caught after ~16
 trades; one with no edge left is only caught about a third of the time within 40 trades — results alone are
 slow to prove anything, which is why the lab's eight years of walk-forward tests come first. A trade split by the runner (sold part + the part that rode on) counts
-once, as the backtest counts it. State lives in ``autopilot/health.json``.
+once, as the backtest counts it. Only trades of setups the lab tested are judged — the others (an intraday stock
+setup, say) are listed as not judged. State lives in ``autopilot/health.json``.
 """
 from __future__ import annotations
 
@@ -40,9 +41,10 @@ def settings(cfg: dict) -> dict:
     return out
 
 
-def reference(cfg: dict = None) -> list:
+def reference(cfg: dict = None, setups: set = None) -> list:
     """R of every out-of-sample lab trade of the setups the bot trades, in time order — with the runner's results
-    where the bot lets winners ride. Families the lab did not validate are left out: the bot doesn't trade them."""
+    where the bot lets winners ride. Families the lab did not validate are left out: the bot doesn't trade them.
+    ``setups`` (a set) is filled with the setups the reference covers."""
     riding = bool((((cfg or {}).get("autopilot") or {}).get("runner") or {}).get("enabled"))
     rows = []
     for name in LAB_FILES:
@@ -54,6 +56,8 @@ def reference(cfg: dict = None) -> list:
             got = ride.get("test_trades") if riding and ride.get("helps") and ride.get("test_trades") else \
                 fam.get("test_trades")
             rows += [(int(t), float(r)) for t, r in got or []]
+            if setups is not None and got:
+                setups.add(fam.get("setup"))
     return [r for _, r in sorted(rows)]
 
 
@@ -186,7 +190,19 @@ def update(cfg: dict, now=None, control: dict = None) -> dict:
         state.write_json(FILE, doc)
         return dict(doc, new_alarm=False)
     since = (control or {}).get("dd_reset_at")
-    doc = evaluate(live_trades(since), reference(cfg), cfg)
+    covered = set()
+    ref = reference(cfg, covered)
+    # only trades of setups the lab tested can be held against its trades — an intraday stock setup is not a trend
+    trades = live_trades(since)
+    judged = [t for t in trades if t["setup"] in covered]
+    other = {}
+    for t in trades:
+        if t["setup"] not in covered:
+            other[t["setup"]] = other.get(t["setup"], 0) + 1
+    doc = evaluate(judged, ref, cfg)
+    if other:
+        doc["not_judged"] = other
+        doc["text"] += " · not judged (no lab reference): %s" % ", ".join("%s %d" % kv for kv in sorted(other.items()))
     alarm_since = prev.get("alarm_since") if prev.get("status") == "alarm" else None
     new_alarm = doc["status"] == "alarm" and not alarm_since
     if doc["status"] == "alarm":

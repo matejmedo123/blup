@@ -61,6 +61,7 @@ REPORT_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe
               "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox")
 LIVE_PHRASE = "I ACCEPT REAL MONEY RISK"
 HEARTBEAT_MIN_STALE_SEC = 180  # alive = a heartbeat younger than 3 × interval, never less than this
+CYCLE_MAX_SEC = 900            # a cycle that started this long ago and never finished is a hung bot
 NO_NEW_STOCK_ENTRIES_ET = (15, 30)  # mirrors the autopilot: too little session left after 3:30 p.m. ET
 PROXY_HEADERS = ("X-Forwarded-For", "Forwarded", "X-Real-IP")
 REDACTED = "[redacted]"
@@ -659,6 +660,8 @@ def health_view() -> dict:
         return out
     interval = _num(hb.get("interval_sec"), 60.0) or 60.0
     stale_after = max(float(HEARTBEAT_MIN_STALE_SEC), 3.0 * interval)
+    if str(hb.get("status") or "") == "cycling":  # mid-cycle: a slow data source is not a dead bot
+        stale_after = max(stale_after, float(CYCLE_MAX_SEC))
     age = _age_sec(hb.get("at"))
     if age is not None:
         age = max(0.0, age)  # a pinned demo clock can sit a little behind the last beat
@@ -983,6 +986,11 @@ def write_control(action: str, by: str = "dashboard") -> dict:
         raise ValueError("unknown action %r" % action)
     c.update(updated_at=_now_iso(), by=by)
     state.write_json("autopilot/control.json", c)
+    try:
+        from shared import shadow
+        shadow.note_control(c)  # backtest vs reality: signals while paused were not "missed"
+    except Exception:
+        pass
     return c
 
 

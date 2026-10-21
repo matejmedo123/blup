@@ -117,6 +117,26 @@ class Day(TraderTestCase):
         self.assertIn("daily loss", res["message"])
         self.assertTrue(ap().read_control()["paused"])
 
+    def test_daily_loss_is_measured_from_the_start_of_the_day(self):
+        """A position held for days carries old unrealized P&L — only today's fall in equity counts."""
+        config.ensure_home()
+        self.write_state("autopilot/day.json", {"day": "2026-10-20", "start_equity": 25000.0, "last_equity": 25000.0})
+        res = self.cycle("2026-10-20T13:50:00Z")
+        self.assertNotEqual(res["status"], "killed")
+        loss, start = ap()._day_loss("2026-10-20T15:00:00Z", 24100.0)   # fell $900 since midnight
+        self.assertEqual((loss, start), (900.0, 25000.0))
+        loss, start = ap()._day_loss("2026-10-21T00:05:00Z", 24050.0)   # a new day starts from yesterday's last
+        self.assertEqual((loss, start), (50.0, 24100.0))
+        self.write_state("autopilot/day.json", {"day": "2026-10-20", "start_equity": 25900.0, "last_equity": 25900.0})
+        res = self.cycle("2026-10-20T14:00:00Z")          # equity ~$25,000: $900 below the day's start ≥ $750
+        self.assertEqual(res["status"], "killed")
+        self.assertIn("daily loss", res["message"])
+
+    def test_a_back_off_beats_with_its_real_wait(self):
+        hb = ap().heartbeat("daemon", "error", wait_sec=900)
+        self.assertEqual(hb["interval_sec"], 900)   # the dashboard waits 3 × 15 min before calling it dead
+        self.assertEqual(mc.ts(hb["next_cycle"]) - mc.ts(hb["at"]), 900)
+
     def test_meme_never_traded(self):
         config.ensure_home()
         doc = json.loads((self.home / "config.json").read_text())
