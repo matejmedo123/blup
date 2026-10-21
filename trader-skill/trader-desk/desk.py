@@ -25,7 +25,7 @@ if not os.path.isdir(os.path.join(_ROOT, "shared")):
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from shared import cli, data, fmt, html, market_clock, state, symbols  # noqa: E402
+from shared import cli, config, data, fmt, html, market_clock, skills, state, symbols  # noqa: E402
 
 ROLES = ("researcher", "skeptic", "lead")
 # The replay resamples ordinary bars, so an honest replay of a fair 2:1 bracket centres on 0R: the hard gate
@@ -126,6 +126,8 @@ def build_case(idea_id: str, symbol: str = None) -> dict:
     news = state.read_json("news.json", {}) or {}
     case["news"] = [n for n in news.get("items") or []
                     if not n.get("symbol") or _key_of(n.get("symbol", "")) in (key, "")][:12]
+    case["feed_scope"] = _feed_scope(sym, raw, case.get("asset"))
+    case["feed"] = build_feed(case, sym)
     case["rugcheck"] = None
     if sym and sym.asset == "meme" and sym.chain and sym.address:
         case["rugcheck"] = state.read_json("rugcheck/%s-%s.json" % (sym.chain, sym.address))
@@ -142,6 +144,142 @@ def build_case(idea_id: str, symbol: str = None) -> dict:
     case["order"] = orders[-1] if orders else None
     case["missing"] = missing_steps(case)
     return case
+
+
+# --- news & filings (news_feed.json) -------------------------------------------------------------
+
+FEED_FIELDS = ("id", "title", "source", "kind", "published", "tags", "importance", "credibility", "sentiment", "url",
+               "symbol")
+FEED_MAX = 15
+
+
+def news_gate_cfg(cfg: dict) -> dict:
+    base = (config.DEFAULT_CONFIG.get("autopilot") or {}).get("news_gate") or {}
+    return config.deep_merge(base, ((cfg or {}).get("autopilot") or {}).get("news_gate") or {})
+
+
+def _feed_scope(sym, raw, asset):
+    if sym is None:
+        return None
+    if sym.asset == "stock":
+        return "stock:%s" % sym.key
+    if sym.asset == "crypto":
+        return "crypto:%s" % sym.base
+    return "meme:%s" % raw
+
+
+def _credibility(it: dict) -> int:
+    if it.get("credibility") is not None:
+        return int(it["credibility"])
+    try:
+        return int(skills.load("trader-news", "news").credibility(it))
+    except Exception:
+        return 1
+
+
+def _age_h(it: dict, now_ts: float):
+    if not it.get("published"):
+        return None
+    try:
+        return (now_ts - market_clock.parse_iso(it["published"]).timestamp()) / 3600.0
+    except (TypeError, ValueError):
+        return None
+
+
+def build_feed(case: dict, sym) -> list:
+    """The symbol's news-feed items inside the lookback (+ recent market-wide crypto items), newest first."""
+    cfg = config.load_config()
+    ng = news_gate_cfg(cfg)
+    asset = case.get("asset") or "stock"
+    look = float((ng.get("lookback_hours") or {}).get(asset if asset != "meme" else "crypto") or 24)
+    market_h = float(ng.get("market_hours") or 6)
+    now_ts = market_clock.now_utc().timestamp()
+    names = set()
+    if sym is not None:
+        names = {sym.key.upper(), (sym.base or "").upper(), (sym.display or "").upper()}
+        if sym.asset == "meme":
+            names.add(str(case.get("symbol_arg") or "").upper())
+    names.discard("")
+    pool = list((state.read_json("news_feed.json", {}) or {}).get("items") or [])
+    pool += [dict(n, credibility=_credibility(n)) for n in case.get("news") or []]
+    out, seen = [], set()
+    for it in pool:
+        if it.get("id") in seen:
+            continue
+        age = _age_h(it, now_ts)
+        if age is None or age < -0.01:
+            continue
+        mine = str(it.get("symbol") or "").upper() in names and (it.get("asset") in (None, asset)
+                                                                  or asset == "meme")
+        market = (asset == "crypto" and str(it.get("symbol") or "") == "market"
+                  and it.get("asset") in (None, "crypto") and age <= market_h)
+        if not (mine and age <= look) and not market:
+            continue
+        seen.add(it.get("id"))
+        row = {k: it.get(k) for k in FEED_FIELDS}
+        row["credibility"] = _credibility(it)
+        row["tags"] = list(it.get("tags") or [])
+        out.append(row)
+    flagged = {f["item"]["id"] for f in _news_flags_for(out, asset, ng, now_ts)}
+    out.sort(key=lambda r: r.get("published") or "", reverse=True)
+    keep = [r for r in out if r["id"] in flagged][:FEED_MAX]
+    keep += [r for r in out if r["id"] not in flagged][:max(0, FEED_MAX - len(keep))]
+    keep.sort(key=lambda r: r.get("published") or "", reverse=True)
+    return keep
+
+
+def _news_flags_for(items: list, asset: str, ng: dict, now_ts: float) -> list:
+    if asset not in ("stock", "crypto"):
+        return []
+    crit = set((ng.get("critical_tags") or {}).get(asset) or [])
+    major = set((ng.get("major_tags") or {}).get(asset) or [])
+    min_cred = int(ng.get("min_credibility") or 0)
+    out = []
+    for it in items:
+        if _credibility(it) < min_cred:
+            continue
+        tags = list(it.get("tags") or [])
+        market = it.get("symbol") == "market"
+        hit = next((t for t in tags if t in crit), None)
+        sev = "critical" if hit else None
+        if not hit:
+            hit = next((t for t in tags if t in major), None)
+            sev = "major" if hit else None
+        if not hit:
+            continue
+        if market:  # it is about the whole market, not this coin: one level softer
+            sev = "major"
+        out.append({"severity": sev, "tag": hit, "item": it, "age_h": _age_h(it, now_ts), "market": market})
+    out.sort(key=lambda f: (f["severity"] != "critical", f["age_h"] if f["age_h"] is not None else 1e9))
+    return out
+
+
+def news_flags(case: dict, cfg: dict) -> list:
+    """Critical / major news and filings for this idea: [{"severity","tag","item","age_h","market"}]."""
+    ng = news_gate_cfg(cfg)
+    if not ng.get("enabled", True):
+        return []
+    return _news_flags_for(case.get("feed") or [], case.get("asset") or "stock", ng,
+                           market_clock.now_utc().timestamp())
+
+
+def _ago(h) -> str:
+    if h is None:
+        return "time unknown"
+    if h < 1:
+        return "%d min ago" % max(0, round(h * 60))
+    return "%.1f h ago" % h
+
+
+def _filings_skipped(case: dict, cfg: dict) -> bool:
+    return case.get("asset") == "stock" and not config.is_offline() and not config.sec_user_agent(cfg)
+
+
+def _feed_refreshed(case: dict):
+    scope = case.get("feed_scope")
+    if not scope:
+        return None
+    return ((state.read_json("news_feed.json", {}) or {}).get("refreshed") or {}).get(scope)
 
 
 def _cmd(skill: str, tool: str, args: str) -> str:
@@ -221,7 +359,27 @@ def gates(case: dict, cfg: dict, limits: dict) -> list:
                          "%s triggers (want ≥ %s)" % (bt.get("triggers"), desk_cfg["min_backtest_triggers"]), hard=False))
     else:
         out.append(_gate("backtest", False, "setup not backtested", hard=False))
+    out.append(_news_gate(case, cfg, desk_cfg))
     return out
+
+
+def _news_gate(case: dict, cfg: dict, desk_cfg: dict) -> dict:
+    ng = desk_cfg.get("news_gate") or news_gate_cfg(cfg)
+    feed = case.get("feed") or []
+    asset = case.get("asset") or "stock"
+    look = (ng.get("lookback_hours") or {}).get(asset if asset != "meme" else "crypto")
+    if not ng.get("enabled", True):
+        return _gate("news & filings", True, "news gate off (autopilot.news_gate.enabled)", hard=False)
+    flags = news_flags(case, cfg)
+    if flags:
+        f = flags[0]
+        return _gate("news & filings", False, "%d alarming item(s) — worst: %s %s (%s, %s)" % (
+            len(flags), f["severity"], f["tag"], f["item"].get("source"), _ago(f["age_h"])), hard=False)
+    if not feed and not _feed_refreshed(case):
+        return _gate("news & filings", False, "never fetched for this symbol", hard=False)
+    extra = " · SEC filings not checked (set sec_user_agent)" if _filings_skipped(case, cfg) else ""
+    return _gate("news & filings", True, "%d item(s) in the last %s h, nothing alarming%s" % (len(feed), look, extra),
+                 hard=False)
 
 
 def memo_path(idea_id: str, role: str):
@@ -305,6 +463,7 @@ def _desk_cfg(cfg: dict) -> dict:
             out[k] = gates_cfg[k]
     if "min_tm_ev_r" in gates_cfg:  # one replay threshold for the desk and the autopilot
         out["min_ev_r"] = gates_cfg["min_tm_ev_r"]
+    out["news_gate"] = news_gate_cfg(cfg)
     out.update(cfg.get("desk") or {})
     return out
 
@@ -341,8 +500,16 @@ def auto_memos(case: dict, cfg: dict, limits: dict) -> dict:
             fmt.prob(p.get("target")), fmt.prob(p.get("stop")), fmt.r((tm.get("expected_value") or {}).get("r"))))
     if rc:
         r.append("- rugcheck: %s (score %s)" % (rc.get("verdict"), rc.get("score")))
-    for n in (case.get("news") or [])[:3]:
-        r.append("- news %s: %s — %s" % (n.get("published") or "", n.get("title"), n.get("source")))
+    now_ts = market_clock.now_utc().timestamp()
+    feed = case.get("feed") or []
+    look = (d["news_gate"].get("lookback_hours") or {}).get(asset if asset != "meme" else "crypto")
+    for n in feed[:5]:
+        r.append("- news %s (%s, %s): %s%s" % (
+            n.get("source"), n.get("kind") or "news", _ago(_age_h(n, now_ts)), n.get("title"),
+            " [%s]" % ", ".join(n["tags"]) if n.get("tags") else ""))
+    if not feed:
+        r.append("- news: %s" % ("no headlines or filings in the last %s h" % look if _feed_refreshed(case)
+                                 else "never fetched for this symbol"))
     r.append("## Data gaps")
     r.append("- a rule-based desk reads only the numbers above; it cannot judge context the way a human or AI reviewer can")
     # Skeptic
@@ -384,7 +551,22 @@ def auto_memos(case: dict, cfg: dict, limits: dict) -> dict:
         age_h = (market_clock.now_utc() - market_clock.parse_iso(plan["entry"]["time"])).total_seconds() / 3600.0
         if age_h > d["max_idea_age_hours"].get(asset or "stock", 2):
             o("major", "the idea is stale: entry was %.1f h ago" % age_h)
-    if any("earnings" in (n.get("tags") or []) for n in case.get("news") or []):
+    shown = {}
+    for f in news_flags(case, cfg):
+        if shown.get(f["severity"], 0) >= 3:
+            continue
+        shown[f["severity"]] = shown.get(f["severity"], 0) + 1
+        it = f["item"]
+        what = "market-wide %s news" % f["tag"] if f["market"] else "%s %s" % (
+            "filing" if it.get("kind") == "filing" else "news", f["tag"])
+        o(f["severity"], "%s: \"%s\" — %s, %s" % (what, it.get("title"), it.get("source"), _ago(f["age_h"])))
+    if d["news_gate"].get("enabled", True):
+        if not (case.get("feed") or []) and not _feed_refreshed(case):
+            o("minor", "news and filings were never fetched for %s — the desk is blind to headlines" % sym)
+        if _filings_skipped(case, cfg):
+            o("minor", "SEC filings were not checked — set sec_user_agent (\"Your Name you@domain.com\") in "
+                       "trader/config.json")
+    if any("earnings" in (n.get("tags") or []) for n in (case.get("feed") or []) + (case.get("news") or [])):
         o("minor", "earnings headlines in the feed — event risk inside or right after the holding window")
     o("minor", "the replay resamples ordinary bars — it cannot see news shocks, halts or gaps")
     sk = obj + ["## Verdict %s" % AUTO_TAG]

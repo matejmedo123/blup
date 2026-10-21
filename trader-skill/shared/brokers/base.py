@@ -59,6 +59,10 @@ class Broker:
     def orders(self, since: str = None) -> list:
         raise NotImplementedError
 
+    def tradable(self, asset: str):
+        """Base symbols this broker can trade for an asset class, or None for "no restriction"."""
+        return None
+
     def clock(self) -> dict:
         st = market_clock.market_status()
         return {"is_open": st["state"] == "open", "next_open": st.get("next_open"), "next_close": st.get("closes_at")}

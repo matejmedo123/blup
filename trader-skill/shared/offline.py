@@ -91,6 +91,11 @@ def _yahoo_spark(m, q, url):
     return json.dumps({s: data[s] for s in wanted if s in data})
 
 
+@route(r"query[12]\.finance\.yahoo\.com", r"/v1/finance/screener/predefined/saved")
+def _yahoo_screener(m, q, url):
+    return _read("yahoo/screener_%s.json" % _safe(q.get("scrIds", "")), url)
+
+
 @route(r"feeds\.finance\.yahoo\.com", r"/rss/2\.0/headline")
 def _yahoo_rss(m, q, url):
     return _read("rss/yahoo_%s.xml" % _safe(q.get("s", "").upper()), url)

@@ -48,11 +48,40 @@ separate: the Skeptic must argue against the case, not summarise it.
 Other actions: `desk.py record --id ID --role researcher|skeptic|lead --file memo.md` and
 `desk.py show --id ID` (same as verify, without changing anything you have not recorded).
 
+## Rule-based mode and the news & filings gate
+
+`desk.py auto SYMBOL` writes all three memos mechanically (the autopilot uses this on every trigger).
+Its Skeptic also reads the symbol's items in `trader/news_feed.json` inside the lookback
+(`autopilot.news_gate.lookback_hours`, stock 24 h / crypto 12 h, plus market-wide crypto items from the
+last `market_hours`): a credible (≥ `min_credibility`) item tagged with a `critical_tags` entry — for
+stocks an offering / dilution, bankruptcy, delisting or restatement 8-K or headline; for coins a hack or
+delisting — becomes a **critical** objection, `major_tags` (merger, FDA, change of control; token unlocks)
+a **major** one. StockTwits and small X accounts never block on their own. No feed data, or SEC filings
+skipped because `sec_user_agent` is not set, is a minor objection. The gate table shows a non-hard
+"news & filings" row.
+
+## Optional AI desk via the Claude API (veto-only)
+
+`ai_desk.py` runs the Skeptic and the Lead through the Claude API instead of subagents — used by the
+autopilot when `ai_desk.enabled: true`, or by hand:
+
+```bash
+python3 "${CLAUDE_SKILL_DIR}/ai_desk.py" --id NVDA-20261020-orb15 $FLAGS
+```
+
+It first runs the rule-based desk; only a rule-based **GO** is sent to Claude (default model
+`claude-opus-5-5`), which can turn it into NO-GO or WAIT but never revives an idea the rules rejected.
+Headlines, posts and filings go in as untrusted data, never instructions. Needs `pip install anthropic`
+and `ANTHROPIC_API_KEY` (environment or `trader/secrets.env`); daily caps `ai_desk.max_calls_per_day` /
+`max_usd_per_day`; usage in `trader/ai_usage.json`; results in `desk/{id}/ai.json`, `ai_skeptic.md`,
+`ai_lead.md`. Offline, without the SDK or key, or over budget it reports `unavailable` and costs nothing.
+
 ## Reads / writes
 
-* reads `setups.json`, `entries.json`, `plan.json`, `news.json`, `rugcheck/`, `backtests/`,
+* reads `setups.json`, `entries.json`, `plan.json`, `news.json`, `news_feed.json`, `rugcheck/`, `backtests/`,
   `timemachine/`, `orders.json`, `config.json` (`"desk": {"min_ev_r": 0.0, "min_backtest_triggers": 10}`), `limits.json`
 * writes `trader/desk/{id}/case.json`, `research.md`, `skeptic.md`, `lead.md`, `desk.json`, `log.jsonl`
+  (AI desk: `ai.json`, `ai_skeptic.md`, `ai_lead.md`, and `trader/ai_usage.json`)
   and `trader/reports/desk-{id}.html` (four role cards, objections with the Lead's answers, gates)
 
 ## How to present results
@@ -66,4 +95,6 @@ the disclaimer (stronger for meme coins).
 
 * Never let any subagent run `trader-broker` or approve a ticket; never skip the user's "yes".
 * Never override a BLOCKED verdict by editing memos to hide objections.
-* Never use paid data (no X/Twitter API), never touch wallets or keys, never promise profit.
+* Never call a paid API the user did not configure (X token, Anthropic key) and never exceed its daily
+  budget; never touch wallets or keys, never promise profit.
+* Never let the AI desk approve what the rule-based gates rejected — it is a veto, not an override.

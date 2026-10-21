@@ -1,9 +1,10 @@
 # Trader — a day-trading toolkit for Claude Code
 
 Day-trading skills for **US stocks, crypto and DEX meme coins**, one shared data layer, a
-**web dashboard** that shows everything, an opt-in **autopilot** that can trade for you
-(simulator or paper by default), and a four-role **AI trading desk** that has to agree before any
-trade happens.
+**web dashboard** that shows everything, an opt-in **24/7 autopilot** that picks its own stocks and
+coins, reads the news and SEC filings before every trade, learns from its own record and trades for
+you (simulator or paper by default), a four-role **AI trading desk** that has to agree before any
+trade happens, and a **deploy kit** to run it all on a small server with phone notifications.
 
 | Asset class | Examples | Market clock |
 |---|---|---|
@@ -24,6 +25,7 @@ Needs Python 3.8+ and nothing else.
 python3 scripts/demo.py                                    # every walkthrough below, offline, ~25 s
 python3 app/server.py --home demo/autopilot --offline      # the dashboard on the demo day → http://127.0.0.1:8765
 python3 app/server.py --autopilot                          # for real: dashboard + autopilot in the local simulator
+python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon on its own (deploy/ runs both on a VPS)
 ```
 
 ## What's in the box
@@ -36,15 +38,16 @@ python3 app/server.py --autopilot                          # for real: dashboard
 | `/trader-exit` | Stop, R-multiple target, time stop, trailing stop; meme scale-outs and liquidity exit |
 | `/trader-timemachine` ⭐ | Replays the rest of the session 10,000 times from the symbol's own candles: odds of target vs stop, expected value, 90 % close range, fan chart |
 | `/trader-backtest` | "Last 59 sessions: 33 triggers, 6 hit target, 17 hit stop, 10 neither." — with fees and slippage |
-| `/trader-desk` | Researcher → Skeptic → Lead: every objection must be answered; GO only through hard gates. AI subagents, or a rule-based mode (`desk.py auto`) |
+| `/trader-desk` | Researcher → Skeptic → Lead: every objection must be answered; GO only through hard gates. AI subagents, a rule-based mode (`desk.py auto`, incl. a news & filings gate) or the optional Claude API desk (`ai_desk.py`, veto-only) |
 | `/trader-sizer` · `/trader-risk` | Position size from account × risk %; PASS/BLOCK against `limits.json` (per asset class, daily loss, exposure, rugcheck) |
 | `/trader-broker` | A plain ticket + the exact JSON for your brokerage MCP connector, sent only after you type **yes**; meme coins get a manual wallet checklist |
-| `/trader-autopilot` | Trades for you: scans your watchlist, runs every gate, places orders through the **local simulator** (default) or **Alpaca** (paper; live only through an explicit opt-in), manages exits, journals fills, kill switch |
+| `/trader-autopilot` | Trades for you **24/7**: picks its own universe (~40 liquid US stocks ranked by today's movement + the day's most active names, the 20 most traded coins), fetches the latest news and SEC filings before every trade, runs every gate, places orders through the **local simulator** (default) or **Alpaca** (paper; live only through an explicit opt-in), manages exits, journals fills, learns from its own record, notifies your phone, kill switch |
 | `/trader-alerts` | Rings once on levels, stops/targets, % moves, the opening bell, liquidity pulled, dev selling |
 | `/trader-journal` | Every trade with its chart; win rate, expectancy (net of costs), best/worst setups per asset class |
 | `/trader-rugcheck` 🛡️ | Meme-coin safety gate: LP lock, mint/freeze authority, honeypot/taxes, holder concentration, dev share, age, fake-volume hints → SAFE / RISKY / DANGER |
 | `/trader-arb` | Read-only arbitrage gap monitor — shows why visible gaps don't survive fees and slippage |
-| **Dashboard** `app/server.py` | Equity, P&L today/total, positions, orders, every trade with its chart, the bot's decisions and reasons, news & social feed, reports, bot controls |
+| **Dashboard** `app/server.py` | Equity, P&L today/total, positions, orders, every trade with its chart, the bot's decisions and reasons, is it alive (heartbeat), what it watches and why, what it learned, news & social feed, notifications, AI desk spend, reports, bot controls |
+| **Deploy kit** `deploy/` | Docker Compose or systemd for a small VPS (daemon + dashboard as two services), HTTPS via Caddy, step-by-step guide in Slovak |
 
 ## Safety model
 
@@ -55,8 +58,13 @@ python3 app/server.py --autopilot                          # for real: dashboard
   1. a fresh trigger (the setup fired on the last closed bar),
   2. **a real edge in the backtest** — ≥ 10 past triggers on that symbol and expectancy ≥ +0.05R after costs,
   3. a Time Machine replay that doesn't reject the stop/target geometry (EV ≥ −0.05R),
-  4. desk verdict GO, then sizing and a risk PASS against `limits.json`,
-  5. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever).
+  4. no fresh red-flag news or filing for the symbol (fetched right before the decision: dilution /
+     offering, bankruptcy, delisting, restatement 8-Ks; hacks and delistings for coins),
+  5. its own record doesn't argue against it (setups that lost money for the bot are paused; a symbol
+     with three losses in a row sits out; a losing streak halves the size; a 10 % drawdown pauses the bot),
+  6. desk verdict GO — and, if you enable the optional **AI desk**, Claude doesn't veto it (it can only
+     say no, never yes to something the rules rejected) — then sizing and a risk PASS against `limits.json`,
+  7. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever).
 
   It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries after 15:30 ET,
   kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a KILL
@@ -66,8 +74,11 @@ python3 app/server.py --autopilot                          # for real: dashboard
   `alpaca`, `autopilot.mode: "live"`, top-level `"paper": false`, live keys, and
   `"live_confirmation": "I ACCEPT REAL MONEY RISK"` — set by you in your own files. There is
   deliberately no button for it; anything missing and the autopilot refuses to start in live mode.
+* **24/7 means crypto.** Crypto trades around the clock; US stocks only in the regular session
+  (9:30–16:00 ET = 15:30–22:00 in Central Europe). Pre-market, after-hours and overnight stock
+  sessions are deliberately not traded — the setups and backtests are built on regular-session bars.
 * **Be honest with yourself.** On the demo data, almost every rule *lost* money in its backtest, so the
-  autopilot skipped 18 of 19 setups. A bot trading a strategy without an edge loses money faster than
+  autopilot skipped almost every setup it found. A bot trading a strategy without an edge loses money faster than
   you would by hand. Run it on paper for weeks and only consider live if the journal shows a positive
   edge net of costs over a meaningful number of trades.
 
@@ -91,10 +102,16 @@ The first run creates `trader/config.json` and `trader/limits.json` (override th
   "account_size": 25000, "risk_per_trade_pct": 0.5, "paper": true,
   "watchlists": {"stocks": ["TSLA", "NVDA", "AAPL"], "crypto": ["BTCUSDT", "ETHUSDT"], "meme": []},
   "sec_user_agent": "Jane Doe jane@example.org",
-  "autopilot": {"enabled": false, "broker": "simulator", "mode": "paper", "max_new_trades_per_day": 3},
-  "news": {"x": {"enabled": true, "max_reads_per_day": 300, "poll_minutes": 15}}
+  "autopilot": {"enabled": false, "broker": "simulator", "mode": "paper", "max_new_trades_per_day": 3,
+                "universe": {"mode": "auto", "stocks": {"top_n": 40}, "crypto": {"top_n": 20}, "exclude": []}},
+  "news": {"x": {"enabled": true, "max_reads_per_day": 300, "poll_minutes": 15}},
+  "notify": {"enabled": false, "ntfy_topic": "", "telegram": false},
+  "ai_desk": {"enabled": false, "model": "claude-opus-5-5", "max_usd_per_day": 3.0}
 }
 ```
+
+Every other knob (news gate tags and lookbacks, learning thresholds, scan budget …) is listed in
+`docs/SCHEMAS.md` and `trader-autopilot/SKILL.md`.
 
 Keys and passwords go in environment variables or `trader/secrets.env` (never in git; `chmod 600` it):
 
@@ -103,6 +120,8 @@ ALPACA_PAPER_KEY_ID=...          # free paper account: alpaca.markets → Paper 
 ALPACA_PAPER_SECRET_KEY=...
 X_BEARER_TOKEN=...               # optional: X developer account, pay-per-use
 TRADER_DASHBOARD_PASSWORD=...    # only needed to open the dashboard from your phone
+TELEGRAM_BOT_TOKEN=...           # optional: notifications via your own Telegram bot (+ TELEGRAM_CHAT_ID)
+ANTHROPIC_API_KEY=...            # optional: the AI desk (pip install anthropic)
 ```
 
 Nothing ever prints, logs or returns a key — the dashboard only shows "set / not set".
@@ -119,25 +138,56 @@ Nothing ever prints, logs or returns a key — the dashboard only shows "set / n
 * Everything lands in one ranked, deduplicated `trader/news_feed.json` (the same story from Yahoo and
   X becomes one item), shown in the dashboard's News tab.
 
-## Running it for real
+### Optional AI desk (Claude, veto-only)
+
+The rule-based desk reads numbers; it can't read a headline, an 8-K or a tweet and judge what it
+means. Set `ai_desk.enabled: true`, `pip install anthropic` and put `ANTHROPIC_API_KEY` in your
+environment or `trader/secrets.env`, and every trade the rules already cleared gets a second look: an
+AI Skeptic (default model `claude-opus-5-5`) tries to prove it wrong from the case — plan, backtest,
+Time Machine, news and filings — then an AI Lead answers each objection and decides GO / NO-GO / WAIT.
+It can only stop a trade: it never runs on, or revives, an idea the rules rejected. Headlines, posts
+and filings are passed to it as untrusted data, never as instructions. Spending is capped per day
+(`max_calls_per_day`, default 40 calls = 20 reviews; `max_usd_per_day`, default $3 — roughly
+$0.10–0.20 per review) and logged in `trader/ai_usage.json`. If it is off, offline, out of budget or
+failing, `ai_desk.on_unavailable` decides: `rule_based` keeps the rule-based decision, `skip` places no
+trade. Try it by hand: `python3 trader-desk/ai_desk.py --id <idea>`. The rest of the pack never needs
+the SDK.
+
+## Running it for real — 24/7
 
 ```bash
-python3 app/server.py --autopilot           # dashboard + autopilot loop (simulator by default)
-python3 trader-autopilot/autopilot.py status
+python3 trader-autopilot/autopilot.py daemon --approve   # the bot, around the clock (one per trader/ folder)
+python3 app/server.py                                    # the dashboard, in another terminal
+python3 trader-autopilot/autopilot.py status             # alive? what is it doing?
+python3 trader-autopilot/autopilot.py universe           # what it watches and why
+python3 trader-autopilot/autopilot.py learned            # what its own trades taught it
 python3 trader-autopilot/autopilot.py kill --confirm KILL
 ```
 
-The autopilot only trades while it runs, so the computer has to stay on during market hours (crypto:
-24/7). For always-on use, run it on a small VPS as a systemd service — a sample unit file is in
-`trader-autopilot/SKILL.md`. To open the dashboard from your phone on the same Wi-Fi:
-`TRADER_DASHBOARD_PASSWORD='…' python3 app/server.py --host 0.0.0.0 --autopilot`.
+The bot only trades while it runs, so for 24/7 it belongs on a small always-on server, not a laptop
+that sleeps. `deploy/` has everything for a ~5 €/month Linux VPS: `install-vps.sh` (two systemd
+services, a dedicated user, secrets in `/etc/trader/trader.env`), a `docker-compose.yml` alternative,
+a Caddy config for HTTPS, and a step-by-step guide in Slovak (`deploy/NAVOD.sk.md`). The dashboard
+stays on 127.0.0.1 — open it through an SSH tunnel, or behind Caddy with a password.
+
+**What "24/7" does:** every minute the daemon syncs the broker, manages exits and the kill switch; every
+closed 5-minute bar it scans its universe (crypto always, stocks 9:30–15:30 ET); between cycles it
+refreshes the news feed in the background. It writes a heartbeat (the dashboard shows *alive* /
+*stale*), holds a lock so two copies can't trade one account, backs off and notifies you when cycles
+keep failing, and stops cleanly on SIGTERM.
+
+**Phone notifications:** set `notify.enabled: true` and either an [ntfy](https://ntfy.sh) topic (free
+app, no account — use a long random topic name) or your own Telegram bot. You get trade opened/closed,
+kill switch, drawdown pause, what it learned, repeated errors and a daily summary after the US close.
+`autopilot.py notify-test` checks the setup.
 
 ## Dashboard
 
 A local web app over the `trader/` folder (stdlib server, no CDN, dark/light, built for phones):
 Overview (equity curve, P&L today/total, win rate, expectancy, positions, latest decisions, top news,
-desk verdicts) · Trades (every trade with a candle chart, entry/exit, stop/target, R, fees) · Bot
-(status, pause / resume / run once / KILL, mode and what live would need, gates, decision timeline) ·
+desk verdicts, bot heartbeat and trading sessions) · Trades (every trade with a candle chart, entry/exit, stop/target, R, fees) · Bot
+(status, pause / resume / run once / KILL, mode and what live would need, gates, decision timeline,
+the universe with reasons, what it learned, notifications, AI desk spend) ·
 News (X, StockTwits, news, SEC with importance and sentiment) · Setups · Reports.
 
 Security: binds to 127.0.0.1 unless you give a password; every button needs a per-session CSRF token;
@@ -265,7 +315,7 @@ key or a deposit are a common scam. This tool only watches.
 ```
 manual (stocks / crypto):  scanner → news → entry → exit → backtest → timemachine → DESK → sizer → risk → broker (your yes) → journal
 meme coins:                scanner → rugcheck → news → entry → exit → timemachine → DESK → sizer → risk → manual checklist → journal
-autopilot:                 the same chain, every cycle, for your watchlist — orders only on GO + risk PASS (simulator / paper by default)
+autopilot (24/7):          own universe → the same chain + just-in-time news & filings + its own record → DESK (+ AI veto) → orders only on GO + risk PASS
 always on:                 dashboard · alerts · news feed (stocks in market hours, crypto & meme 24/7)
 ```
 
@@ -275,6 +325,7 @@ always on:                 dashboard · alerts · news feed (stocks in market ho
 |---|---|---|
 | Stock candles & quotes | Yahoo Finance chart JSON | Stooq CSV |
 | Stock universe | SEC `company_tickers_exchange.json` | Nasdaq Trader symbol directory |
+| Autopilot universe | built-in ~150 liquid US names ranked by Yahoo spark · Yahoo most actives / day gainers · CoinGecko by volume | the watchlists |
 | Stock news / filings | Yahoo & Google News RSS · SEC EDGAR 8-K (User-Agent with name + e-mail) | — |
 | Crypto candles & quotes | Binance (`api.binance.com`) | `data-api.binance.vision` mirror → Coinbase → Kraken |
 | Crypto universe · funding & OI | CoinGecko · Binance futures | Binance tickers · OKX |
@@ -282,6 +333,8 @@ always on:                 dashboard · alerts · news feed (stocks in market ho
 | Meme pairs · candles · safety | DexScreener · GeckoTerminal · RugCheck / honeypot.is | next-deepest pool |
 | Social | **X API (your token, pay-per-use)** · StockTwits (free) | — |
 | Trading | Local simulator · **Alpaca** (free paper account; live by explicit opt-in) | — |
+| Notifications | ntfy.sh (free) · Telegram Bot API (your bot) | — |
+| AI desk (optional) | Claude API (your key, pay-per-use, daily budget) | the rule-based desk |
 
 `api.binance.com` and Binance futures answer HTTP 451 from some countries; the data layer notices and
 moves on to the mirror / OKX automatically.
@@ -305,7 +358,12 @@ format, so offline runs go through the same parsing code as live runs. `--now` p
 * **The Time Machine is not a prediction.** It resamples ordinary bars, so it cannot see the conditional
   behaviour after a breakout, news shocks, halts or gaps; a fair 2:1 bracket replays to about 0R.
 * **The autopilot is simple on purpose:** long only, one position per symbol, bracket exits, no
-  pre/after-market. It is as good as the edge in your rules — which you have to prove on paper first.
+  pre/after-market or overnight stock trading. It is as good as the edge in your rules — which you have
+  to prove on paper first. "Learning" means pausing what lost and trading smaller after losses; it does
+  not invent new strategies.
+* **The news gate reads headline tags, not meaning.** It catches the obvious (a dilution 8-K, a hack);
+  the optional AI desk reads the text, but it can be wrong too, and neither sees news that isn't
+  published yet. SEC filings need `sec_user_agent` set to your name and e-mail.
 * **X costs money and its timeline is noisy;** StockTwits is crowd mood. Neither is a signal by itself.
 * **Meme-coin data can be manipulated** (wash trading, hidden insiders, expiring LP locks). A clean
   rugcheck means "no red flags found in these checks", nothing more.
@@ -320,8 +378,10 @@ trader-skill/
   trader-desk/ trader-arb/ trader-autopilot/
   agents/        trader-researcher.md, trader-skeptic.md, trader-lead.md (the desk's subagents)
   app/           server.py + static/ (the dashboard), devdata.py (sample data)
+  deploy/        Dockerfile, docker-compose.yml, systemd units, install-vps.sh, Caddyfile, guides (EN + SK)
   shared/        data.py, sources/* (incl. x.py, stocktwits.py), brokers/ (simulator, alpaca), symbols, market_clock,
-                 setups, trade_sim, indicators, cache, http, offline, secrets, html, cli
+                 setups, trade_sim, indicators, cache, http, offline, secrets, html, cli,
+                 universe (what the autopilot watches), adapt (what it learned), notify (ntfy / Telegram)
   tests/         test_*.py, fixtures/ (make_fixtures.py regenerates them)
   docs/SCHEMAS.md  every trader/ state file, field by field
   scripts/demo.py  the walkthroughs, offline (scripts/demo.sh wraps it)

@@ -1,8 +1,8 @@
 """API keys and passwords: environment first, then trader/secrets.env — never git, never logs.
 
-Only the autopilot (broker keys), the X source (bearer token) and the dashboard (password) read
-secrets. Nothing ever prints, logs or returns a secret's value — use ``masked()`` to show
-that one is set.
+Only the autopilot (broker keys), the X source (bearer token), notifications (Telegram / ntfy),
+the optional AI desk (Anthropic key) and the dashboard (password) read secrets. Nothing ever
+prints, logs or returns a secret's value — use ``masked()`` to show that one is set.
 """
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ import stat
 from . import config
 
 KNOWN = ("ALPACA_PAPER_KEY_ID", "ALPACA_PAPER_SECRET_KEY", "ALPACA_LIVE_KEY_ID", "ALPACA_LIVE_SECRET_KEY",
-         "X_BEARER_TOKEN", "TRADER_DASHBOARD_PASSWORD")
+         "X_BEARER_TOKEN", "TRADER_DASHBOARD_PASSWORD", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "NTFY_TOKEN",
+         "ANTHROPIC_API_KEY")
 
 
 def _file_values() -> dict:

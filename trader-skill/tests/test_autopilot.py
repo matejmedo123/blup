@@ -21,6 +21,11 @@ class Day(TraderTestCase):
     """The fixture day: NVDA's breakout is backed by its history, TSLA's and BTC's are not."""
     NOW = "2026-10-20T13:45:00Z"
 
+    def setUp(self):
+        super().setUp()
+        config.ensure_home()
+        self.cfg(universe={"mode": "watchlist"})  # the v2 scenario: just the watchlists (test_autopilot_v3 covers auto)
+
     def cfg(self, **autopilot):
         doc = json.loads((self.home / "config.json").read_text()) if (self.home / "config.json").exists() else {}
         doc.setdefault("autopilot", {}).update(autopilot)
@@ -109,7 +114,7 @@ class Day(TraderTestCase):
     def test_meme_never_traded(self):
         config.ensure_home()
         doc = json.loads((self.home / "config.json").read_text())
-        doc["autopilot"] = {"assets": ["stock", "crypto", "meme"]}
+        doc["autopilot"] = {"assets": ["stock", "crypto", "meme"], "universe": {"mode": "watchlist"}}
         doc["watchlists"] = {"stocks": [], "crypto": [], "meme": [MEME_PASS]}
         (self.home / "config.json").write_text(json.dumps(doc))
         self.cycle("2026-10-20T15:55:00Z")

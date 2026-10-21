@@ -23,6 +23,7 @@ KEYS = {"paper": ("ALPACA_PAPER_KEY_ID", "ALPACA_PAPER_SECRET_KEY"),
         "live": ("ALPACA_LIVE_KEY_ID", "ALPACA_LIVE_SECRET_KEY")}
 TIMEOUT = 15
 QUOTES = ("USDT", "USDC", "USD", "BTC")
+TRADABLE_TTL = 6 * 3600
 
 
 def _fmt_price(x: float, asset: str, tick: float = None) -> str:
@@ -73,6 +74,8 @@ class AlpacaBroker(Broker):
                               "alpaca.markets → Paper Trading → API Keys)" % " and ".join(missing))
         self._key_name, self._secret_name = key_name, secret_name
         self.base = BASE[mode]
+        self._tradable = {}
+        self.notes = []
 
     # -- transport ---------------------------------------------------------------------------------
     def _headers(self) -> dict:
@@ -212,6 +215,35 @@ class AlpacaBroker(Broker):
         return {"is_open": bool(c.get("is_open")), "next_open": c.get("next_open"), "next_close": c.get("next_close")}
 
     # -- writes --------------------------------------------------------------------------------------
+    def tradable(self, asset: str):
+        """Crypto: the active Alpaca crypto assets ("BTC/USD" → "BTC"); stocks: no restriction.
+
+        A failed lookup returns None (no filter) and leaves a note — a missing asset list must
+        never stop the autopilot from trading what it already trades.
+        """
+        if asset != "crypto":
+            return None
+        now = time.time()
+        hit = self._tradable.get(asset)
+        if hit and now - hit[0] < TRADABLE_TTL:
+            return set(hit[1])
+        try:
+            rows = self._get("/v2/assets?asset_class=crypto&status=active", retries=1)
+        except BrokerError as exc:
+            self.notes.append("Alpaca crypto asset list unavailable: %s" % exc)
+            return set(hit[1]) if hit else None
+        bases = set()
+        for r in rows or []:
+            if not isinstance(r, dict) or r.get("tradable") is False:
+                continue
+            sym = str(r.get("symbol") or "").upper()
+            base = sym.split("/", 1)[0] if "/" in sym else next(
+                (sym[: -len(q)] for q in QUOTES if sym.endswith(q) and len(sym) > len(q)), sym)
+            if base:
+                bases.add(base)
+        self._tradable[asset] = (now, bases)
+        return set(bases)
+
     def _tick(self, symbol: str, asset: str):
         if asset == "stock":
             return None

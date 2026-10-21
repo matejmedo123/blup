@@ -640,8 +640,11 @@ def _refresh_feed(assets, raw_symbols, now) -> dict:
     merged.sort(key=lambda it: it.get("published") or "", reverse=True)
     cap = int(news_cfg.get("feed_max_items") or 500)
     seen_list = [i for i in doc.get("seen_ids") or [] if i] + new_ids
+    refreshed = dict(doc.get("refreshed") or {})
+    for scope in (["stock:%s" % t for t in stocks] + ["crypto:%s" % c for c in coins] + ["meme:%s" % m for m in memes]):
+        refreshed[scope] = market_clock.iso(now)
     doc.update({"updated_at": market_clock.iso(now), "items": merged[:cap], "sources": status,
-                "seen_ids": seen_list[-FEED_SEEN_IDS:]})
+                "seen_ids": seen_list[-FEED_SEEN_IDS:], "refreshed": refreshed})
     state.write_json(FEED_FILE, doc)
     return {"new": new, "items": len(doc["items"]), "sources": status, "updated_at": doc["updated_at"]}
 

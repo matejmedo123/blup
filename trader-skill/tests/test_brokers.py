@@ -226,6 +226,30 @@ class Alpaca(TraderTestCase):
                          [("p", None, None), ("s", "stop", "p"), ("t", "target", "p")])
 
 
+    def test_tradable_crypto_assets_cached_and_failure_tolerant(self):
+        assets = [{"symbol": "BTC/USD", "class": "crypto", "tradable": True},
+                  {"symbol": "ETH/USD", "class": "crypto", "tradable": True},
+                  {"symbol": "DOGEUSD", "class": "crypto", "tradable": True},
+                  {"symbol": "XYZ/USD", "class": "crypto", "tradable": False}]
+        b = self.broker()
+        with self.fake([assets]):
+            self.assertEqual(b.tradable("crypto"), {"BTC", "ETH", "DOGE"})
+            self.assertEqual(b.tradable("crypto"), {"BTC", "ETH", "DOGE"})  # cached: one request
+            self.assertIsNone(b.tradable("stock"))
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.calls[0]["url"],
+                         "https://paper-api.alpaca.markets/v2/assets?asset_class=crypto&status=active")
+        err = urllib.error.HTTPError("u", 500, "err", {}, io.BytesIO(b"{}"))
+        b2 = self.broker()
+        with self.fake([err, err]), mock.patch("time.sleep"):
+            self.assertIsNone(b2.tradable("crypto"))
+        self.assertIn("asset list unavailable", b2.notes[0])
+
+    def test_simulator_trades_anything(self):
+        from shared.brokers.simulator import SimBroker
+        self.assertIsNone(SimBroker(config.load_config()).tradable("crypto"))
+
+
 class Readiness(TraderTestCase):
     def test_live_needs_every_step(self):
         cfg = config.load_config()

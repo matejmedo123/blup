@@ -208,6 +208,13 @@ class Feed(SocialCase):
         self.assertEqual(res2["new"], 0)
         self.assertEqual(len(doc2["items"]), 5)
 
+    def test_refreshed_per_symbol(self):
+        _, _, doc = self.feed(symbols=["TSLA", "BTCUSDT"])
+        self.assertEqual(doc["refreshed"], {"stock:TSLA": self.NOW, "crypto:BTC": self.NOW})
+        self.set_now("2026-10-20T14:55:00Z")
+        _, _, doc = self.feed(symbols=["TSLA"])
+        self.assertEqual(doc["refreshed"], {"stock:TSLA": "2026-10-20T14:55:00Z", "crypto:BTC": self.NOW})
+
     def test_one_crowd_summary_per_symbol(self):
         self.feed(symbols=["TSLA"])
         self.set_now("2026-10-20T15:05:00Z")

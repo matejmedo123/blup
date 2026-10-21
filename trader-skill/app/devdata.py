@@ -3,7 +3,9 @@
 
 Writes autopilot/state.json, autopilot/control.json, autopilot/decisions.jsonl, broker/equity.jsonl,
 broker/positions.json, broker/orders.json, news_feed.json and x_usage.json into a trader/ folder
-(and a few journal trades if there is no journal yet). Nothing here is real market data.
+(and a few journal trades if there is no journal yet) — plus the v3 files: autopilot/heartbeat.json,
+autopilot/universe.json, autopilot/scan.json, autopilot/adapt.json, notifications.jsonl, ai_usage.json
+and one desk/<id>/ai.json. Nothing here is real market data.
 
     python3 app/devdata.py --home /tmp/trader-sample
 """
@@ -102,6 +104,24 @@ def generate(home, now_iso: str = "2026-10-20T19:30:00Z", seed: int = 3) -> Path
         {"at": at(17, 45), "id": "NVDA-%s-orb15" % today.strftime("%Y%m%d"), "symbol": "NVDA", "asset": "stock",
          "setup": "orb15", "action": "skipped", "reasons": ["already in a position from this setup today"],
          "gates": [], "order_id": None},
+        {"at": at(18, 5), "id": "SOFI-%s-gap_and_go" % today.strftime("%Y%m%d"), "symbol": "SOFI", "asset": "stock",
+         "setup": "gap_and_go", "action": "skipped",
+         "reasons": ["desk NO-GO: news & filings: 8-K item 3.02 (unregistered sale of equity — possible dilution) "
+                     "filed 2 h ago (SEC EDGAR)"],
+         "desk": {"status": "NO-GO", "objections": 2},
+         "gates": [_gate("news & filings", False, "1 critical item in the last 24 h: dilution (SEC EDGAR)")],
+         "order_id": None, "entry": 15.42, "stop": 15.11, "target": 16.04},
+        {"at": at(18, 20), "id": "SOLUSDT-%s-asia_range" % today.strftime("%Y%m%d"), "symbol": "SOLUSDT",
+         "asset": "crypto", "setup": "asia_range", "action": "skipped",
+         "reasons": ["learned: crypto:asia_range sits out until %s — expectancy -0.42R over 9 autopilot trades"
+                     % _iso(now + timedelta(days=5))[:10]],
+         "gates": [], "order_id": None},
+        {"at": at(18, 50), "id": "AMD-%s-orb30" % today.strftime("%Y%m%d"), "symbol": "AMD", "asset": "stock",
+         "setup": "orb30", "action": "skipped",
+         "reasons": ["AI desk NO-GO: O1 [major] the breakout runs straight into tomorrow's earnings — "
+                     "the backtest never held through an earnings release"],
+         "desk": {"status": "GO", "objections": 1}, "gates": gates_ok, "order_id": None,
+         "entry": 162.30, "stop": 160.85, "target": 165.20},
     ]
     for d in decisions:
         d["sample"] = True
@@ -196,6 +216,11 @@ def generate(home, now_iso: str = "2026-10-20T19:30:00Z", seed: int = 3) -> Path
     _write(home / "x_usage.json", {"date": today.isoformat(), "reads": 124, "requests": 13, "max_reads_per_day": 300,
                                    "sample": True})
 
+    _write_v3(home, now, today, decisions)
+    if not (home / "config.json").exists():  # only a fresh sample folder — never touch a real config
+        _write(home / "config.json", {"sample": True, "notify": {"enabled": True,
+                                                                 "ntfy_topic": "trader-sample-k3v9x2m8q7w1z5"}})
+
     journal = home / "journal.json"
     if not journal.exists():
         def tr(i, sym, asset, setup, e_t, e_p, x_t, x_p, reason, qty, stop, target, unit="shares"):
@@ -220,6 +245,109 @@ def generate(home, now_iso: str = "2026-10-20T19:30:00Z", seed: int = 3) -> Path
             tr(4, "NVDA", "stock", "orb15", at(13, 55), 194.49, at(17, 0), 196.80, "target", 32, 192.10, 196.80),
         ]})
     return home
+
+
+SAMPLE_STOCKS = [
+    ("NVDA", "watchlist"), ("TSLA", "watchlist"), ("AAPL", "watchlist"), ("AMD", "watchlist"), ("META", "watchlist"),
+    ("SOFI", "most active today: 81M shares"), ("PLTR", "top mover: gap +3.4% · move +2.1%"),
+    ("SMCI", "day gainer: +8.7%"), ("MU", "top mover: gap +2.9% · move +1.6%"), ("COIN", "top mover: gap -3.1% · move +2.4%"),
+    ("MSFT", "top mover: gap +0.8% · move +1.9%"), ("AMZN", "top mover: gap +1.2% · move +1.1%"),
+    ("GOOGL", "top mover: gap +0.6% · move +1.5%"), ("AVGO", "top mover: gap +1.9% · move +0.9%"),
+    ("NFLX", "top mover: gap -2.2% · move +1.0%"), ("INTC", "most active today: 64M shares"),
+    ("F", "most active today: 52M shares"), ("RIVN", "day gainer: +6.1%"), ("MARA", "top mover: gap +4.0% · move -1.2%"),
+    ("UBER", "top mover: gap +1.1% · move +1.3%"), ("SHOP", "top mover: gap +2.4% · move +0.7%"),
+    ("CRM", "top mover: gap -1.5% · move +1.4%"), ("ORCL", "top mover: gap +1.0% · move +1.2%"),
+    ("BA", "top mover: gap -1.8% · move +0.9%"), ("JPM", "top mover: gap +0.4% · move +1.0%"),
+]
+SAMPLE_CRYPTO = [
+    ("BTCUSDT", "watchlist"), ("ETHUSDT", "watchlist"), ("SOLUSDT", "watchlist"),
+    ("XRPUSDT", "top 20 by 24h volume ($2.1B)"), ("DOGEUSDT", "top 20 by 24h volume ($1.4B)"),
+    ("BNBUSDT", "top 20 by 24h volume ($0.9B)"), ("ADAUSDT", "top 20 by 24h volume ($0.6B)"),
+    ("LINKUSDT", "top 20 by 24h volume ($0.5B)"), ("AVAXUSDT", "top 20 by 24h volume ($0.4B)"),
+    ("SUIUSDT", "top 20 by 24h volume ($0.4B)"), ("LTCUSDT", "top 20 by 24h volume ($0.3B)"),
+    ("TRXUSDT", "top 20 by 24h volume ($0.3B)"),
+]
+
+
+def _write_v3(home: Path, now: datetime, today, decisions) -> None:
+    """Heartbeat, universe, scan progress, what it learned, notifications and AI desk usage."""
+    bar = int(now.timestamp()) // 300 * 300 - 300
+    _write(home / "autopilot" / "heartbeat.json", {
+        "sample": True, "at": _iso(now - timedelta(seconds=20)), "pid": 4242, "host": "vps-sample", "runner": "daemon",
+        "started_at": _iso(now - timedelta(days=2, hours=3)), "cycle": 3121, "status": "running", "interval_sec": 60,
+        "next_cycle": _iso(now + timedelta(seconds=40)), "universe": {"stock": len(SAMPLE_STOCKS), "crypto": len(SAMPLE_CRYPTO)},
+        "scan": {"stock": "%d/%d" % (len(SAMPLE_STOCKS) - 7, len(SAMPLE_STOCKS)),
+                 "crypto": "%d/%d" % (len(SAMPLE_CRYPTO), len(SAMPLE_CRYPTO))},
+        "sessions": {"crypto": "open 24/7", "stock": "open"}})
+    _write(home / "autopilot" / "universe.json", {
+        "sample": True, "generated_at": _iso(now - timedelta(minutes=12)), "mode": "auto",
+        "stock": {"symbols": [s for s, _ in SAMPLE_STOCKS], "refreshed_at": _iso(now - timedelta(minutes=12)),
+                  "source": "built-in liquid list ranked by Yahoo spark + Yahoo movers", "candidates": 152,
+                  "reasons": dict(SAMPLE_STOCKS)},
+        "crypto": {"symbols": [s for s, _ in SAMPLE_CRYPTO], "refreshed_at": _iso(now - timedelta(hours=2, minutes=5)),
+                   "source": "CoinGecko top by volume", "candidates": 40, "reasons": dict(SAMPLE_CRYPTO)},
+        "excluded": {"USDCUSDT": "stablecoin", "FDUSDUSDT": "stablecoin", "WBTCUSDT": "wrapped token",
+                     "STETHUSDT": "wrapped token", "GME": "exclude list (autopilot.universe.exclude)",
+                     "PENNY": "market cap below $2B"},
+        "warnings": ["Yahoo spark failed for 1 of 8 batches — those names keep yesterday's rank"]})
+    _write(home / "autopilot" / "scan.json", {
+        "sample": True,
+        "stock": {"bar": bar, "done": [s for s, _ in SAMPLE_STOCKS][:-7], "total": len(SAMPLE_STOCKS),
+                  "finished_at": None},
+        "crypto": {"bar": bar, "done": [s for s, _ in SAMPLE_CRYPTO], "total": len(SAMPLE_CRYPTO),
+                   "finished_at": _iso(now - timedelta(seconds=95))}})
+    until_setup = _iso(now + timedelta(days=5))
+    until_sym = _iso(now + timedelta(days=3))
+    _write(home / "autopilot" / "adapt.json", {
+        "sample": True, "updated_at": _iso(now - timedelta(seconds=20)), "enabled": True,
+        "setups": {
+            "stock:orb15": {"trades": 14, "wins": 7, "expectancy_r": 0.21, "status": "active", "until": None,
+                            "since": None, "reason": "net +0.21R over 14 trades — keeps trading"},
+            "stock:vwap_reclaim": {"trades": 6, "wins": 3, "expectancy_r": 0.05, "status": "active", "until": None,
+                                   "since": None, "reason": "6 of 8 trades needed before the record counts"},
+            "crypto:asia_range": {"trades": 9, "wins": 2, "expectancy_r": -0.42, "status": "paused",
+                                  "until": until_setup, "since": _iso(now - timedelta(days=2)),
+                                  "reason": "net -0.42R over 9 trades (limit -0.25R) — sits out 7 days"},
+            "crypto:momentum": {"trades": 8, "wins": 4, "expectancy_r": 0.12, "status": "active", "until": None,
+                                "since": None, "reason": "net +0.12R over 8 trades — keeps trading"}},
+        "symbols": {
+            "TSLA": {"loss_streak": 3, "status": "cooldown", "until": until_sym,
+                     "reason": "3 losses in a row on TSLA — sits out 5 days"},
+            "ETHUSDT": {"loss_streak": 1, "status": "active", "until": None, "reason": "1 loss in a row"}},
+        "loss_streak": 3, "risk_mult": 0.5, "risk_reason": "3 losing trades in a row — half size until the next win",
+        "equity_peak": 25480.0, "equity": 24893.5, "drawdown_pct": 2.3, "drawdown_pause": False,
+        "events": [
+            {"at": _iso(now - timedelta(days=2)), "kind": "setup_paused",
+             "text": "crypto:asia_range paused for 7 days: net -0.42R over 9 trades"},
+            {"at": _iso(now - timedelta(days=1, hours=2)), "kind": "symbol_cooldown",
+             "text": "TSLA sits out 5 days after 3 losses in a row"},
+            {"at": _iso(now - timedelta(hours=5)), "kind": "risk_reduced",
+             "text": "3 losing trades in a row — risk per trade × 0.5 until the next win"}]})
+    notes = [
+        ("started", "Autopilot started", "daemon on vps-sample · simulator · 25 stocks + 12 crypto", 26 * 60),
+        ("trade_opened", "NVDA bought 32 @ $194.49", "orb15 · stop $192.10 · target $199.27 · simulator", 5 * 60 + 35),
+        ("learned", "Risk halved", "3 losing trades in a row — risk per trade × 0.5 until the next win", 5 * 60),
+        ("trade_opened", "ETH/USD bought 1.0362 @ $2,412.55", "momentum · stop $2,398.10 · target $2,441.45", 4 * 60 + 25),
+        ("trade_closed", "NVDA closed +0.97R", "target $196.80 · P&L +$73.92", 2 * 60 + 30),
+        ("error", "Yahoo Finance rate-limited", "5 cycles in a row could not load stock candles — retrying", 3 * 60 + 18),
+    ]
+    rows = []
+    for event, title, text, minutes_ago in sorted(notes, key=lambda n: -n[3]):
+        rows.append({"at": _iso(now - timedelta(minutes=minutes_ago)), "event": event, "title": "SAMPLE: " + title,
+                     "text": text, "priority": "high" if event in ("error", "kill", "paused") else "default",
+                     "channels": {"ntfy": "sent", "telegram": "off"}, "suppressed": None, "sample": True})
+    _write_jsonl(home / "notifications.jsonl", rows)
+    _write(home / "ai_usage.json", {"sample": True, "days": {
+        (today - timedelta(days=1)).isoformat(): {"calls": 4, "input_tokens": 10800, "output_tokens": 1900, "usd": 0.081},
+        today.isoformat(): {"calls": 6, "input_tokens": 15600, "output_tokens": 2800, "usd": 0.118}}})
+    amd = [d for d in decisions if d["setup"] == "orb30"]
+    if amd:
+        _write(home / "desk" / amd[0]["id"] / "ai.json", {
+            "sample": True, "at": amd[0]["at"], "model": "claude-opus-5-5", "status": "NO-GO", "reason": None,
+            "objections": [{"n": 1, "severity": "major", "text": "the breakout runs straight into tomorrow's earnings — "
+                                                                 "the backtest never held through an earnings release"}],
+            "decision_text": "DECISION: NO-GO", "usage": {"calls": 2, "input_tokens": 5200, "output_tokens": 900,
+                                                          "usd": 0.039}})
 
 
 def main(argv=None) -> int:

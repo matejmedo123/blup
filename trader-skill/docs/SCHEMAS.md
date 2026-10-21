@@ -407,3 +407,156 @@ orders: `[{"id": "...", "client_order_id": "...", "symbol": "...", "side": "buy|
 as "new") and `meme_snapshots`; items may carry `score`, `credibility`, `also`, `x_id`, `wire`, `followers`,
 `verified` and `crowd_summary` (one StockTwits mood line per symbol).
 ### `x_usage.json` — `{"date": "2026-10-20", "reads": 120, "requests": 12, "max_reads_per_day": 300}`
+
+## v3 — 24/7 daemon, self-picked universe, news/filings gate, learning from its own record, notifications, optional AI desk
+
+Principles that do not change: the database of record is the `trader/` folder; meme coins are never
+auto-traded; nothing touches wallets, keys or seed phrases; live money still needs the five-step opt-in;
+every new layer can only make the autopilot **more** careful (a veto), never wave through a trade that a
+hard gate rejected.
+
+### Trading hours (no config — this is the design)
+* **Crypto: 24/7.** New entries any time, every day.
+* **US stocks: regular session only** — new entries 9:30–15:30 ET on NYSE trading days, flat by 15:55 ET.
+  Pre-market, after-hours and Alpaca's overnight session are deliberately not traded: every stock setup
+  and every backtest in this pack is built on regular-session bars, extended-hours liquidity is thin and
+  the broker only takes plain limit orders there (no brackets). Outside the session the daemon keeps
+  trading crypto, refreshing news and filings, and rebuilding the stock universe for the next open.
+
+### `config.json` additions
+```json
+"autopilot": {
+  "universe": {
+    "mode": "auto",                 // "auto" = the autopilot picks its own symbols; "watchlist" = v2 behaviour
+    "stocks": {"top_n": 40, "refresh_minutes": 60, "base": null,       // null = built-in list of ~150 liquid US names
+               "include_movers": true, "max_movers": 10,              // Yahoo "most actives" + "day gainers"
+               "min_market_cap_usd": 2000000000},                     // movers below this are ignored
+    "crypto": {"top_n": 20, "refresh_minutes": 240, "min_volume_usd": 50000000},
+    "always": [],                   // always watched (on top of watchlists.stocks / watchlists.crypto)
+    "exclude": []                   // never watched
+  },
+  "scan_time_budget_sec": 40,       // per cycle; symbols not reached roll over to the next cycle of the same bar
+  "news_gate": {
+    "enabled": true,
+    "refresh_before_trade": true,   // fetch the latest headlines + SEC filings for the symbol right before judging
+    "refresh_max_age_minutes": 10,  // …unless they were fetched less than this long ago
+    "lookback_hours": {"stock": 24, "crypto": 12},
+    "market_hours": 6,              // market-wide crypto items (hack, delisting, macro) this recent count too
+    "min_credibility": 2,           // StockTwits / small X accounts (credibility 1) never block a trade
+    "critical_tags": {"stock": ["offering", "dilution", "bankruptcy", "delisting", "restatement"],
+                      "crypto": ["hack", "delisting"]},
+    "major_tags": {"stock": ["merger", "fda", "control"], "crypto": ["token_unlock"]}
+  },
+  "adapt": {
+    "enabled": true,
+    "min_trades": 8,                // per setup and asset class, before the record counts
+    "disable_below_r": -0.25,       // net expectancy at or below this → the setup is paused for that asset
+    "cooldown_days": 7,             // …for this long; afterwards it starts with a clean slate
+    "symbol_loss_streak": 3,        // this many losses in a row on one symbol → that symbol sits out
+    "symbol_cooldown_days": 5,
+    "loss_streak": 3,               // this many losses in a row overall → risk per trade × loss_streak_risk_mult
+    "loss_streak_risk_mult": 0.5,   // …until the next winning trade
+    "max_drawdown_pct": 10          // equity this far below its peak → the autopilot pauses itself; resume resets the peak
+  }
+},
+"notify": {
+  "enabled": false,
+  "ntfy_topic": "",                 // https://ntfy.sh/<topic> — pick a long random topic, anyone who knows it can read it
+  "ntfy_server": "https://ntfy.sh",
+  "telegram": false,                // needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID secrets
+  "events": ["started", "stopped", "trade_opened", "trade_closed", "kill", "paused", "learned", "error",
+             "daily_summary"],
+  "daily_summary_et": "16:10",
+  "max_per_hour": 30
+},
+"ai_desk": {
+  "enabled": false,                 // optional: Claude reviews every trade the rule-based desk already passed
+  "model": "claude-opus-5-5",
+  "max_calls_per_day": 40,          // two calls (Skeptic + Lead) per reviewed trade
+  "max_usd_per_day": 3.0,
+  "timeout_sec": 120,
+  "on_unavailable": "rule_based"    // "rule_based" = fall back to the rule-based decision · "skip" = no trade
+}
+```
+
+### Secrets added
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NTFY_TOKEN` (optional, for a protected ntfy server),
+`ANTHROPIC_API_KEY` (only for the optional AI desk). Same rules as v2: environment first, then
+`trader/secrets.env`; never printed, logged, returned by the dashboard or put in a URL that gets logged.
+
+### `autopilot/universe.json` — written by `shared/universe.py`
+```json
+{"generated_at": "...", "mode": "auto|watchlist",
+ "stock":  {"symbols": ["NVDA", "TSLA"], "refreshed_at": "...", "source": "built-in liquid list ranked by Yahoo spark",
+            "candidates": 150, "reasons": {"NVDA": "watchlist", "AMD": "top mover: gap +3.1% · move +2.4%",
+                                           "SOFI": "most active today: 81M shares", "XYZ": "day gainer: +6.2%"}},
+ "crypto": {"symbols": ["BTCUSDT", "ETHUSDT"], "refreshed_at": "...", "source": "CoinGecko top by volume",
+            "candidates": 40, "reasons": {"BTCUSDT": "watchlist", "XRPUSDT": "top 20 by 24h volume ($2.1B)"}},
+ "excluded": {"USDCUSDT": "stablecoin", "WBTCUSDT": "wrapped token", "DOGEUSDT": "not tradable on alpaca"},
+ "warnings": ["Yahoo spark failed for 1 of 8 batches"]}
+```
+Symbols are data symbols (stock tickers, Binance-style `BASEUSDT` pairs). Watchlists and `always` are always
+included; `exclude` and `blocked_symbols` (limits.json) are always removed. If a refresh fails the previous
+list stays (with a warning); with no previous list it falls back to the watchlists.
+
+### `autopilot/scan.json` — scan progress per asset class (one full pass per closed 5-minute bar)
+`{"stock": {"bar": 1792000000, "done": ["NVDA", "TSLA"], "total": 40, "finished_at": "..."}, "crypto": {...}}`
+
+### `autopilot/adapt.json` — what the autopilot learned from its own closed trades
+```json
+{"updated_at": "...", "enabled": true,
+ "setups": {"stock:orb15": {"trades": 9, "wins": 3, "expectancy_r": -0.31, "status": "active|paused",
+                            "until": "...|null", "since": "...|null", "reason": "..."}},
+ "symbols": {"TSLA": {"loss_streak": 3, "status": "active|cooldown", "until": "...|null", "reason": "..."}},
+ "loss_streak": 3, "risk_mult": 0.5, "risk_reason": "3 losing trades in a row — half size until the next win",
+ "equity_peak": 25480.0, "equity": 24900.0, "drawdown_pct": 2.3, "drawdown_pause": false,
+ "events": [{"at": "...", "kind": "setup_paused|setup_resumed|symbol_cooldown|risk_reduced|risk_restored|drawdown_pause",
+             "text": "..."}]}
+```
+Only closed journal trades with `"source": "autopilot"` count, scored by `r_net` (falls back to `r_multiple`).
+A paused setup or cooling symbol is skipped with the reason in `decisions.jsonl`; after the cooldown only
+trades closed after `until` count toward the next decision. `events` keeps the last 100.
+
+### `autopilot/heartbeat.json` — written at the end of every cycle (daemon, dashboard thread or CLI)
+`{"at": "...", "pid": 1234, "host": "vps-1", "runner": "daemon|dashboard|cli|replay", "started_at": "...",
+  "cycle": 812, "status": "running|paused|killed|error|stopped", "interval_sec": 60, "next_cycle": "...",
+  "universe": {"stock": 40, "crypto": 20}, "scan": {"stock": "32/40", "crypto": "20/20"},
+  "sessions": {"crypto": "open 24/7", "stock": "open|closed|pre-market|after-hours|holiday|weekend"}}`
+The dashboard calls the bot **alive** when `at` is younger than 3 × `interval_sec` (minimum 3 minutes).
+
+### `autopilot/daemon.lock` — `{"pid": 1234, "host": "vps-1", "started_at": "..."}`; one daemon per `trader/` folder
+A lock whose pid is gone, or whose heartbeat is older than 10 minutes, is stale and gets taken over.
+
+### `autopilot/control.json` gains `"dd_reset_at": "..."` — written on resume; the drawdown peak only counts
+equity snapshots from that moment on.
+
+### `notifications.jsonl` — every notification, sent or not
+`{"at": "...", "event": "trade_closed", "title": "NVDA closed +0.80R", "text": "...", "priority": "default|high",
+  "channels": {"ntfy": "sent|error: …|off", "telegram": "sent|error: …|off"}, "suppressed": null}`
+Offline mode never sends anything (`"channels": {"ntfy": "offline — not sent", ...}`).
+
+### `news_feed.json` gains `"refreshed": {"stock:NVDA": "...", "crypto:BTC": "..."}` — when each symbol's
+sources were last fetched (the autopilot's just-in-time refresh reads it).
+
+### `desk/{id}/case.json` gains `"feed"` — the symbol's news-feed items inside the lookback (plus recent
+market-wide crypto items), newest first, max 15, each `{"id","title","source","kind","published","tags",
+"importance","credibility","sentiment","url","symbol"}`; `desk.json` gates gain a non-hard
+`"news & filings"` gate. Critical/major tags from `news_gate` become critical/major Skeptic objections.
+
+### `desk/{id}/ai.json`, `ai_skeptic.md`, `ai_lead.md` — written by the optional AI desk
+```json
+{"at": "...", "model": "claude-opus-5-5", "status": "GO|NO-GO|WAIT|unavailable|error",
+ "reason": "…why unavailable / error…", "objections": [{"n": 1, "severity": "critical|major|minor", "text": "..."}],
+ "decision_text": "...", "usage": {"calls": 2, "input_tokens": 5200, "output_tokens": 900, "usd": 0.039}}
+```
+### `ai_usage.json` — `{"days": {"2026-10-21": {"calls": 6, "input_tokens": 15000, "output_tokens": 2800, "usd": 0.12}}}`
+
+### Python module contracts added in v3
+* `universe.current(cfg, now=None, broker=None, force=False) -> {"stock": [...], "crypto": [...]}` —
+  refreshes stale sections and writes `autopilot/universe.json`; `universe.build(...)` same, always refreshes.
+* `adapt.evaluate(cfg, now=None) -> dict` (writes `adapt.json`, returns it plus `"new_events"` for this call) ·
+  `adapt.check(doc, asset, setup, symbol_key) -> (ok, reason)` · `adapt.risk_mult(doc) -> float`.
+* `notify.send(event, title, text, cfg=None, priority="default") -> dict` (never raises) · `notify.test(cfg)`.
+* `ai_desk.review(case, rule_result, cfg, client=None) -> dict` (trader-desk/ai_desk.py; never raises;
+  `client` lets tests pass a fake) · `ai_desk.available(cfg) -> (bool, reason)`.
+* `Broker.tradable(asset) -> set | None` — base symbols the broker can trade (`None` = no restriction).

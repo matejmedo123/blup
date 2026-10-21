@@ -302,6 +302,40 @@ def build_stocks():
     write("yahoo/spark.json", spark)
 
 
+def build_screeners():
+    """Yahoo "most actives" / "day gainers" for the autopilot's universe: the liquid names have chart
+    fixtures; MULN (under $2) and BYND (under $2B market cap) are there to be filtered out."""
+    spark = json.loads((OUT / "yahoo/spark.json").read_text(encoding="utf-8"))
+    info = {"TSLA": ("Tesla, Inc.", 1.16e12, 98e6), "NVDA": ("NVIDIA Corporation", 4.45e12, 182e6),
+            "PLTR": ("Palantir Technologies Inc.", 4.3e11, 61e6), "AAPL": ("Apple Inc.", 3.7e12, 52e6),
+            "META": ("Meta Platforms, Inc.", 1.78e12, 13e6), "AMD": ("Advanced Micro Devices, Inc.", 3.84e11, 48e6)}
+
+    def quote(t, price=None, prev=None, volume=None, name=None, mcap=None, avg=None):
+        if t in spark:
+            price, prev = spark[t]["close"][-1], spark[t]["chartPreviousClose"]
+            name, mcap, avg = info[t]
+            volume = volume or avg * 1.4
+        return {"symbol": t, "shortName": name, "quoteType": "EQUITY", "exchange": "NMS",
+                "regularMarketPrice": round(price, 2), "regularMarketPreviousClose": round(prev, 2),
+                "regularMarketChange": round(price - prev, 2),
+                "regularMarketChangePercent": round((price / prev - 1) * 100, 4),
+                "regularMarketVolume": int(volume), "averageDailyVolume3Month": int(avg),
+                "averageDailyVolume10Day": int(avg * 1.1), "marketCap": int(mcap)}
+
+    def doc(scr_id, title, quotes):
+        return {"finance": {"result": [{"id": scr_id, "title": title, "canonicalName": scr_id.upper(),
+                                        "count": len(quotes), "quotes": quotes}], "error": None}}
+
+    write("yahoo/screener_most_actives.json", doc("most_actives", "Most Actives", [
+        quote("NVDA", volume=241e6), quote("TSLA", volume=131e6),
+        quote("MULN", 0.31, 0.27, 388e6, "Mullen Automotive Inc.", 9.1e7, 205e6),
+        quote("PLTR", volume=94e6), quote("AAPL", volume=71e6)]))
+    write("yahoo/screener_day_gainers.json", doc("day_gainers", "Day Gainers", [
+        quote("MULN", 0.31, 0.27, 388e6, "Mullen Automotive Inc.", 9.1e7, 205e6),
+        quote("BYND", 6.42, 5.31, 42e6, "Beyond Meat, Inc.", 4.9e8, 9e6),
+        quote("NVDA", volume=241e6), quote("PLTR", volume=94e6), quote("AMD", volume=71e6)]))
+
+
 # --- crypto ---------------------------------------------------------------------------
 
 def crypto_sigma(t):
@@ -806,6 +840,7 @@ def build_news():
 
 def main():
     build_stocks()
+    build_screeners()
     btc = build_btc()
     build_alt("ETHUSDT", 22, 2380.0, 1900.0, "spike")
     build_alt("SOLUSDT", 23, 149.0, 21000.0, "vwap")

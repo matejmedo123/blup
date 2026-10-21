@@ -4,7 +4,7 @@
   'use strict';
 
   var CSRF = (document.querySelector('meta[name="trader-csrf"]') || {}).content || '';
-  var TABS = ['overview', 'trades', 'bot', 'news', 'setups', 'reports'];
+  var TABS = ['overview', 'trades', 'bot', 'brain', 'news', 'setups', 'reports'];
   var SVGNS = 'http://www.w3.org/2000/svg';
   var ASSET_LABEL = { stock: 'Stocks', crypto: 'Crypto', meme: 'Meme coins' };
   var REFRESH_MS = 10000;
@@ -126,6 +126,14 @@
     return (withDate || !sameDay) ? t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + time : time;
   }
   function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+  // the viewer's own clock and time zone — the server sends UTC ISO times
+  var TZ = (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'; } catch (e) { return 'local time'; } })();
+  function localDT(iso) {
+    var t = new Date(iso);
+    if (!isFinite(t.getTime())) return '—';
+    return t.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+  function secs(n) { n = num(n); return n === null ? '—' : (n < 90 ? Math.round(n) + 's' : dur(n)); }
 
   // ---------------------------------------------------------------- API
   function api(path) {
@@ -407,10 +415,10 @@
     $('live-stripe').hidden = m.mode !== 'live';
     document.body.classList.toggle('live', m.mode === 'live');
     var bot = s.bot || {};
-    var status = String(bot.status || 'unknown');
-    $('bot-dot').className = 'dot ' + status.replace(/\s+/g, '-');
-    $('bot-txt').textContent = cap(status) + (bot.last_cycle ? ' · ' + hm(bot.last_cycle) : '');
-    $('bot-pill').title = 'Autopilot: ' + status + (bot.message ? ' — ' + bot.message : '');
+    var p = pillState(s);
+    $('bot-dot').className = 'dot ' + p[0];
+    $('bot-txt').textContent = p[1];
+    $('bot-pill').title = 'Autopilot: ' + p[1] + (bot.message ? ' — ' + bot.message : '');
     var a = s.account || {};
     $('top-equity').textContent = a.equity !== undefined && a.equity !== null ? money(a.equity) : '—';
     var today = $('top-today');
@@ -423,6 +431,17 @@
     var st_ = s.stats || {};
     $('count-trades').textContent = st_.closed ? String(st_.closed) : '';
     $('count-bot').textContent = bot.today && bot.today.trades_opened ? String(bot.today.trades_opened) : '';
+  }
+  // heartbeat first: a "running" state.json means nothing if nobody has written it for an hour
+  function continuous(hl) { return hl.runner === 'daemon' || hl.runner === 'dashboard'; }
+  function pillState(s) {
+    var bot = s.bot || {}, hl = s.health || {};
+    var status = String(bot.status || 'unknown');
+    if (hl.state === 'stale' && continuous(hl)) return ['stale', 'No heartbeat · ' + ago(hl.at)];
+    if (hl.state === 'stale') return ['idle', 'Idle · last run ' + ago(hl.at)];
+    if (hl.state === 'stopped') return ['stopped', 'Stopped · ' + hm(hl.at)];
+    var at = hl.at || bot.last_cycle;
+    return [status.replace(/\s+/g, '-'), cap(status) + (at ? ' · ' + hm(at) : '')];
   }
   function setBanner(text, kind) {
     var b = $('banner');
@@ -438,6 +457,12 @@
     if (ap.thread && ap.last_error) return ['Autopilot loop error: ' + ap.last_error, 'error'];
     if ((s.mode || {}).mode === 'live') return ['LIVE MODE — the autopilot can place real-money orders. Use KILL on the Bot tab to stop everything.', 'error'];
     if (s.bot && s.bot.status === 'killed') return ['The kill switch is on — the autopilot cancelled orders and stopped. Resume it on the Bot tab.', 'error'];
+    var ln = s.learned || {};
+    if (ln.drawdown_pause) return ['Paused by the drawdown guard: equity is ' + pct(ln.drawdown_pct) + ' below its peak (limit ' + pct(ln.max_drawdown_pct) +
+      '). Look at what went wrong, then Resume on the Bot tab — resuming starts a new peak.', 'error'];
+    var hl = s.health || {};
+    if (hl.state === 'stale' && continuous(hl)) return ['The bot has not checked in for ' + secs(hl.age_sec) + ' (expected every ' + secs((hl.stale_after_sec || 180) / 3) +
+      '). Is it still running? On a VPS: sudo systemctl status trader-autopilot', ''];
     if (s.offline) return ['Offline demo — synthetic fixture data, clock pinned to ' + hm(s.now, true) + '.', 'info'];
     return [null];
   }
@@ -462,6 +487,19 @@
     }));
   }
 
+  function reasonKind(r) {
+    r = String(r || '').toLowerCase();
+    if (/^ai\b|ai desk|claude/.test(r)) return ['AI', 'purple'];
+    if (/news|headline|filing|8-k|sec edgar/.test(r)) return ['news', 'amber'];
+    if (/learn|adapt|cooldown|cooling|loss streak|losses in a row|drawdown|sits out|paused setup/.test(r)) return ['learned', 'blue'];
+    if (/^risk\b/.test(r)) return ['risk', 'red'];
+    if (/^desk\b/.test(r)) return ['desk', ''];
+    return null;
+  }
+  function reasonItem(r) {
+    var k = reasonKind(r);
+    return h('li', null, k ? h('span', { class: 'rk ' + k[1], text: k[0] }) : null, String(r));
+  }
   function decisionRow(d, compact) {
     var action = String(d.action || '?');
     var color = action === 'taken' ? 'green' : (action === 'error' ? 'red' : '');
@@ -471,7 +509,7 @@
     var mid = h('div', null,
       h('div', { class: 'title' }, h('span', { class: 'sym', text: d.symbol || '?' }), h('span', { class: 'muted', text: d.setup || '' }), st(action, color),
         d.desk && d.desk.status ? st('desk ' + d.desk.status, statusColor(d.desk.status)) : null),
-      reasons.length ? h('ul', { class: 'reasons' }, reasons.map(function (r) { return h('li', { text: r }); })) : null,
+      reasons.length ? h('ul', { class: 'reasons' }, reasons.map(reasonItem)) : null,
       !compact && d.gates && d.gates.length ? h('details', { class: 'gates' }, h('summary', { text: 'Gates (' + d.gates.length + ')' }),
         h('ul', { class: 'checklist' }, d.gates.map(function (g) {
           return h('li', null, h('span', { class: 'mark ' + (g.ok ? 'up' : 'down'), text: g.ok ? '✓' : '✗' }),
@@ -480,10 +518,11 @@
       !compact && (d.order_id || d.broker_order_id) ? h('div', { class: 'small faint mono', text: 'order ' + (d.broker_order_id || d.order_id) + (d.qty ? ' · qty ' + d.qty : '') }) : null);
     if (compact) {
       var first = (d.reasons || [])[0] || '';
+      var fk = reasonKind(first);
       return h('div', { class: 'row' },
         h('div', { class: 'title' }, h('span', { class: 'sym', text: d.symbol || '?' }), h('span', { class: 'muted', text: d.setup || '' }), st(action, color)),
         h('div', { class: 'right' }, h('div', { class: 'sm', text: hm(d.at) })),
-        h('div', { class: 'detail' }, first + ((d.reasons || []).length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '') +
+        h('div', { class: 'detail' }, fk ? h('span', { class: 'rk ' + fk[1], text: fk[0] }) : null, first + ((d.reasons || []).length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '') +
           (d.entry ? ' · entry ' + price(d.entry) : '')));
     }
     return h('div', { class: 'row' }, h('div', { class: 'time', text: hm(d.at) }), mid, right);
@@ -639,6 +678,7 @@
   function renderBot() {
     return api('/api/decisions?limit=200').then(function (d) {
       var s = S.summary, bot = s.bot || {}, m = s.mode || {}, ctl = s.control || {}, cfg = s.autopilot_config || {}, srv = (s.server || {}).autopilot || {};
+      var hl = s.health || {}, daemonUp = hl.state === 'alive' && hl.runner === 'daemon';
       var frag = [head('Autopilot', bot.installed ? (bot.message || 'Trades for you within your gates and limits') : 'Not installed yet')];
       var status = String(bot.status || 'unknown');
       var paused = ctl.paused || status === 'paused' || status === 'killed';
@@ -647,16 +687,21 @@
         h('button', { class: 'btn', type: 'button', onclick: function () { control('run_once'); } }, '↻ Run once'),
         h('button', { class: 'btn btn-danger', type: 'button', onclick: killDialog }, '■ KILL'));
       var stats = h('div', { class: 'kvgrid' });
-      [['Last cycle', bot.last_cycle ? hm(bot.last_cycle) + ' (' + ago(bot.last_cycle) + ')' : '—'], ['Next cycle', bot.next_cycle ? hm(bot.next_cycle) : '—'],
-       ['Cycles', bot.cycles !== undefined && bot.cycles !== null ? String(bot.cycles) : '—'], ['Interval', bot.interval_sec ? bot.interval_sec + ' s' : '—'],
-       ['Loop in this server', srv.thread ? 'on' : 'off'], ['Control', ctl.kill ? 'KILL' : (ctl.paused ? 'paused' : 'normal') + (ctl.updated_at ? ' · ' + hm(ctl.updated_at) : '')]]
+      var beat = hl.state === 'never' ? 'never' : (hl.state + (hl.at ? ' · ' + ago(hl.at) : ''));
+      [['Heartbeat', beat], ['Runner', hl.runner ? hl.runner + (hl.pid ? ' · pid ' + hl.pid : '') + (hl.host ? ' @ ' + hl.host : '') : '—'],
+       ['Last cycle', bot.last_cycle ? hm(bot.last_cycle) + ' (' + ago(bot.last_cycle) + ')' : '—'], ['Next cycle', bot.next_cycle ? hm(bot.next_cycle) : '—'],
+       ['Cycles', hl.cycle !== undefined && hl.cycle !== null ? String(hl.cycle) : (bot.cycles !== undefined && bot.cycles !== null ? String(bot.cycles) : '—')],
+       ['Interval', bot.interval_sec ? bot.interval_sec + ' s' : '—'],
+       ['Loop in this server', srv.thread ? (srv.deferred_to_daemon ? 'idle — daemon trades' : 'on') : 'off'],
+       ['Control', ctl.kill ? 'KILL' : (ctl.paused ? 'paused' : 'normal') + (ctl.updated_at ? ' · ' + hm(ctl.updated_at) : '')]]
         .forEach(function (p) { stats.appendChild(h('div', null, h('div', { class: 'k', text: p[0] }), h('div', { class: 'v', text: p[1] }))); });
       var errs = (bot.last_errors || []).slice().reverse();
       var statusCard = card('Status', null, h('div', null,
         h('div', { class: 'status-big' }, h('span', { class: 'dot ' + status.replace(/\s+/g, '-') }), h('span', { text: status })),
         stats, h('div', { class: 'gap' }), controls,
         !bot.installed ? h('p', { class: 'small muted', text: 'trader-autopilot/ is not installed next to this app yet — the buttons still write autopilot/control.json.' }) : null,
-        !srv.thread ? h('p', { class: 'small muted' }, 'The loop is not running in this server. Start it with ', h('code', { text: 'python3 app/server.py --autopilot' }), '.') : null,
+        daemonUp ? h('p', { class: 'small muted', text: 'A separate 24/7 daemon is trading' + (hl.host ? ' on ' + hl.host : '') + ' — this page shows it and the buttons control it.' })
+          : (!srv.thread ? h('p', { class: 'small muted' }, 'No loop is running in this server. Start one with ', h('code', { text: 'python3 app/server.py --autopilot' }), ' or run the 24/7 daemon: ', h('code', { text: 'python3 trader-autopilot/autopilot.py daemon --approve' }), '.') : null),
         errs.length ? h('div', { class: 'small' }, h('div', { class: 'muted', text: 'Recent errors' }),
           h('ul', { class: 'reasons' }, errs.map(function (e) { return h('li', { class: 'down', text: hm(e.at) + ' — ' + (e.error || '') }); }))) : null));
       var reqs = h('ul', { class: 'checklist' }, (m.live_requirements || []).map(function (r) {
@@ -674,7 +719,7 @@
           h('div', null, h('div', { class: 'k', text: 'Alpaca paper keys' }), h('div', { class: 'v', text: sec.alpaca_paper ? 'set' : 'not set' })),
           h('div', null, h('div', { class: 'k', text: 'Alpaca live keys' }), h('div', { class: 'v', text: sec.alpaca_live ? 'set' : 'not set' })),
           h('div', null, h('div', { class: 'k', text: 'X API token' }), h('div', { class: 'v', text: sec.x_token ? 'set' : 'not set' })))));
-      frag.push(h('div', { class: 'grid-even' }, statusCard, modeCard));
+      frag.push(h('div', { class: 'grid-even' }, statusCard, hoursCard(s.sessions || {})));
       var today = bot.today || {};
       frag.push(h('div', { class: 'tiles' },
         tile('Opened today', String(today.trades_opened || 0), cfg.max_new_trades_per_day ? 'max ' + cfg.max_new_trades_per_day + ' per day' : null),
@@ -686,11 +731,14 @@
         h('li', null, h('span', { class: 'mark', text: '1' }), h('span', { text: 'Fresh trigger: the setup fired on the last ' + (g.max_trigger_age_bars || 1) + ' closed bar(s)' })),
         h('li', null, h('span', { class: 'mark', text: '2' }), h('span', { text: 'Backtest edge: ≥ ' + (g.min_backtest_triggers || 10) + ' past triggers and expectancy ≥ ' + rr(g.min_backtest_expectancy_r || 0) + ' after costs' })),
         h('li', null, h('span', { class: 'mark', text: '3' }), h('span', { text: 'Time Machine: expected value ≥ ' + rr(g.min_tm_ev_r || 0) + ' over ' + (g.tm_paths || 2000).toLocaleString('en-US') + ' replays' })),
-        h('li', null, h('span', { class: 'mark', text: '4' }), h('span', { text: 'Desk verdict GO, then sizer + risk check PASS against trader/limits.json' })),
-        h('li', null, h('span', { class: 'mark', text: '5' }), h('span', { text: 'Assets: ' + ((cfg.assets || []).join(', ') || '—') + ' — meme coins are never auto-traded' })));
+        h('li', null, h('span', { class: 'mark', text: '4' }), h('span', { text: newsGateText(cfg.news_gate) })),
+        h('li', null, h('span', { class: 'mark', text: '5' }), h('span', { text: adaptText(cfg.adapt) })),
+        h('li', null, h('span', { class: 'mark', text: '6' }), h('span', { text: 'Desk verdict GO' + ((s.ai_desk || {}).enabled ? ', then the AI desk (' + ((s.ai_desk || {}).model || 'Claude') + ') — it can only veto' : '') + ', then sizer + risk check PASS against trader/limits.json' })),
+        h('li', null, h('span', { class: 'mark', text: '7' }), h('span', { text: 'Assets: ' + ((cfg.assets || []).join(', ') || '—') + ' — meme coins are never auto-traded' })));
       var setups = cfg.setups || {};
       var setupsLine = Object.keys(setups).map(function (k) { return (ASSET_LABEL[k] || k) + ': ' + (setups[k] || []).join(', '); }).join(' · ');
-      frag.push(card('Gates in force', 'every trade must pass all of them', h('div', null, gateList, setupsLine ? h('p', { class: 'small muted', text: setupsLine }) : null)));
+      frag.push(h('div', { class: 'grid-even' }, modeCard,
+        card('Gates in force', 'every trade must pass all of them', h('div', null, gateList, setupsLine ? h('p', { class: 'small muted', text: setupsLine }) : null))));
       var decs = d.decisions || [], c = d.counts || {};
       var fdec = S.filters.decisions;
       var shown = decs.filter(function (x) { return !fdec || x.action === fdec; });
@@ -702,9 +750,191 @@
     });
   }
 
+  function hoursCard(ss) {
+    var cr = ss.crypto || {}, sk = ss.stock || {};
+    function line(name, on, state, label, color, sub) {
+      return h('div', { class: 'row' },
+        h('div', { class: 'title' }, h('span', { text: name }), on ? st(state, color) : st('off', '')),
+        h('div', { class: 'right' }),
+        h('div', { class: 'detail', text: on ? label + (sub ? ' · ' + sub : '') : 'not in autopilot.assets' }));
+    }
+    var stockColor = sk.bot_trading ? 'green' : (sk.state === 'open' ? 'amber' : '');
+    var sub = '';
+    if (sk.state === 'open' && sk.closes_at) sub = 'closes ' + localDT(sk.closes_at) + ' (' + ago(sk.closes_at) + ')';
+    else if (sk.next_open) sub = 'opens ' + localDT(sk.next_open) + ' (' + ago(sk.next_open) + ')';
+    return card('Trading hours', 'your time · ' + TZ, h('div', null,
+      h('div', { class: 'rows' },
+        line('Crypto', cr.enabled !== false, 'open', cr.label || 'open 24/7', 'green', 'trades around the clock, every day'),
+        line('US stocks', sk.enabled !== false, sk.state || '—', sk.label || '—', stockColor, sub)),
+      sk.opens_at && sk.closes_at ? h('p', { class: 'small', text: 'Today\'s US session in your time: ' + hm(sk.opens_at) + '–' + hm(sk.closes_at) +
+        (sk.entries_until ? ' · new stock trades until ' + hm(sk.entries_until) : '') + '.' }) : null,
+      h('p', { class: 'small muted', text: 'Stocks trade only in the regular session (9:30–16:00 New York time): new entries until 15:30 ET, flat by 15:55 ET. ' +
+        'Pre-market, after-hours and overnight are skipped on purpose — every stock setup and backtest here uses regular-session bars. ' +
+        'Outside the session the bot keeps trading crypto, reading news and filings, and picks the stocks for the next open.' })));
+  }
+  function newsGateText(ng) {
+    ng = ng || {};
+    if (ng.enabled === false) return 'News & filings gate: off (autopilot.news_gate.enabled)';
+    var lb = ng.lookback_hours || {}, crit = ng.critical_tags || {};
+    var tags = (crit.stock || []).concat(crit.crypto || []);
+    return 'News & filings: fresh headlines and SEC filings are read right before each trade; ' +
+      (tags.length ? tags.join(', ') : 'serious') + ' news in the last ' + (lb.stock || 24) + ' h (stocks) / ' + (lb.crypto || 12) + ' h (crypto) blocks it';
+  }
+  function adaptText(ad) {
+    ad = ad || {};
+    if (ad.enabled === false) return 'Learning from its own record: off (autopilot.adapt.enabled)';
+    return 'Its own record: a setup at ≤ ' + rr(ad.disable_below_r !== undefined ? ad.disable_below_r : -0.25) + ' over ≥ ' + (ad.min_trades || 8) +
+      ' trades sits out ' + (ad.cooldown_days || 7) + ' days; ' + (ad.loss_streak || 3) + ' losses in a row → risk × ' + (ad.loss_streak_risk_mult || 0.5) +
+      '; equity ' + (ad.max_drawdown_pct || 10) + '% below its peak → it pauses itself';
+  }
+
+  // ---------------------------------------------------------------- brain: universe, what it learned, AI desk, notifications
+  function bar(share, cls) {
+    share = Math.max(0, Math.min(100, num(share) || 0));
+    return h('div', { class: 'budget' + (cls ? ' ' + cls : '') }, setWidth(h('span'), share));
+  }
+  function kvs(pairs) {
+    var g = h('div', { class: 'kvgrid' });
+    pairs.forEach(function (p) { if (p) g.appendChild(h('div', null, h('div', { class: 'k', text: p[0] }), h('div', { class: 'v ' + (p[2] || ''), text: p[1] }))); });
+    return g;
+  }
+  function universeBlock(asset, a, sc) {
+    var key = 'uni-' + asset, all = !!S.expanded[key], list = a.symbols || [];
+    var shown = all ? list : list.slice(0, 12);
+    var grid = h('div', { class: 'symgrid' }, shown.map(function (x) {
+      return h('div', { class: 'symcell', title: x.symbol + (x.reason ? ' — ' + x.reason : '') },
+        h('span', { class: 'sym', text: x.symbol }), h('span', { class: 'why', text: x.reason || '—' }));
+    }));
+    var more = list.length > 12 ? h('button', { class: 'btn btn-quiet', type: 'button', onclick: function () { S.expanded[key] = !all; refresh(); } },
+      all ? 'Show fewer' : 'Show all ' + list.length) : null;
+    var prog = sc ? h('div', { class: 'scanline' },
+      h('span', { class: 'small muted', text: 'This bar: ' + (sc.done || 0) + ' / ' + (sc.total || '?') + ' scanned' + (sc.finished_at ? ' · done ' + hm(sc.finished_at) : '') }),
+      bar(sc.pct, sc.pct >= 100 ? 'ok' : '')) : null;
+    return h('div', { class: 'uniblock' },
+      h('div', { class: 'unihead' }, h('b', { text: (asset === 'stock' ? 'US stocks' : 'Crypto') + ' · ' + list.length }),
+        h('span', { class: 'small muted', text: (a.source || '') + (a.refreshed_at ? ' · refreshed ' + ago(a.refreshed_at) : '') })),
+      prog, list.length ? grid : empty('No symbols.'), more);
+  }
+  function renderBrain() {
+    return api('/api/system').then(function (d) {
+      var u = d.universe || {}, a = d.adapt || {}, ai = d.ai || {}, n = d.notify || {};
+      var frag = [head('Brain', 'What the bot watches, what it learned from its own trades, and who double-checks it')];
+      var ua = u.assets || {}, cfgU = u.config || {};
+      var dd = num(a.drawdown_pct), ddMax = num(a.max_drawdown_pct);
+      frag.push(h('div', { class: 'tiles' },
+        tile('Stocks watched', ua.stock ? String(ua.stock.count) : '—', u.mode === 'auto' ? 'picked itself · top ' + (cfgU.stock_top_n || '?') : 'watchlist'),
+        tile('Crypto watched', ua.crypto ? String(ua.crypto.count) : '—', u.mode === 'auto' ? 'by 24h volume · top ' + (cfgU.crypto_top_n || '?') : 'watchlist'),
+        tile('Risk per trade', a.available ? '× ' + (num(a.risk_mult) === null ? '1' : String(+num(a.risk_mult).toFixed(2))) : '× 1', a.risk_reason || 'full size', num(a.risk_mult) !== null && num(a.risk_mult) < 1 ? 'down' : ''),
+        tile('Drawdown', dd === null ? '—' : pct(dd, false, 1), ddMax !== null ? 'pauses itself at ' + pct(ddMax, false, 0) : null, a.drawdown_pause ? 'down' : ''),
+        tile('Setups sitting out', String(a.paused_setups || 0), (a.cooling || 0) + ' symbol' + (a.cooling === 1 ? '' : 's') + ' cooling off', a.paused_setups ? 'down' : ''),
+        tile('AI desk', ai.enabled ? (ai.ready ? 'on' : 'not ready') : 'off', ai.enabled ? (ai.today ? (ai.today.calls || 0) + ' calls · ' + money(ai.today.usd) + ' today' : '') : 'optional, veto only', ai.enabled && !ai.ready ? 'down' : '')));
+
+      // universe
+      var uniMeta = (u.mode === 'auto' ? 'auto — it picks its own symbols' : 'watchlist only') + (u.generated_at ? ' · ' + ago(u.generated_at) : '');
+      var uniBody;
+      if (!u.available) {
+        uniBody = empty('The universe is built on the autopilot\'s first cycle (mode: ' + (u.mode || 'auto') + ').');
+      } else {
+        uniBody = h('div', null,
+          (u.warnings || []).length ? h('ul', { class: 'reasons warnlist' }, u.warnings.map(function (w) { return h('li', { class: 'warnc', text: w }); })) : null,
+          h('div', { class: 'grid-even tight' },
+            ua.stock ? universeBlock('stock', ua.stock, (u.scan || {}).stock) : empty('No stocks — not in autopilot.assets.'),
+            ua.crypto ? universeBlock('crypto', ua.crypto, (u.scan || {}).crypto) : empty('No crypto — not in autopilot.assets.')),
+          (u.excluded || []).length ? h('details', { class: 'gates' }, h('summary', { text: u.excluded.length + ' left out on purpose' }),
+            h('ul', { class: 'reasons' }, u.excluded.map(function (x) { return h('li', null, h('b', { class: 'mono', text: x.symbol }), ' — ' + x.reason); }))) : null,
+          h('p', { class: 'small muted', text: 'Your watchlists are always included. Stocks: a built-in list of liquid US names ranked by today\'s moves plus Yahoo\'s most active and day gainers (refreshed every ' +
+            (cfgU.stock_refresh_minutes || 60) + ' min). Crypto: top coins by 24h volume, no stablecoins or wrapped tokens (every ' + (cfgU.crypto_refresh_minutes || 240) + ' min). Meme coins are never on it.' }));
+      }
+      frag.push(card('What it watches', uniMeta, uniBody));
+
+      // what it learned
+      var learnBody;
+      if (!a.available) {
+        learnBody = h('div', null, empty(a.enabled === false ? 'Learning from its own record is switched off (autopilot.adapt.enabled).' : 'Nothing learned yet — the record starts with the autopilot\'s first closed trade.'),
+          h('p', { class: 'small muted', text: adaptText(a.config) }));
+      } else {
+        var setRows = (a.setups || []).length ? h('div', { class: 'rows' }, a.setups.map(function (x) {
+          var paused = x.status !== 'active';
+          var wr = num(x.trades) ? Math.round(100 * (num(x.wins) || 0) / num(x.trades)) + '% wins' : '';
+          return h('div', { class: 'row' },
+            h('div', { class: 'title' }, x.asset ? st(x.asset, x.asset === 'crypto' ? 'amber' : 'blue') : null, h('span', { class: 'sym', text: x.setup }),
+              st(paused ? 'sitting out' : 'active', paused ? 'red' : 'green')),
+            h('div', { class: 'right' }, h('div', { class: 'big ' + tone(x.expectancy_r), text: rr(x.expectancy_r) }), h('div', { class: 'sm', text: (x.trades || 0) + ' trades' + (wr ? ' · ' + wr : '') })),
+            (paused || x.reason) ? h('div', { class: 'detail', text: (x.reason || '') + (paused && x.until ? ' · back ' + localDT(x.until) : '') }) : null);
+        })) : empty('No setup has enough closed trades yet (' + ((a.config || {}).min_trades || 8) + ' needed).');
+        var symRows = (a.symbols || []).filter(function (x) { return x.status !== 'active' || num(x.loss_streak); });
+        var symBody = symRows.length ? h('div', { class: 'rows' }, symRows.map(function (x) {
+          var cool = x.status !== 'active';
+          return h('div', { class: 'row' }, h('div', { class: 'title' }, h('span', { class: 'sym', text: x.symbol }), st(cool ? 'cooling off' : 'watching', cool ? 'amber' : '')),
+            h('div', { class: 'right' }, h('div', { class: 'sm', text: (x.loss_streak || 0) + ' loss' + (x.loss_streak === 1 ? '' : 'es') + ' in a row' })),
+            h('div', { class: 'detail', text: (x.reason || '') + (cool && x.until ? ' · back ' + localDT(x.until) : '') }));
+        })) : null;
+        var ddShare = dd !== null && ddMax ? 100 * dd / ddMax : 0;
+        var evs = (a.events || []).length ? h('div', { class: 'rows timeline' }, a.events.map(function (e) {
+          return h('div', { class: 'row' }, h('div', { class: 'time', text: hm(e.at, true) }),
+            h('div', null, h('span', { class: 'tag', text: String(e.kind || '').replace(/_/g, ' ') }), ' ', h('span', { text: e.text || '' })), h('div', { class: 'right' }));
+        })) : null;
+        learnBody = h('div', null,
+          kvs([['Risk multiplier', '× ' + String(+((num(a.risk_mult) === null ? 1 : num(a.risk_mult))).toFixed(2)), num(a.risk_mult) < 1 ? 'down' : ''],
+               ['Losses in a row', String(a.loss_streak || 0)],
+               ['Equity vs peak', money(a.equity) + ' / ' + money(a.equity_peak)],
+               ['Updated', a.updated_at ? ago(a.updated_at) : '—']]),
+          a.risk_reason ? h('p', { class: 'small', text: a.risk_reason }) : null,
+          h('div', { class: 'small muted', text: 'Drawdown ' + (dd === null ? '—' : pct(dd, false, 1)) + ' of the ' + (ddMax === null ? '—' : pct(ddMax, false, 0)) + ' it allows before pausing itself' }),
+          bar(ddShare, ddShare >= 100 ? 'full' : (ddShare >= 60 ? 'warn' : '')),
+          h('div', { class: 'gap' }), h('h3', { class: 'sub-h', text: 'Setups, by its own closed trades' }), setRows,
+          symBody ? [h('h3', { class: 'sub-h', text: 'Symbols' }), symBody] : null,
+          evs ? [h('h3', { class: 'sub-h', text: 'Recent changes' }), evs] : null,
+          h('p', { class: 'small muted', text: adaptText(a.config) }));
+      }
+      frag.push(card('What it learned', a.available ? 'from ' + ((a.setups || []).reduce(function (t, x) { return t + (num(x.trades) || 0); }, 0)) + ' closed autopilot trades' : null, learnBody));
+
+      // AI desk
+      var t = ai.today || {};
+      var maxCalls = num(ai.max_calls_per_day), maxUsd = num(ai.max_usd_per_day);
+      var aiState = ai.enabled ? (ai.ready ? st('ready', 'green') : st('not ready', 'red')) : st('off', '');
+      var aiBody = h('div', null,
+        h('p', { class: 'small muted', text: 'Optional. Claude reviews only trades the rule-based desk already passed (a Skeptic and a Lead) and can veto them — it can never approve a trade a hard gate rejected.' }),
+        kvs([['Model', ai.model || '—'], ['API key', ai.key ? 'set' : 'not set', ai.key ? '' : (ai.enabled ? 'down' : '')],
+             ['Python SDK', ai.sdk ? 'installed' : 'not installed', ai.sdk ? '' : (ai.enabled ? 'down' : '')],
+             ['If unavailable', ai.on_unavailable === 'skip' ? 'skip the trade' : 'rule-based decision']]),
+        ai.enabled ? h('div', null,
+          h('div', { class: 'small gap-t' }, h('b', { text: 'Today: ' }), (t.calls || 0) + (maxCalls ? ' / ' + maxCalls : '') + ' calls · ' + money(t.usd) + (maxUsd !== null ? ' / ' + money(maxUsd) : '')),
+          bar(maxUsd ? 100 * (num(t.usd) || 0) / maxUsd : 0, maxUsd && (num(t.usd) || 0) >= maxUsd ? 'full' : '')) : null,
+        !ai.enabled ? h('p', { class: 'small muted' }, 'Turn it on with ', h('code', { text: '"ai_desk": {"enabled": true}' }), ' in trader/config.json, ANTHROPIC_API_KEY in your secrets and ', h('code', { text: 'pip install anthropic' }), '. Budget-capped per day.') : null,
+        (ai.recent || []).length ? h('div', { class: 'rows' }, ai.recent.map(function (r) {
+          return h('div', { class: 'row' }, h('div', { class: 'title' }, h('span', { class: 'sym', text: r.id }), st(r.status || '?', statusColor(r.status))),
+            h('div', { class: 'right' }, h('div', { class: 'sm', text: (r.usd !== null && r.usd !== undefined ? money(r.usd) + ' · ' : '') + (r.at ? hm(r.at) : '') })),
+            h('div', { class: 'detail', text: (r.objections || 0) + ' objection' + (r.objections === 1 ? '' : 's') + (r.top ? ' — ' + r.top : (r.reason ? ' — ' + r.reason : '')) }));
+        })) : null);
+
+      // notifications
+      var ntfy = n.ntfy || {}, tg = n.telegram || {};
+      function chan(v) { v = String(v || ''); return v === 'sent' ? '✓' : (/^off|offline/.test(v) ? '–' : '✗'); }
+      var notBody = h('div', null,
+        kvs([['ntfy', ntfy.configured ? 'topic set · ' + (ntfy.server || 'ntfy.sh') : 'no topic', ntfy.configured ? '' : 'faint'],
+             ['Telegram', tg.enabled ? ((tg.bot_token && tg.chat_id) ? 'on' : 'missing ' + (!tg.bot_token ? 'TELEGRAM_BOT_TOKEN' : 'TELEGRAM_CHAT_ID')) : 'off', tg.enabled && !(tg.bot_token && tg.chat_id) ? 'down' : ''],
+             ['Daily summary', n.daily_summary_et ? n.daily_summary_et + ' ET' : '—'],
+             ['Limit', n.max_per_hour ? n.max_per_hour + ' / hour' : '—']]),
+        ntfy.short_topic ? h('p', { class: 'small warnc', text: 'Your ntfy topic is short — anyone who guesses it can read your alerts. Use a long random one.' }) : null,
+        (n.events || []).length ? h('div', { class: 'small gap-t' }, h('span', { class: 'muted', text: 'Sends: ' }), n.events.map(function (e) { return h('span', { class: 'tag', text: e.replace(/_/g, ' ') }); })) : null,
+        (n.recent || []).length ? h('div', { class: 'rows' }, n.recent.map(function (r) {
+          var ch = r.channels || {};
+          var chs = Object.keys(ch).map(function (k) { return k + ' ' + chan(ch[k]); }).join(' · ');
+          return h('div', { class: 'row' }, h('div', { class: 'title' }, h('span', { class: 'tag', text: String(r.event || '').replace(/_/g, ' ') }), h('span', { text: r.title || '' })),
+            h('div', { class: 'right' }, h('div', { class: 'sm', text: hm(r.at) })),
+            h('div', { class: 'detail', text: (r.suppressed ? 'not sent: ' + r.suppressed + (chs ? ' · ' : '') : '') + chs }));
+        })) : empty(n.enabled ? 'No notifications yet.' : 'Off — set "notify": {"enabled": true, "ntfy_topic": "<long random name>"} in trader/config.json and subscribe to the topic in the ntfy app.'));
+      frag.push(h('div', { class: 'grid-even' },
+        card('AI desk', aiState, aiBody),
+        card('Notifications', n.enabled ? st('on', 'green') : st('off', ''), notBody)));
+      return frag;
+    });
+  }
+
   function control(action) {
     post('/api/control', { action: action }).then(function () {
-      toast(({ pause: 'Paused — no new trades from the next cycle.', resume: 'Resumed.', run_once: 'Requested one cycle now.' })[action] || 'Done.');
+      toast(({ pause: 'Paused — no new trades from the next cycle; exits keep running.', resume: 'Resumed — the drawdown guard starts counting from today\'s equity.', run_once: 'Requested one cycle now.' })[action] || 'Done.');
       refresh();
     }).catch(function (e) { toast('Failed: ' + e.message); });
   }
@@ -829,7 +1059,7 @@
     });
   }
 
-  var VIEWS = { overview: renderOverview, trades: renderTrades, bot: renderBot, news: renderNews, setups: renderSetups, reports: renderReports };
+  var VIEWS = { overview: renderOverview, trades: renderTrades, bot: renderBot, brain: renderBrain, news: renderNews, setups: renderSetups, reports: renderReports };
 
   // ---------------------------------------------------------------- routing + refresh
   function tabFromHash() {

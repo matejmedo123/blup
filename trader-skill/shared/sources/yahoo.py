@@ -117,5 +117,53 @@ def spark(tickers) -> dict:
     return parse_spark(http.get_json(spark_url(tickers), ttl=120))
 
 
+SCREENERS = ("most_actives", "day_gainers", "day_losers")
+
+
+def screener_url(scr_id: str, count: int = 25, base: str = BASES[0]) -> str:
+    return "%s/v1/finance/screener/predefined/saved?scrIds=%s&count=%d" % (base, quote(scr_id), int(count))
+
+
+def _raw(v):
+    """Yahoo sends plain numbers or {"raw": 1.2, "fmt": "1.20"} depending on the endpoint."""
+    if isinstance(v, dict):
+        v = v.get("raw")
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_screener(obj) -> list:
+    fin = (obj or {}).get("finance") or {}
+    if fin.get("error"):
+        err = fin["error"]
+        raise ValueError(err.get("description") if isinstance(err, dict) else str(err))
+    out = []
+    for res in fin.get("result") or []:
+        for q in res.get("quotes") or []:
+            t = str(q.get("symbol") or "").upper()
+            if not t:
+                continue
+            out.append({"ticker": t, "price": _raw(q.get("regularMarketPrice")),
+                        "change_pct": _raw(q.get("regularMarketChangePercent")),
+                        "volume": _raw(q.get("regularMarketVolume")),
+                        "avg_volume": _raw(q.get("averageDailyVolume3Month")) or _raw(q.get("averageDailyVolume10Day")),
+                        "market_cap": _raw(q.get("marketCap")),
+                        "name": q.get("shortName") or q.get("longName") or t,
+                        "quote_type": q.get("quoteType")})
+    return out
+
+
+def screener(scr_id: str, count: int = 25) -> list:
+    """Yahoo's predefined screeners ("most_actives", "day_gainers") — today's busiest names."""
+    if scr_id not in SCREENERS:
+        raise ValueError("unknown Yahoo screener %r" % scr_id)
+    try:
+        return parse_screener(http.get_json(screener_url(scr_id, count), ttl=300))
+    except ValueError as exc:
+        raise http.SourceError(screener_url(scr_id, count), "Yahoo screener %s: %s" % (scr_id, exc))
+
+
 def news_rss_url(ticker: str) -> str:
     return "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%s&region=US&lang=en-US" % quote(ticker)
