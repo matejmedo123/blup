@@ -72,7 +72,7 @@ def as_symbol(symbol, asset: str = None, quote: str = None) -> symbols.Symbol:
     if quote is None:
         try:
             quote = config.load_config().get("quote_currency") or "USDT"
-        except SystemExit:
+        except (SystemExit, ValueError):
             quote = "USDT"
     return symbols.parse(symbol, asset=asset, quote=quote)
 
@@ -163,11 +163,13 @@ def _crypto_candles(sym, interval, days, end_ts) -> Series:
     errors, warnings = [], []
     if sym.quote == "USD":
         warnings.append("USD price taken from the %s pair where needed (USDT ≈ USD)" % sym.binance)
-    attempts = (
+    attempts = [
         ("Binance", lambda: binance.klines(sym.binance, interval, days, end_ts)),
         ("Coinbase", lambda: coinbase.candles(sym.coinbase, interval, days, end_ts)),
         ("Kraken", lambda: kraken.candles(sym.kraken, interval)),
-    )
+    ]
+    if days > coinbase.MAX_DAYS:  # Coinbase stops at 30 days; Kraken's 720 bars cover a 200-day average
+        attempts[1], attempts[2] = attempts[2], attempts[1]
     for name, fn in attempts:
         try:
             raw = fn()

@@ -205,6 +205,8 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
             sizing["rounding"] = "fractional shares (4 dp)" if step < 1 else "whole shares"
         else:
             tick = lot.get("tick") or 0.01
+            if tick > entry * 0.001:  # a cent tick on a $0.0004 coin would put the limit 25× above the price
+                tick = 10.0 ** (math.floor(math.log10(entry)) - 4)
             limit = ceil_to(entry * 1.0002, tick)
             sizing["rounding"] = "lot step %s, tick %s (%s)" % (fmt.qty(step), fmt.qty(tick), lot.get("source"))
         order.update(qty=qty, qty_unit=unit, notional_usd=round(qty * entry, 2), limit_price=limit,
@@ -221,11 +223,11 @@ def _num(x) -> str:
 
 
 def save_order(order: dict) -> None:
-    doc = state.read_json("orders.json", {}) or {}
-    orders = [o for o in doc.get("orders") or []
-              if not (o.get("plan_id") == order.get("plan_id") and o.get("status") == "proposed")]
-    orders.append(order)
-    state.write_json("orders.json", {"orders": orders})
+    def add(doc):
+        orders = [o for o in (doc or {}).get("orders") or []
+                  if not (o.get("plan_id") == order.get("plan_id") and o.get("status") == "proposed")]
+        return {"orders": orders + [order]}
+    state.update_json("orders.json", add, {})
 
 
 def describe(order: dict) -> str:

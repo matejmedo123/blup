@@ -68,11 +68,15 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
      the trend profile below loosens these to fit a strategy that wins only 30–40 % of its trades),
   7. desk verdict GO — and, if you enable the optional **AI desk**, Claude doesn't veto it (it can only
      say no, never yes to something the rules rejected) — then sizing and a risk PASS against `limits.json`,
-  8. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever).
+  8. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever), and that
+     includes meme coins listed on exchanges (DOGE, SHIB, PEPE, BONK, WIF, …).
 
   It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries after 15:30 ET,
   kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a KILL
-  button in the dashboard.
+  button in the dashboard. Its exits and the kill switch sell only what the bot bought and cancel only its
+  own orders — shares or coins you hold yourself at the same broker are never touched. A broken file, a
+  typo in `config.json`, a full disk or one failing position never stops the stops and time stops of the
+  others: the bot then takes no new trades and says why.
 * **Leverage is off.** It needs both `leverage.<asset>` in `config.json` and `allow_leverage` /
   `allow_margin` + `max_leverage` in `limits.json`; no file can go past **2×**, meme coins never, and
   crypto at Alpaca never (there is no crypto margin there). Leverage only lets more positions be open at
@@ -168,7 +172,14 @@ the SDK.
 ```bash
 python3 trader-backtest/lab.py                       # top 25 coins · 5m (180 d) + 1h (365 d) + 4h (730 d) + 1d (~8 y)
 python3 trader-backtest/lab.py --min-target-r 2      # only exits that aim for 2R or more
+python3 trader-backtest/lab.py --universe today      # the old way: today's top coins for the whole history
 ```
+
+**Point-in-time coins (the default).** Today's biggest coins are partly big *because* they rose, so a
+backtest on them alone flatters every trend strategy. The lab trades each period only on the coins that
+were biggest (30-day dollar volume) when that period began — including coins that later collapsed or
+were delisted (LUNA, FTT, SRM, EOS, WAVES …), from Binance's own history. Each coin still gets its own row,
+but sizing trusts the strategy's point-in-time result, not one coin's.
 
 For every crypto setup — the one-day breakouts on 5-minute bars, four swing setups on 1-hour and 4-hour
 bars, and four daily strategies with their own exit rules (trend following EMA20/50, trend breakout,
@@ -196,6 +207,16 @@ with more size the higher the certainty (never past `limits.json`). The daemon r
 | A single train/test split | "validated" the 4h band bounce on 6 coins (profit chance up to 98 % on 10 trades) — a different split flipped it, which is why the lab now insists on every period |
 | Per-coin tuning | 109 per-coin "best settings" in training, 43 % still profitable in the latest period — worse than a coin flip |
 | One-day setups on 5-minute bars | no exit had an edge in any training period: 0.26 % costs are a whole 1R on many of these stops |
+
+**The same daily trend strategies, coins chosen point in time** (21 Oct 2026 · top 10 · 1d ~8 years):
+
+| | Today's top 10 for all 8 years (old) | The top 10 of each period's own time (honest) |
+|---|---|---|
+| Trend following EMA20/50 | +4.65R / +0.74R / +2.81R per trade · 92 % | **+2.97R / +0.66R / +0.34R** · 35 % wins · **84 %** |
+| Trend breakout | +1.27R / +0.47R / +1.36R · 93 % | **+0.84R / +0.29R / +0.59R** · 44 % wins · **83 %** |
+
+Both still made money in every period — but the edge is roughly half of what today's winners suggest, and
+in the latest period trend following earned only +0.34R per trade.
 
 **The four classic strategies, as exact daily rules** (crypto: 43 coins 2018–2026, BTC above its 200-day
 average; stocks: 162 liquid US names and ETFs 2016–2026; costs included; "chance" = 20 trades end in profit):
@@ -374,6 +395,25 @@ first daily close below the 50-day EMA during market hours; and in the simulator
 | Crypto winter mid-2018 → spring 2019 | €1,000 | **€1,017** | €999 |
 | Last 12 months | €1,126 | **€1,163** | €1,104 |
 
+**The same, with the coins chosen point in time** (each trade only on a coin among the 10 biggest by
+30-day dollar volume on the day it was entered, delisted coins included, no meme coins — 46 different
+coins took part; 21 Oct 2026):
+
+| | Crypto only | + T-bills | + ETF trend in crypto bear markets |
+|---|---|---|---|
+| After 1 year, typical | €1,234 | €1,260 | **€1,293** |
+| … 1 year in 10 is worse than | €964 | **€984** | €946 |
+| … in profit | 81 % of starts | **87 %** | 85 % |
+| After 3 years, typical | €3,161 | €3,385 | **€3,460** |
+| … 1 in 10 is worse than | €2,179 | **€2,322** | €1,943 |
+| 2022 (crypto −65 %) | €1,000 | €1,020 | **€1,125** |
+| Last 12 months | €1,292 | **€1,334** | €1,116 |
+
+The earlier tables used a fixed list of today's large coins; chosen point in time, the average trade
+falls from +0.95R to +0.86R and the typical results move by a few percent — the portfolio rules (big
+coins only, 2 % risk, 5 positions) were already fairly robust. Costs here are 0.13 % per side; at Alpaca's
+0.25 % crypto fee every trade costs about 0.25 % more.
+
 Honest reading: T-bills help every year a little. The ETF rotation is the only thing that earned in a
 real bear year (2022: +12.5 %) and makes one-year results better, but it did nothing in the 2018 crypto
 winter, cost a little in the last 12 months, and makes the worst three-year case worse. `profile` turns it
@@ -459,9 +499,11 @@ Setups · Reports. On a phone: a tab bar with Overview, Trades, Bot, Checks and 
 The design lives in Figma ("Trader — dashboard redesign": tokens, components, desktop and phone
 screens); `app/static/app.css` uses the same tokens.
 
-Security: binds to 127.0.0.1 unless you give a password; every button needs a per-session CSRF token;
-no response ever contains a key; reports are served sandboxed; live trading cannot be switched on from
-the dashboard. `python3 app/devdata.py --home /tmp/trader-sample` writes clearly-marked SAMPLE data.
+Security: binds to 127.0.0.1 unless you give a password; without one it answers only to `localhost` /
+`127.0.0.1` (a web page can't reach it through DNS rebinding — add other names with
+`TRADER_DASHBOARD_HOSTS`); every button needs a per-session CSRF token; password guesses are checked one
+at a time; no response ever contains a key; reports are served sandboxed; live trading cannot be switched
+on from the dashboard. KILL reaches a running daemon within seconds. `python3 app/devdata.py --home /tmp/trader-sample` writes clearly-marked SAMPLE data.
 
 ## Walkthroughs (real output of `python3 scripts/demo.py`, offline fixtures)
 

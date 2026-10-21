@@ -50,6 +50,16 @@ def _slash(sym: str) -> str:
     return sym
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """urllib would resend the key headers to wherever a redirect points — the API never redirects, so refuse."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "unexpected redirect refused", headers, fp)
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _f(x):
     try:
         return float(x)
@@ -75,6 +85,7 @@ class AlpacaBroker(Broker):
         self._key_name, self._secret_name = key_name, secret_name
         self.base = BASE[mode]
         self._tradable = {}
+        self._crypto = {}   # "BTC/USD" → Alpaca's price_increment, min_trade_increment, min_order_size
         self.notes = []
 
     # -- transport ---------------------------------------------------------------------------------
@@ -87,7 +98,7 @@ class AlpacaBroker(Broker):
         url = self.base + path
         payload = json.dumps(body).encode("utf-8") if body is not None else None
         req = urllib.request.Request(url, data=payload, method=method, headers=self._headers())
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        with _OPENER.open(req, timeout=TIMEOUT) as resp:
             raw = resp.read()
         return json.loads(raw.decode("utf-8")) if raw.strip() else {}
 
@@ -127,16 +138,27 @@ class AlpacaBroker(Broker):
         except (urllib.error.URLError, socket.timeout, ConnectionError) as err:
             raise BrokerError("Alpaca DELETE %s failed: %s" % (path.split("?")[0], getattr(err, "reason", err)))
 
-    def _lookup(self, client_order_id: str):
-        try:
-            return self._send("GET", "/v2/orders:by_client_order_id?client_order_id=%s"
-                              % urllib.parse.quote(client_order_id))
-        except urllib.error.HTTPError as err:
-            if err.code == 404:
-                return None
-            raise BrokerError("Alpaca order lookup failed (HTTP %s): %s" % (err.code, self._message(err)))
-        except (urllib.error.URLError, socket.timeout, ConnectionError) as err:
-            raise BrokerError("Alpaca order lookup failed: %s" % getattr(err, "reason", err))
+    def _lookup(self, client_order_id: str, tries: int = 3):
+        """The order sent under this client id, or None when Alpaca has none (it can take a moment to show)."""
+        delay = 1.0
+        for attempt in range(tries):
+            try:
+                return self._send("GET", "/v2/orders:by_client_order_id?client_order_id=%s"
+                                  % urllib.parse.quote(client_order_id))
+            except urllib.error.HTTPError as err:
+                if err.code == 404:
+                    if attempt == tries - 1:
+                        return None
+                elif err.code < 500 and err.code != 429:
+                    raise BrokerError("Alpaca order lookup failed (HTTP %s): %s" % (err.code, self._message(err)))
+                elif attempt == tries - 1:
+                    raise BrokerError("Alpaca order lookup failed (HTTP %s)" % err.code)
+            except (urllib.error.URLError, socket.timeout, ConnectionError) as err:
+                if attempt == tries - 1:
+                    raise BrokerError("Alpaca order lookup failed: %s" % getattr(err, "reason", err))
+            time.sleep(delay)
+            delay *= 2
+        return None
 
     def _post_order(self, body: dict) -> dict:
         """POST once; on a timeout or 5xx find out whether it landed before trying again (once)."""
@@ -146,7 +168,13 @@ class AlpacaBroker(Broker):
                 return self._send("POST", "/v2/orders", body)
             except urllib.error.HTTPError as err:
                 if err.code < 500:
-                    raise BrokerError("Alpaca rejected the order (HTTP %s): %s" % (err.code, self._message(err)))
+                    why = self._message(err)
+                    if cid and err.code == 422 and "client_order_id" in why.lower():
+                        found = self._lookup(cid)  # our first try did land — that order is the one
+                        if found:
+                            self.log("post_recovered", client_order_id=cid, order_id=found.get("id"))
+                            return found
+                    raise BrokerError("Alpaca rejected the order (HTTP %s): %s" % (err.code, why))
                 failure = "HTTP %s" % err.code
             except (urllib.error.URLError, socket.timeout, ConnectionError) as err:
                 failure = str(getattr(err, "reason", err))
@@ -166,7 +194,9 @@ class AlpacaBroker(Broker):
     @staticmethod
     def _order(o: dict, leg: str = None, parent_id: str = None) -> dict:
         asset = "crypto" if o.get("asset_class") == "crypto" or "/" in str(o.get("symbol")) else "stock"
-        return order_dict(id=o.get("id"), client_order_id=o.get("client_order_id"), symbol=_slash(o.get("symbol") or ""),
+        sym = o.get("symbol") or ""
+        return order_dict(id=o.get("id"), client_order_id=o.get("client_order_id"),
+                          symbol=_slash(sym) if asset == "crypto" else sym,   # GBTC is a stock, not G/BTC
                           asset=asset, side=o.get("side"), type=o.get("type") or o.get("order_type"),
                           qty=_f(o.get("qty")), limit_price=_f(o.get("limit_price")), stop_price=_f(o.get("stop_price")),
                           status=o.get("status"), filled_qty=_f(o.get("filled_qty")),
@@ -202,13 +232,22 @@ class AlpacaBroker(Broker):
         return out
 
     def orders(self, since: str = None) -> list:
-        q = "status=all&nested=true&limit=200&direction=desc"
+        """The newest 500 orders plus every order still open — a stop placed weeks ago is never out of sight."""
+        q = "status=all&nested=true&limit=500&direction=desc"
         if since:
             q += "&after=" + urllib.parse.quote(since)
-        return self._flatten(self._get("/v2/orders?" + q))
+        out = self._flatten(self._get("/v2/orders?" + q))
+        seen = {o["id"] for o in out}
+        return out + [o for o in self.open_orders() if o["id"] not in seen]
 
     def open_orders(self) -> list:
-        return self._flatten(self._get("/v2/orders?status=open&nested=true&limit=200"))
+        return self._flatten(self._get("/v2/orders?status=open&nested=true&limit=500"))
+
+    def lookup(self, order_id: str) -> list:
+        try:
+            return self._flatten([self._get("/v2/orders/%s?nested=true" % urllib.parse.quote(order_id), retries=1)])
+        except BrokerError:
+            return []
 
     def clock(self) -> dict:
         c = self._get("/v2/clock")
@@ -237,6 +276,8 @@ class AlpacaBroker(Broker):
             if not isinstance(r, dict) or r.get("tradable") is False:
                 continue
             sym = str(r.get("symbol") or "").upper()
+            self._crypto[_slash(sym)] = {k: _f(r.get(k)) for k in ("price_increment", "min_trade_increment",
+                                                                   "min_order_size")}
             base = sym.split("/", 1)[0] if "/" in sym else next(
                 (sym[: -len(q)] for q in QUOTES if sym.endswith(q) and len(sym) > len(q)), sym)
             if base:
@@ -244,13 +285,41 @@ class AlpacaBroker(Broker):
         self._tradable[asset] = (now, bases)
         return set(bases)
 
+    def _crypto_lot(self, symbol: str) -> dict:
+        if symbol not in self._crypto:
+            self.tradable("crypto")
+        return self._crypto.get(symbol) or {}
+
     def _tick(self, symbol: str, asset: str):
         if asset == "stock":
             return None
+        own = self._crypto_lot(symbol).get("price_increment")
+        if own:
+            return own   # Alpaca's own price step — Binance's can be finer and get the order refused
         try:
             return data.lot_info(symbols.parse(symbol, asset="crypto")).get("tick")
         except Exception:
             return None
+
+    def _qty(self, symbol: str, qty: float, asset: str, bracket: bool = False) -> float:
+        """The quantity Alpaca accepts: whole shares for a bracket (fractional orders can't have one), the coin's
+        trade increment for crypto. Refuses what rounds below the minimum instead of sending it to be rejected."""
+        qty = float(qty)
+        if asset == "stock":
+            if bracket and qty != int(qty):
+                qty = float(int(qty))
+                if qty < 1:
+                    raise BrokerError("Alpaca takes no bracket order for a fraction of a share — the position is "
+                                      "under 1 whole share (turn fractional_shares off or raise the risk budget)")
+            return qty
+        lot = self._crypto_lot(symbol)
+        step = lot.get("min_trade_increment")
+        if step:
+            qty = math.floor(qty / step + 1e-9) * step
+        if lot.get("min_order_size") and qty < lot["min_order_size"] - 1e-12:
+            raise BrokerError("%s %s is below Alpaca's minimum order of %s" % (_fmt_qty(qty), symbol,
+                                                                              _fmt_qty(lot["min_order_size"])))
+        return qty
 
     def place_entry(self, order: dict) -> dict:
         asset = order["asset"]
@@ -258,7 +327,8 @@ class AlpacaBroker(Broker):
             raise BrokerError("meme coins are never auto-traded")
         sym = order["symbol"]
         tick = self._tick(sym, asset)
-        body = {"symbol": sym, "qty": _fmt_qty(order["qty"]), "side": "buy", "type": "limit",
+        body = {"symbol": sym, "qty": _fmt_qty(self._qty(sym, order["qty"], asset, bracket=asset == "stock")),
+                "side": "buy", "type": "limit",
                 "limit_price": _fmt_price(order["limit_price"], asset, tick),
                 "client_order_id": order.get("client_order_id")}
         if asset == "stock":
@@ -278,7 +348,7 @@ class AlpacaBroker(Broker):
 
     def place_stop(self, symbol, qty, stop_price, client_order_id=None, asset="crypto") -> dict:
         tick = self._tick(symbol, asset)
-        body = {"symbol": symbol, "qty": _fmt_qty(qty), "side": "sell", "time_in_force": "gtc",
+        body = {"symbol": symbol, "qty": _fmt_qty(self._qty(symbol, qty, asset)), "side": "sell", "time_in_force": "gtc",
                 "client_order_id": client_order_id}
         if asset == "crypto":
             # crypto has no plain stop orders: a stop-limit a little below the stop keeps it fillable
@@ -291,7 +361,7 @@ class AlpacaBroker(Broker):
         return self._order(res, leg="stop")
 
     def place_exit(self, symbol, qty, kind="market", limit_price=None, client_order_id=None, asset="stock") -> dict:
-        body = {"symbol": symbol, "qty": _fmt_qty(qty), "side": "sell", "type": kind,
+        body = {"symbol": symbol, "qty": _fmt_qty(self._qty(symbol, qty, asset)), "side": "sell", "type": kind,
                 "time_in_force": "gtc" if asset == "crypto" else "day", "client_order_id": client_order_id}
         if kind == "limit":
             body["limit_price"] = _fmt_price(limit_price, asset, self._tick(symbol, asset))

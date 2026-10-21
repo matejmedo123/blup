@@ -197,10 +197,15 @@ class SimBroker(Broker):
         equity, cash = self._equity(), self.book["cash"]
         lev = max(self.leverage(a) for a in config.LEVERAGE_ASSETS)
         return {"equity": _r(equity, 2), "cash": _r(cash, 2),
-                "buying_power": _r(max(0.0, cash + (lev - 1) * max(equity, 0.0)), 2),
+                "buying_power": _r(max(0.0, cash + (lev - 1) * max(equity, 0.0) - self._reserved()), 2),
                 "borrowed": _r(max(0.0, -cash), 2), "interest_paid": _r(self.book.get("interest_paid") or 0, 2),
                 "interest_earned": _r(self.book.get("interest_earned") or 0, 2),
                 "currency": "USD", "starting_cash": self.book.get("starting_cash"), "mode": self.mode}
+
+    def _reserved(self) -> float:
+        """Buy orders still waiting hold their cash, as at a real broker — two can't spend the same dollars."""
+        return sum(float(o["qty"]) * float(o.get("limit_price") or 0) for o in self.book["orders"]
+                   if o.get("side") == "buy" and o.get("status") in ("new", "held"))
 
     def positions(self) -> list:
         out = []
@@ -247,8 +252,12 @@ class SimBroker(Broker):
         qty, limit = float(order["qty"]), float(order["limit_price"])
         if qty <= 0 or limit <= 0:
             raise BrokerError("qty and limit price must be positive")
+        cid = order.get("client_order_id")
+        for o in self.book["orders"] if cid else []:
+            if o.get("client_order_id") == cid and o.get("leg") == "entry":  # sent twice: like Alpaca, one order
+                return order_dict(**{k: v for k, v in o.items() if k != "active_from"})
         lev = max(1.0, min(float(order.get("leverage") or 1.0), self.leverage(asset)))
-        power = self.book["cash"] + (lev - 1) * max(self._equity(), 0.0)
+        power = self.book["cash"] + (lev - 1) * max(self._equity(), 0.0) - self._reserved()
         if qty * limit > power + 1e-6:
             raise BrokerError("insufficient buying power: %.2f needed, %.2f available (cash %.2f, %g× leverage)" % (
                 qty * limit, power, self.book["cash"], lev))

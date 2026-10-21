@@ -353,10 +353,11 @@ def journal_report(trades: list, stats: dict):
 # --- actions ------------------------------------------------------------------------------------------------
 
 def _upsert(trade: dict) -> None:
-    doc = _doc()
-    trades = [t for t in doc.get("trades") or [] if t.get("id") != trade["id"]]
-    trades.append(trade)
-    _save({"trades": trades})
+    with state.locked("journal.json"):  # the autopilot and a manual journal run must not drop each other's trade
+        doc = _doc()
+        trades = [t for t in doc.get("trades") or [] if t.get("id") != trade["id"]]
+        trades.append(trade)
+        _save({"trades": trades})
 
 
 def save_trade(trade: dict) -> None:

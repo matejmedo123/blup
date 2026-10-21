@@ -16,8 +16,9 @@ class BrokerError(Exception):
 ORDER_FIELDS = ("id", "client_order_id", "symbol", "asset", "side", "type", "qty", "limit_price", "stop_price",
                 "status", "filled_qty", "filled_avg_price", "submitted_at", "filled_at", "leg", "parent_id",
                 "time_in_force")
+# Alpaca's still-working states ("replaced" is final: a new order took its place)
 OPEN_STATUSES = ("new", "accepted", "pending_new", "partially_filled", "held", "accepted_for_bidding",
-                 "pending_replace", "replaced", "calculated")
+                 "pending_replace", "calculated", "done_for_day", "pending_cancel")
 
 
 def broker_symbol(raw, asset: str = None) -> str:
@@ -58,6 +59,10 @@ class Broker:
 
     def orders(self, since: str = None) -> list:
         raise NotImplementedError
+
+    def lookup(self, order_id: str) -> list:
+        """One order by its broker id, with its bracket legs — for orders older than what orders() returns."""
+        return [o for o in self.orders() if o.get("id") == order_id or o.get("parent_id") == order_id]
 
     def tradable(self, asset: str):
         """Base symbols this broker can trade for an asset class, or None for "no restriction"."""

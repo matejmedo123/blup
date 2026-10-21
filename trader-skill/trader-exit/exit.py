@@ -360,10 +360,10 @@ def main(argv=None) -> int:
             title, body, "%s · %s bars · ATR %s" % (series.source, interval, fmt.price(plan["atr"])), asset))
         plan["chart"] = state.rel(report)
 
-    doc = state.read_json("plan.json", {}) or {}
-    doc.setdefault("plans", {})[plan_id] = plan
-    doc["latest"] = plan_id
-    state.write_json("plan.json", doc)
+    def save(doc):
+        doc.setdefault("plans", {})[plan_id] = plan
+        doc["latest"] = plan_id
+    state.update_json("plan.json", save, {})  # the autopilot writes plans too — neither may lose the other's
 
     lines = ["%s · %s — exit plan" % (sym.display, plan["label"] or plan["setup"]),
              "Get in %s · Stop %s · Target %s (%gR) · Time stop %s" % (

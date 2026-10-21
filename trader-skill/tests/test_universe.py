@@ -87,7 +87,8 @@ class Universe(TraderTestCase):
                        exclude=["PLTR", "ETHUSDT", "XRPUSDT"])
         cur = universe.current(cfg)
         self.assertIn("COIN", cur["stock"])
-        self.assertIn("DOGEUSDT", cur["crypto"])
+        self.assertNotIn("DOGEUSDT", cur["crypto"])   # a meme coin, even listed on an exchange and asked for
+        self.assertIn("meme coin", self.read_state("autopilot/universe.json")["excluded"]["DOGEUSDT"])
         for gone in ("META", "PLTR"):
             self.assertNotIn(gone, cur["stock"])
         for gone in ("ETHUSDT", "XRPUSDT"):
@@ -168,7 +169,7 @@ class Universe(TraderTestCase):
         cur = universe.current(config.load_config(), broker=FakeBroker({"BTC", "ETH", "SOL", "DOGE"}))
         doc = self.read_state("autopilot/universe.json")
         self.assertEqual(doc["excluded"]["XRPUSDT"], "not tradable on alpaca")
-        self.assertIn("below $3.0B", doc["excluded"]["DOGEUSDT"])
+        self.assertIn("meme coin", doc["excluded"]["DOGEUSDT"])   # out before the volume floor is even checked
         self.assertIn("below $3.0B", doc["excluded"]["BNBUSDT"])
         self.assertEqual(cur["crypto"], ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
         self.assertIn("tradable on alpaca", doc["crypto"]["source"])

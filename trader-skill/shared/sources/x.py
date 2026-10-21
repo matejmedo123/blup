@@ -73,10 +73,11 @@ def usage(cfg: dict = None) -> dict:
 
 
 def _record(reads: int, cfg: dict = None) -> dict:
-    doc = usage(cfg)
-    doc["reads"] = int(doc.get("reads", 0)) + int(reads)
-    doc["requests"] = int(doc.get("requests", 0)) + 1
-    state.write_json("x_usage.json", doc)
+    with state.locked("x_usage.json"):  # the news thread and a cycle both read X — every read is counted
+        doc = usage(cfg)
+        doc["reads"] = int(doc.get("reads", 0)) + int(reads)
+        doc["requests"] = int(doc.get("requests", 0)) + 1
+        state.write_json("x_usage.json", doc)
     return doc
 
 

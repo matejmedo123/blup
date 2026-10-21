@@ -137,9 +137,16 @@ class BorrowingInTheSimulator(TraderTestCase):
         with self.assertRaises(BrokerError):
             b.place_entry(self.order(1400, lev=1.0))  # the order did not ask for leverage
         b.place_entry(self.order(1400))
-        with self.assertRaises(BrokerError):
-            SimBroker(self.cfg).place_entry(self.order(1600))
+        self.assertAlmostEqual(SimBroker(self.cfg).account()["buying_power"], 100.0)  # the waiting buy holds its cash
+        with self.assertRaises(BrokerError):   # two waiting buys can't spend the same dollars
+            SimBroker(self.cfg).place_entry(dict(self.order(200), client_order_id="o2"))
+        again = SimBroker(self.cfg).place_entry(self.order(1400))   # the same order sent twice is one order
+        self.assertEqual(len(SimBroker(self.cfg).open_orders()), 1)
+        self.assertEqual(again["client_order_id"], "o1")
         config.update_file("limits.json", {"crypto": {"allow_leverage": False}})
+        self.assertAlmostEqual(SimBroker(self.cfg).account()["buying_power"], 0.0)
+        b = SimBroker(self.cfg)
+        b.cancel(b.open_orders()[0]["id"])
         self.assertAlmostEqual(SimBroker(self.cfg).account()["buying_power"], 1000.0)
 
     def test_borrowed_cash_costs_interest(self):

@@ -110,6 +110,13 @@ def open_book(now_iso: str) -> list:
             continue
         book.append({"asset": o["asset"], "symbol": o.get("symbol"), "notional": float(o.get("notional_usd") or 0),
                      "source": tk["id"]})
+    # the autopilot's entries waiting at the broker have no ticket and no journal trade yet — they still count
+    for it in ((state.read_json("autopilot/book.json", {}) or {}).get("items") or {}).values():
+        if it.get("status") != "pending" or it.get("order_id") in journaled:
+            continue
+        book.append({"asset": it.get("asset"), "symbol": it.get("data_key") or it.get("symbol"),
+                     "notional": float(it.get("qty") or 0) * float(it.get("entry_plan") or 0),
+                     "source": it.get("order_id")})
     return book
 
 
@@ -350,15 +357,16 @@ def pick_order(order_id: str = None) -> dict:
 
 
 def save_result(order_id: str, risk: dict) -> dict:
-    doc = state.read_json("orders.json", {}) or {}
-    saved = None
-    for o in doc.get("orders") or []:
-        if o.get("id") == order_id:
-            o["risk"] = risk
-            o["status"] = "risk_pass" if risk["result"] == "PASS" else "risk_block"
-            saved = o
-    state.write_json("orders.json", doc)
-    return saved
+    saved = []
+
+    def change(doc):
+        for o in doc.get("orders") or []:
+            if o.get("id") == order_id:
+                o["risk"] = risk
+                o["status"] = "risk_pass" if risk["result"] == "PASS" else "risk_block"
+                saved.append(o)
+    state.update_json("orders.json", change, {})
+    return saved[-1] if saved else None
 
 
 def adhoc_order(args, cfg: dict) -> dict:

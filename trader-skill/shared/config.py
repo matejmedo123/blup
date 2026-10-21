@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import tempfile
 from pathlib import Path
 
 PACK_ROOT = Path(__file__).resolve().parent.parent
@@ -218,12 +219,41 @@ def deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
+class ConfigError(ValueError):
+    """config.json / limits.json can't be used (a typo while editing it by hand)."""
+
+
+def atomic_write(path: Path, text: str) -> None:
+    """Write through a temp file of its own, flushed to disk, then renamed over the target: a reader sees the old
+    file or the new one — never half of one, and two writers never share (and truncate) one temp file."""
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, str(path))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    try:  # the rename itself survives a power cut only once the folder is on disk too
+        dfd = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
+    except (OSError, AttributeError):
+        pass
+
+
 def _write_default(path: Path, obj: dict) -> None:
     if path.exists():
         return
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
-    os.replace(str(tmp), str(path))
+    atomic_write(path, json.dumps(obj, indent=2) + "\n")
 
 
 def ensure_home() -> Path:
@@ -241,9 +271,9 @@ def _load(name: str, defaults: dict) -> dict:
     try:
         user = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise SystemExit("trader: cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
+        raise ConfigError("cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
     if not isinstance(user, dict):
-        raise SystemExit("trader: %s must contain a JSON object" % path)
+        raise ConfigError("%s must contain a JSON object" % path)
     return deep_merge(defaults, user)
 
 
@@ -253,11 +283,9 @@ def update_file(name: str, changes: dict) -> dict:
     try:
         user = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise SystemExit("trader: cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
+        raise ConfigError("cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
     merged = deep_merge(user if isinstance(user, dict) else {}, changes)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
-    os.replace(str(tmp), str(path))
+    atomic_write(path, json.dumps(merged, indent=2) + "\n")
     return merged
 
 

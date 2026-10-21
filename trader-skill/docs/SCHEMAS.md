@@ -538,8 +538,11 @@ how far equity fell since the UTC day began (never less than today's realized lo
 `{"generated_at", "path", "entries": {"ETHUSDT:trend_breakout@1d": {"symbol", "setup", "interval"}}}` — backtest vs
 reality judges each signal by the playbook in force that day.
 
-### `autopilot/daemon.lock` — `{"pid": 1234, "host": "vps-1", "started_at": "..."}`; one daemon per `trader/` folder
-A lock whose pid is gone, or whose heartbeat is older than 10 minutes, is stale and gets taken over.
+### `autopilot/daemon.lock` — `{"pid": 1234, "host": "vps-1", "started_at": "...", "flock": true}`; one daemon per `trader/` folder
+The live daemon also holds an OS lock (`flock`) on `autopilot/daemon.flock` for its whole life — that, not the
+heartbeat, says whether it runs (`"flock": true`), so a long back-off never makes it look dead and a crashed one
+(or a new Docker container with another hostname) can take over at once. Without `flock` (Windows, older lock
+files) a lock whose pid is gone, or whose heartbeat is older than 10 minutes, is stale and gets taken over.
 
 ### `autopilot/control.json` gains `"dd_reset_at": "..."` — written on resume; the drawdown peak only counts
 equity snapshots from that moment on.
@@ -645,6 +648,7 @@ lab's test-period result (`"source": "backtest lab"`). Swing-setup ids use the b
 `BTCUSDT-20261021T1300-oversold_bounce`.
 
 ### `cache/lab/<symbol>-<interval>.json` — the lab's candle store (only the new tail is downloaded on re-runs)
+`{"symbol", "interval", "source", "from" (how far back it was asked for), "updated_at", "candles": [[t,o,h,l,c,v]]}`
 
 ### Rule-exit plans (daily setups)
 Plans from `trend_ema` / `trend_breakout` / `breakout_volume` / `dip_in_uptrend` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
@@ -811,3 +815,64 @@ bot's first cycle (`autopilot/state.json` `started_at`, an hour of slack) are le
 through the desks; `board_view` sorts each gate into research / news / strategy / execution / risk / boss
 (`pass|fail|none`), adds the desk verdict, marks the desk that stopped a rejected trade, and sets
 `call`: BUY / WOULD BUY / REJECT / ERROR. The **Checks** tab renders it.
+
+## v3.6 — hardening: crashes, races, two traders, honest backtests
+
+### State files (`shared/state.py`)
+Every write goes through a temp file of its own (`.<name>.<random>.tmp`), flushed and fsynced, then renamed; the
+same text is then written to `<name>.bak` (not for `cache/`). A read of a broken file (a typo, an empty file)
+falls back to its `.bak` and notes it in `state.recovered` (the autopilot reports those as errors and takes no new
+entries that cycle); with no good copy it raises `state.StateError` (a `ValueError`, never `SystemExit`).
+`state.locked(name)` serialises a read-modify-write across threads and processes (`trader/.locks/`), and
+`state.update_json(name, fn, default)` does read → change → write under it — used for `orders.json`, `plan.json`,
+`journal.json`, `tickets.json`, `x_usage.json` and `autopilot/control.json`. `config.json` / `limits.json` that
+can't be read raise `config.ConfigError` (a `ValueError`): CLI tools print it and exit 2; the daemon keeps the last
+good settings, manages exits and takes no new entries until the file is fixed.
+
+### Autopilot
+* One cycle at a time per folder (`state.locked("autopilot/cycle")`) — daemon, dashboard loop and CLI runs queue.
+* `reconcile` / `manage_exits` handle each book item on its own; one that fails gets `"error"` and the others still
+  get their stops, targets and time stops. Bookkeeping (broker files, learning, health, daily loss) that fails
+  stops new entries for that cycle, never the exits.
+* Book items: an entry that fills partly (a cancelled order with `filled_qty > 0`) becomes a trade of that size with
+  its own stop; a crypto stop is sized from the position the broker reports (fees taken in the coin). Exits and the
+  kill switch sell only the bot's own quantity and cancel only its own orders (`_mine`: its bracket legs, stop and
+  exits) — shares or coins you hold yourself on the same symbol are never touched. A position whose stop order is
+  gone (Alpaca cancels GTC orders after 90 days) gets it back, at most once an hour (`stop_retry_at`); a crypto
+  stop-limit the price fell through (more than 0.5 % below the stop) is closed by the bot.
+  `"rule_check"` says when a rule exit could not be judged (too few bars from the data source); the rule is checked
+  on every daily close since the fill, so a bot that was down still exits.
+* The book item is saved right after the broker accepts the order; the client order id is `ord-<signal id>`, so
+  an order sent twice is refused as a duplicate and found again (Alpaca, and the simulator) instead of doubled.
+* A daily signal is judged once: only on the newest closed bar, and `book.handled` is read across the last 7 days
+  (older days are pruned); a signal id already in the book is never traded again.
+* Meme coins listed on exchanges (`symbols.MEME_BASES`: DOGE, SHIB, PEPE, BONK, WIF, …) are never auto-traded —
+  left out of the universe, the playbook coins and refused by `judge`.
+* Waiting entries count for `risk.open_book` (open positions, exposure) and hold their cash in the simulator.
+* While positions or entries are open, failing cycles back off for at most `HOLDING_BACKOFF_SEC` (120 s).
+* `replay` runs only on the simulator and never next to a running daemon; it writes no heartbeat.
+
+### Dashboard
+Without a password only `localhost`, `127.0.0.1` and `::1` (plus `TRADER_DASHBOARD_HOSTS`, comma-separated) are
+answered as `Host` — DNS rebinding is refused. KILL also sets `run_once` (the daemon acts within seconds). The
+dashboard's own loop defers to a daemon holding the OS lock, even before its first heartbeat. Logins are checked one
+at a time (≤ 2 guesses a second); a request socket times out after 30 s.
+
+### Alpaca
+Stock symbols are never rewritten (`GBTC` is not `G/BTC`); `orders()` reads 500 and merges every open order;
+`lookup(id)` fetches an order (and its legs) by id for orders older than that; a 422 "client_order_id must be
+unique" after a lost response finds the order that landed; lookups retry; redirects are refused (the key headers
+never travel elsewhere). Fractional stock quantities are floored to whole shares for bracket orders (Alpaca has no
+fractional brackets). Crypto uses Alpaca's own `price_increment`, `min_trade_increment` and `min_order_size`
+(from `/v2/assets`). `OPEN_STATUSES` adds `done_for_day` and `pending_cancel` and drops the final `replaced`.
+
+### Lab: point-in-time universe (`--universe point-in-time`, the default without `--symbols`)
+Today's top coins are partly there because they rose — a backtest on them alone flatters every trend setup. The lab
+now loads every coin that was ever among the biggest on Binance (`PAST_MAJORS`, delisted ones included, Binance
+history only), splits a coin delisted and relisted under one ticker into listings (`LUNAUSDT~2020-08` vs
+`LUNAUSDT`), and counts a trade for the setup only if its coin was among the `--top` coins by 30-day dollar volume
+when its period began. Families gain `"universe": "point-in-time|fixed"` and `"members": [[keys], …]` (one list per
+period). Per-coin rows are made for today's coins only and use each coin's whole history; a coin is validated only
+if it also traded in the latest period and its history reaches today. Playbook entries: `"test"` is now the
+setup's (point-in-time) result — confidence sizing uses it — and `"coin_test"` the coin's own. With
+`autopilot.broker: "alpaca"` crypto fees default to Alpaca's 25 bps per side. `--universe today` keeps the old way.

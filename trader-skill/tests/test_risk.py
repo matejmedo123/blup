@@ -107,6 +107,15 @@ class RiskTest(TraderTestCase):
         res = self.risk()
         self.assertIn("max_open_positions", check_names(res["risk"], False))
 
+    def test_the_autopilots_waiting_entries_count_as_open(self):
+        self.set_now(DEMOS["btc"]["now"])
+        self.size(BTC_ID)
+        items = {"p%d" % i: {"status": "pending", "asset": "crypto", "data_key": s, "order_id": "ord-%d" % i,
+                             "qty": 2.0, "entry_plan": 2400.0} for i, s in enumerate(("ETHUSDT", "SOLUSDT"))}
+        self.write_state("autopilot/book.json", {"items": items, "handled": {}})
+        res = self.risk()
+        self.assertIn("max_total_exposure", check_names(res["risk"], False))  # $9,600 waiting at the broker
+
     def test_max_daily_trades(self):
         self.size()
         rows = "".join('{"ts": "2026-10-20T13:5%d:00Z", "ticket_id": "t%d", "approved": true, "asset": "stock"}\n'

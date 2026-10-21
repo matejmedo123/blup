@@ -46,9 +46,10 @@ if not os.path.isdir(os.path.join(_ROOT, "shared")):
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from shared import cli, data, fmt, html, market_clock, setups, skills, state, symbols, trade_sim  # noqa: E402
+from shared import cli, data, fmt, html, http, market_clock, setups, skills, state, symbols, trade_sim  # noqa: E402
 from shared import indicators, shadow, universe as universe_mod  # noqa: E402
 from shared.indicators import Candle  # noqa: E402
+from shared.sources import binance  # noqa: E402
 
 LAB_FILE = "backtests/lab-crypto.json"
 PLAYBOOK = "backtests/playbook.json"
@@ -72,6 +73,17 @@ PROFIT_TRADES = 20            # "profit chance" = P(sum of this many trades > 0)
 BOOTSTRAP_PATHS = 4000
 SEED = 7
 PLAYBOOK_DAYS = 14            # the autopilot stops trusting a playbook older than this
+# Coins that were among Binance's biggest at some point since 2018 — many have shrunk or were delisted (LUNA,
+# FTT, SRM …). Today's top coins are partly there BECAUSE they rose, so a backtest on them alone flatters every
+# trend setup; each period is traded on the coins that were biggest when it began (--universe point-in-time).
+PAST_MAJORS = """BTC ETH BNB XRP ADA SOL DOT LTC BCC BCHABC BCHSV BCH LINK EOS TRX XLM ETC NEO IOTA ONT VEN VET ICX QTUM
+WAVES ZEC DASH XMR ATOM MATIC POL AVAX UNI FIL LUNA FTT NEAR SAND MANA AXS APE GMT FTM ALGO THETA XTZ BTT HOT SXP
+CHZ AAVE SUSHI CRV 1INCH GALA OP ARB APT SUI WLD TIA SEI INJ ORDI FET RNDR RENDER KAVA COMP MKR SNX YFI ZIL ENJ BAT
+ZRX OMG NANO HBAR ICP EGLD GRT KSM RUNE CAKE DYDX ENA TAO TON HYPE ZRO LUNC SRM ANKR CELR ONE HNT KLAY FLOW XEM NULS
+BTG STRAT ARDR LSK STORM MCO""".split()
+ALPACA_CRYPTO_FEE_BPS = 25.0  # Alpaca's crypto taker fee at the lowest volume tier, per side
+PIT_LOOKBACK_DAYS = 30        # a coin's size = its dollar volume over the 30 days before a period starts
+SEGMENT_GAP_DAYS = 7          # a longer gap in a coin's history = delisted and relisted (old LUNA vs LUNA 2.0)
 
 
 def build_parser():
@@ -82,6 +94,10 @@ def build_parser():
     p.add_argument("--symbols", help="comma-separated coins or ETFs (default: the top --top coins by 24h volume, or "
                                      "autopilot.etf_trend.symbols)")
     p.add_argument("--top", type=int, default=25, help="how many coins by 24h volume (default 25)")
+    p.add_argument("--universe", choices=("point-in-time", "today"), default="point-in-time",
+                   help="point-in-time (default): every period is traded on the --top coins that were biggest when "
+                        "it began, delisted ones included — honest; today: today's top coins for the whole history "
+                        "(flatters trend setups: those coins are big now because they went up)")
     p.add_argument("--timeframes", default="5m,1h,4h,1d", help="any of 5m,1h,4h,1d (default all four)")
     p.add_argument("--days", type=float, default=180, help="days of 5-minute history (default 180)")
     p.add_argument("--swing-days", type=float, default=365,
@@ -114,28 +130,103 @@ def _store_name(sym, interval: str) -> str:
     return "%s/%s-%s.json" % (STORE, sym.key, interval)
 
 
+def _fetch(sym, interval: str, days: float, now_ts: int, asset: str) -> tuple:
+    """(candles, source). Crypto history comes from Binance only (its mirror included): a fallback venue with a
+    30-day or 720-bar limit, or another market's prices, would quietly replace years of history."""
+    if asset != "crypto":
+        series = data.get_candles(sym, interval, days=days, asset=asset, end=market_clock.iso(now_ts))
+        return series.candles, series.source
+    step = market_clock.interval_seconds(interval)
+    try:
+        raw = binance.klines(sym.binance, interval, days, now_ts)
+    except http.SourceError as exc:
+        raise data.DataUnavailable("no Binance %s history for %s (%s)" % (interval, sym.display, exc))
+    return data._clean(raw, step, now_ts, now_ts - int(days * 86400)), "Binance"
+
+
 def history(sym, interval: str, days: float, now_ts: int, asset: str = "crypto") -> tuple:
     """(candles, source) for the last ``days`` — reuses the local copy and fetches only the new tail."""
     step = market_clock.interval_seconds(interval)
     start_ts = now_ts - int(days * 86400)
     doc = state.read_json(_store_name(sym, interval), {}) or {}
     rows = doc.get("candles") or []
-    if rows and rows[0][0] <= start_ts + 86400 and doc.get("source"):
-        tail_days = max(0.01, (now_ts - rows[-1][0]) / 86400.0 + 2 * step / 86400.0)
-        series = data.get_candles(sym, interval, days=tail_days, asset=asset, end=market_clock.iso(now_ts))
-        if series.source == doc["source"]:
-            seen = {r[0] for r in rows}
-            rows += [[c.t, c.o, c.h, c.l, c.c, c.v] for c in series.candles if c.t not in seen]
-        else:
+    if rows and int(doc.get("from") or rows[0][0]) > start_ts + 86400:
+        rows = []  # the store doesn't reach back as far as asked (a coin listed later still counts as covered)
+    if rows and doc.get("source"):
+        tail_days = max(0.01, (now_ts - rows[-1][0]) / 86400.0 + 4 * step / 86400.0)
+        try:
+            fresh, source = _fetch(sym, interval, tail_days, now_ts, asset)
+        except data.DataUnavailable:
+            fresh, source = [], None  # the source is down or the coin delisted: the stored history still stands
+        if fresh and source == doc["source"]:
+            have = {r[0]: r for r in rows}
+            moved = [c for c in fresh if c.t in have and abs(c.c - have[c.t][4]) > 0.005 * max(have[c.t][4], 1e-12)]
+            if moved:  # the past changed (a split, a redenomination): two price scales must never mix — start over
+                rows = []
+            else:
+                rows += [[c.t, c.o, c.h, c.l, c.c, c.v] for c in fresh if c.t not in have]
+        elif fresh:
             rows = []
     if not rows:
-        series = data.get_candles(sym, interval, days=days, asset=asset, end=market_clock.iso(now_ts))
-        rows = [[c.t, c.o, c.h, c.l, c.c, c.v] for c in series.candles]
-        doc["source"] = series.source
+        candles, source = _fetch(sym, interval, days, now_ts, asset)
+        rows = [[c.t, c.o, c.h, c.l, c.c, c.v] for c in candles]
+        doc["source"], doc["from"] = source, start_ts
     rows = sorted((r for r in rows if r[0] + step <= now_ts), key=lambda r: r[0])
     state.write_json(_store_name(sym, interval), {"symbol": sym.key, "interval": interval, "source": doc["source"],
+                                                  "from": min(int(doc.get("from") or start_ts), start_ts),
                                                   "updated_at": market_clock.iso(now_ts), "candles": rows})
     return [Candle(*r) for r in rows if r[0] >= start_ts], doc["source"]
+
+
+class Listing(symbols.Symbol):
+    """An earlier listing of a coin that was delisted and later relisted under the same ticker (old LUNA)."""
+
+    def __init__(self, sym, since: str):
+        super().__init__(**{f: getattr(sym, f) for f in ("raw", "asset", "base", "quote", "chain", "address", "name",
+                                                          "note")})
+        self.since = since
+
+    @property
+    def key(self) -> str:
+        return "%s~%s" % (symbols.Symbol.key.fget(self), self.since)
+
+    @property
+    def display(self) -> str:
+        return "%s (listed %s)" % (symbols.Symbol.display.fget(self), self.since)
+
+
+def segments(sym, candles: list) -> list:
+    """[(symbol, candles)] — one per listing: indicators must never run across a delisting into a relisting."""
+    parts, cur = [], []
+    for c in candles:
+        if cur and c.t - cur[-1].t > SEGMENT_GAP_DAYS * 86400:
+            parts.append(cur)
+            cur = []
+        cur.append(c)
+    if cur:
+        parts.append(cur)
+    out = [(Listing(sym, market_clock.iso(p[0].t)[:7]), p) for p in parts[:-1]]
+    return out + ([(sym, parts[-1])] if parts else [])
+
+
+def fold_bounds(now_ts: int, days: float, folds: int) -> tuple:
+    """(start, [end of period 1 … end of the last period]) — the history cut into folds + 1 equal periods."""
+    start_ts = int(now_ts - days * 86400)
+    k = max(1, int(folds))
+    return start_ts, [int(start_ts + i * (now_ts - start_ts) / float(k + 1)) for i in range(1, k + 1)] + [int(now_ts)]
+
+
+def pit_members(daily: dict, starts: list, n: int) -> list:
+    """For each period start, the keys of the ``n`` coins with the most dollar volume in the 30 days before it."""
+    out = []
+    for t0 in starts:
+        sized = []
+        for key, bars in daily.items():
+            vol = [b.c * b.v for b in bars if t0 - PIT_LOOKBACK_DAYS * 86400 <= b.t < t0]
+            if len(vol) >= PIT_LOOKBACK_DAYS - 5:
+                sized.append((sum(vol), key))
+        out.append({key for _, key in sorted(sized, reverse=True)[:n]})
+    return out
 
 
 # --- triggers and the exit grid --------------------------------------------------------------------
@@ -443,17 +534,26 @@ def runner_verdict(setup: str, without: dict, ride_rs: list, folds: list) -> dic
 
 
 def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit_mod, cost: float,
-                 context: dict = None) -> tuple:
+                 context: dict = None, members: list = None, tradable: set = None) -> tuple:
     """Walk-forward test of one setup on one timeframe across all coins.
 
     The history is cut into folds + 1 equal periods. In fold k the exit is chosen on everything before period
     k + 1 (all coins pooled) and then traded, unchanged, in period k + 1. The setup holds only if that
     out-of-sample result made money in every period; the exit to trade is the one chosen last.
     coins: [(sym, candles, tick)] → (family summary, per-coin rows, per-coin-optimised test edges).
+    members: one set of coin keys per period (point-in-time universe) — a trade counts for the setup only if its
+    coin was among the biggest when its period began. The per-coin rows use each coin's whole history.
+    tradable: the coin keys that get a per-coin row (today's universe) — the others only shape the family result.
     """
-    start_ts = int(now_ts - tf_days(interval, args) * 86400)
     k = max(1, int(args.folds))
-    bounds = [int(start_ts + i * (now_ts - start_ts) / float(k + 1)) for i in range(1, k + 1)] + [int(now_ts)]
+    start_ts, bounds = fold_bounds(now_ts, tf_days(interval, args), k)
+    starts = [start_ts] + bounds[:-1]
+
+    def counts(key, ts):
+        if members is None:
+            return True
+        i = sum(1 for b in starts[1:] if ts >= b)
+        return key in members[i]
     rule = setups.exit_rule(setup)
     # a rule-exit setup has nothing to choose, so the training data only has to show it made money at all
     min_n = max(20, args.min_pooled // 4) if rule else args.min_pooled
@@ -472,7 +572,7 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
             if only is not None and sym.key != only:
                 continue
             for ts, res in trades:
-                if lo <= ts < hi:
+                if lo <= ts < hi and (only is not None or counts(sym.key, ts)):
                     for key, r in res.items():
                         out.setdefault(key, []).append(r)
         return out
@@ -486,7 +586,7 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
         if b is not None:
             for sym, trades in per_coin:
                 for ts, res in trades:
-                    if bounds[i] <= ts < bounds[i + 1] and b in res:
+                    if bounds[i] <= ts < bounds[i + 1] and b in res and counts(sym.key, ts):
                         end, ride_end = ends.get(sym.key, {}).get(ts, (ts, ts))
                         timed.append([int(end), round(res[b], 4)])
                         if RUNNER_KEY in res and b == RULE_KEY:
@@ -496,7 +596,7 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
             ride_folds.append((stats(test.get(RULE_KEY, []))["expectancy_r"], stats(test[RUNNER_KEY])["expectancy_r"]))
             for sym, trades in per_coin:
                 ride_coin[sym.key] += [res[RUNNER_KEY] for ts, res in trades
-                                       if bounds[i] <= ts < bounds[i + 1] and RUNNER_KEY in res]
+                                       if bounds[i] <= ts < bounds[i + 1] and RUNNER_KEY in res]  # whole history
         f = {"train_until": market_clock.iso(bounds[i]), "test_until": market_clock.iso(bounds[i + 1]),
              "exit": exit_label(b, setup) if b else None, "train": stats(train[b]) if b else None,
              "test": stats(test.get(b, [])) if b else None}
@@ -510,7 +610,11 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     last_train, last_test = pool(start_ts, bounds[k - 1]), pool(bounds[k - 1], bounds[k])
     fam = {"setup": setup, "label": setups.SETUPS[setup]["label"], "timeframe": interval,
            "train_until": market_clock.iso(bounds[k - 1]), "coins": sum(1 for _, t in per_coin if t),
-           "signals": sum(len(t) for _, t in per_coin), "folds": folds}
+           "signals": sum(len(t) for _, t in per_coin), "folds": folds,
+           "universe": "point-in-time" if members is not None else "fixed",
+           "members": [sorted(m) for m in members] if members is not None else None}
+    step = market_clock.interval_seconds(interval)
+    last_bar = {sym.key: (c[-1].t if c else 0) for sym, c, _ in coins}
     # what the highest win chance looks like, edge or not
     hw = None if rule else highest_win(last_train, args.min_pooled, args.min_target_r)
     fam["highest_win"] = None if hw is None else {
@@ -541,7 +645,7 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
         fam.update(exit=exit_label(best, setup), train=final_stats(last_train[best]), test=oos_s, validated=ok,
                    verdict=verdict or "made money in all %d walk-forward periods" % k)
         for sym, trades in per_coin:
-            if not trades:
+            if not trades or (tradable is not None and sym.key not in tradable):
                 continue
             a = stats(pool(start_ts, bounds[k - 1], sym.key).get(best, []))
             b = stats(oos_coin[sym.key])
@@ -553,7 +657,12 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
                 why.append("only %d out-of-sample trades on this coin" % b["n"])
             elif b["expectancy_r"] < args.min_edge:
                 why.append("out-of-sample edge %s on this coin" % fmt.r(b["expectancy_r"]))
-            if recent["n"] and recent["expectancy_r"] < 0:
+            if last_bar.get(sym.key, 0) + step < now_ts - 5 * step:
+                why.append("its history ends %s — delisted or no longer on this source" %
+                           market_clock.iso(last_bar.get(sym.key, 0))[:10])
+            elif not recent["n"]:
+                why.append("no trades on this coin in the latest period — nothing recent to judge it by")
+            elif recent["expectancy_r"] < 0:
                 why.append("lost money on this coin in the latest period (%s)" % fmt.r(recent["expectancy_r"]))
             if not why:
                 b = final_stats(oos_coin[sym.key])
@@ -582,6 +691,15 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
 
 # --- the run -----------------------------------------------------------------------------------------
 
+def _tick(sym, asset: str):
+    if asset == "stock":
+        return 0.01
+    try:
+        return data.lot_info(sym).get("tick")
+    except (data.DataUnavailable, ValueError):
+        return None
+
+
 def universe(args, cfg) -> tuple:
     if getattr(args, "etf", False):
         raw = args.symbols.split(",") if args.symbols else \
@@ -592,8 +710,9 @@ def universe(args, cfg) -> tuple:
     if args.symbols:
         return [symbols.parse(s.strip(), asset="crypto", quote=quote) for s in args.symbols.split(",") if s.strip()], \
             "your list"
-    uni = data.crypto_universe(args.top + 5, quote)  # a few spares for the gold tokens dropped below
-    coins = [c["symbol"] for c in uni["coins"] if c["symbol"].base not in universe_mod.COMMODITY_BACKED]
+    uni = data.crypto_universe(args.top + 20, quote)  # spares for the gold tokens and meme coins dropped below
+    coins = [c["symbol"] for c in uni["coins"] if c["symbol"].base not in universe_mod.COMMODITY_BACKED
+             and c["symbol"].base not in symbols.MEME_BASES]   # the autopilot never trades them
     return coins[:args.top], "top %d by 24h volume (%s)" % (args.top, uni["source"])
 
 
@@ -603,6 +722,8 @@ def run(args, ctx) -> dict:
     asset = "stock" if getattr(args, "etf", False) else "crypto"
     costs = (cfg.get("costs") or {}).get(asset) or {}
     fee = args.fee_bps if args.fee_bps is not None else float(costs.get("fee_bps") or 0)
+    if args.fee_bps is None and asset == "crypto" and ((cfg.get("autopilot") or {}).get("broker") == "alpaca"):
+        fee = max(fee, ALPACA_CRYPTO_FEE_BPS)  # what the autopilot will really pay, not an exchange's VIP rate
     slip = args.slippage_bps if args.slippage_bps is not None else float(costs.get("slippage_bps") or 0)
     cost = trade_sim.cost_pct(fee, slip)
     tfs = ["1d"] if asset == "stock" else [t.strip() for t in args.timeframes.split(",") if t.strip()]
@@ -618,28 +739,65 @@ def run(args, ctx) -> dict:
     started = time.time()
     notes = []
     families, rows, picks = [], [], []
+    pit = asset == "crypto" and not args.symbols and getattr(args, "universe", "point-in-time") == "point-in-time"
+
+    def fetch_all(wanted_syms, interval, days):
+        def one(sym):
+            try:
+                return sym, history(sym, interval, days, now_ts, asset), None
+            except (data.DataUnavailable, symbols.SymbolError, ValueError) as exc:
+                return sym, None, str(exc)
+        with ThreadPoolExecutor(max_workers=max(1, int(args.workers))) as ex:
+            return list(ex.map(one, wanted_syms))
+
+    daily, base_of = {}, {}
+    if pit:  # every coin that was ever big, delisted ones too — sized by its dollar volume at each period start
+        quote = cfg.get("quote_currency") or "USDT"
+        have = {s.key for s in syms}
+        skip = set(symbols.STABLECOINS) | set(symbols.WRAPPED) | set(symbols.MEME_BASES) | \
+            set(universe_mod.COMMODITY_BACKED)
+        past = [symbols.parse(b + quote, asset="crypto", quote=quote) for b in PAST_MAJORS if b not in skip]
+        longest = max(tf_days(t, args) for t in tfs) + PIT_LOOKBACK_DAYS + 2
+        for sym, got, err in fetch_all(syms + [s for s in past if s.key not in have], "1d", longest):
+            if err or not got or not got[0]:
+                if sym.key in have:
+                    notes.append("%s daily history unavailable: %s" % (sym.display, err or "no candles"))
+                continue
+            for seg, bars in segments(sym, got[0]):
+                daily[seg.key], base_of[seg.key] = bars, (sym, seg)
+        uname += " · each period traded on the top %d coins of its own time (%d coins ever big, delisted ones " \
+                 "included)" % (args.top, len(daily))
     for interval in tfs:
         fam_setups = [s for s in wanted if setup_fits(s, interval)]
         if not fam_setups:
             continue
         days = tf_days(interval, args)
-
-        def load(sym):
-            try:
-                return sym, history(sym, interval, days, now_ts, asset), None
-            except (data.DataUnavailable, symbols.SymbolError, ValueError) as exc:
-                return sym, None, str(exc)
+        members = None
         coins = []
-        with ThreadPoolExecutor(max_workers=max(1, int(args.workers))) as pool:
-            for sym, got, err in pool.map(load, syms):
+        if pit:
+            start_ts, bounds = fold_bounds(now_ts, days, args.folds)
+            members = pit_members(daily, [start_ts] + bounds[:-1], args.top)
+            keys = set().union(*members) | {s.key for s in syms}
+            if interval == "1d":  # already loaded, split into listings
+                loaded = [(base_of[k][1], [c for c in daily[k] if c.t >= now_ts - days * 86400])
+                          for k in keys if k in daily]
+            else:
+                loaded = []
+                bases = {base_of[k][0].key: base_of[k][0] for k in keys if k in base_of}
+                for sym, got, err in fetch_all(list(bases.values()), interval, days):
+                    if err or not got or not got[0]:
+                        notes.append("%s %s skipped: %s" % (sym.display, interval, err or "no candles"))
+                        continue
+                    loaded += segments(sym, got[0])
+            for seg, bars in loaded:
+                if seg.key in keys and bars:
+                    coins.append((seg, bars, _tick(seg, asset)))
+        else:
+            for sym, got, err in fetch_all(syms, interval, days):
                 if err or not got or not got[0]:
                     notes.append("%s %s skipped: %s" % (sym.display, interval, err or "no candles"))
                     continue
-                try:
-                    tick = 0.01 if asset == "stock" else data.lot_info(sym).get("tick")
-                except (data.DataUnavailable, ValueError):
-                    tick = None
-                coins.append((sym, got[0], tick))
+                coins.append((sym, got[0], _tick(sym, asset)))
         context = None
         if any(setups.SETUPS[st].get("needs_btc") for st in fam_setups):
             btc = next((c for sym, c, _ in coins if sym.base == "BTC"), None)
@@ -650,7 +808,8 @@ def run(args, ctx) -> dict:
                     notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
             context = {"btc_up": setups.regime_map(btc)} if btc else {"btc_up": {}}
         for setup in fam_setups:
-            fam, coin_rows, coin_picks = study_family(setup, interval, coins, now_ts, args, exit_mod, cost, context)
+            fam, coin_rows, coin_picks = study_family(setup, interval, coins, now_ts, args, exit_mod, cost, context,
+                                                      members, {s.key for s in syms} if pit else None)
             fam["coins_loaded"] = len(coins)
             families.append(fam)
             rows += coin_rows
@@ -687,16 +846,20 @@ def run(args, ctx) -> dict:
 
 def write_playbook(doc: dict, now, path: str = PLAYBOOK) -> dict:
     entries = {}
+    keys = ("n", "win_rate", "expectancy_r", "profit_chance", "profit_factor")
     for r in doc["validated"]:
         e = r["exit"]
+        fam = next((f for f in doc.get("families") or []
+                    if f["setup"] == r["setup"] and f["timeframe"] == r["timeframe"]), {})
+        # sizing trusts the setup's result across the universe, not one coin's: a coin is in the list partly
+        # because it did well, so its own numbers are the optimistic ones (kept as coin_test for the record)
+        test = fam.get("test") if (fam.get("test") or {}).get("n") else r["test"]
         entries["%s:%s@%s" % (r["symbol"], r["setup"], r["timeframe"])] = {
             "symbol": r["symbol"], "display": r["display"], "setup": r["setup"], "interval": r["timeframe"],
             "stop": e["stop"], "atr_mult": e["atr_mult"], "target_r": e["target_r"], "horizon": e["horizon"],
             "exit_rule": e.get("exit_rule"), "exit_text": e["text"],
-            "test": {k: r["test"][k] for k in ("n", "win_rate", "expectancy_r", "profit_chance", "profit_factor")},
+            "test": {k: test.get(k) for k in keys}, "coin_test": {k: r["test"].get(k) for k in keys},
             "train": {k: r["train"][k] for k in ("n", "win_rate", "expectancy_r")}}
-        fam = next((f for f in doc.get("families") or []
-                    if f["setup"] == r["setup"] and f["timeframe"] == r["timeframe"]), {})
         ride = fam.get("runner")
         if ride:
             entries["%s:%s@%s" % (r["symbol"], r["setup"], r["timeframe"])]["runner"] = {
@@ -782,6 +945,9 @@ def text(doc: dict) -> str:
             lines.append("  ✓ %-11s %-16s %-3s %-38s out of sample: win %s · edge %s · profit chance %s · %d trades" % (
                 r["display"], r["setup"], r["timeframe"], r["exit"]["text"], _pct(r["test"]["win_rate"]),
                 fmt.r(r["test"]["expectancy_r"]), _pct(r["test"]["profit_chance"]), r["test"]["n"]))
+        if any(f.get("universe") == "point-in-time" for f in doc.get("families") or []):
+            lines.append("  (a coin's own numbers are its whole history — optimistic, since it is in today's list partly "
+                         "because it rose; the setup lines above are the honest ones, and the autopilot sizes by them)")
     else:
         lines.append("VALIDATED: nothing — no setup made money after costs in every period it was tested on unseen "
                      "data. The autopilot will not trade crypto until the lab finds something (it re-checks weekly).")

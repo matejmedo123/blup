@@ -78,6 +78,8 @@ def parse_iso(value) -> datetime:
     if s.endswith("Z") or s.endswith("z"):
         s = s[:-1] + "+00:00"
     s = re.sub(r"\.(\d{1,6})\d*", lambda m: "." + m.group(1).ljust(6, "0"), s)
+    # +0000 and -04 (what some APIs send) → +00:00 / -04:00, which Python 3.8's fromisoformat needs
+    s = re.sub(r"([+-])(\d{2})(?::?(\d{2}))?$", lambda m: "%s%s:%s" % (m.group(1), m.group(2), m.group(3) or "00"), s)
     dt = datetime.fromisoformat(s)
     return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 

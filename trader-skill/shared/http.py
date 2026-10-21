@@ -71,6 +71,17 @@ stats = {"requests": 0, "cache_hits": 0, "retries": 0, "stale": 0}
 warnings = []
 
 
+MAX_WARNINGS = 20
+
+
+def note(text: str) -> None:
+    """A data warning for whoever reads data next — each once, and only the latest few (a daemon runs for months)."""
+    if text in warnings:
+        warnings.remove(text)
+    warnings.append(text)
+    del warnings[:-MAX_WARNINGS]
+
+
 def reset() -> None:
     """Forget per-process state (used by tests)."""
     global _cache
@@ -180,7 +191,7 @@ def get_text(url: str, ttl: float = 60, headers: dict = None, retries: int = 3,
         stale = cache.get(url, 0, allow_stale=True)
         if stale is not None and stale[1] <= STALE_MAX_AGE:
             stats["stale"] += 1
-            warnings.append("served a cached copy of %s (%d min old) — live request failed" % (host, stale[1] // 60))
+            note("served a cached copy of %s (%d min old) — live request failed" % (host, stale[1] // 60))
             return stale[0]
     status = getattr(last_error, "code", None)
     reason = getattr(last_error, "reason", None) or str(last_error)

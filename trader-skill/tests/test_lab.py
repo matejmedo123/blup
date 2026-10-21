@@ -451,11 +451,24 @@ class RuleExit(TraderTestCase):
         self.closes([100, 98, 96, 94, 92, 91])
         b = FakeBroker()
         b.pos = [{"symbol": "ETH/USD", "asset": "crypto", "qty": 1.0, "last": 91.0}]
+        stop = [{"id": "s1", "symbol": "ETH/USD", "side": "sell", "type": "stop_limit", "status": "new", "leg": "stop"}]
         book = {"items": {"p": self.item()}, "handled": {}}
-        self.assertEqual(ap().manage_exits(b, book, b.pos, []), [])
+        self.assertEqual(ap().manage_exits(b, book, b.pos, stop), [])
         self.closes([100, 98, 96, 94, 92, 99])
         book = {"items": {"p": self.item(filled_at="2026-10-20T00:01:00Z")}, "handled": {}}
-        self.assertEqual(ap().manage_exits(b, book, b.pos, []), [])  # that close happened before we owned it
+        self.assertEqual(ap().manage_exits(b, book, b.pos, stop), [])  # that close happened before we owned it
+
+    def test_a_position_whose_stop_is_gone_gets_it_back_once_an_hour(self):
+        from tests.test_autopilot import FakeBroker
+        self.closes([100, 98, 96, 94, 92, 91])
+        b = FakeBroker()
+        b.pos = [{"symbol": "ETH/USD", "asset": "crypto", "qty": 1.0, "last": 91.0}]
+        book = {"items": {"p": self.item()}, "handled": {}}
+        acts = ap().manage_exits(b, book, b.pos, [])  # e.g. Alpaca cancelled the GTC stop after 90 days
+        self.assertEqual(b.calls, [("stop", "ETH/USD", 1.0, 1.0)])
+        self.assertIn("put back", acts[0])
+        self.assertEqual(book["items"]["p"]["stop_order_id"], "stop-1")
+        self.assertEqual(ap().manage_exits(b, book, b.pos, []), [])  # not again within the hour
 
 
 class TrendBreakout(TraderTestCase):
@@ -521,3 +534,50 @@ class UserStrategies(TraderTestCase):
         self.assertEqual(len(idx), len(set(idx)))
         trades = lab().rule_trades(coin, "trend_ema", "1d", 0.0, ctx)
         self.assertTrue(all(len(t[1]) == 1 for t in trades))
+
+
+class PointInTime(TraderTestCase):
+    """Each period is traded on the coins that were biggest when it began — not on today's winners."""
+
+    def test_segments_keep_a_delisted_listing_apart_from_its_relisting(self):
+        day = 86400
+        bars = [Candle(1600000000 + i * day, 1, 1, 1, 1.0, 1) for i in range(100)]
+        bars += [Candle(1600000000 + (120 + i) * day, 5, 5, 5, 5.0, 1) for i in range(50)]  # 20 days dark
+        segs = lab().segments(symbols.parse("LUNAUSDT", asset="crypto"), bars)
+        self.assertEqual([(s.key, len(b)) for s, b in segs], [("LUNAUSDT~2020-09", 100), ("LUNAUSDT", 50)])
+        self.assertIn("listed 2020-09", segs[0][0].display)
+        self.assertEqual(segs[0][0].binance, "LUNAUSDT")
+
+    def test_members_are_the_biggest_by_dollar_volume_before_each_start(self):
+        day, t0 = 86400, 1600000000
+        big_then = [Candle(t0 + i * day, 1, 1, 1, 10.0, 1000.0 if i < 60 else 1.0) for i in range(120)]
+        big_now = [Candle(t0 + i * day, 1, 1, 1, 10.0, 1.0 if i < 60 else 1000.0) for i in range(120)]
+        m = lab().pit_members({"OLDUSDT": big_then, "NEWUSDT": big_now}, [t0 + 40 * day, t0 + 100 * day], 1)
+        self.assertEqual(m, [{"OLDUSDT"}, {"NEWUSDT"}])
+        self.assertEqual(lab().pit_members({"OLDUSDT": big_then}, [t0 + 10 * day], 1), [set()])  # too young
+
+    def test_a_coin_counts_only_while_it_was_big(self):
+        coins = [(symbols.parse(s, asset="crypto"), synthetic(i, bars=5000), 0.01)
+                 for i, s in enumerate(("AAAUSDT", "BBBUSDT"))]
+        now = coins[0][1][-1].t + 3600
+        args = lab().build_parser().parse_args(["--min-pooled", "40", "--min-pooled-test", "20", "--fee-bps", "0",
+                                                "--slippage-bps", "0", "--swing-days", "208"])
+        exit_mod = load("trader-exit", "exit")
+        full, rows_full, _ = lab().study_family("oversold_bounce", "1h", coins, now, args, exit_mod, 0.0)
+        only_a = [{"AAAUSDT"}] * 4
+        fam, rows, _ = lab().study_family("oversold_bounce", "1h", coins, now, args, exit_mod, 0.0, None, only_a)
+        self.assertLess(fam["test"]["n"], full["test"]["n"])          # BBB's trades no longer count for the setup
+        self.assertEqual(fam["universe"], "point-in-time")
+        b = [r for r in rows if r["symbol"] == "BBBUSDT"][0]
+        self.assertGreater(b["test"]["n"], 0)   # its own row still judges BBB on its whole history
+
+    def test_a_coin_whose_history_stops_is_never_validated(self):
+        coins = [(symbols.parse("AAAUSDT", asset="crypto"), synthetic(1, bars=5000), 0.01),
+                 (symbols.parse("BBBUSDT", asset="crypto"), synthetic(2, bars=4000), 0.01)]  # delisted early
+        now = coins[0][1][-1].t + 3600
+        args = lab().build_parser().parse_args(["--min-pooled", "40", "--min-pooled-test", "20", "--fee-bps", "0",
+                                                "--slippage-bps", "0", "--swing-days", "208"])
+        fam, rows, _ = lab().study_family("oversold_bounce", "1h", coins, now, args, load("trader-exit", "exit"), 0.0)
+        b = [r for r in rows if r["symbol"] == "BBBUSDT"][0]
+        self.assertFalse(b["validated"])
+        self.assertIn("history ends", b["why"])

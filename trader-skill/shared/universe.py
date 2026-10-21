@@ -100,7 +100,7 @@ def _blocked(cfg: dict, quote: str) -> dict:
     out = {}
     try:
         blocked = config.load_limits().get("blocked_symbols") or []
-    except SystemExit:
+    except (SystemExit, ValueError):
         blocked = []
     for reason, rows in (("excluded in config (autopilot.universe.exclude)", _ucfg(cfg).get("exclude") or []),
                          ("blocked in limits.json (blocked_symbols)", blocked)):
@@ -254,6 +254,9 @@ def _crypto_picks(cfg: dict, broker):
         if sym.base in symbols.WRAPPED:
             excluded[sym.key] = "wrapped token"
             continue
+        if sym.base in symbols.MEME_BASES:
+            excluded[sym.key] = "meme coin — never auto-traded"
+            continue
         vol = row.get("volume_24h")
         if min_vol and vol is not None and float(vol) < min_vol:
             excluded[sym.key] = "24h volume %s below %s" % (_money(vol), _money(min_vol))
@@ -302,6 +305,8 @@ def _compose(cfg: dict, asset: str, picks: list, quote: str, blocked: dict, excl
         if k in reasons:
             continue
         why = blocked.get(k)
+        if not why and asset == "crypto" and k.endswith(quote) and k[: -len(quote)] in symbols.MEME_BASES:
+            why = "meme coin — never auto-traded (watch it with /trader-scanner)"
         if why:
             excluded[k] = why
             continue

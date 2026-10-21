@@ -130,6 +130,19 @@ class SizerTest(TraderTestCase):
         self.assertAlmostEqual(o["limit_price"], 67462.09, places=2)
         self.assertLessEqual(o["position_pct"], 15.0 + 1e-9)
 
+    def test_a_sub_cent_coin_gets_a_limit_near_its_price(self):
+        size = __import__("tests.helpers", fromlist=["load"]).load("trader-sizer", "size")
+        from shared import config, data
+        real = data.lot_info
+        data.lot_info = lambda symbol: {"step": 1.0, "tick": 0.01, "min_qty": 1.0, "min_notional": 1.0,
+                                        "source": "test"}
+        self.addCleanup(setattr, data, "lot_info", real)
+        plan = dict(plans()[BTC_ID], symbol="HOTUSDT", entry={"price": 0.00001234, "time": "2026-10-20T14:40:00Z"},
+                    stop={"price": 0.0000115}, risk_per_unit=0.00000084)
+        o = size.size_order(plan, config.load_config(), config.load_limits(), account=1000)
+        self.assertLess(o["limit_price"], 0.00001234 * 1.001)   # not a cent — 800× the price
+        self.assertGreaterEqual(o["limit_price"], 0.00001234)
+
     def test_crypto_below_minimum_refused(self):
         self.set_now(DEMOS["btc"]["now"])
         code, out, err = self.run_tool("trader-sizer", "size", ["--id", BTC_ID, "--account", "20"])

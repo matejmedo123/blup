@@ -32,7 +32,10 @@ from shared import cli, fmt, market_clock, skills, state, symbols  # noqa: E402
 
 TICKET_TTL_MIN = 15
 RISK_MAX_AGE_MIN = 30
-CONNECTOR_NOTES = ["paper account by default", "check argument names against your connector's tool schema before calling"]
+CONNECTOR_NOTES = ["paper account by default",
+                   "the connector, not this payload, decides paper or live: read its account info first and send only "
+                   "if it is the account this ticket names",
+                   "check argument names against your connector's tool schema before calling"]
 
 
 def build_parser():
@@ -180,18 +183,20 @@ def _risk_problem(order: dict, now) -> str:
 
 
 def _save_ticket(ticket: dict) -> None:
-    doc = _tickets_doc()
-    tickets = [t for t in doc.get("tickets") or [] if t.get("id") != ticket["id"]]
-    tickets.append(ticket)
-    state.write_json("tickets.json", {"tickets": tickets})
+    with state.locked("tickets.json"):
+        doc = _tickets_doc()
+        tickets = [t for t in doc.get("tickets") or [] if t.get("id") != ticket["id"]]
+        tickets.append(ticket)
+        state.write_json("tickets.json", {"tickets": tickets})
 
 
 def _set_order_status(order_id: str, status: str) -> None:
-    doc = _orders_doc()
-    for o in doc.get("orders") or []:
-        if o.get("id") == order_id:
-            o["status"] = status
-    state.write_json("orders.json", doc)
+    with state.locked("orders.json"):
+        doc = _orders_doc()
+        for o in doc.get("orders") or []:
+            if o.get("id") == order_id:
+                o["status"] = status
+        state.write_json("orders.json", doc)
 
 
 def prepare(args, ctx) -> tuple:

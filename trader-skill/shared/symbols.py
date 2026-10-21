@@ -22,6 +22,11 @@ KNOWN_COINS = {
 STABLECOINS = {"USDT", "USDC", "BUSD", "FDUSD", "DAI", "TUSD", "USDE", "PYUSD", "USDD", "USDS", "EURC",
                "USD1", "USDP", "GUSD", "FRAX", "LUSD", "RLUSD", "USDTB", "USDF", "USDG", "USD0", "AUSD",
                "BFUSD", "USDX", "USDQ", "EURI"}
+# meme coins that trade on the big exchanges like any other coin — the autopilot never buys them either
+MEME_BASES = {"DOGE", "SHIB", "PEPE", "BONK", "WIF", "FLOKI", "TRUMP", "MELANIA", "BOME", "POPCAT", "MEW", "PENGU",
+              "FARTCOIN", "1000PEPE", "1000BONK", "1000SHIB", "1000SATS", "1000FLOKI", "1MBABYDOGE", "BABYDOGE",
+              "NEIRO", "TURBO", "MOG", "BRETT", "PNUT", "ACT", "GOAT", "SPX", "MOODENG", "DOGS", "MEME", "PEOPLE",
+              "CHILLGUY", "AI16Z", "GIGA", "PONKE", "MYRO", "WEN", "SLERF", "BOOK", "LADYS", "COQ", "ELON", "SAMO"}
 WRAPPED = {"WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "RETH", "WBETH", "BTCB", "WSOL",
            "JITOSOL", "MSOL", "BSOL", "SUSDE", "LBTC", "SOLVBTC", "EZETH", "RSETH"}
 QUOTES = ("FDUSD", "USDT", "USDC", "BUSD", "USD", "EUR", "BTC", "ETH")

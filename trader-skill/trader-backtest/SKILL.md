@@ -63,7 +63,15 @@ python3 "${CLAUDE_SKILL_DIR}/lab.py" --fee-bps 25                     # e.g. Alp
   with a net edge is picked on everything before it, all coins pooled, and then traded unchanged in
   that period, which the choice never saw. A setup **holds** only if it made money in every one of
   those periods; a coin is **validated** only if it made money out of sample, including the latest
-  period. The exit traded is the one chosen last.
+  period (and still trades today). The exit traded is the one chosen last.
+* **Point-in-time coins (default without `--symbols`):** every period is traded only on the `--top` coins
+  that were biggest (30-day dollar volume) when it began — coins that later collapsed or were delisted
+  included (LUNA, FTT, SRM …, Binance history only; a relisted ticker is a separate listing such as
+  `LUNAUSDT~2020-08`). Today's top coins alone flatter trend setups (they are big because they rose):
+  on 8 years of daily bars the trend-following edge fell from +2.46R to +1.38R per trade this way. Say so
+  when you quote lab numbers. Per-coin rows use each coin's whole history (optimistic); the playbook sizes
+  by the setup's point-in-time result. `--universe today` gives the old view. With `autopilot.broker:
+  "alpaca"` crypto fees default to Alpaca's 25 bps per side.
 * The report also shows the highest *win chance* each setup can reach and what it earned — usually a
   lot of small wins and a loss overall — and an overfitting check: how many per-coin "best settings"
   survived the latest period.

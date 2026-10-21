@@ -952,7 +952,7 @@ def _secret_values() -> list:
             vals.add(v)
     try:
         topic = str(((config.load_config().get("notify") or {}).get("ntfy_topic")) or "")
-    except SystemExit:
+    except (SystemExit, ValueError):
         topic = ""
     if len(topic) >= 8:
         vals.add(topic)
@@ -969,6 +969,11 @@ def redact(text: str) -> str:
 
 
 def write_control(action: str, by: str = "dashboard") -> dict:
+    with state.locked("autopilot/control.json"):  # the daemon writes it too
+        return _write_control(action, by)
+
+
+def _write_control(action: str, by: str) -> dict:
     old = read_json("autopilot/control.json", {}) or {}
     c = {"paused": bool(old.get("paused")), "kill": bool(old.get("kill")), "run_once": bool(old.get("run_once"))}
     if old.get("dd_reset_at"):
@@ -981,7 +986,7 @@ def write_control(action: str, by: str = "dashboard") -> dict:
     elif action == "run_once":
         c["run_once"] = True
     elif action == "kill":
-        c.update(kill=True, paused=True)
+        c.update(kill=True, paused=True, run_once=True)  # the daemon acts now, not at its next cycle
     else:
         raise ValueError("unknown action %r" % action)
     c.update(updated_at=_now_iso(), by=by)
@@ -999,6 +1004,8 @@ def write_control(action: str, by: str = "dashboard") -> dict:
 class DashboardApp:
     def __init__(self, password: str = "", run_autopilot: bool = False, news_every: float = None):
         self.csrf = _pysecrets.token_urlsafe(32)
+        self.login_lock = threading.Lock()
+        self._compacted = 0.0
         self.password = password or ""
         self.sessions = {}
         self.lock = threading.Lock()
@@ -1053,11 +1060,23 @@ class DashboardApp:
             self.autopilot.update(available=False, last_error="autopilot not installed (no run_cycle)")
             return None
         self.autopilot["available"] = True
+        self._ap_mod = mod
         return mod
 
-    @staticmethod
-    def daemon_active() -> bool:
-        """A separate autopilot daemon is beating — this server must not trade the same folder too."""
+    def daemon_active(self) -> bool:
+        """A separate autopilot daemon holds the lock or is beating — this server must not trade the folder too."""
+        mod = getattr(self, "_ap_mod", None)
+        if mod is None:
+            try:
+                mod = self._ap_mod = skills.load("trader-autopilot", "autopilot")
+            except Exception:
+                mod = None
+        if mod is not None and hasattr(mod, "running_daemon"):
+            try:
+                if mod.running_daemon():
+                    return True  # its OS lock says so even before its first heartbeat, and during a long back-off
+            except Exception:
+                pass
         hb = health_view()
         if hb["state"] != "alive" or hb.get("runner") != "daemon":
             return False
@@ -1084,6 +1103,9 @@ class DashboardApp:
                 try:
                     self._run_cycle(mod)
                     self.autopilot.update(last_run=_now_iso(), last_error=None, runs=self.autopilot["runs"] + 1)
+                    if hasattr(mod, "compact_equity") and time.time() - self._compacted > 6 * 3600:
+                        self._compacted = time.time()  # without a daemon, this loop keeps equity.jsonl small
+                        mod.compact_equity()
                 except Exception as exc:  # keep the dashboard alive whatever the bot does
                     self.autopilot.update(last_run=_now_iso(), last_error="%s: %s" % (type(exc).__name__, exc))
                     _log_error("autopilot cycle", exc)
@@ -1182,6 +1204,7 @@ def make_handler(app: DashboardApp):
     class Handler(BaseHTTPRequestHandler):
         server_version = "TraderDashboard/1.0"
         sys_version = ""
+        timeout = 30  # a client that sends nothing never holds a thread for good
 
         def log_message(self, fmt, *args):  # quiet by default; errors still go to stderr
             if os.environ.get("TRADER_DASHBOARD_LOG"):
@@ -1233,6 +1256,20 @@ def make_handler(app: DashboardApp):
             return self._error(403, "this dashboard is reached through a reverse proxy but has no password — set "
                                     "TRADER_DASHBOARD_PASSWORD and restart it")
 
+        def _host_ok(self) -> bool:
+            """Without a password only this computer's names are answered: a web page whose own domain is made to
+            point at 127.0.0.1 (DNS rebinding) is refused instead of reading the dashboard and pressing its buttons."""
+            if app.auth_required:
+                return True
+            host = (self.headers.get("Host") or "").strip().lower()
+            name = host[1:host.index("]")] if host.startswith("[") and "]" in host else host.rsplit(":", 1)[0]
+            extra = {h.strip().lower() for h in os.environ.get("TRADER_DASHBOARD_HOSTS", "").split(",") if h.strip()}
+            return name in ("localhost", "127.0.0.1", "::1") or name in extra
+
+        def _refuse_host(self):
+            return self._error(403, "unknown Host header — open the dashboard as http://127.0.0.1:<port>/ or "
+                                    "http://localhost:<port>/ (or add the name to TRADER_DASHBOARD_HOSTS)")
+
         def _same_origin(self) -> bool:
             host = self.headers.get("Host") or ""
             for h in ("Origin", "Referer"):
@@ -1267,6 +1304,8 @@ def make_handler(app: DashboardApp):
             parts = urlsplit(self.path)
             path = parts.path
             q = {k: v[-1] for k, v in parse_qs(parts.query).items()}
+            if not self._host_ok():
+                return self._refuse_host()
             if self._proxied_without_password():
                 return self._refuse_proxy()
             if path == "/login":
@@ -1369,6 +1408,8 @@ def make_handler(app: DashboardApp):
 
         def _post(self):
             path = urlsplit(self.path).path
+            if not self._host_ok():
+                return self._refuse_host()
             if self._proxied_without_password():
                 return self._refuse_proxy()
             if path == "/login":
@@ -1414,8 +1455,11 @@ def make_handler(app: DashboardApp):
                 return self._error(403, "cross-origin request refused")
             raw = self._read_body().decode("utf-8", "replace")
             pw = (parse_qs(raw).get("password") or [""])[-1]
-            if not app.check_password(pw):
-                time.sleep(0.5)  # slow down guessing
+            with app.login_lock:  # one guess at a time, however many connections — at most two a second
+                ok = app.check_password(pw)
+                if not ok:
+                    time.sleep(0.5)
+            if not ok:
                 return self._send(401, (LOGIN_PAGE % "<p class='login-error'>Wrong password.</p>").encode("utf-8"),
                                   "text/html; charset=utf-8")
             token = app.new_session()

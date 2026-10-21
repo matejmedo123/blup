@@ -6,6 +6,7 @@ import json
 import os
 import socket
 import urllib.error
+import urllib.request
 from unittest import mock
 
 from tests.helpers import TraderTestCase
@@ -139,11 +140,13 @@ class Alpaca(TraderTestCase):
             if isinstance(r, Exception):
                 raise r
             return FakeResponse(json.dumps(r).encode())
-        return mock.patch("urllib.request.urlopen", urlopen)
+        from shared.brokers import alpaca as alpaca_mod
+        return mock.patch.object(alpaca_mod, "_OPENER", type("Opener", (), {"open": staticmethod(urlopen)})())
 
     def broker(self):
         b = AlpacaBroker("paper", config.load_config())
         b._tick = lambda symbol, asset: 0.01
+        b._crypto_lot = lambda symbol: {}
         return b
 
     def test_offline_and_missing_keys_refused(self):
@@ -197,6 +200,41 @@ class Alpaca(TraderTestCase):
         self.assertEqual([c["method"] for c in self.calls], ["POST", "GET"])
         self.assertIn("orders:by_client_order_id?client_order_id=ord-9", self.calls[1]["url"])
 
+    def test_a_resent_order_alpaca_already_has_is_found_not_lost(self):
+        """POST timed out, the lookup did not see it yet, the resend is refused as a duplicate: it did land."""
+        dup = urllib.error.HTTPError("u", 422, "dup", {}, io.BytesIO(b'{"message": "client_order_id must be unique"}'))
+        nf = urllib.error.HTTPError("u", 404, "nf", {}, io.BytesIO(b"{}"))
+        found = {"id": "a7", "client_order_id": "ord-7", "symbol": "NVDA", "status": "accepted"}
+        with self.fake([socket.timeout("timed out"), nf, nf, nf, dup, found]), mock.patch("time.sleep"):
+            o = self.broker().place_entry({"client_order_id": "ord-7", "symbol": "NVDA", "asset": "stock", "qty": 1,
+                                           "limit_price": 10, "stop_price": 9, "target_price": 12})
+        self.assertEqual(o["id"], "a7")
+        self.assertEqual([c["method"] for c in self.calls], ["POST", "GET", "GET", "GET", "POST", "GET"])
+
+    def test_a_bracket_takes_whole_shares_and_crypto_alpacas_own_steps(self):
+        with self.fake([{"id": "a1", "symbol": "NVDA", "status": "accepted"}]):
+            self.broker().place_entry({"client_order_id": "o", "symbol": "NVDA", "asset": "stock", "qty": 3.4567,
+                                       "limit_price": 10, "stop_price": 9, "target_price": 12})
+        self.assertEqual(self.calls[0]["body"]["qty"], "3")
+        with self.assertRaises(BrokerError):
+            self.broker().place_entry({"client_order_id": "o", "symbol": "NVDA", "asset": "stock", "qty": 0.5,
+                                       "limit_price": 10, "stop_price": 9, "target_price": 12})
+        b = AlpacaBroker("paper", config.load_config())
+        assets = [{"symbol": "BTC/USD", "tradable": True, "price_increment": "1", "min_trade_increment": "0.0001",
+                   "min_order_size": "0.0002"}]
+        with self.fake([assets, {"id": "c1", "symbol": "BTC/USD", "status": "new"}]):
+            b.place_entry({"client_order_id": "o", "symbol": "BTC/USD", "asset": "crypto", "qty": 0.055594,
+                           "limit_price": 67462.09, "stop_price": 1, "target_price": 2})
+            with self.assertRaises(BrokerError):
+                b.place_stop("BTC/USD", 0.00015, 60000.0)
+        self.assertEqual((self.calls[-1]["body"]["qty"], self.calls[-1]["body"]["limit_price"]), ("0.0555", "67462"))
+
+    def test_a_redirect_never_carries_the_keys_elsewhere(self):
+        from shared.brokers.alpaca import _NoRedirect
+        req = urllib.request.Request("https://paper-api.alpaca.markets/v2/account", headers={"APCA-API-KEY-ID": "k"})
+        with self.assertRaises(urllib.error.HTTPError):
+            _NoRedirect().redirect_request(req, io.BytesIO(b""), 302, "Found", {}, "https://evil.example/")
+
     def test_rejection_message_and_no_secret_leak(self):
         err = urllib.error.HTTPError("https://paper-api.alpaca.markets/v2/orders", 403, "Forbidden", {},
                                      io.BytesIO(b'{"message": "insufficient buying power"}'))
@@ -217,13 +255,17 @@ class Alpaca(TraderTestCase):
                         [{"id": "p", "symbol": "NVDA", "side": "buy", "type": "limit", "status": "filled",
                           "filled_avg_price": "193.92", "qty": "32", "legs": [
                               {"id": "s", "symbol": "NVDA", "side": "sell", "type": "stop", "status": "held"},
-                              {"id": "t", "symbol": "NVDA", "side": "sell", "type": "limit", "status": "held"}]}]]):
+                              {"id": "t", "symbol": "NVDA", "side": "sell", "type": "limit", "status": "held"}]}],
+                        [{"id": "old-stop", "symbol": "GBTC", "side": "sell", "type": "stop", "status": "new"}]]):
             b = self.broker()
             pos = b.positions()
             orders = b.orders()
         self.assertEqual((pos[0]["symbol"], pos[0]["asset"], pos[0]["last"]), ("BTC/USD", "crypto", 67500.0))
         self.assertEqual([(o["id"], o["leg"], o["parent_id"]) for o in orders],
-                         [("p", None, None), ("s", "stop", "p"), ("t", "target", "p")])
+                         [("p", None, None), ("s", "stop", "p"), ("t", "target", "p"), ("old-stop", None, None)])
+        self.assertEqual(orders[-1]["symbol"], "GBTC")   # an open order older than the page, and a stock not G/BTC
+        self.assertIn("limit=500", self.calls[1]["url"])
+        self.assertIn("status=open", self.calls[2]["url"])
 
 
     def test_tradable_crypto_assets_cached_and_failure_tolerant(self):
