@@ -233,10 +233,16 @@ class AlpacaBroker(Broker):
     # -- reads ---------------------------------------------------------------------------------------
     def account(self) -> dict:
         a = self._get("/v2/account")
-        if a.get("trading_blocked") or a.get("account_blocked"):
-            raise BrokerError("Alpaca says this account is blocked from trading")
+        # a blocked account is reported, not raised: the cycle still books fills and journals what happened — it
+        # opens nothing new (and Alpaca refuses what it can't do)
+        why = [w for w, on in (("blocked from trading", a.get("trading_blocked") or a.get("account_blocked")),
+                               ("trading suspended by you", a.get("trade_suspended_by_user")),
+                               ("account status %s" % a.get("status"), a.get("status") not in (None, "ACTIVE")))
+               if on]
         return {"equity": _f(a.get("equity")), "cash": _f(a.get("cash")), "buying_power": _f(a.get("buying_power")),
-                "currency": a.get("currency") or "USD", "mode": self.mode, "status": a.get("status"),
+                "last_equity": _f(a.get("last_equity")), "currency": a.get("currency") or "USD", "mode": self.mode,
+                "status": a.get("status"), "blocked": "; ".join(why) or None,
+                "crypto_ok": a.get("crypto_status") in (None, "ACTIVE"),
                 "daytrade_count": int(_f(a.get("daytrade_count")) or 0),
                 "pattern_day_trader": bool(a.get("pattern_day_trader"))}
 

@@ -711,6 +711,19 @@ format, so offline runs go through the same parsing code as live runs. `--now` p
 * **The backtest lab tests many ideas;** every extra idea raises the odds that one passes by luck.
   Walk-forward over three periods and pooling all coins make that much harder, not impossible — trade
   anything it validates on paper first. Costs and fills are modelled, not measured.
+* **The lab is more optimistic than the bot can be — know by how much.** It scores each setup on its own,
+  so a coin held by one setup still counts the other's trades (with one position per coin, `trend_ema` and
+  `trend_breakout` together had 421 tradable trades, not 799 — the average per trade held up, the trade
+  count and the certainty don't). The trend rules and the runner were designed on the same 2018–2026
+  history the walk-forward then reports, so "better in all 3 periods" is partly in-sample. Since v3.8 the
+  profit chance draws runs of 10 consecutive trades (losses cluster: 86 % with trades drawn one by one was
+  about 69 % in runs), the ETF trend is tested only on crypto-bear days (the days the bot trades it), daily
+  entries may pay up to a quarter ATR above the close and keep working for an hour (an order at the close
+  missed the strongest moves — 17–32 % of the lab's total R), and the runner rides after a time stop as in
+  the lab.
+* **Small accounts can't hold most ETFs.** Alpaca brackets need whole shares and the stock cap is 25 % of
+  the account: with €1,000, SPY, QQQ, IWM, DIA, GLD and SMH round to 0 shares and are skipped, and the rest
+  risk 0.1–1.5 % instead of 2 %. The ETF projections above assume the full 2 %.
 * **The news gate reads headline tags, not meaning.** It catches the obvious (a dilution 8-K, a hack);
   the optional AI desk reads the text, but it can be wrong too, and neither sees news that isn't
   published yet. SEC filings need `sec_user_agent` set to your name and e-mail.

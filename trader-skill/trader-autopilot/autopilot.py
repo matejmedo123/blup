@@ -403,6 +403,29 @@ def _sale_refused(broker, it: dict, p: dict, exc, now, cfg: dict = None) -> list
     return out
 
 
+def _orphans(book: dict, orders: list, cfg: dict) -> None:
+    """An open order at the broker that carries the bot's client id but no book item of the bot's: a crash at
+    the worst moment, a book restored from an old copy. Nobody manages it — say so once, with its id."""
+    mine = [it.get("order_id") for it in book["items"].values() if it.get("order_id")]
+    manual = {o.get("id") for o in (state.read_json("orders.json", {}) or {}).get("orders") or []
+              if o.get("origin") != "autopilot"}
+    seen = (state.read_json(STATE, {}) or {}).get("orphans_told") or []
+    new = []
+    for o in orders:
+        cid = str(o.get("client_order_id") or "")
+        if o.get("status") not in OPEN_ORDER or not cid.startswith("ord-") or cid in manual:
+            continue
+        if any(cid == m or cid.startswith(m + "-") for m in mine) or o.get("id") in seen:
+            continue
+        new.append(o)
+    if new:
+        notify.send("error", "Order(s) the bot does not manage", "Open at the broker under the bot's client ids, but "
+                    "not in its book: %s. Cancel them at the broker, or check what happened before a restart." % (
+                        ", ".join("%s %s %s (%s)" % (o.get("side"), o.get("symbol"), o.get("client_order_id"),
+                                                     o.get("id")) for o in new[:5])), cfg, priority="high")
+        _state(orphans_told=(seen + [o.get("id") for o in new])[-50:])
+
+
 def _tracked(broker, book: dict, orders: list) -> list:
     """The bot's own orders missing from the broker's recent-orders list (a swing bracket placed weeks ago)."""
     seen = {o.get("id") for o in orders}
@@ -1000,7 +1023,9 @@ def watched(cfg: dict, broker=None, now=None) -> tuple:
     return {a: list(uni.get(a) or []) for a in ("stock", "crypto") if a in assets}, notes
 
 
-SERIES_HISTORY_DAYS = {"1h": 12, "4h": 45, "1d": 300}   # enough closed bars for the 200-bar averages
+# ~1,000 closed bars for the hourly timeframes: an EMA-200 seeded on fewer still carries its starting value, and the
+# lab's indicators run on years — 300 days for the daily ones (the 200-day average plus room)
+SERIES_HISTORY_DAYS = {"1h": 42, "4h": 167, "1d": 300}
 # Rule-exit plans still carry a target (brackets need one) but the lab's rule trades have none: the stop and the
 # exit rule decide. A 10R cap halved the average trade on 2018–2026 data (+1.78R → +0.90R): the few huge trends
 # (ZEC +133R, BNB +100R, BTC +48R) are what pays for all the small losses. So the target is out of reach.
@@ -1574,8 +1599,11 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         return _decision(reasons=reasons, desk=desk_info, gates=gates, **base)
     now = market_clock.now_utc()
     max_new = int(ap.get("max_new_trades_per_day", 3))
+    if asset == "crypto" and acct.get("crypto_ok") is False:
+        return _decision(reasons=["the broker account is not enabled for crypto"], desk=desk_info, gates=gates, **base)
+    pdt_eq = acct.get("last_equity") if acct.get("last_equity") is not None else acct.get("equity")
     if asset == "stock" and not plan.get("swing") and broker.name == "alpaca" and \
-            float(acct.get("equity") or 0) < PDT_EQUITY and int(acct.get("daytrade_count") or 0) >= 3:
+            float(pdt_eq or 0) < PDT_EQUITY and int(acct.get("daytrade_count") or 0) >= 3:
         # under $25,000 a 4th day trade in 5 days is refused — and then the 3:55 p.m. sale would be too
         return _decision(reasons=["pattern day trader rule: %d day trades in the last 5 days and equity under $25,000 "
                                   "— a same-day stock trade would be refused" % int(acct.get("daytrade_count") or 0)],
@@ -1925,8 +1953,11 @@ def _cycle(approved=None) -> dict:
     if free is not None and free < MIN_FREE_MB:
         errors.append("disk almost full: %d MB free (under %d MB) — exits go on, nothing new opens" % (free, MIN_FREE_MB))
     acct, positions, orders = sync()
+    if acct.get("blocked"):
+        errors.append("broker account: %s — nothing new opens" % acct["blocked"])
     actions += reconcile(broker, book, positions, orders, cfg, limits)
     best_effort("saving the book", lambda: state.write_json(BOOK, book))  # what reached the broker, on disk first
+    best_effort("orphan orders", lambda: _orphans(book, orders, cfg))
     # the equity snapshot first, so the drawdown check sees this cycle's equity
     line = best_effort("broker files", lambda: _write_broker_files(broker, acct, positions, orders, book,
                                                                      _realized_today(now)))

@@ -65,10 +65,11 @@ class EtfRule(TraderTestCase):
 class EtfLab(TraderTestCase):
     def test_lab_runs_on_etfs_and_writes_its_own_playbook(self):
         rising = {s: series(2400, 0.0009, seed=i) for i, s in enumerate(("GLD", "UUP", "DBC"))}
+        rising["BTCUSDT"] = series(2700, -0.002, seed=9)  # a long crypto bear market: every ETF day counts
         real = lab().history
 
         def fake(sym, interval, days, now_ts, asset="crypto"):
-            self.assertEqual(asset, "stock")
+            self.assertEqual(asset, "crypto" if sym.key == "BTCUSDT" else "stock")
             return [c for c in rising[sym.key] if c.t + DAY <= now_ts], "test"
         lab().history = fake
         self.addCleanup(setattr, lab(), "history", real)
@@ -78,6 +79,13 @@ class EtfLab(TraderTestCase):
         doc = lab().run(args, ctx)["doc"]
         self.assertEqual((doc["asset"], doc["timeframes"]), ("etf", ["1d"]))
         self.assertEqual([f["setup"] for f in doc["families"]], ["etf_trend"])
+        self.assertEqual(doc["families"][0]["when"], "crypto_bear")  # tested on the days the bot trades it
+        self.assertGreater(doc["families"][0]["signals"], 0)
+        rising["BTCUSDT"] = series(2700, 0.002, seed=9)  # crypto never in a bear market: no ETF trade to count
+        doc = lab().run(args, ctx)["doc"]
+        self.assertEqual(doc["families"][0]["signals"], 0)
+        rising["BTCUSDT"] = series(2700, -0.002, seed=9)
+        doc = lab().run(args, ctx)["doc"]
         self.assertEqual(doc["costs"]["fee_bps"], 0)  # stock costs, not crypto
         self.assertIsNotNone(state.read_json("backtests/playbook-etf.json"))
         self.assertIsNone(state.read_json("backtests/playbook.json"))  # the crypto playbook is left alone

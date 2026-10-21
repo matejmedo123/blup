@@ -71,6 +71,7 @@ STOPS = (("auto", 1.5), ("atr", 1.0), ("atr", 1.5), ("atr", 2.0), ("atr", 3.0))
 ATR_LOOKBACK_BARS = 300
 PROFIT_TRADES = 20            # "profit chance" = P(sum of this many trades > 0)
 BOOTSTRAP_PATHS = 4000
+BOOTSTRAP_BLOCK = 10  # trades per run drawn together (losses cluster in time)
 SEED = 7
 PLAYBOOK_DAYS = 14            # the autopilot stops trusting a playbook older than this
 # Coins that were among Binance's biggest at some point since 2018 — many have shrunk or were delisted (LUNA,
@@ -91,6 +92,9 @@ def build_parser():
     p.add_argument("--etf", action="store_true",
                    help="the daily ETF trend on autopilot.etf_trend.symbols (gold, the dollar, commodities, bonds, "
                         "energy, the indexes) instead of crypto")
+    p.add_argument("--etf-when", choices=("crypto_bear", "always"),
+                   help="which days the ETF trend is tested on — the days the autopilot trades it "
+                        "(default: autopilot.etf_trend.when, crypto_bear = Bitcoin below its 200-day average)")
     p.add_argument("--symbols", help="comma-separated coins or ETFs (default: the top --top coins by 24h volume, or "
                                      "autopilot.etf_trend.symbols)")
     p.add_argument("--top", type=int, default=25, help="how many coins by 24h volume (default 25)")
@@ -357,14 +361,25 @@ def stats(rs: list) -> dict:
                 1.0 if mean > 0 else 0.0)}
 
 
-def bootstrap_profit_chance(rs: list, k: int = PROFIT_TRADES, paths: int = BOOTSTRAP_PATHS, seed: int = SEED):
+def bootstrap_profit_chance(rs: list, k: int = PROFIT_TRADES, paths: int = BOOTSTRAP_PATHS, seed: int = SEED,
+                            block: int = BOOTSTRAP_BLOCK):
+    """How often ``k`` trades in a row ended in profit: histories stitched from runs of ``block`` consecutive
+    trades (``rs`` in time order). Trades drawn one by one would count a trend's losing streak — many coins
+    stopped out in the same week — as bad luck that rarely comes twice; it comes together."""
     if not rs:
         return None
     rng = random.Random(seed)
     n = len(rs)
+    block = max(1, min(block, n))
     hits = 0
     for _ in range(paths):
-        if sum(rs[int(rng.random() * n)] for _ in range(k)) > 0:
+        total, got = 0.0, 0
+        while got < k:
+            start = int(rng.random() * n)
+            for j in range(min(block, k - got)):
+                total += rs[(start + j) % n]  # circular: the last trades start runs as often as the first
+            got += min(block, k - got)
+        if total > 0:
             hits += 1
     return round(hits / float(paths), 4)
 
@@ -566,23 +581,29 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     # a rule-exit setup has nothing to choose, so the training data only has to show it made money at all
     min_n = max(20, args.min_pooled // 4) if rule else args.min_pooled
     per_coin, ends = [], {}
+    entry_ok = (context or {}).get("entry_ok") or (lambda ts: True)  # the days the autopilot would take it
     for sym, candles, tick in coins:
         if rule:
             ends[sym.key] = {}
-            per_coin.append((sym, rule_trades(candles, setup, interval, cost, context, ends[sym.key])))
+            per_coin.append((sym, [x for x in rule_trades(candles, setup, interval, cost, context, ends[sym.key])
+                                   if entry_ok(x[0])]))
         else:
             per_coin.append((sym, [(t["entry_ts"], grid_outcomes(candles, t, interval, exit_mod, tick, cost))
-                                   for t in triggers(candles, setup, interval, now_ts)]))
+                                   for t in triggers(candles, setup, interval, now_ts) if entry_ok(t["entry_ts"])]))
 
     def pool(lo, hi, only=None):
-        out = {}
+        rows = []
         for sym, trades in per_coin:
             if only is not None and sym.key != only:
                 continue
             for ts, res in trades:
                 if lo <= ts < hi and (only is not None or counts(sym.key, ts)):
-                    for key, r in res.items():
-                        out.setdefault(key, []).append(r)
+                    rows.append((ts, res))
+        rows.sort(key=lambda x: x[0])  # in time order: losing streaks across coins stay together
+        out = {}
+        for _, res in rows:
+            for key, r in res.items():
+                out.setdefault(key, []).append(r)
         return out
 
     folds, oos, oos_coin, best = [], [], {sym.key: [] for sym, _ in per_coin}, None
@@ -708,6 +729,28 @@ def _tick(sym, asset: str):
         return None
 
 
+def etf_context(args, cfg, now_ts: int, notes: list) -> dict:
+    """The ETF trend is traded only while crypto is in a bear market (autopilot.etf_trend.when) — so it is tested
+    only on those days: a trade counts if Bitcoin's last closed daily bar before its entry was below its 200-day
+    average. Validating it on every day would measure a different strategy than the one the bot runs."""
+    when = getattr(args, "etf_when", None) or (((cfg.get("autopilot") or {}).get("etf_trend") or {}).get("when")
+                                               or "crypto_bear")
+    if when != "crypto_bear":
+        return {"when": "always"}
+    try:
+        btc = history(data.as_symbol("BTCUSDT", "crypto"), "1d", tf_days("1d", args) + 260, now_ts, "crypto")[0]
+    except (data.DataUnavailable, ValueError) as exc:
+        notes.append("Bitcoin's daily history is unavailable (%s) — the ETF trend is tested on every day" % exc)
+        return {"when": "always"}
+    up = {t // 86400: v for t, v in setups.regime_map(btc).items()}  # by UTC day
+
+    def entry_ok(ts: int) -> bool:
+        # the newest Bitcoin daily bar closed before the entry is the previous UTC day's; bear = below its average
+        # (a day without a Bitcoin bar counts as not tradable)
+        return up.get(int(ts) // 86400 - 1) is False
+    return {"when": "crypto_bear", "entry_ok": entry_ok}
+
+
 def universe(args, cfg) -> tuple:
     if getattr(args, "etf", False):
         raw = args.symbols.split(",") if args.symbols else \
@@ -811,6 +854,8 @@ def run(args, ctx) -> dict:
                     continue
                 coins.append((sym, got[0], _tick(sym, asset)))
         context = None
+        if asset == "stock":
+            context = etf_context(args, cfg, now_ts, notes)
         if any(setups.SETUPS[st].get("needs_btc") for st in fam_setups):
             btc = next((c for sym, c, _ in coins if sym.base == "BTC"), None)
             if btc is None:
@@ -818,11 +863,13 @@ def run(args, ctx) -> dict:
                     btc = history(data.as_symbol("BTCUSDT", "crypto"), interval, days, now_ts)[0]
                 except (data.DataUnavailable, ValueError) as exc:
                     notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
-            context = {"btc_up": setups.regime_map(btc)} if btc else {"btc_up": {}}
+            context = dict(context or {}, btc_up=setups.regime_map(btc) if btc else {})
         for setup in fam_setups:
             fam, coin_rows, coin_picks = study_family(setup, interval, coins, now_ts, args, exit_mod, cost, context,
                                                       members, {s.key for s in syms} if pit else None)
             fam["coins_loaded"] = len(coins)
+            if asset == "stock":
+                fam["when"] = (context or {}).get("when") or "always"  # crypto_bear: only the days the bot trades it
             families.append(fam)
             rows += coin_rows
             picks += coin_picks
@@ -965,7 +1012,8 @@ def text(doc: dict) -> str:
                          "because it rose; the setup lines above are the honest ones, and the autopilot sizes by them)")
     else:
         lines.append("VALIDATED: nothing — no setup made money after costs in every period it was tested on unseen "
-                     "data. The autopilot will not trade crypto until the lab finds something (it re-checks weekly).")
+                     "data. The autopilot will not trade %s until the lab finds something (it re-checks weekly)."
+                     % ("the ETF trend" if doc.get("asset") == "etf" else "crypto"))
     if s["per_coin_picks"]:
         lines.append("Overfitting check: tuning every coin on its own found %d \"winners\" in training; only %d (%s) "
                      "stayed profitable in the latest period." % (s["per_coin_picks"], s["per_coin_survived"],

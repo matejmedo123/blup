@@ -959,7 +959,7 @@ dashboard or the autopilot's news gate.
   `broker/sim-archive.jsonl` (`"kind": "order" | "fill"`); a bracket stays whole while a leg still works. A book
   that cannot be saved (full disk) sets `save_error`: the cycle goes on in memory and opens nothing new.
 * **Pruning (`autopilot.prune_state`, housekeeping every 6 h, also in `autopilot.py loop` and the dashboard's own
-  loop).** Finished book items, plans, entries and orders older than 45 days move to `archive/book.jsonl`,
+  loop).** Closed or cancelled book items, and plans, entries and orders, older than 45 days move to `archive/book.jsonl`,
   `archive/plan.jsonl`, `archive/entries.jsonl`, `archive/orders.jsonl` (anything a live book item or
   `alerts.json` points to stays). `desk/<id>/`, `timemachine/*.json` and `backtests/<sym>-<setup>.json`
   untouched for 45 days are deleted (`lab-*` and `playbook*` never). Logs past a size are rotated into
@@ -978,3 +978,71 @@ dashboard or the autopilot's news gate.
 * **Disk.** Under 200 MB free, the cycle opens nothing new (exits go on); under 1 GB, housekeeping empties the
   download cache and notifies you (every 6 hours at most).
 * **Lab store.** 5-min bars older than the run's window plus 30 days are dropped from `cache/lab/`.
+
+## v3.8 — round four: a real broker between two requests, a KILL that ends, the lab and the bot alike
+
+### Exits at a real broker (`trader-autopilot/autopilot.py`)
+* Before selling, the bot cancels its own sell orders (stop, legs, exits) and **waits up to 6 s for the broker
+  to confirm** (`broker.lookup`): a cancel still pending holds the quantity (Alpaca refuses the sale), and a
+  stop that filled in between already sold — the sale waits for the next cycle instead of coming out of shares
+  you hold yourself. The runner's partial sale does the same.
+* A sale the broker **refuses** (Alpaca's wash-trade guard against your own open buy order, the day-trade rule,
+  an asset no longer tradable) puts the protective stop back at once, also for intraday stocks; the sale is
+  retried after `EXIT_RETRY_SEC` (15 min) and you are notified once. Book item: `exit_refused_at`,
+  `exit_refused`. A sale whose outcome is unclear places no stop (it may have gone through).
+* An exit order still open (`exit_order_id`, e.g. queued after hours) is not sent again — by exits or the KILL.
+* A stop id the broker does not list counts as working only for 10 minutes after it was placed.
+* Splits: `broker_qty` / `broker_avg` remember last cycle's broker position; a split is a quantity and an
+  average that moved by the same ratio since then (your own shares blended into the average are no split).
+* One position per **broker symbol** too (BTCUSDT and BTC-USD are one BTC/USD at Alpaca).
+* An open order under the bot's client id (`ord-…`) that no book item owns is reported once (`orphans_told`
+  in `state.json`); a blocked or suspended account (`account().blocked`) and an account without crypto stop
+  new entries; the PDT check uses `last_equity`.
+* A 422 "client_order_id must be unique" whose order can't be read yet is "may or may not have been placed"
+  (the entry stays `submitting`), never "refused". `cancel_all` / `close_all` are gone.
+
+### KILL
+The first `cancel_asked_at` is kept (a never-answered entry is cancelled 30 min after the first ask). With
+`flatten_on_kill: false` the kill cycle still runs the exits. A refused KILL sale puts the stop back.
+
+### State and files
+* `state.append_jsonl_rows` holds the log file's own `flock` while it appends; `state.rotate_jsonl` holds it while
+  it streams the old part into gzip and swaps the file — appends wait and go to the new file (no line lost,
+  no 2× memory). A failed append never cuts off another writer's line.
+* A broken file is repaired under its lock, only if it still holds the same broken bytes; the broken bytes are
+  copied to `<name>.broken` and the file is never missing in between.
+* `trader/` and its folders are created `0700`, new logs `0600`; a `secrets.env` other users can read is
+  reported at start (dashboard and daemon). Errors on stderr are redacted.
+* The simulator refuses an order it cannot save (`BrokerError`) — a sync goes on in memory.
+* `state.read_jsonl` splits on `\n` only (U+2028 in a headline is no line end).
+
+### Time and data
+* A bar that closed after its data was downloaded (or cached) is never counted as closed (`http.track` /
+  `http.oldest_fetch`, `data._asof`).
+* `replay` refuses a folder whose simulator or cycles already ran past `--from`; the simulator never charges
+  interest backwards.
+* The global daily limits (loss, trade count) count the UTC day; per-asset limits keep the asset's day.
+* The 23:55 UTC crypto bar is judged after midnight; the daily summary covers the New York day it is named
+  after; a playbook made after "now" is refused; Stooq daily bars are stamped at the session open; the ETF
+  time stop is 12:55 on early-close days; the drawdown reads equity lines dated after a clock step.
+
+### Lab and live alike
+* Daily signals (`interval: "1d"`): `plan.entry_slack_pct` = a quarter ATR above the close (0.5–2 %); the sizer
+  sizes the risk at that worst price and sets the limit there; the entry keeps working `DAILY_ENTRY_WAIT_SEC`
+  (1 h).
+* The runner also starts after a time stop (the lab rode after both); the sold part's journal reason is `time`.
+* `bootstrap_profit_chance` draws circular runs of `BOOTSTRAP_BLOCK` (10) trades from pools in time order.
+* `lab.py --etf` tests the ETF trend only on crypto-bear days (`--etf-when crypto_bear|always`, default from
+  `autopilot.etf_trend.when`); families carry `"when"`.
+* Live 1h / 4h series fetch ~1,000 bars (`SERIES_HISTORY_DAYS`).
+
+### Dashboard login
+The throttle keys on the last `X-Forwarded-For` entry (the one the proxy appended) when the peer is loopback or
+a private address (Docker's bridge); besides 10 wrong passwords per client, 50 per 10 minutes from everyone
+refuse logins for a while — logged-in browsers and the CLI keep working.
+
+### Other
+`config.update_file` validates before writing; `"leverage": 1.5` (one multiple for all) is accepted; `profile`
+dollar limits never round to 0; `nohup … daemon` survives a closed terminal; the watchdog times the cycle, not
+the wait for another process's lock; the lab runs under `nice -n 10`; the download cache is pruned in a
+background thread (and to its last hour when the disk is low).
