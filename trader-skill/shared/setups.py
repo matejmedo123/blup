@@ -37,8 +37,22 @@ SETUPS = {
     "band_bounce": {"label": "Bollinger-band bounce above the 200 EMA", "assets": ("crypto",), "kind": "series"},
     "breakout_24": {"label": "24-bar high breakout on 2× volume above the 200 EMA", "assets": ("crypto",),
                     "kind": "series"},
+    # daily mean reversion inside an uptrend; Bitcoin's 200-day trend is the switch for the whole market
+    "dip_in_uptrend": {"label": "Dip in an uptrend (3 lower daily closes, RSI(2) < 10, BTC above its 200-day average)",
+                       "assets": ("crypto",), "kind": "series", "intervals": ("1d",), "needs_btc": True,
+                       "cooldown": 1, "stop_atr": 3.0,
+                       "exit_rule": {"type": "close_above_sma", "n": 5, "max_bars": 10,
+                                     "text": "first daily close above the 5-day average, at most 10 days",
+                                     "short": "close > 5-day average (≤ 10 d)"}},
+    # daily trend following: few winners, but they run — the steadiest edge crypto has shown
+    "trend_breakout": {"label": "Trend breakout (daily close above the 20-day high, BTC above its 200-day average)",
+                       "assets": ("crypto",), "kind": "series", "intervals": ("1d",), "needs_btc": True,
+                       "cooldown": 1, "stop_atr": 3.0,
+                       "exit_rule": {"type": "close_below_low", "n": 10, "max_bars": 60,
+                                     "text": "first daily close below the lowest close of the previous 10 days, at "
+                                             "most 60 days", "short": "close < 10-day low (≤ 60 d)"}},
 }
-SERIES_INTERVALS = ("1h", "4h")
+SERIES_INTERVALS = ("1h", "4h", "1d")
 SERIES_WARMUP = 210          # bars before the first signal (the 200-bar EMA needs them)
 SERIES_COOLDOWN = 12         # bars after a signal before the same rule may fire again
 DEFAULT_SETUP = {"stock": "orb15", "crypto": "asia_range", "meme": "momentum"}
@@ -420,16 +434,59 @@ def _eval_momentum(setup, window, bars, step, p, since_ts):
 
 # --- swing setups across a whole series ------------------------------------------------------------
 
+def regime_map(candles, n: int = 200) -> dict:
+    """{bar open time: close above its n-bar simple average} — Bitcoin's trend, the switch for every coin."""
+    cl = [c.c for c in candles]
+    avg = indicators.sma(cl, n)
+    return {c.t: (i >= n - 1 and cl[i] > avg[i]) for i, c in enumerate(candles)}
+
+
+def exit_rule(setup: str):
+    return (SETUPS.get(setup) or {}).get("exit_rule")
+
+
+def rule_says_exit(rule: dict, closes: list, j: int) -> bool:
+    """Does the close at index j meet the exit rule? closes = all closes up to and including j."""
+    n = int(rule.get("n") or 5)
+    if j < n:
+        return False
+    if rule.get("type") == "close_above_sma":
+        return closes[j] > sum(closes[j - n + 1:j + 1]) / float(n)
+    if rule.get("type") == "close_below_low":
+        return closes[j] < min(closes[j - n:j])
+    return False
+
+
 def _series_context(candles) -> dict:
     cl = [c.c for c in candles]
     return {"close": cl, "ema20": indicators.ema(cl, 20), "ema50": indicators.ema(cl, 50),
             "ema200": indicators.ema(cl, 200), "rsi14": indicators.rsi(cl, 14), "rsi2": indicators.rsi(cl, 2),
+            "sma5": indicators.sma(cl, 5), "sma50": indicators.sma(cl, 50), "sma200": indicators.sma(cl, 200),
             "bb_low": indicators.bollinger_lower(cl, 20, 2.0)}
 
 
-def _series_hit(setup: str, candles, i: int, x: dict):
+def _series_hit(setup: str, candles, i: int, x: dict, context: dict = None):
     """(rule text, levels) when ``setup`` fires on the close of bar i, else None."""
     c, cl = candles[i], x["close"]
+    if setup == "dip_in_uptrend":
+        btc_up = (context or {}).get("btc_up")
+        if not btc_up or not btc_up.get(c.t):
+            return None  # Bitcoin below its 200-day average: the whole market is in a downtrend — stand aside
+        if not (cl[i] > x["sma200"][i] and cl[i] > x["sma50"][i] and cl[i] < cl[i - 1] < cl[i - 2] < cl[i - 3]
+                and x["rsi2"][i] < 10):
+            return None
+        return ("3 lower closes in a row, RSI(2) %.1f, above the 50- and 200-day averages, Bitcoin above its "
+                "200-day average" % x["rsi2"][i], {"trigger_level": cl[i], "stop_ref": None, "sma5": x["sma5"][i],
+                                                   "sma50": x["sma50"][i], "sma200": x["sma200"][i]})
+    if setup == "trend_breakout":
+        btc_up = (context or {}).get("btc_up")
+        if not btc_up or not btc_up.get(c.t):
+            return None
+        hi = max(cl[i - 20:i])
+        if cl[i] <= hi:
+            return None
+        return ("daily close above the 20-day high %s, Bitcoin above its 200-day average" % fmt.price(hi),
+                {"trigger_level": hi, "stop_ref": None, "low10": min(cl[i - 10:i])})
     if cl[i] <= x["ema200"][i]:
         return None  # every swing rule here is long-only and wants the long-term trend up
     low10 = min(b.l for b in candles[i - 9:i + 1])
@@ -459,8 +516,10 @@ def _series_hit(setup: str, candles, i: int, x: dict):
     return None
 
 
-def series_signals(setup: str, candles, interval: str = "1h", start_ts: int = None) -> list:
+def series_signals(setup: str, candles, interval: str = "1h", start_ts: int = None, context: dict = None) -> list:
     """Every bar where a swing setup fired (closed bars only), with a cool-down between signals.
+
+    context: {"btc_up": regime_map(btc_daily_candles)} for setups that need Bitcoin's trend (needs_btc).
 
     Returns trigger dicts shaped like ``evaluate`` results: setup, label, rule, levels, stop_ref, trigger, window.
     """
@@ -472,10 +531,11 @@ def series_signals(setup: str, candles, interval: str = "1h", start_ts: int = No
         return []
     x = _series_context(candles)
     out, last = [], None
+    cooldown = int(spec.get("cooldown") or SERIES_COOLDOWN)
     for i in range(SERIES_WARMUP, len(candles)):
-        if last is not None and i - last < SERIES_COOLDOWN:
+        if last is not None and i - last < cooldown:
             continue
-        hit = _series_hit(setup, candles, i, x)
+        hit = _series_hit(setup, candles, i, x, context)
         if not hit:
             continue
         last = i

@@ -300,7 +300,7 @@ def missing_steps(case: dict) -> list:
     if case.get("setup_name") and not case.get("backtest"):
         out.append(("skeptic", "no backtest of this setup",
                     _cmd("trader-backtest", "backtest.py", '"%s" --setup %s' % (sym, case["setup_name"]))))
-    if case.get("plan") and not case.get("timemachine"):
+    if case.get("plan") and not case.get("timemachine") and not (case["plan"].get("exit_rule")):
         out.append(("skeptic", "no Time Machine run", _cmd("trader-timemachine", "replay.py", "--id %s --seed 7" % idea)))
     return [{"role": r, "what": w, "run": c} for r, w, c in out]
 
@@ -320,7 +320,7 @@ def gates(case: dict, cfg: dict, limits: dict) -> list:
         out.append(_gate("exit plan", s < e < t, "entry %s · stop %s · target %s" % (fmt.price(e), fmt.price(s),
                                                                                       fmt.price(t))))
         age_h = (market_clock.now_utc() - market_clock.parse_iso(plan["entry"]["time"])).total_seconds() / 3600.0
-        max_age = desk_cfg["max_idea_age_hours"].get(case.get("asset") or "stock", 2)
+        max_age = max_idea_age(desk_cfg, case.get("asset"), plan)
         out.append(_gate("idea still fresh", age_h <= max_age, "entry was %.1f h ago (limit %s h)" % (age_h, max_age),
                          hard=False))
     else:
@@ -348,6 +348,10 @@ def gates(case: dict, cfg: dict, limits: dict) -> list:
                          "EV %s · target %s / stop %s / neither %s (minimum EV %s)"
                          % (fmt.r(ev), fmt.prob(p.get("target")), fmt.prob(p.get("stop")), fmt.prob(p.get("neither")),
                             fmt.r(desk_cfg["min_ev_r"]))))
+    elif plan and plan.get("exit_rule"):
+        out.append(_gate("Time Machine", True, "not applicable — this plan exits on a rule (%s), which the replay "
+                         "can't model; the backtest lab's walk-forward result is the evidence"
+                         % (plan["exit_rule"].get("text") or plan["exit_rule"].get("type")), hard=False))
     else:
         out.append(_gate("Time Machine", False, "no replay yet — run /trader-timemachine"))
     bt = case.get("backtest")
@@ -455,6 +459,12 @@ def verify(idea_id: str, case: dict, cfg: dict, limits: dict) -> dict:
             "trader_next": trader_next(case, status)}
 
 
+def max_idea_age(d: dict, asset: str, plan: dict = None) -> float:
+    """Hours an idea stays fresh; a signal on daily bars stays good for longer than an intraday one."""
+    hours = float(d["max_idea_age_hours"].get(asset or "stock", 2))
+    return max(hours, 12.0) if (plan or {}).get("interval") == "1d" else hours
+
+
 def _desk_cfg(cfg: dict) -> dict:
     out = dict(DEFAULTS)
     gates_cfg = ((cfg.get("autopilot") or {}).get("gates") or {})
@@ -531,9 +541,10 @@ def auto_memos(case: dict, cfg: dict, limits: dict) -> dict:
               % (fmt.r(exp), fmt.r(d["min_backtest_expectancy_r"])))
         if n < d["min_backtest_triggers"]:
             o("major", "thin sample: only %d past triggers (want ≥ %d)" % (n, d["min_backtest_triggers"]))
-    if not tm:
+    rule_exit = bool(plan and plan.get("exit_rule"))
+    if not tm and not rule_exit:
         o("critical", "no Time Machine replay of this plan")
-    else:
+    elif tm:
         ev = (tm.get("expected_value") or {}).get("r")
         p = tm.get("probabilities") or {}
         if ev is None or ev < d["min_ev_r"]:
@@ -549,7 +560,7 @@ def auto_memos(case: dict, cfg: dict, limits: dict) -> dict:
             o("critical", "rugcheck is %s — meme coins need %s" % ((rc or {}).get("verdict") or "missing", "/".join(allowed)))
     if plan:
         age_h = (market_clock.now_utc() - market_clock.parse_iso(plan["entry"]["time"])).total_seconds() / 3600.0
-        if age_h > d["max_idea_age_hours"].get(asset or "stock", 2):
+        if age_h > max_idea_age(d, asset, plan):
             o("major", "the idea is stale: entry was %.1f h ago" % age_h)
     shown = {}
     for f in news_flags(case, cfg):
@@ -568,7 +579,11 @@ def auto_memos(case: dict, cfg: dict, limits: dict) -> dict:
                        "trader/config.json")
     if any("earnings" in (n.get("tags") or []) for n in (case.get("feed") or []) + (case.get("news") or [])):
         o("minor", "earnings headlines in the feed — event risk inside or right after the holding window")
-    o("minor", "the replay resamples ordinary bars — it cannot see news shocks, halts or gaps")
+    if rule_exit:
+        o("minor", "the exit is a rule (%s): the result depends on the backtest lab's out-of-sample record, not on a "
+          "replay of this exact trade" % (plan["exit_rule"].get("text") or plan["exit_rule"].get("type")))
+    else:
+        o("minor", "the replay resamples ordinary bars — it cannot see news shocks, halts or gaps")
     sk = obj + ["## Verdict %s" % AUTO_TAG]
     severities = [x.split("[", 1)[1].split("]", 1)[0] for x in obj]
     blocking = [x for x, sev in zip(obj, severities) if sev in ("critical", "major")]

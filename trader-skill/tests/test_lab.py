@@ -65,7 +65,8 @@ class Grid(TraderTestCase):
         with self.assertRaises(setups.SetupError):
             setups.evaluate("trend_pullback", w)
         self.assertEqual(set(setups.for_asset("crypto", "series")),
-                         {"trend_pullback", "oversold_bounce", "band_bounce", "breakout_24"})
+                         {"trend_pullback", "oversold_bounce", "band_bounce", "breakout_24", "dip_in_uptrend",
+                          "trend_breakout"})
 
 
 class Validation(TraderTestCase):
@@ -119,9 +120,9 @@ class OfflineRun(TraderTestCase):
         self.assertIn("BACKTEST LAB", out)
         self.assertIn("Highest win chance", out)
         doc = state.read_json("backtests/lab-crypto.json")
-        self.assertEqual(doc["timeframes"], ["5m", "1h", "4h"])
+        self.assertEqual(doc["timeframes"], ["5m", "1h", "4h", "1d"])
         self.assertEqual(doc["costs"]["round_trip_pct"], 0.26)
-        self.assertEqual(len(doc["families"]), 6 + 4 + 4)
+        self.assertEqual(len(doc["families"]), 6 + 4 + 4 + 2)
         pb = state.read_json("backtests/playbook.json")
         self.assertEqual(pb["entries"], {})  # 30 days of fixtures prove nothing
         self.assertTrue(all(not f["validated"] for f in doc["families"]))
@@ -297,3 +298,192 @@ class ConfidenceSizing(TraderTestCase):
         for pick in (fam["exit"], (fam["highest_win"] or {}).get("exit")):
             if pick:
                 self.assertGreaterEqual(pick["target_r"], 3)
+
+
+def daily_uptrend(seed: int, days: int = 1500, start: int = 1577836800) -> list:
+    """Daily bars: a steady uptrend with a 3-day dip every 20 days that recovers within two days."""
+    rng = random.Random(seed)
+    out, px = [], 100.0
+    for i in range(days):
+        k = i % 20
+        move = -0.03 if k in (14, 15, 16) else (0.05 if k in (17, 18) else 0.004 + rng.uniform(-0.01, 0.01))
+        o, c = px, px * (1 + move)
+        out.append(Candle(start + i * 86400, o, max(o, c) * 1.01, min(o, c) * 0.99, c, 1000.0))
+        px = c
+    return out
+
+
+class DailyDip(TraderTestCase):
+    def test_signal_needs_bitcoin_above_its_200_day_average(self):
+        coin = daily_uptrend(1)
+        up = {"btc_up": setups.regime_map(daily_uptrend(9))}
+        down = {"btc_up": {c.t: False for c in coin}}
+        self.assertGreater(len(setups.series_signals("dip_in_uptrend", coin, "1d", context=up)), 20)
+        self.assertEqual(setups.series_signals("dip_in_uptrend", coin, "1d", context=down), [])
+        self.assertEqual(setups.series_signals("dip_in_uptrend", coin, "1d"), [])  # no context = no regime = no trade
+
+    def test_rule_exit_trades_one_at_a_time(self):
+        coin = daily_uptrend(2)
+        ctx = {"btc_up": setups.regime_map(daily_uptrend(9))}
+        trades = lab().rule_trades(coin, "dip_in_uptrend", "1d", 0.0, ctx)
+        self.assertGreater(len(trades), 20)
+        rs = [t[1][lab().RULE_KEY] for t in trades]
+        self.assertGreater(sum(1 for r in rs if r > 0) / float(len(rs)), 0.8)
+        times = [t[0] for t in trades]
+        self.assertEqual(times, sorted(set(times)))
+
+    def test_lab_validates_the_daily_rule_and_writes_the_exit_rule(self):
+        coins = [(symbols.parse(s, asset="crypto"), daily_uptrend(i, days=2400), 0.01)
+                 for i, s in enumerate(("AAAUSDT", "BBBUSDT"))]
+        now = coins[0][1][-1].t + 86400
+        args = lab().build_parser().parse_args(["--daily-days", "2400", "--fee-bps", "0", "--slippage-bps", "0",
+                                                "--min-target-r", "3"])  # a target filter must not hide a rule exit
+        ctx = {"btc_up": setups.regime_map(daily_uptrend(9, days=2400))}
+        fam, rows, picks = lab().study_family("dip_in_uptrend", "1d", coins, now, args, load("trader-exit", "exit"),
+                                              0.0, ctx)
+        self.assertTrue(fam["validated"], fam["verdict"])
+        self.assertEqual(fam["exit"]["exit_rule"]["n"], 5)
+        self.assertIsNone(fam["exit"]["target_r"])
+        self.assertEqual((fam["exit"]["stop"], fam["exit"]["atr_mult"], fam["exit"]["horizon"]), ("atr", 3.0, "10d"))
+        self.assertIsNone(fam["highest_win"])
+        self.assertEqual(picks, [])
+        pb = lab().write_playbook({"generated_at": "2026-10-20T00:00:00Z", "objective": "profit", "costs": {},
+                                   "days": {}, "summary": {"families_validated": 1}, "validated": rows}, now)
+        e = pb["entries"]["AAAUSDT:dip_in_uptrend@1d"]
+        self.assertEqual((e["interval"], e["exit_rule"]["type"]), ("1d", "close_above_sma"))
+
+
+class DailyAutopilot(TraderTestCase):
+    NOW = "2026-10-20T00:01:00Z"
+    END = 1792454400  # 2026-10-20T00:00:00Z — the daily bar of Oct 19 has just closed
+
+    def setUp(self):
+        super().setUp()
+        config.ensure_home()
+        doc = json.loads((self.home / "config.json").read_text())
+        doc["autopilot"] = {"universe": {"mode": "watchlist"}, "news_gate": {"enabled": False}}
+        (self.home / "config.json").write_text(json.dumps(doc))
+        days = 20 * 20 + 17  # the last closed bar is the third down day of a dip
+        self.daily = {"ETHUSDT": daily_uptrend(4, days=days, start=self.END - days * 86400),
+                      "BTCUSDT": daily_uptrend(8, days=days, start=self.END - days * 86400)}
+        real = data.get_candles
+
+        def fake(symbol, interval="5m", days=None, asset=None, end=None, quote=None):
+            sym = data.as_symbol(symbol, asset)
+            if interval == "1d" and sym.key in self.daily:
+                now = mc.ts(mc.now_utc())
+                bars = [c for c in self.daily[sym.key] if c.t + 86400 <= now]
+                return data.Series(sym, "1d", bars, "test", [], {})
+            return real(symbol, interval, days=days, asset=asset, end=end, quote=quote)
+        data.get_candles = fake
+        self.addCleanup(setattr, data, "get_candles", real)
+        e = entry("ETHUSDT", "dip_in_uptrend", "1d", stop="atr", atr_mult=3.0, target_r=None, horizon="10d")
+        e["exit_rule"] = dict(setups.exit_rule("dip_in_uptrend"))
+        self.write_state("backtests/playbook.json", {
+            "generated_at": "2026-10-19T00:00:00Z", "valid_until": "2026-11-02T00:00:00Z",
+            "entries": {"ETHUSDT:dip_in_uptrend@1d": e}})
+
+    def test_daily_signal_becomes_a_rule_exit_plan(self):
+        sig = setups.series_signals("dip_in_uptrend", self.daily["ETHUSDT"], "1d",
+                                    context={"btc_up": setups.regime_map(self.daily["BTCUSDT"])})
+        self.assertEqual(sig[-1]["trigger"]["t"], self.END - 86400)
+        res = ap().run_cycle(self.NOW, approved=True)
+        self.assertNotEqual(res["status"], "error", res)
+        did = setups.setup_id("ETHUSDT", sig[-1]["window"], "dip_in_uptrend")
+        d = [x for x in state.read_jsonl("autopilot/decisions.jsonl") if x["id"] == did]
+        self.assertEqual(len(d), 1, state.read_jsonl("autopilot/decisions.jsonl"))
+        plan = state.read_json("plan.json")["plans"][did]
+        self.assertEqual((plan["interval"], plan["exit_rule"]["n"], plan["stop"]["method"]), ("1d", 5, "atr"))
+        self.assertEqual(mc.ts(plan["time_stop"]["at"]) - mc.ts(plan["entry"]["time"]), 10 * 86400)
+        self.assertIn("exit rule decides", plan["target"]["note"])
+        self.assertFalse(list((self.home / "timemachine").glob("ETHUSDT-*")))  # no replay for a rule exit
+        desk = state.read_json("desk/%s/desk.json" % did)
+        tm = [g for g in desk["gates"] if g["name"] == "Time Machine"][0]
+        self.assertTrue(tm["ok"])
+        self.assertIn("not applicable", tm["detail"])
+        self.assertEqual(desk["status"], "GO", desk.get("headline"))
+
+    def test_bitcoin_below_its_200_day_average_switches_it_off(self):
+        self.daily["BTCUSDT"] = [Candle(c.t, c.o, c.h, c.l, 50.0 if i == len(self.daily["BTCUSDT"]) - 1 else c.c, c.v)
+                                 for i, c in enumerate(self.daily["BTCUSDT"])]
+        ap().run_cycle(self.NOW, approved=True)
+        self.assertFalse([x for x in state.read_jsonl("autopilot/decisions.jsonl") if "dip_in_uptrend" in x["id"]])
+
+
+class RuleExit(TraderTestCase):
+    NOW = "2026-10-20T00:02:00Z"
+
+    def item(self, filled_at="2026-10-17T00:01:00Z"):
+        return {"plan_id": "p", "order_id": "o", "symbol": "ETH/USD", "data_key": "ETHUSDT", "asset": "crypto",
+                "qty": 1.0, "stop": 1.0, "target": 1e9, "time_stop": "2026-10-27T00:00:00Z", "status": "open",
+                "placed_at": "2026-10-17T00:00:30Z", "filled_at": filled_at, "broker": "alpaca", "mode": "paper",
+                "exit_rule": {"type": "close_above_sma", "n": 5, "interval": "1d", "text": "x"}}
+
+    def closes(self, closes):
+        real = data.get_candles
+        start = 1792454400 - len(closes) * 86400
+
+        def fake(symbol, interval="5m", days=None, asset=None, end=None, quote=None):
+            bars = [Candle(start + i * 86400, c, c, c, c, 1.0) for i, c in enumerate(closes)]
+            return data.Series(data.as_symbol(symbol, asset), interval, bars, "test", [], {})
+        data.get_candles = fake
+        self.addCleanup(setattr, data, "get_candles", real)
+
+    def test_closes_when_the_daily_close_is_back_above_the_5_day_average(self):
+        from tests.test_autopilot import FakeBroker
+        self.closes([100, 98, 96, 94, 92, 99])
+        b = FakeBroker()
+        b.pos = [{"symbol": "ETH/USD", "asset": "crypto", "qty": 1.0, "last": 99.0}]
+        book = {"items": {"p": self.item()}, "handled": {}}
+        acts = ap().manage_exits(b, book, b.pos, [])
+        self.assertEqual(book["items"]["p"]["exit_reason"], "rule")
+        self.assertIn("above the 5-bar average", book["items"]["p"]["exit_note"])
+        self.assertEqual(b.calls[-1], ("close", "ETH/USD"))
+        self.assertTrue(acts)
+
+    def test_waits_while_below_and_ignores_bars_before_the_fill(self):
+        from tests.test_autopilot import FakeBroker
+        self.closes([100, 98, 96, 94, 92, 91])
+        b = FakeBroker()
+        b.pos = [{"symbol": "ETH/USD", "asset": "crypto", "qty": 1.0, "last": 91.0}]
+        book = {"items": {"p": self.item()}, "handled": {}}
+        self.assertEqual(ap().manage_exits(b, book, b.pos, []), [])
+        self.closes([100, 98, 96, 94, 92, 99])
+        book = {"items": {"p": self.item(filled_at="2026-10-20T00:01:00Z")}, "handled": {}}
+        self.assertEqual(ap().manage_exits(b, book, b.pos, []), [])  # that close happened before we owned it
+
+
+class TrendBreakout(TraderTestCase):
+    def test_breakout_signal_and_rule_exit(self):
+        coin = daily_uptrend(3, days=600)
+        ctx = {"btc_up": setups.regime_map(daily_uptrend(9, days=600))}
+        sigs = setups.series_signals("trend_breakout", coin, "1d", context=ctx)
+        self.assertGreater(len(sigs), 5)
+        for s in sigs[:5]:
+            i = s["trigger"]["index"]
+            self.assertGreater(coin[i].c, max(c.c for c in coin[i - 20:i]))
+        self.assertEqual(setups.series_signals("trend_breakout", coin, "1d", context={"btc_up": {}}), [])
+        trades = lab().rule_trades(coin, "trend_breakout", "1d", 0.0, ctx)
+        self.assertTrue(trades)
+
+    def test_rule_says_exit(self):
+        below = {"type": "close_below_low", "n": 3}
+        self.assertTrue(setups.rule_says_exit(below, [10, 11, 12, 9], 3))
+        self.assertFalse(setups.rule_says_exit(below, [10, 11, 12, 10.5], 3))
+        above = {"type": "close_above_sma", "n": 3}
+        self.assertTrue(setups.rule_says_exit(above, [10, 9, 8, 10], 3))
+        self.assertFalse(setups.rule_says_exit(above, [10, 9, 8, 8.5], 3))
+
+    def test_autopilot_closes_a_trend_trade_below_the_10_day_low(self):
+        from tests.test_autopilot import FakeBroker
+        rx = RuleExit("test_closes_when_the_daily_close_is_back_above_the_5_day_average")
+        rx.addCleanup = self.addCleanup
+        rx.closes([100 + i for i in range(12)] + [95])
+        it = rx.item()
+        it["exit_rule"] = {"type": "close_below_low", "n": 10, "interval": "1d", "text": "x"}
+        b = FakeBroker()
+        b.pos = [{"symbol": "ETH/USD", "asset": "crypto", "qty": 1.0, "last": 95.0}]
+        book = {"items": {"p": it}, "handled": {}}
+        ap().manage_exits(b, book, b.pos, [])
+        self.assertEqual(book["items"]["p"]["exit_reason"], "rule")
+        self.assertIn("below the lowest close of the previous 10 bars", book["items"]["p"]["exit_note"])

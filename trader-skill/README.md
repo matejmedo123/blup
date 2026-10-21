@@ -163,8 +163,9 @@ python3 trader-backtest/lab.py                       # top 25 coins · 5m (180 d
 python3 trader-backtest/lab.py --min-target-r 2      # only exits that aim for 2R or more
 ```
 
-For every crypto setup — the one-day breakouts on 5-minute bars and four swing setups on 1-hour and
-4-hour bars — it tries 160 exits (targets 0.5–5R, structure or 1–3×ATR stops, four time stops), with
+For every crypto setup — the one-day breakouts on 5-minute bars, four swing setups on 1-hour and 4-hour
+bars, and two daily strategies with their own exit rules (a trend breakout and a dip-in-uptrend, both
+switched on only while Bitcoin is above its 200-day average) — it tries 160 exits (targets 0.5–5R, structure or 1–3×ATR stops, four time stops), with
 fees and slippage. It works **walk-forward**: the history is cut into four periods, and for each of the
 last three the exit with the highest **profit chance** (certainty: how often 20 trades ended in profit)
 is picked on everything before it — all coins pooled — and then traded unchanged in that period, which
@@ -173,20 +174,25 @@ the choice never saw. A setup holds only if it made money in every one of those 
 become `trader/backtests/playbook.json`, the only crypto the autopilot trades — with those exits, and
 with more size the higher the certainty (never past `limits.json`). The daemon re-runs it weekly.
 
-**The first real run** (21 Oct 2026 · top 30 coins by volume · 5m 180 days, 1h 365 days, 4h 730 days ·
-0.26 % round-trip costs · 14 setup × timeframe combinations × 160 exits):
+**Real runs** (21 Oct 2026 · top 30–40 coins by volume · 5m 180 days, 1h 365 days, 4h 730 days, 1d ~6 years ·
+0.26 % round-trip costs):
 
 | | Result |
 |---|---|
-| Held in all three walk-forward periods | **none** — so the autopilot trades no crypto for now |
+| **Held in all three walk-forward periods** | **the daily trend breakout** (close above the 20-day high while BTC is above its 200-day average; out at the first close below the 10-day low, 3×ATR stop): +0.26R / +0.63R / +0.53R per trade, 40 % wins, +0.53R out of sample, 79 % chance that 20 trades end in profit — validated on 17 of 40 coins (BTC 93 %, SOL 99 %, XRP 95 %) |
+| Everything intraday (5m, 1h, 4h) | nothing held — fees and noise eat it |
+| Daily dip in an uptrend | 67 % wins, but only +0.05R per trade since 2021 and negative in the earlier periods — not validated |
 | Closest | 24-bar breakout on 4h bars, 5R target, 1.5×ATR stop, 48 h: +0.34R / −0.34R / +0.18R per trade in the three periods (40 % wins, +0.13R overall) — works in trending stretches, loses in choppy ones |
 | Highest win chance | 64–73 % (0.5R target, 2–3×ATR stop) — and −0.09R to −0.17R per trade after costs; the best of them, the 4h band bounce, nets +0.02R |
 | A single train/test split | "validated" the 4h band bounce on 6 coins (profit chance up to 98 % on 10 trades) — a different split flipped it, which is why the lab now insists on every period |
 | Per-coin tuning | 109 per-coin "best settings" in training, 43 % still profitable in the latest period — worse than a coin flip |
 | One-day setups on 5-minute bars | no exit had an edge in any training period: 0.26 % costs are a whole 1R on many of these stops |
 
-In short: a high *win chance* is easy and loses money; a real edge after costs that survives unseen data
-is rare, and the lab is built to say "none" rather than flatter a lucky fit.
+In short: a high *win chance* is easy and loses money; the edge that survives is the oldest one in
+crypto — follow Bitcoin's trend and let the few big winners run. 40 % of its trades win, but the
+average win is about 4× the average loss, so the chance of being up after 20 trades is ~80 % (~94 % on
+BTC + ETH alone, 2019–2026). History, not a promise: the coins tested are today's survivors, and the
+strategy sits out whenever Bitcoin is below its 200-day average (all of 2022, for example).
 
 ## Running it for real — 24/7
 

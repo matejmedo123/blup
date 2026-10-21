@@ -620,11 +620,21 @@ over ≥ `min_test` trades and it did not lose in the latest period.
 
 ### `backtests/playbook.json` — what the autopilot may trade in crypto
 `{"generated_at", "valid_until", "objective", "costs", "days", "families_validated",
-  "entries": {"BTCUSDT:oversold_bounce@1h": {"symbol", "display", "setup", "interval": "5m|1h|4h", "stop": "auto|atr",
-              "atr_mult", "target_r", "horizon": "24h", "exit_text", "test": {"n", "win_rate", "expectancy_r",
+  "entries": {"BTCUSDT:trend_breakout@1d": {"symbol", "display", "setup", "interval": "5m|1h|4h|1d", "stop": "auto|atr",
+              "atr_mult", "target_r": 2.0 | null (rule exit), "horizon": "24h|60d",
+              "exit_rule": null | {"type": "close_above_sma|close_below_low", "n", "max_bars", "text", "short"},
+              "exit_text", "test": {"n", "win_rate", "expectancy_r",
               "profit_chance", "profit_factor"}, "train": {"n", "win_rate", "expectancy_r"}}}}`
 Plans traded from it carry `"playbook": "<key>"` and `"interval"`; their `backtests/<key>-<setup>.json` is the
 lab's test-period result (`"source": "backtest lab"`). Swing-setup ids use the bar time:
 `BTCUSDT-20261021T1300-oversold_bounce`.
 
 ### `cache/lab/<symbol>-<interval>.json` — the lab's candle store (only the new tail is downloaded on re-runs)
+
+### Rule-exit plans (daily setups)
+Plans from `trend_breakout` / `dip_in_uptrend` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
+a 3×ATR protective stop, a far target cap (10R) and a time stop of `max_bars` days. The autopilot checks the rule after
+every daily close that happened after the fill and closes with `"reason": "rule"` (journal exit reason `rule`). The
+Time Machine is skipped for them (it models stop / target / time only); the desk shows its gate as "not applicable"
+and relies on the lab's walk-forward record. Both setups need Bitcoin above its 200-day average
+(`setups.regime_map(btc_daily)`), and their ids use the bar date: `ETHUSDT-20261019T0000-trend_breakout`.

@@ -47,7 +47,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from shared import cli, data, fmt, html, market_clock, setups, skills, state, symbols, trade_sim  # noqa: E402
-from shared import universe as universe_mod  # noqa: E402
+from shared import indicators, universe as universe_mod  # noqa: E402
 from shared.indicators import Candle  # noqa: E402
 
 LAB_FILE = "backtests/lab-crypto.json"
@@ -57,7 +57,9 @@ TIMEFRAMES = {
     "5m": {"kind": "window", "horizons_h": (1, 4, 12, 24)},
     "1h": {"kind": "series", "horizons_h": (12, 24, 48, 72)},
     "4h": {"kind": "series", "horizons_h": (24, 48, 96, 168)},
+    "1d": {"kind": "series", "horizons_h": (240,)},   # rule-exit setups: the exit is part of the rule, no grid
 }
+RULE_KEY = ("rule", 0.0, 0)
 TARGETS_R = (0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0)
 STOPS = (("auto", 1.5), ("atr", 1.0), ("atr", 1.5), ("atr", 2.0), ("atr", 3.0))
 ATR_LOOKBACK_BARS = 300
@@ -71,10 +73,11 @@ def build_parser():
     p = cli.parser("lab.py", __doc__)
     p.add_argument("--symbols", help="comma-separated coins (default: the top --top by 24h volume)")
     p.add_argument("--top", type=int, default=25, help="how many coins by 24h volume (default 25)")
-    p.add_argument("--timeframes", default="5m,1h,4h", help="any of 5m,1h,4h (default all three)")
+    p.add_argument("--timeframes", default="5m,1h,4h,1d", help="any of 5m,1h,4h,1d (default all four)")
     p.add_argument("--days", type=float, default=180, help="days of 5-minute history (default 180)")
     p.add_argument("--swing-days", type=float, default=365,
                    help="days of 1-hour history (default 365; 4-hour bars get twice as much)")
+    p.add_argument("--daily-days", type=float, default=2200, help="days of daily history (default 2200, ~6 years)")
     p.add_argument("--setups", help="comma-separated crypto setups (default: every crypto setup)")
     p.add_argument("--folds", type=int, default=3,
                    help="walk-forward periods: the history is cut into FOLDS + 1 parts and every part after the first "
@@ -264,7 +267,14 @@ def final_stats(rs: list) -> dict:
     return s
 
 
-def exit_label(key) -> dict:
+def exit_label(key, setup: str = None) -> dict:
+    if key[0] == "rule":
+        spec = setups.SETUPS.get(setup) or {}
+        rule = spec.get("exit_rule") or {}
+        mult = float(spec.get("stop_atr") or 3.0)
+        return {"stop": "atr", "atr_mult": mult, "target_r": None, "horizon": "%dd" % int(rule.get("max_bars") or 10),
+                "exit_rule": rule, "text": "exit %s · %g×ATR stop" % (rule.get("short") or rule.get("text") or "rule",
+                                                                       mult)}
     stop, target, hours = key
     atr = stop.startswith("atr:")
     return {"stop": "atr" if atr else "auto", "atr_mult": float(stop.split(":")[1]) if atr else 1.5,
@@ -277,7 +287,7 @@ def choose(by_key: dict, objective: str, min_n: int, min_edge: float, min_target
     """Best exit on the given (train) trades: highest win chance among exits with an edge, or highest profit chance."""
     best, best_score = None, None
     for key, rs in by_key.items():
-        if len(rs) < min_n or key[1] < min_target_r:
+        if len(rs) < min_n or (key[1] < min_target_r and key[0] != "rule"):
             continue
         s = stats(rs)
         if s["expectancy_r"] < min_edge:
@@ -304,7 +314,61 @@ def highest_win(by_key: dict, min_n: int, min_target_r: float = 0.0):
 
 # --- one setup on one timeframe, all coins -------------------------------------------------------------
 
-def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit_mod, cost: float) -> tuple:
+def tf_days(interval: str, args) -> float:
+    return {"5m": args.days, "1h": args.swing_days, "4h": args.swing_days * 2, "1d": args.daily_days}[interval]
+
+
+def setup_fits(setup: str, interval: str) -> bool:
+    spec = setups.SETUPS[setup]
+    if spec["kind"] != "series":
+        return interval == "5m"
+    return interval in (spec.get("intervals") or ("1h", "4h"))
+
+
+def rule_trades(candles, setup: str, interval: str, cost: float, context: dict = None) -> list:
+    """Trades of a rule-exit setup, one at a time per coin: [(entry_ts, {RULE_KEY: net R})].
+
+    Entry at the signal close; exit at the first close that meets the rule, at the protective stop
+    (stop_atr × ATR, gaps fill at the open) or at the close of the last allowed bar.
+    """
+    spec = setups.SETUPS[setup]
+    rule, mult = spec["exit_rule"], float(spec.get("stop_atr") or 3.0)
+    step = market_clock.interval_seconds(interval)
+    closes = [c.c for c in candles]
+    atrs = indicators.atr(candles)
+    out, busy = [], -1
+    for r in setups.series_signals(setup, candles, interval, context=context):
+        i = r["trigger"]["index"]
+        if i <= busy:
+            continue
+        entry = candles[i].c
+        stop = entry - mult * atrs[i]
+        if stop <= 0 or stop >= entry:
+            continue
+        px, j = None, i
+        for j in range(i + 1, min(len(candles), i + 1 + int(rule["max_bars"]))):
+            b = candles[j]
+            if b.o <= stop:
+                px = b.o
+                break
+            if b.l <= stop:
+                px = stop
+                break
+            if setups.rule_says_exit(rule, closes, j):
+                px = b.c
+                break
+        else:
+            if j == i + int(rule["max_bars"]):
+                px = candles[j].c
+        if px is None:
+            break  # the last trade has not finished yet
+        out.append((candles[i].t + step, {RULE_KEY: trade_sim.net_r(entry, px, entry - stop, cost)}))
+        busy = j
+    return out
+
+
+def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit_mod, cost: float,
+                 context: dict = None) -> tuple:
     """Walk-forward test of one setup on one timeframe across all coins.
 
     The history is cut into folds + 1 equal periods. In fold k the exit is chosen on everything before period
@@ -312,14 +376,19 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     out-of-sample result made money in every period; the exit to trade is the one chosen last.
     coins: [(sym, candles, tick)] → (family summary, per-coin rows, per-coin-optimised test edges).
     """
-    days = args.days if interval == "5m" else args.swing_days * (2 if interval == "4h" else 1)
-    start_ts = int(now_ts - days * 86400)
+    start_ts = int(now_ts - tf_days(interval, args) * 86400)
     k = max(1, int(args.folds))
     bounds = [int(start_ts + i * (now_ts - start_ts) / float(k + 1)) for i in range(1, k + 1)] + [int(now_ts)]
+    rule = setups.exit_rule(setup)
+    # a rule-exit setup has nothing to choose, so the training data only has to show it made money at all
+    min_n = max(20, args.min_pooled // 4) if rule else args.min_pooled
     per_coin = []
     for sym, candles, tick in coins:
-        per_coin.append((sym, [(t["entry_ts"], grid_outcomes(candles, t, interval, exit_mod, tick, cost))
-                               for t in triggers(candles, setup, interval, now_ts)]))
+        if rule:
+            per_coin.append((sym, rule_trades(candles, setup, interval, cost, context)))
+        else:
+            per_coin.append((sym, [(t["entry_ts"], grid_outcomes(candles, t, interval, exit_mod, tick, cost))
+                                   for t in triggers(candles, setup, interval, now_ts)]))
 
     def pool(lo, hi, only=None):
         out = {}
@@ -335,9 +404,9 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     folds, oos, oos_coin, best = [], [], {sym.key: [] for sym, _ in per_coin}, None
     for i in range(k):
         train, test = pool(start_ts, bounds[i]), pool(bounds[i], bounds[i + 1])
-        b = choose(train, args.objective, args.min_pooled, args.min_edge, args.min_target_r)
+        b = choose(train, args.objective, min_n, args.min_edge, args.min_target_r)
         f = {"train_until": market_clock.iso(bounds[i]), "test_until": market_clock.iso(bounds[i + 1]),
-             "exit": exit_label(b) if b else None, "train": stats(train[b]) if b else None,
+             "exit": exit_label(b, setup) if b else None, "train": stats(train[b]) if b else None,
              "test": stats(test.get(b, [])) if b else None}
         folds.append(f)
         best = b
@@ -351,7 +420,7 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
            "train_until": market_clock.iso(bounds[k - 1]), "coins": sum(1 for _, t in per_coin if t),
            "signals": sum(len(t) for _, t in per_coin), "folds": folds}
     # what the highest win chance looks like, edge or not
-    hw = highest_win(last_train, args.min_pooled, args.min_target_r)
+    hw = None if rule else highest_win(last_train, args.min_pooled, args.min_target_r)
     fam["highest_win"] = None if hw is None else {
         "exit": exit_label(hw), "train": stats(last_train[hw]), "test": stats(last_test.get(hw, []))}
     rows, verdict = [], None
@@ -377,7 +446,7 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     if best is None:
         fam.update(exit=None, train=None, test=oos_s if oos else None, validated=False, verdict=verdict)
     else:
-        fam.update(exit=exit_label(best), train=final_stats(last_train[best]), test=oos_s, validated=ok,
+        fam.update(exit=exit_label(best, setup), train=final_stats(last_train[best]), test=oos_s, validated=ok,
                    verdict=verdict or "made money in all %d walk-forward periods" % k)
         for sym, trades in per_coin:
             if not trades:
@@ -397,12 +466,13 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
             if not why:
                 b = final_stats(oos_coin[sym.key])
             rows.append({"symbol": sym.key, "display": sym.display, "setup": setup, "timeframe": interval,
-                         "exit": exit_label(best), "train": a, "test": b, "recent": recent, "validated": not why,
+                         "exit": exit_label(best, setup), "train": a, "test": b, "recent": recent,
+                         "validated": not why,
                          "why": "; ".join(why) or "made money out of sample, including the latest period"})
     fam["validated_coins"] = [r["display"] for r in rows if r["validated"]]
     # the tempting alternative: tune every coin on its own — how much of that survives?
     picks = []
-    for sym, _ in per_coin:
+    for sym, _ in ([] if rule else per_coin):
         key = choose(pool(start_ts, bounds[k - 1], sym.key), args.objective, 20, args.min_edge, args.min_target_r)
         if key is not None:
             picks.append(stats(pool(bounds[k - 1], bounds[k], sym.key).get(key, []))["expectancy_r"])
@@ -441,11 +511,10 @@ def run(args, ctx) -> dict:
     notes = []
     families, rows, picks = [], [], []
     for interval in tfs:
-        kind = TIMEFRAMES[interval]["kind"]
-        fam_setups = [s for s in wanted if (setups.is_series(s) == (kind == "series"))]
+        fam_setups = [s for s in wanted if setup_fits(s, interval)]
         if not fam_setups:
             continue
-        days = args.days if interval == "5m" else args.swing_days * (2 if interval == "4h" else 1)
+        days = tf_days(interval, args)
 
         def load(sym):
             try:
@@ -463,8 +532,17 @@ def run(args, ctx) -> dict:
                 except (data.DataUnavailable, ValueError):
                     tick = None
                 coins.append((sym, got[0], tick))
+        context = None
+        if any(setups.SETUPS[st].get("needs_btc") for st in fam_setups):
+            btc = next((c for sym, c, _ in coins if sym.base == "BTC"), None)
+            if btc is None:
+                try:
+                    btc = history(data.as_symbol("BTCUSDT", "crypto"), interval, days, now_ts)[0]
+                except (data.DataUnavailable, ValueError) as exc:
+                    notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
+            context = {"btc_up": setups.regime_map(btc)} if btc else {"btc_up": {}}
         for setup in fam_setups:
-            fam, coin_rows, coin_picks = study_family(setup, interval, coins, now_ts, args, exit_mod, cost)
+            fam, coin_rows, coin_picks = study_family(setup, interval, coins, now_ts, args, exit_mod, cost, context)
             fam["coins_loaded"] = len(coins)
             families.append(fam)
             rows += coin_rows
@@ -475,10 +553,11 @@ def run(args, ctx) -> dict:
     validated.sort(key=lambda r: -((r["test"] or {}).get("expectancy_r") or 0))
     doc = {
         "generated_at": market_clock.iso(ctx.now), "universe": uname, "coins": len(syms), "timeframes": tfs,
-        "days": {"5m": args.days, "1h": args.swing_days, "4h": args.swing_days * 2}, "objective": args.objective,
+        "days": {t: tf_days(t, args) for t in TIMEFRAMES}, "objective": args.objective,
         "folds": args.folds,
         "costs": {"fee_bps": fee, "slippage_bps": slip, "round_trip_pct": round(2 * cost, 4)},
         "grid": {"targets_r": list(TARGETS_R), "stops": ["structure"] + ["%g×ATR" % m for k, m in STOPS if k == "atr"],
+                 "rule_exits": {st: setups.SETUPS[st]["exit_rule"]["text"] for st in wanted if setups.exit_rule(st)},
                  "horizons_h": {k: list(v["horizons_h"]) for k, v in TIMEFRAMES.items() if k in tfs},
                  "exits_per_setup": sum(1 for t in TARGETS_R if t >= args.min_target_r) * len(STOPS) * 4},
         "rules": {"min_target_r": args.min_target_r, "min_pooled": args.min_pooled, "min_fold_test": args.min_fold_test, "min_pooled_test": args.min_pooled_test, "min_test": args.min_test,
@@ -504,7 +583,7 @@ def write_playbook(doc: dict, now) -> dict:
         entries["%s:%s@%s" % (r["symbol"], r["setup"], r["timeframe"])] = {
             "symbol": r["symbol"], "display": r["display"], "setup": r["setup"], "interval": r["timeframe"],
             "stop": e["stop"], "atr_mult": e["atr_mult"], "target_r": e["target_r"], "horizon": e["horizon"],
-            "exit_text": e["text"],
+            "exit_rule": e.get("exit_rule"), "exit_text": e["text"],
             "test": {k: r["test"][k] for k in ("n", "win_rate", "expectancy_r", "profit_chance", "profit_factor")},
             "train": {k: r["train"][k] for k in ("n", "win_rate", "expectancy_r")}}
     pb = {"generated_at": doc["generated_at"],

@@ -34,11 +34,15 @@ stock universe for the next open.
    always including your watchlists, never anything in `exclude` or `blocked_symbols`, **never meme
    coins**. Each symbol is scanned once per closed 5-minute bar within a per-cycle time budget.
 7. **Crypto only from the backtest lab** (`autopilot.playbook`): a coin is traded only with a setup,
-   timeframe (5m, or the 1h / 4h swing setups) and exit the lab validated on data it never saw
+   timeframe (5m, the 1h / 4h swing setups, or the daily trend breakout / dip-in-uptrend, which only
+   trade while Bitcoin is above its 200-day average) and exit the lab validated on data it never saw
    (`trader-backtest/lab.py` → `backtests/playbook.json`, re-run weekly by the daemon). No fresh
    playbook, or nothing validated → no crypto trades. Size follows certainty: the lab's profit chance on
    unseen trades ≥ 90 % → risk × 2, ≥ 80 % → × 1.5, ≥ 70 % → × 1, lower → × 0.5 (a boost needs ≥ 30
-   unseen trades; `limits.json` caps always win).
+   unseen trades; `limits.json` caps always win). Daily setups close on their rule (e.g. the first daily
+   close below the 10-day low), checked after every daily close, with a 3×ATR protective stop; when
+   several signals fire together, the most certain are taken first. Positions can last weeks — consider
+   raising `limits.crypto.max_open_positions` (default 2) if you want the trend strategy diversified.
 8. **Fresh triggers** → entry → exit plan → backtest of that rule on that symbol → Time Machine →
    **latest news and SEC filings for that symbol, fetched right before judging** → rule-based desk
    (`desk.py auto`; a fresh dilution/offering, bankruptcy, delisting or restatement filing, or a hack /

@@ -172,7 +172,7 @@ def _close_trade(item: dict, exit_order: dict, reason: str, cfg: dict) -> dict:
     at = exit_order.get("filled_at") or market_clock.iso(market_clock.now_utc())
     journal.finalize(trade, cfg, price, at, reason)
     trade["exit"]["broker_order_id"] = exit_order.get("id")
-    if reason == "manual" and item.get("exit_note"):
+    if reason in ("manual", "rule") and item.get("exit_note"):
         trade["notes"] = (trade.get("notes") or "") + " · " + item["exit_note"]
     journal.save_trade(trade)
     return trade
@@ -262,8 +262,31 @@ def reconcile(broker, book: dict, positions: list, orders: list, cfg: dict, limi
     return actions
 
 
+def rule_exit_due(it: dict) -> str:
+    """'' or why a rule-exit position should close now: a bar that closed after the fill met the rule."""
+    rule = it.get("exit_rule") or {}
+    if rule.get("type") not in ("close_above_sma", "close_below_low"):
+        return ""
+    interval, n = rule.get("interval") or "1d", int(rule.get("n") or 5)
+    step = market_clock.interval_seconds(interval)
+    try:
+        bars = data.get_candles(it["data_key"], interval, days=(n + 3) * step / 86400.0, asset="crypto").candles
+    except (data.DataUnavailable, ValueError, KeyError):
+        return ""
+    if len(bars) <= n or bars[-1].t + step <= market_clock.ts(it.get("filled_at") or it["placed_at"]):
+        return ""
+    closes = [b.c for b in bars]
+    if not setups.rule_says_exit(rule, closes, len(closes) - 1):
+        return ""
+    if rule["type"] == "close_above_sma":
+        return "the %s close %s is above the %d-bar average %s" % (
+            setups.bar_label(interval), fmt.price(closes[-1]), n, fmt.price(sum(closes[-n:]) / float(n)))
+    return "the %s close %s is below the lowest close of the previous %d bars (%s)" % (
+        setups.bar_label(interval), fmt.price(closes[-1]), n, fmt.price(min(closes[-n - 1:-1])))
+
+
 def manage_exits(broker, book: dict, positions: list, orders: list) -> list:
-    """Time stops for everything; target/stop management for crypto (Alpaca has no crypto brackets)."""
+    """Time stops for everything; target/stop management for crypto (Alpaca has no crypto brackets); exit rules."""
     actions = []
     now_ts = market_clock.now_utc().timestamp()
     pos_by = {p["symbol"]: p for p in positions}
@@ -281,6 +304,11 @@ def manage_exits(broker, book: dict, positions: list, orders: list) -> list:
                 reason = "target"
             elif float(p["last"]) <= float(it["stop"]) and not it.get("stop_order_id"):
                 reason = "stop"
+        if not reason and it.get("exit_rule"):
+            why = rule_exit_due(it)
+            if why:
+                reason = "rule"
+                it["exit_note"] = "exit rule: " + why
         if not reason:
             continue
         for o in orders:
@@ -344,7 +372,8 @@ def watched(cfg: dict, broker=None, now=None) -> tuple:
     return {a: list(uni.get(a) or []) for a in ("stock", "crypto") if a in assets}, notes
 
 
-SERIES_HISTORY_DAYS = {"1h": 12, "4h": 45}   # enough closed bars for the 200-bar EMA of the swing setups
+SERIES_HISTORY_DAYS = {"1h": 12, "4h": 45, "1d": 300}   # enough closed bars for the 200-bar averages
+RULE_TARGET_CAP_R = 10.0   # rule-exit plans still carry a target (brackets, gates); it is far away on purpose
 
 
 def add_playbook_coins(uni: dict, pbs: dict, cfg: dict, limits: dict, broker=None) -> list:
@@ -501,14 +530,21 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None, pbs: dict
 
 def _series_candidates(sym, e: dict, memo: dict, handled: dict, holding: set, now_ts: int, max_age: int,
                        notes: list) -> list:
-    """A validated swing setup (1h / 4h bars) that fired on the newest closed bar."""
+    """A validated swing or daily setup (1h / 4h / 1d bars) that fired on the newest closed bar."""
     interval = e["interval"]
     step = market_clock.interval_seconds(interval)
-    key = (sym.key, "crypto", interval)
-    try:
+    days = SERIES_HISTORY_DAYS.get(interval, 45)
+
+    def candles(s):
+        key = (s.key, "crypto", interval)
         if key not in memo:
-            memo[key] = data.get_candles(sym, interval, days=SERIES_HISTORY_DAYS.get(interval, 45), asset="crypto")
-        series = memo[key]
+            memo[key] = data.get_candles(s, interval, days=days, asset="crypto")
+        return memo[key]
+    try:
+        series = candles(sym)
+        context = None
+        if (setups.SETUPS.get(e["setup"]) or {}).get("needs_btc"):  # Bitcoin's 200-day trend switches it on and off
+            context = {"btc_up": setups.regime_map(candles(data.as_symbol("BTCUSDT", "crypto")).candles)}
     except (data.DataUnavailable, ValueError) as exc:
         notes.append("%s %s: %s" % (sym.display, interval, exc))
         return []
@@ -516,7 +552,8 @@ def _series_candidates(sym, e: dict, memo: dict, handled: dict, holding: set, no
         return []
     last_t = series.candles[-1].t
     out = []
-    for r in setups.series_signals(e["setup"], series.candles, interval, start_ts=last_t - max_age * step):
+    for r in setups.series_signals(e["setup"], series.candles, interval, start_ts=last_t - max_age * step,
+                                   context=context):
         trig = r["trigger"]
         age = (now_ts - (trig["t"] + step)) // step
         sid = setups.setup_id(sym.key, r["window"], e["setup"])
@@ -560,9 +597,15 @@ def make_plan(c: dict, cfg: dict) -> dict:
     levels = r.get("levels") or {}
     pb = c.get("playbook")
     stop, atr_mult, target_r = "auto", 1.5, exit_mod.DEFAULT_TARGET_R[asset]
+    rule = (pb or {}).get("exit_rule") or setups.exit_rule(c["setup"])
     if pb:  # trade it exactly the way the backtest lab validated it
-        stop, atr_mult, target_r = pb["stop"], float(pb["atr_mult"]), float(pb["target_r"])
+        stop, atr_mult = pb["stop"], float(pb["atr_mult"])
+        target_r = float(pb["target_r"]) if pb.get("target_r") is not None else RULE_TARGET_CAP_R
         horizon_s = market_clock.parse_horizon(pb["horizon"])
+    elif rule:
+        spec = setups.SETUPS[c["setup"]]
+        stop, atr_mult, target_r = "atr", float(spec.get("stop_atr") or 3.0), RULE_TARGET_CAP_R
+        horizon_s = int(rule.get("max_bars") or 10) * step
     lv = exit_mod.plan_levels(trig["price"], entry_ts, asset, until, stop_ref=levels.get("stop_ref"),
                               trigger_level=levels.get("trigger_level"), stop=stop, atr_mult=atr_mult,
                               target_r=target_r, tick=tick, horizon_s=horizon_s)
@@ -575,7 +618,10 @@ def make_plan(c: dict, cfg: dict) -> dict:
             "time_stop": lv["time_stop"], "horizon": lv["horizon"], "trailing": None, "scale_out": [],
             "liquidity_exit": None, "atr": lv["atr"], "interval": interval, "source": c["series"].source,
             "created_at": market_clock.iso(market_clock.now_utc()), "chart": None, "origin": "autopilot",
-            "playbook": (pb or {}).get("key")}
+            "playbook": (pb or {}).get("key"),
+            "exit_rule": dict(rule, interval=interval) if rule else None}
+    if rule:
+        plan["target"]["note"] = "a far cap — the exit rule decides: %s" % rule.get("text")
     doc = state.read_json("plan.json", {}) or {}
     doc.setdefault("plans", {})[plan["id"]] = plan
     doc.setdefault("latest", plan["id"])
@@ -731,7 +777,8 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     plan = make_plan(c, cfg)
     base.update(entry=plan["entry"]["price"], stop=plan["stop"]["price"], target=plan["target"]["price"])
     ensure_backtest(c, plan, cfg, limits)
-    run_timemachine(plan, cfg, limits)
+    if not plan.get("exit_rule"):  # the replay models stop / target / time only — a rule exit is the lab's job
+        run_timemachine(plan, cfg, limits)
     news_note = refresh_news(plan, cfg)
     desk = _mod("trader-desk", "desk").auto_review(plan["id"], cfg, limits, force=True, symbol=plan["symbol"])
     blocking = [o for o in desk.get("objections") or [] if o.get("severity") in ("critical", "major")]
@@ -816,7 +863,8 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         "plan_id": plan["id"], "order_id": order["id"], "broker_order_id": bo.get("id"), "broker": broker.name,
         "mode": broker.mode, "symbol": bsym, "data_key": sym.key, "asset": asset, "qty": order["qty"],
         "qty_unit": order.get("qty_unit"), "stop": order["stop_price"], "target": order["target_price"],
-        "time_stop": plan["time_stop"]["at"], "status": "pending", "placed_at": market_clock.iso(now)}
+        "time_stop": plan["time_stop"]["at"], "status": "pending", "placed_at": market_clock.iso(now),
+        "exit_rule": plan.get("exit_rule"), "interval": plan.get("interval")}
     notify.send("trade_opened", "BUY %s %s (%s)" % (fmt.qty(order["qty"]), bsym, c["setup"]),
                 "%s. Risk %s%s. Desk GO, risk PASS%s." % (
                     text, fmt.money(order.get("risk_usd")), " (risk × %g)" % mult if abs(mult - 1) > 1e-9 else "",
@@ -1036,6 +1084,8 @@ def _cycle(approved=None) -> dict:
             errors.append("trigger scan: %s: %s" % (type(exc).__name__, exc))
         handled = book["handled"].setdefault(_today(now), {})
         use_learned = learned if learned.get("enabled", True) else None
+        # when several fire at once and the caps allow only some, the most certain go first
+        cands.sort(key=lambda c: -float((((c.get("playbook") or {}).get("test") or {}).get("profit_chance")) or 0))
         for c in cands:
             try:
                 d = judge(c, cfg, limits, broker, book, approved, acct, use_learned)

@@ -132,7 +132,7 @@ def _nasdaq(m, q, url):
 
 # --- crypto (CEX) -------------------------------------------------------------
 
-_KLINE_SECONDS = {"15m": 900, "1h": 3600, "4h": 14400}
+_KLINE_SECONDS = {"15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
 
 
 def _resample_klines(rows: list, seconds: int) -> list:

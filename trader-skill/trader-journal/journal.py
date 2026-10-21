@@ -29,7 +29,7 @@ if _ROOT not in sys.path:
 
 from shared import cli, data, fmt, html, market_clock, skills, state, symbols, trade_sim  # noqa: E402
 
-REASONS = ("target", "stop", "time", "manual", "liquidity", "rug")
+REASONS = ("target", "stop", "time", "manual", "liquidity", "rug", "rule")
 
 
 def build_parser():
