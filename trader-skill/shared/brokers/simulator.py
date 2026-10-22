@@ -21,6 +21,7 @@ from .base import Broker, BrokerError, data_symbol, order_dict
 BOOK = "broker/sim.json"
 ARCHIVE = "broker/sim-archive.jsonl"
 INTERVAL = "5m"
+FALLBACK = ("1h", "1d")  # when 5-minute bars don't reach back far enough (Yahoo keeps ~60 days of them)
 KEEP_DAYS = 30  # finished orders and fills older than this move to the archive: sync walks every order per bar
 FINAL = ("filled", "canceled", "expired", "rejected")
 
@@ -37,6 +38,7 @@ class SimBroker(Broker):
         self.cfg = cfg or config.load_config()
         self._candles = {}
         self._spans = {}  # (symbol, asset) → the oldest time the fetched series surely covers
+        self._steps = {}  # (symbol, asset) → bar length of that series (5 min, or a fallback's)
         self.save_error = None
         self.sync_errors = {}  # symbol → why its orders could not be checked this sync
         self.book = state.read_json(BOOK) or self._new_book()
@@ -83,12 +85,29 @@ class SimBroker(Broker):
             if since_ts:
                 span_days = max(span_days, (now_ts - since_ts) / 86400.0 + 1.0)
             days = int(span_days) + 1 if asset == "stock" else span_days
-            try:
-                self._candles[key] = data.get_candles(data_symbol(symbol, asset), INTERVAL, days=days).candles
-            except data.DataUnavailable as exc:
-                raise BrokerError("no prices for %s: %s" % (symbol, exc))
+            # an order older than the 5-minute history (a replay of last winter's ETF trade) is walked on hourly
+            # or daily bars instead — coarser, never skipped
+            slack = 4 * 86400 if asset == "stock" else 3600  # weekends and holidays have no bars
+            why = None
+            for interval in (INTERVAL,) + (FALLBACK if since_ts else ()):
+                try:
+                    bars = data.get_candles(data_symbol(symbol, asset), interval, days=days).candles
+                except data.DataUnavailable as exc:
+                    why = exc
+                    continue
+                if since_ts and interval != FALLBACK[-1] and (not bars or bars[0].t > since_ts + slack):
+                    why = "%s bars start %s, after %s" % (interval, market_clock.iso(bars[0].t) if bars else "nowhere",
+                                                         market_clock.iso(since_ts))
+                    continue
+                self._candles[key], self._steps[key] = bars, market_clock.interval_seconds(interval)
+                break
+            else:
+                raise BrokerError("no prices for %s: %s" % (symbol, why))
             self._spans[key] = now_ts - int(span_days * 86400) + 86400
         return self._candles[key]
+
+    def _step(self, symbol: str, asset: str) -> int:
+        return self._steps.get((symbol, asset)) or market_clock.interval_seconds(INTERVAL)
 
     def _last_close(self, symbol: str, asset: str) -> float:
         bars = self._series(symbol, asset)
@@ -144,7 +163,6 @@ class SimBroker(Broker):
         symbol remembers the last bar it walked (``walked``), so a position held for months costs one new bar a
         cycle, not every bar since its entry."""
         now_ts = int(self._now().timestamp())
-        step = market_clock.interval_seconds(INTERVAL)
         open_orders = [o for o in self.book["orders"] if o["status"] in ("new", "held")]
         walked = self.book.setdefault("walked", {})
         for symbol in list(walked):
@@ -160,6 +178,7 @@ class SimBroker(Broker):
             except BrokerError as exc:  # one symbol without prices: its orders wait, every other symbol's still fill
                 self.sync_errors[symbol] = str(exc)
                 continue
+            step = self._step(symbol, asset)
             bars = [c for c in series if c.t >= since - step and c.t > done and c.t + step <= now_ts]
             for bar in bars:
                 live = [o for o in mine if o["status"] == "new"]

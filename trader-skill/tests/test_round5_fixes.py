@@ -370,3 +370,32 @@ class TheLabRidesOneTradeAtATime(TraderTestCase):
         self.assertLess(len(rides), len(trades))  # some signals came while two thirds still rode: sell-all only
         for (_, ride_end), (start, _) in zip(rides, rides[1:]):
             self.assertGreater(start, ride_end)
+
+
+class AnOrderOlderThanTheFiveMinuteHistory(TraderTestCase):
+    """Yahoo keeps ~60 days of 5-minute bars: an ETF order from last winter (a replay) is walked on hourly bars."""
+    NOW = "2026-03-02T15:00:00Z"
+
+    def test_is_walked_on_hourly_bars(self):
+        config.ensure_home()
+        b = SimBroker(config.load_config())
+        placed = mc.ts(self.NOW)
+        asked = []
+
+        def candles(sym, interval, days=None, **kw):
+            asked.append(interval)
+            step = mc.interval_seconds(interval)
+            first = mc.ts("2026-04-01T14:30:00Z") if interval == "5m" else placed - 86400  # 5m: only recent bars
+            bars = [Candle(t, 100.0, 101.0, 97.0, 99.0, 1.0) for t in range(first, mc.ts("2026-05-01T20:00:00Z"), step)]
+            return data.Series(data.as_symbol(sym, "stock"), interval, bars, "test", [], {})
+        with mock.patch.object(data, "get_candles", side_effect=candles):
+            b._candles[("GLD", "stock")] = []  # an empty 5m series from the order's own cycle
+            b.place_entry({"client_order_id": "ord-g", "symbol": "GLD", "asset": "stock", "qty": 2.0,
+                           "limit_price": 98.0, "stop_price": 90.0, "target_price": 120.0, "swing": True})
+            del b._candles[("GLD", "stock")]
+            self.set_now("2026-05-01T20:00:00Z")
+            b.sync()
+        self.assertEqual(asked[:2], ["5m", "1h"])
+        entry = [o for o in b.book["orders"] if o.get("leg") == "entry"][0]
+        self.assertEqual(entry["status"], "filled")
+        self.assertLess(mc.ts(entry["filled_at"]), mc.ts("2026-03-03T00:00:00Z"))  # the day it was asked, not April
