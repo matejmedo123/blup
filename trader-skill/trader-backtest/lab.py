@@ -372,7 +372,8 @@ def bootstrap_profit_chance(rs: list, k: int = PROFIT_TRADES, paths: int = BOOTS
         return None
     rng = random.Random(seed)
     n = len(rs)
-    block = max(1, min(block, n))
+    # a block of 10 out of 16 trades would make every run nearly the same two blocks — "100 %" by construction
+    block = max(1, min(block, n // 4))
     hits = 0
     for _ in range(paths):
         total, got = 0.0, 0
@@ -453,7 +454,10 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
     """Trades of a rule-exit setup, one at a time per coin: [(entry_ts, {RULE_KEY: net R})].
 
     Entry at the signal close; exit at the first close that meets the rule, at the protective stop
-    (the setup's stop rule; gaps fill at the open) or at the close of the last allowed bar.
+    (the setup's stop rule; gaps fill at the open) or at the close of the last allowed bar. With
+    ``context["fill"] == "next_open"`` (ETFs: the bot sees the daily bar only at the next open) the entry and a
+    rule exit are priced at the next bar's open. A signal on a day ``context["entry_ok"]`` refuses is never
+    taken — so it never keeps the coin busy for one that would have been.
     """
     spec = setups.SETUPS[setup]
     rule = spec["exit_rule"]
@@ -468,14 +472,20 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
         trend = indicators.sma(closes, int(ride.get("min_sma") or 200))
     out, busy, ride_busy = [], -1, -1
     times = [c.t for c in candles]
+    entry_ok = (context or {}).get("entry_ok")
+    next_open = (context or {}).get("fill") == "next_open"
     for r in setups.series_signals(setup, candles, interval, context=context):
         i = r["trigger"]["index"]
         if i <= busy:
             continue
+        if entry_ok is not None and not entry_ok(candles[i].t + step):
+            continue
         # a signal while the previous trade's two thirds still ride: the bot holds that coin, so with the runner on
         # this trade never happens — it counts only for "sell everything" (one position per coin, as live)
         riding = bool(ride) and i <= ride_busy
-        entry = candles[i].c
+        if next_open and i + 1 >= len(candles):
+            break  # bought at an open that hasn't come yet
+        entry = candles[i + 1].o if next_open else candles[i].c
         stop = setups.rule_stop(setup, candles, i, r.get("levels") or {}, atrs[i])
         if stop <= 0 or stop >= entry:
             continue
@@ -489,7 +499,11 @@ def rule_trades(candles, setup: str, interval: str, cost: float, context: dict =
                 px = stop
                 break
             if setups.rule_says_exit(rule, closes, j, cache):
-                px, how = b.c, "rule"
+                if next_open:  # sold after the next open
+                    px = candles[j + 1].o if j + 1 < len(candles) else None
+                else:
+                    px = b.c
+                how = "rule"
                 break
         else:
             if j == i + int(rule["max_bars"]):
@@ -540,31 +554,73 @@ def _with_runner(ride, candles, closes, cache, trend, j, entry, stop, r_main, co
     return (1 - keep) * r_main + keep * trade_sim.net_r(entry, rpx, entry - stop, cost), candles[k].t + step
 
 
-def runner_verdict(setup: str, without: dict, ride_rs: list, folds: list) -> dict:
-    """Does letting part of a winner ride beat selling it all — on the walk-forward periods nobody tuned on?"""
+RUNNER_MIN_AFTER = 30  # trades after the runner's design window needed to judge it on those alone
+
+
+def runner_verdict(setup: str, without: dict, ride_rs: list, folds: list, pairs: list = None) -> dict:
+    """Does letting part of a winner ride beat selling it all — on the walk-forward periods nobody tuned on?
+
+    pairs: [(entry ts, R selling everything, R with the ride)] of the same out-of-sample trades. The runner was
+    chosen on data up to its ``designed_until``: with enough trades after that, only those judge it (earlier
+    walk-forward periods were seen while choosing it)."""
     ride = setups.runner(setup)
-    with_ = final_stats(ride_rs)
+    words = setups.keep_text(float(ride["keep"]))
+    since = ride.get("designed_until")
+    where = "on unseen periods"
+    if pairs:
+        cut = market_clock.ts(since + "T23:59:59Z") if since else 0
+        after = [(a, b) for ts, a, b in pairs if ts > cut]
+        use = after if len(after) >= RUNNER_MIN_AFTER else [(a, b) for _, a, b in pairs]
+        without, with_ = final_stats([a for a, _ in use]), final_stats([b for _, b in use])
+        if since:
+            where = ("on %d trades after %s, when it was chosen" % (len(use), since[:4]) if use is after else
+                     "on unseen periods — mostly the years it was chosen on (only %d trades after %s)" % (
+                         len(after), since[:4]))
+    else:
+        with_ = final_stats(ride_rs)
     gain = with_["expectancy_r"] - without["expectancy_r"]
     drop = without["profit_chance"] - with_["profit_chance"]
     helps = gain > 0 and drop <= RUNNER_MIN_CHANCE_DROP
-    words = setups.keep_text(float(ride["keep"]))
     if helps:
-        why = "keeping %s in until %s added %s per trade on unseen periods (%s → %s), profit chance %s → %s" % (
-            words, ride["exit_rule"]["short"], fmt.r(gain), fmt.r(without["expectancy_r"]), fmt.r(with_["expectancy_r"]),
-            fmt.pct(100 * without["profit_chance"], 0), fmt.pct(100 * with_["profit_chance"], 0))
+        why = "keeping %s in until %s added %s per trade %s (%s → %s), profit chance %s → %s" % (
+            words, ride["exit_rule"]["short"], fmt.r(gain), where, fmt.r(without["expectancy_r"]),
+            fmt.r(with_["expectancy_r"]), fmt.pct(100 * without["profit_chance"], 0),
+            fmt.pct(100 * with_["profit_chance"], 0))
     elif gain <= 0:
-        why = "keeping %s in did not pay on unseen periods (%s per trade) — the bot sells everything" % (
-            words, fmt.r(gain))
+        why = "keeping %s in did not pay %s (%s per trade) — the bot sells everything" % (words, where, fmt.r(gain))
     else:
-        why = "keeping %s in added %s per trade but cut the profit chance by %s — the bot sells everything" % (
-            words, fmt.r(gain), fmt.pct(100 * drop, 0))
+        why = "keeping %s in added %s per trade %s but cut the profit chance by %s — the bot sells everything" % (
+            words, fmt.r(gain), where, fmt.pct(100 * drop, 0))
     return {"keep": float(ride["keep"]), "min_sma": int(ride.get("min_sma") or 200), "exit_rule": ride["exit_rule"],
             "test": with_, "test_without": without, "gain_r": round(gain, 3), "helps": helps, "why": why,
+            "judged_on": where, "designed_until": since,
             "folds": [{"without_r": round(a, 3), "with_r": round(b, 3)} for a, b in folds]}
 
 
+def together(rule_setups: list, coins: list, interval: str, cost: float, context: dict = None) -> dict:
+    """The rule-exit setups the bot runs side by side, traded the way it trades them: one position per coin — a
+    coin held by one setup (until its ride ends) is skipped by the others; on the same day the earlier setup in
+    the list goes first. → {setup: {coin key: entry times the bot would have taken}}. Scored one by one, two
+    trend setups firing on the same coins would count trades the bot never makes."""
+    taken = {st: {} for st in rule_setups}
+    for sym, candles, _ in coins:
+        rows = []
+        for rank, st in enumerate(rule_setups):
+            ends = {}
+            for ts, res in rule_trades(candles, st, interval, cost, context, ends):
+                end, ride_end = ends.get(ts, (ts, ts))
+                rows.append((ts, rank, st, ride_end if RUNNER_KEY in res else end))
+        busy_until = 0
+        for ts, _, st, until in sorted(rows):
+            if ts <= busy_until:
+                continue  # the coin is still held (an exit on the same close can't buy it back on that close)
+            taken[st].setdefault(sym.key, set()).add(ts)
+            busy_until = until
+    return taken
+
+
 def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit_mod, cost: float,
-                 context: dict = None, members: list = None, tradable: set = None) -> tuple:
+                 context: dict = None, members: list = None, tradable: set = None, taken: dict = None) -> tuple:
     """Walk-forward test of one setup on one timeframe across all coins.
 
     The history is cut into folds + 1 equal periods. In fold k the exit is chosen on everything before period
@@ -574,6 +630,7 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     members: one set of coin keys per period (point-in-time universe) — a trade counts for the setup only if its
     coin was among the biggest when its period began. The per-coin rows use each coin's whole history.
     tradable: the coin keys that get a per-coin row (today's universe) — the others only shape the family result.
+    taken: {coin key: entry times} from ``together`` — only the trades this setup gets beside the others.
     """
     k = max(1, int(args.folds))
     start_ts, bounds = fold_bounds(now_ts, tf_days(interval, args), k)
@@ -592,8 +649,9 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     for sym, candles, tick in coins:
         if rule:
             ends[sym.key] = {}
+            mine = None if taken is None else taken.get(sym.key, set())
             per_coin.append((sym, [x for x in rule_trades(candles, setup, interval, cost, context, ends[sym.key])
-                                   if entry_ok(x[0])]))
+                                   if entry_ok(x[0]) and (mine is None or x[0] in mine)]))
         else:
             per_coin.append((sym, [(t["entry_ts"], grid_outcomes(candles, t, interval, exit_mod, tick, cost))
                                    for t in triggers(candles, setup, interval, now_ts) if entry_ok(t["entry_ts"])]))
@@ -605,16 +663,16 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
                 continue
             for ts, res in trades:
                 if lo <= ts < hi and (only is not None or counts(sym.key, ts)):
-                    rows.append((ts, res))
-        rows.sort(key=lambda x: x[0])  # in time order: losing streaks across coins stay together
+                    rows.append((ts, sym.key, res))
+        rows.sort(key=lambda x: x[:2])  # in time order: losing streaks across coins stay together
         out = {}
-        for _, res in rows:
+        for _, _, res in rows:
             for key, r in res.items():
                 out.setdefault(key, []).append(r)
         return out
 
     folds, oos, oos_coin, best = [], [], {sym.key: [] for sym, _ in per_coin}, None
-    ride_oos, ride_coin, ride_folds = [], {sym.key: [] for sym, _ in per_coin}, []
+    ride_oos, ride_coin, ride_folds, ride_pairs = [], {sym.key: [] for sym, _ in per_coin}, [], []
     timed, ride_timed = [], []  # [entry time, R] of every out-of-sample trade, for shared/health.py
     for i in range(k):
         train, test = pool(start_ts, bounds[i]), pool(bounds[i], bounds[i + 1])
@@ -629,6 +687,8 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
                             ride_timed.append([int(ride_end), round(res[RUNNER_KEY], 4)])
         if b == RULE_KEY and RUNNER_KEY in test:
             ride_oos += test[RUNNER_KEY]
+            ride_pairs += sorted((ts, res[RULE_KEY], res[RUNNER_KEY]) for sym, trades in per_coin for ts, res in trades
+                                 if bounds[i] <= ts < bounds[i + 1] and RUNNER_KEY in res and counts(sym.key, ts))
             ride_folds.append((stats(test.get(RULE_KEY, []))["expectancy_r"], stats(test[RUNNER_KEY])["expectancy_r"]))
             for sym, trades in per_coin:
                 ride_coin[sym.key] += [res[RUNNER_KEY] for ts, res in trades
@@ -707,7 +767,8 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
                          "validated": not why,
                          "why": "; ".join(why) or "made money out of sample, including the latest period"})
     fam["validated_coins"] = [r["display"] for r in rows if r["validated"]]
-    fam["runner"] = runner_verdict(setup, oos_s, ride_oos, ride_folds) if (best == RULE_KEY and ride_oos) else None
+    fam["runner"] = runner_verdict(setup, oos_s, ride_oos, ride_folds, ride_pairs) \
+        if (best == RULE_KEY and ride_oos) else None
     # every out-of-sample trade as [exit time, R] in time order, so the autopilot can tell whether its own results
     # look like these
     fam["test_trades"] = sorted(timed)
@@ -743,12 +804,12 @@ def etf_context(args, cfg, now_ts: int, notes: list) -> dict:
     when = getattr(args, "etf_when", None) or (((cfg.get("autopilot") or {}).get("etf_trend") or {}).get("when")
                                                or "crypto_bear")
     if when != "crypto_bear":
-        return {"when": "always"}
+        return {"when": "always", "fill": "next_open"}
     try:
         btc = history(data.as_symbol("BTCUSDT", "crypto"), "1d", tf_days("1d", args) + 260, now_ts, "crypto")[0]
     except (data.DataUnavailable, ValueError) as exc:
         notes.append("Bitcoin's daily history is unavailable (%s) — the ETF trend is tested on every day" % exc)
-        return {"when": "always"}
+        return {"when": "always", "fill": "next_open"}
     regime = setups.regime_map(btc)
     # by UTC day; the first 199 bars have no 200-day average yet — unknown, never counted as a bear market
     up = {t // 86400: regime[t] for t in sorted(regime)[199:]}
@@ -757,7 +818,7 @@ def etf_context(args, cfg, now_ts: int, notes: list) -> dict:
         # the newest Bitcoin daily bar closed before the entry is the previous UTC day's; bear = below its average
         # (a day without a Bitcoin bar counts as not tradable)
         return up.get(int(ts) // 86400 - 1) is False
-    return {"when": "crypto_bear", "entry_ok": entry_ok}
+    return {"when": "crypto_bear", "entry_ok": entry_ok, "fill": "next_open"}
 
 
 def universe(args, cfg) -> tuple:
@@ -838,7 +899,7 @@ def run(args, ctx) -> dict:
         if pit:
             start_ts, bounds = fold_bounds(now_ts, days, args.folds)
             members = pit_members(daily, [start_ts] + bounds[:-1], args.top)
-            keys = set().union(*members) | {s.key for s in syms}
+            keys = sorted(set().union(*members) | {s.key for s in syms})  # same order every run (hash seeds vary)
             if interval == "1d":  # already loaded, split into listings
                 loaded = [(base_of[k][1], [c for c in daily[k] if c.t >= now_ts - days * 86400])
                           for k in keys if k in daily]
@@ -874,10 +935,15 @@ def run(args, ctx) -> dict:
                 except (data.DataUnavailable, ValueError) as exc:
                     notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
             context = dict(context or {}, btc_up=setups.regime_map(btc) if btc else {})
+        rule_fam = [st for st in fam_setups if setups.exit_rule(st)]
+        shared = together(rule_fam, coins, interval, cost, context) if len(rule_fam) > 1 else {}
         for setup in fam_setups:
             fam, coin_rows, coin_picks = study_family(setup, interval, coins, now_ts, args, exit_mod, cost, context,
-                                                      members, {s.key for s in syms} if pit else None)
+                                                      members, {s.key for s in syms} if pit else None,
+                                                      shared.get(setup))
             fam["coins_loaded"] = len(coins)
+            if setup in shared:
+                fam["shared_with"] = [st for st in rule_fam if st != setup]
             if asset == "stock":
                 fam["when"] = (context or {}).get("when") or "always"  # crypto_bear: only the days the bot trades it
             families.append(fam)
@@ -993,6 +1059,9 @@ def text(doc: dict) -> str:
             "✓" if f["validated"] else "·", name, f["exit"]["text"], per, _pct(f["test"]["win_rate"]),
             fmt.r(f["test"]["expectancy_r"]), _pct(f["test"]["profit_chance"]),
             "" if f["validated"] else "  — " + f["verdict"]))
+        if f.get("shared_with"):
+            lines.append("      scored beside %s: only the trades it gets with one position per coin" % (
+                ", ".join(f["shared_with"])))
         if f.get("runner"):
             ride = f["runner"]
             lines.append("      %s let winners ride: %s (per period %s)" % (

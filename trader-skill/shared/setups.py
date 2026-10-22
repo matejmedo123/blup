@@ -54,7 +54,7 @@ SETUPS = {
                        # when that exit comes in profit while the coin is still above its 200-day average, sell a
                        # third and let two thirds ride until the trend itself breaks — chosen on 2018–2022, it did
                        # better on 2023–2026, on 33 other coins and on BTC + ETH alone
-                       "runner": {"keep": 0.67, "min_sma": 200,
+                       "runner": {"keep": 0.67, "min_sma": 200, "designed_until": "2022-12-31",
                                   "exit_rule": {"type": "close_below_ema", "n": 50, "max_bars": 250,
                                                 "text": "first daily close below the 50-day EMA (the trend is broken)",
                                                 "short": "close < 50-day EMA"}}},

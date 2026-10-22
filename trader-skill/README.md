@@ -741,17 +741,17 @@ format, so offline runs go through the same parsing code as live runs. `--now` p
 * **The backtest lab tests many ideas;** every extra idea raises the odds that one passes by luck.
   Walk-forward over three periods and pooling all coins make that much harder, not impossible — trade
   anything it validates on paper first. Costs and fills are modelled, not measured.
-* **The lab is more optimistic than the bot can be — know by how much.** It scores each setup on its own,
-  so a coin held by one setup still counts the other's trades (with one position per coin, `trend_ema` and
-  `trend_breakout` together had 421 tradable trades, not 799 — the average per trade held up, the trade
-  count and the certainty don't). The trend rules and the runner were designed on the same 2018–2026
-  history the walk-forward then reports, so "better in all 3 periods" is partly in-sample. Since v3.8 the
-  profit chance draws runs of 10 consecutive trades (losses cluster: 86 % with trades drawn one by one was
-  about 69 % in runs), the ETF trend is tested only on crypto-bear days (the days the bot trades it), daily
-  entries may pay up to a quarter ATR above the close and keep working for an hour (an order at the close
-  missed the strongest moves — 17–32 % of the lab's total R), and the runner rides after a time stop as in
-  the lab. Since v3.9 a signal that comes while the previous trade's two thirds still ride counts only for
-  "sell everything" (the bot holds that coin and would not take it): 394 of 476 trades get the runner.
+* **The lab is more optimistic than the bot can be — know by how much.** Since v3.10 it scores the trend
+  setups together, one position per coin (a coin held by one setup, until its two thirds stop riding, is
+  skipped by the other) — before, `trend_ema` and `trend_breakout` counted trades the bot never makes and
+  the combined edge was about +0.9R per trade, not the +1.4R / +0.55R shown one by one. What it still does
+  not model: the 5-position and 100 % exposure caps (the portfolio re-check above does — it skips about a
+  third of the signals, the better ones, because they cluster in strong runs). The trend rules were designed
+  on the same 2018–2026 history; the runner was chosen on 2018–2022, so since v3.10 the lab judges it only
+  on trades after 2022 (+0.09R per trade there, not the +0.37R the whole history suggests). The profit
+  chance draws runs of trades (losses cluster), never longer than a quarter of the sample — a coin with
+  16 trades no longer reads "100 %". ETFs are priced at the next open (the bot sees the daily bar only
+  then), daily crypto entries may pay up to a quarter ATR above the close and keep working for an hour.
 * **Your own coins at the same broker:** the daily-loss limit takes out what your own holdings moved today,
   so your BTC falling doesn't trip it. Cash can't be told apart: a deposit or a withdrawal still moves it, and
   the drawdown pause (equity against its peak) still sees your own holdings — keep them in another account if

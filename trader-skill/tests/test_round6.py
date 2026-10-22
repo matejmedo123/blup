@@ -241,3 +241,76 @@ class BrokerStepDefault(TraderTestCase):
     def test_a_broker_without_steps_sells_as_before(self):
         self.assertEqual(FakeBroker().qty_step("BTC/USD", "crypto"), 0.0)
         self.assertIsNotNone(BrokerError)
+
+
+def _trend_coin(n=900, end=1792454400):
+    """30 days up 1 % a day, then a 4-day pullback — trend setups fire again and again."""
+    coin, px = [], 100.0
+    for i in range(n):
+        o, px = px, px * (0.985 if i % 34 >= 30 else 1.01)
+        coin.append(Candle(end - (n - i) * 86400, o, max(o, px) * 1.005, min(o, px) * 0.995, px, 1000.0))
+    return coin
+
+
+class TheLabScoresWhatTheBotCanTake(TraderTestCase):
+    def lab(self):
+        return load("trader-backtest", "lab")
+
+    def test_two_trend_setups_share_one_position_per_coin(self):
+        from shared import setups
+        lab = self.lab()
+        coin = _trend_coin()
+        ctx = {"btc_up": setups.regime_map(coin)}
+        sym = data.as_symbol("BTCUSDT", "crypto")
+        both = ["trend_ema", "trend_breakout"]
+        taken = lab.together(both, [(sym, coin, None)], "1d", 0.0026, ctx)
+        held = []
+        for st in both:
+            ends = {}
+            alone = lab.rule_trades(coin, st, "1d", 0.0026, ctx, ends)
+            mine = taken[st].get(sym.key, set())
+            self.assertTrue(mine <= {ts for ts, _ in alone})
+            for ts, res in alone:
+                if ts in mine:
+                    end, ride_end = ends[ts]
+                    held.append((ts, ride_end if lab.RUNNER_KEY in res else end))
+        alone_n = sum(len(lab.rule_trades(coin, st, "1d", 0.0026, ctx)) for st in both)
+        self.assertLess(len(held), alone_n)  # the bot can't take them all
+        held.sort()
+        for (_, until), (start, _) in zip(held, held[1:]):
+            self.assertGreater(start, until)  # never two positions on the coin at once
+
+    def test_a_handful_of_trades_never_reads_as_certain(self):
+        rs = [1.2, -1.0, 0.8, -1.0, 2.5, -1.0, -1.0, 1.5, -1.0, 0.9, -1.0, 1.1, -1.0, 0.7, -1.0, 1.3]  # 16 trades
+        chance = self.lab().bootstrap_profit_chance(rs)
+        self.assertLess(chance, 0.99)
+        # runs of 10 out of 16 trades would be nearly the same two runs every time: blocks stay at a quarter
+        self.assertEqual(chance, self.lab().bootstrap_profit_chance(rs, block=4))
+
+    def test_an_etf_is_bought_and_sold_at_the_next_open(self):
+        lab = self.lab()
+        coin = [c._replace(o=c.o * 1.004, h=max(c.h, c.o * 1.004)) for c in _trend_coin(500)]  # gaps up overnight
+        at_close = lab.rule_trades(coin, "etf_trend", "1d", 0.0, {})
+        next_open = lab.rule_trades(coin, "etf_trend", "1d", 0.0, {"fill": "next_open"})
+        self.assertTrue(at_close and next_open)
+        self.assertNotEqual([r for _, r in at_close], [r for _, r in next_open])
+
+    def test_a_day_the_bot_skips_never_keeps_the_coin_busy(self):
+        lab = self.lab()
+        coin = _trend_coin(500)
+        ends = {}
+        every = lab.rule_trades(coin, "etf_trend", "1d", 0.0, {}, ends)
+        first = every[0][0]
+        later = lab.rule_trades(coin, "etf_trend", "1d", 0.0, {"entry_ok": lambda ts: ts != first})
+        self.assertNotIn(first, [ts for ts, _ in later])
+        # a signal while that refused trade would have run is taken: no ghost trade keeps the coin busy
+        self.assertTrue(later and first < later[0][0] < ends[first][0], (later[:1], ends[first]))
+
+    def test_the_runner_is_judged_after_its_design_window(self):
+        lab = self.lab()
+        cut = mc.ts("2023-01-01T00:00:00Z")
+        pairs = [(cut - 86400 * i, 0.0, 5.0) for i in range(1, 41)]  # it shone in 2022, while it was being chosen…
+        pairs += [(cut + 86400 * i, 0.5, 0.4) for i in range(40)]    # …and not since
+        v = lab.runner_verdict("trend_breakout", {"expectancy_r": 0.0, "profit_chance": 0.5}, [], [], pairs)
+        self.assertFalse(v["helps"])
+        self.assertIn("after 2022", v["judged_on"])

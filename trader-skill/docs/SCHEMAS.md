@@ -1160,3 +1160,16 @@ background thread (and to its last hour when the disk is low).
 ### State
 * A rotation part claimed by a process that died (`.<archive>.<id>.<pid>.claimed`, older than an hour) goes
   back to `.pending` and is archived.
+
+### Lab (v3.10)
+* `lab.together(rule_setups, coins, …)`: the rule-exit setups of one timeframe are scored side by side, one
+  position per coin — a coin held by one setup (until its ride ends) is skipped by the others; on the same
+  day the earlier setup in `--setups` goes first. Each family carries `shared_with`; its trades, validation
+  and per-coin rows count only what it gets.
+* `runner_verdict(..., pairs)`: the ride is judged on the same trades with and without it, and — once there
+  are `RUNNER_MIN_AFTER` (30) of them — only on trades after the runner's `designed_until` (2022-12-31);
+  `judged_on` says which.
+* `bootstrap_profit_chance`: runs are at most a quarter of the sample long.
+* ETFs (`etf_context`: `fill: "next_open"`): bought and sold on a rule exit at the next open; a day the bot
+  would not trade (`entry_ok`) is skipped before the one-at-a-time walk, so it never blocks a later signal.
+* Coins and pooled rows are ordered by (time, coin) — the same profit chance on every run.
