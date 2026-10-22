@@ -46,6 +46,7 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
 | `/trader-journal` | Every trade with its chart; win rate, expectancy (net of costs), best/worst setups per asset class |
 | `/trader-rugcheck` 🛡️ | Meme-coin safety gate: LP lock, mint/freeze authority, honeypot/taxes, holder concentration, dev share, age, fake-volume hints → SAFE / RISKY / DANGER |
 | `/trader-arb` | Read-only arbitrage gap monitor — shows why visible gaps don't survive fees and slippage |
+| `/trader-sniper` | Meme-coin sniper — new DEX tokens (pump.fun, PumpSwap, Raydium, Meteora, PancakeSwap, Base) found early, checked hard (liquidity at your size, holders, rug pull, honeypot, fake hype), traded small; paper by default, live on Solana from a wallet of its own |
 | **Dashboard** `app/server.py` | Equity, P&L today/total, positions, orders, every trade with its chart, the bot's decisions and reasons, is it alive (heartbeat), what it watches and why, what it learned, news & social feed, notifications, AI desk spend, reports, bot controls |
 | **Deploy kit** `deploy/` | Docker Compose or systemd for a small VPS (daemon + dashboard as two services), HTTPS via Caddy, step-by-step guide in Slovak |
 
@@ -68,7 +69,9 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
      the trend profile below loosens these to fit a strategy that wins only 30–40 % of its trades),
   7. desk verdict GO — and, if you enable the optional **AI desk**, Claude doesn't veto it (it can only
      say no, never yes to something the rules rejected) — then sizing and a risk PASS against `limits.json`,
-  8. stocks and crypto only — **meme tokens on a DEX are never auto-traded** (no wallets, no keys, ever).
+  8. stocks and crypto only — **the autopilot never trades meme tokens on a DEX** and never touches a wallet
+     or key; that is the separate `/trader-sniper`'s job — paper by default, live only on Solana from a
+     wallet of its own with a hard cap, never from yours.
      Meme coins listed on the exchanges (DOGE, SHIB, PEPE, BONK, WIF, …) are off too unless you switch them on
      (`profile --memes` or `autopilot.memes.enabled`): then only the established ones — among the top 40 by
      market cap, a year on the exchange, validated by the lab like any coin — at half the risk.
@@ -789,7 +792,7 @@ trader-skill/
   README.md  LICENSE  .claude-plugin/{plugin.json, marketplace.json, icon.png}
   trader-scanner/ trader-news/ trader-entry/ trader-exit/ trader-timemachine/ trader-risk/ trader-sizer/
   trader-alerts/ trader-broker/ trader-journal/ trader-backtest/ trader-rugcheck/
-  trader-desk/ trader-arb/ trader-autopilot/
+  trader-desk/ trader-arb/ trader-autopilot/ trader-sniper/
   agents/        trader-researcher.md, trader-skeptic.md, trader-lead.md (the desk's subagents)
   app/           server.py + static/ (the dashboard), devdata.py (sample data)
   deploy/        Dockerfile, docker-compose.yml, systemd units, install-vps.sh, Caddyfile, guides (EN + SK)

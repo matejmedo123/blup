@@ -1,0 +1,42 @@
+{
+ "inputMint": "So11111111111111111111111111111111111111112",
+ "inAmount": "10000000",
+ "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+ "outAmount": "1037389",
+ "otherAmountThreshold": "1032203",
+ "swapMode": "ExactIn",
+ "slippageBps": 50,
+ "platformFee": null,
+ "priceImpactPct": "0",
+ "routePlan": [
+  {
+   "swapInfo": {
+    "ammKey": "7yD7gfXv49SFxhx9uTc11dEd7Nj98rGWeYMdZJgheZbG",
+    "label": "Kipseli",
+    "inputMint": "So11111111111111111111111111111111111111112",
+    "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "inAmount": "10000000",
+    "outAmount": "1037389",
+    "updateContextSlot": "459989017"
+   },
+   "percent": 100,
+   "bps": null
+  }
+ ],
+ "contextSlot": 459989017,
+ "timeTaken": 0.001541161,
+ "swapUsdValue": "1.037040906886491",
+ "mostReliableAmmsQuoteReport": {
+  "info": {
+   "Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE": "1037119",
+   "BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU": "1037298"
+  }
+ },
+ "longtailMarketQuoteReport": null,
+ "useIncurredSlippageForQuoting": null,
+ "useRewards": null,
+ "otherRoutePlans": null,
+ "loadedLongtailToken": false,
+ "instructionVersion": null,
+ "transactionVersion": 0
+}

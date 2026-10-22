@@ -1202,3 +1202,22 @@ spelling) may then be traded like any coin, but only:
 * when its daily history on the exchange is at least `min_listed_days` long (`autopilot.meme_refusal`);
 * at `risk_mult` × the normal risk (a "meme coin" gate in the decision).
 DEX tokens (asset `meme`: pump.fun, Raydium, …) are never auto-traded and never sent to a broker.
+
+## v3.12 — the meme-coin sniper (`trader-sniper`)
+
+A separate skill, separate from the autopilot (its own loop, book and budget). Config `sniper` (see
+`shared/config.py` defaults): `enabled`, `mode` (`paper` | `live`), `chains`, `trade_usd`, `max_open_usd`,
+`max_positions`, `max_trades_per_day`, `daily_loss_usd`, `wallet_cap_usd`, `slippage_bps`, `priority_lamports`,
+`min_liquidity_usd`, `min_age_min`, `max_age_hours`, `max_roundtrip_loss_pct`, `min_safety_score`,
+`max_vol_liq_ratio`, `max_tx_per_wallet`, `strategies` {momentum, breakout, pullback, graduation}, `exits`
+{stop_pct, take_profit_pct, take_profit_part, trail_pct, time_stop_hours, liquidity_drop_pct, recheck_min},
+`x_mentions`, `candidates_per_cycle`, `interval_sec`, `live_confirmation` (`"I ACCEPT MEME COIN RISK"`).
+
+Files under `trader/sniper/`: `book.json` (positions, days, recently traded), `candidates.jsonl` (every judged
+candidate with its checks and decision), `outcomes.json` (each candidate's change 15 min / 1 h / 4 h / 24 h later;
+gone = −100 %), `trades.jsonl` (closed positions), `season.json`, `safety.json` (15-minute cache).
+
+The one exception to "nothing touches wallets or keys": the sniper's own bot wallet, created by
+`sniper.py wallet new` (`SNIPER_SOL_SECRET` in `trader/secrets.env`, 0600, never printed). Live trading needs
+`mode: "live"`, the exact confirmation phrase and that wallet; every buy first checks the wallet holds no more
+than `wallet_cap_usd`. Signing (ed25519) and the Jupiter swap flow are in `shared/solana.py` (pure Python).

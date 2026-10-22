@@ -14,7 +14,10 @@
     "day-trading",
     "meme-coins",
     "monte-carlo",
+    "pump-fun",
     "risk",
+    "sniper",
+    "solana",
     "stocks",
     "trading"
   ],
@@ -33,6 +36,7 @@
     "./trader-rugcheck",
     "./trader-desk",
     "./trader-arb",
-    "./trader-autopilot"
+    "./trader-autopilot",
+    "./trader-sniper"
   ]
 }

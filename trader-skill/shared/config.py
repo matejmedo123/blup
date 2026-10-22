@@ -41,6 +41,22 @@ DEFAULT_CONFIG = {
         "crypto": {"fee_bps": 10, "slippage_bps": 3},
         "meme": {"fee_bps": 30, "slippage_bps": 100},
     },
+    # the meme-coin sniper (trader-sniper): DEX tokens on pump.fun & co. — paper unless switched to live, Solana
+    # live only, from a wallet of its own with a hard cap; every amount in USD (≈ €)
+    "sniper": {
+        "enabled": False,
+        "mode": "paper",
+        "chains": ["solana", "bsc", "base"],
+        "trade_usd": 10, "max_open_usd": 100, "max_positions": 10, "max_trades_per_day": 20,
+        "daily_loss_usd": 30, "wallet_cap_usd": 200, "slippage_bps": 300, "priority_lamports": 100000,
+        "min_liquidity_usd": 25000, "min_age_min": 10, "max_age_hours": 72, "max_roundtrip_loss_pct": 8,
+        "min_safety_score": 60, "max_vol_liq_ratio": 25, "max_tx_per_wallet": 6,
+        "strategies": {"momentum": True, "breakout": True, "pullback": True, "graduation": False},
+        "exits": {"stop_pct": 25, "take_profit_pct": 50, "take_profit_part": 0.5, "trail_pct": 25,
+                  "time_stop_hours": 6, "liquidity_drop_pct": 30, "recheck_min": 15},
+        "x_mentions": True, "candidates_per_cycle": 12, "interval_sec": 45,
+        "live_confirmation": "",
+    },
     "autopilot": {
         "enabled": False,
         "broker": "simulator",

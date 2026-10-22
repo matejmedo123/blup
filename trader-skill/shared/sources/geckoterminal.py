@@ -46,3 +46,54 @@ def ohlcv(network: str, pool: str, interval: str = "5m", days: float = 30, end_t
     if not out:
         raise http.SourceError("geckoterminal", "GeckoTerminal returned no candles for pool %s" % pool)
     return [out[t] for t in sorted(out) if t >= start_ts]
+
+
+# GeckoTerminal network id → the chain id DexScreener and the rest of the pack use
+NETWORKS = {"solana": "solana", "bsc": "bsc", "base": "base", "eth": "ethereum"}
+CHAIN_TO_NETWORK = {v: k for k, v in NETWORKS.items()}
+
+
+def _num(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_pools(obj, network: str) -> list:
+    """Pools in one flat shape: price, liquidity, age, volume, and buys/sells with the number of distinct wallets."""
+    out = []
+    for p in (obj or {}).get("data") or []:
+        a = p.get("attributes") or {}
+        rel = p.get("relationships") or {}
+        base_id = (((rel.get("base_token") or {}).get("data") or {}).get("id") or "")
+        dex_id = (((rel.get("dex") or {}).get("data") or {}).get("id") or "")
+        created = a.get("pool_created_at")
+        try:
+            from ..market_clock import ts as _ts
+            created_ts = _ts(created) if created else None
+        except ValueError:
+            created_ts = None
+
+        def tx(w):
+            t = (a.get("transactions") or {}).get(w) or {}
+            return {k: int(t.get(k) or 0) for k in ("buys", "sells", "buyers", "sellers")}
+        out.append({
+            "chain": NETWORKS.get(network, network), "pool": a.get("address") or "",
+            "address": base_id.split("_", 1)[1] if "_" in base_id else base_id, "name": a.get("name") or "",
+            "dex": dex_id, "created_at": created_ts, "price_usd": _num(a.get("base_token_price_usd")),
+            "liquidity_usd": _num(a.get("reserve_in_usd")), "fdv": _num(a.get("fdv_usd")),
+            "market_cap": _num(a.get("market_cap_usd")),
+            "change": {k: _num((a.get("price_change_percentage") or {}).get(k)) for k in ("m5", "m15", "h1", "h6", "h24")},
+            "volume": {k: _num((a.get("volume_usd") or {}).get(k)) or 0.0 for k in ("m5", "m15", "h1", "h6", "h24")},
+            "txns": {k: tx(k) for k in ("m5", "m15", "h1", "h24")},
+        })
+    return out
+
+
+def pools(network: str, kind: str = "new_pools", page: int = 1, duration: str = None) -> list:
+    """kind: new_pools (the newest), trending_pools (the busiest now; duration 5m / 1h / 6h / 24h)."""
+    url = "%s/networks/%s/%s?page=%d&include=base_token,dex" % (BASE, network, kind, int(page))
+    if duration:
+        url += "&duration=" + duration
+    return parse_pools(http.get_json(url, ttl=60), network)

@@ -238,7 +238,8 @@ Point to the dashboard for the full picture. Always include the disclaimer.
 
 ## Never
 
-* Never auto-trade DEX meme tokens, never touch wallets, keys or seed phrases. Exchange-listed meme coins only
+* Never auto-trade DEX meme tokens (that is `/trader-sniper`, with a wallet of its own), never touch
+  wallets, keys or seed phrases. Exchange-listed meme coins only
   when the user switched them on (`autopilot.memes.enabled`), and then only established ones at reduced risk.
 * Never switch to live by itself, never edit the live opt-in fields for the user, never print a key.
 * Never retry an order blindly — after a timeout it looks the order up by client id first.
