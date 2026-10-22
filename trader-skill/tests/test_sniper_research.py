@@ -13,6 +13,6 @@ def load_tests(loader, tests, pattern):
     if RESEARCH not in sys.path:
         sys.path.insert(0, RESEARCH)
     suite = unittest.TestSuite()
-    for name in ("test_backtest", "test_replay"):
+    for name in ("test_backtest", "test_replay", "test_moonbag"):
         suite.addTests(loader.loadTestsFromName(name))
     return suite
