@@ -811,6 +811,17 @@ class RpcTests(unittest.TestCase):
         self.assertAlmostEqual(sum(clock.sleeps), 10.0)
         self.assertEqual(len(fake.requests), 6)
 
+    def test_signature_status_is_one_look_through_history(self):
+        result, fake = self.run_with([status_reply(None)], lambda: self.rpc.signature_status("SIG"))
+        self.assertIsNone(result)  # the cluster never saw it
+        self.assertTrue(fake.requests[0]["json"]["params"][1]["searchTransactionHistory"])
+        ok = {"slot": 9, "confirmations": None, "err": None, "confirmationStatus": "finalized"}
+        self.assertEqual(self.run_with([status_reply(ok)], lambda: self.rpc.signature_status("SIG"))[0], "finalized")
+        bad = dict(ok, err={"InstructionError": [2, {"Custom": 1}]})
+        self.assertTrue(self.run_with([status_reply(bad)], lambda: self.rpc.signature_status("SIG"))[0].startswith("failed"))
+        with self.assertRaises(solana.SolanaError):  # no answer is not "not found"
+            self.run_with([rpc_ok({"context": {"slot": 1}})], lambda: self.rpc.signature_status("SIG"))
+
     def test_confirm_survives_transient_errors(self):
         result, fake, _ = self.confirm_with([
             urllib.error.URLError("flaky"),
@@ -1033,6 +1044,25 @@ class SwapTests(unittest.TestCase):
         self.assertEqual(cm.exception.signature, solana.tx_signature(self.sent[0]))
         methods = [r["json"]["method"] for r in fake.requests if r["json"] and "method" in r["json"]]
         self.assertNotIn("getSignatureStatuses", methods)
+
+    def test_before_send_runs_after_signing_and_before_anything_is_sent(self):
+        fake = self.router()
+        seen = []
+
+        def record(signature, quote):
+            seen.append((signature, quote["outAmount"], len(self.sent)))
+        rpc = solana.Rpc("https://rpc.example.com")
+        with mock.patch.object(solana, "_urlopen", fake), mock.patch.object(solana, "_sleep", lambda s: None):
+            result = solana.swap(rpc, SECRET64, solana.SOL_MINT, solana.USDC_MINT, 10_000_000, 50, before_send=record)
+        self.assertEqual(seen, [(result["signature"], self.quote["outAmount"], 0)])  # nothing sent yet
+
+        def refuse(signature, quote):
+            raise OSError("disk full")  # the record couldn't be written: then nothing goes out
+        fake = self.router()
+        with mock.patch.object(solana, "_urlopen", fake), mock.patch.object(solana, "_sleep", lambda s: None):
+            with self.assertRaises(OSError):
+                solana.swap(rpc, SECRET64, solana.SOL_MINT, solana.USDC_MINT, 10_000_000, 50, before_send=refuse)
+        self.assertEqual(self.sent, [])
 
     def test_failed_swap_is_reported_not_hidden(self):
         fake = self.router()

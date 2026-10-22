@@ -1221,3 +1221,13 @@ The one exception to "nothing touches wallets or keys": the sniper's own bot wal
 `sniper.py wallet new` (`SNIPER_SOL_SECRET` in `trader/secrets.env`, 0600, never printed). Live trading needs
 `mode: "live"`, the exact confirmation phrase and that wallet; every buy first checks the wallet holds no more
 than `wallet_cap_usd`. Signing (ed25519) and the Jupiter swap flow are in `shared/solana.py` (pure Python).
+
+A position in `book.json` may carry `status`: `"sending"` (signed and written down, being sent), `"unconfirmed"`
+(sent, outcome not yet seen in the wallet; `buy_tx`, `sent_at`, `pre_raw` = the wallet's balance of the token
+before the buy, `note`), `"open"` (settled; absent on paper). `tokens_raw` is what arrived on top of `pre_raw`.
+`stop_pct` is measured on the sell value (the strategy's distance plus the round trip's loss). Counters
+`no_data` (cycles without market data) and `no_route` (consecutive Jupiter "no route" answers). A live fill has
+`sold_raw`. `shared.solana.swap(..., before_send=fn)` calls `fn(signature, quote)` after signing, before sending;
+`Rpc.signature_status(sig)` is one look through the ledger history. `jupiter.quote` raises `jupiter.NoRoute` for
+an answer without a route and plain `SourceError` for no answer; neither the quotes nor the sniper's safety
+reports (`rugcheck.check(..., fresh=True)`) are ever served from an older cached copy.

@@ -38,7 +38,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 log = logging.getLogger(__name__)
 
@@ -840,6 +840,24 @@ class Rpc:
             )
         return sig
 
+    def signature_status(self, signature: str) -> Optional[str]:
+        """One look, through the ledger history: "confirmed", "finalized",
+        "processed", "failed: <err json>", or None when the cluster has never
+        seen it. Raises on an RPC failure — no answer is not "not found"."""
+        res = self.call("getSignatureStatuses", [[signature], {"searchTransactionHistory": True}])
+        value = res.get("value") if isinstance(res, dict) else None
+        status = value[0] if isinstance(value, list) and value else None
+        if not isinstance(value, list):
+            raise SolanaError("RPC getSignatureStatuses: unexpected response shape")
+        if not isinstance(status, dict):
+            return None
+        if status.get("err") is not None:
+            return "failed: %s" % json.dumps(status["err"], separators=(",", ":"))
+        level = status.get("confirmationStatus")
+        if level is None and status.get("confirmations") is None:
+            return "finalized"
+        return level or "processed"
+
     def confirm(self, signature: str, timeout_s: float = 60.0, poll_s: float = 2.0) -> str:
         """Poll until confirmed/finalized/failed; returns one of
         "confirmed", "finalized", "failed: <err json>" or "timeout"."""
@@ -970,6 +988,7 @@ def swap(
     slippage_bps: int,
     priority_lamports: Union[int, str, Dict[str, Any], None] = None,
     confirm_timeout_s: float = 60.0,
+    before_send: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     """quote -> build -> sign -> verify -> send -> confirm.
 
@@ -977,6 +996,11 @@ def swap(
     ``Rpc.confirm`` returned, so check it for "failed: ..." / "timeout".
     A TransportError from the send carries ``signature``: confirm it before
     retrying, because the swap may already have executed.
+
+    ``before_send(signature, quote)`` runs after signing and before anything
+    is broadcast, so a caller can record the trade first: if the process dies
+    mid-send, the record (with the signature to look up) is already there. If
+    it raises, nothing is sent.
     """
     kp = secret if isinstance(secret, Keypair) else Keypair(secret)
     quote = jupiter_quote(input_mint, output_mint, amount_raw, slippage_bps)
@@ -991,6 +1015,8 @@ def swap(
         "swap %s -> %s in=%s out~%s sending %s",
         input_mint, output_mint, quote.get("inAmount"), quote.get("outAmount"), signature,
     )
+    if before_send is not None:
+        before_send(signature, quote)
     rpc.send_raw(signed)
     status = rpc.confirm(signature, timeout_s=confirm_timeout_s)
     log.info("swap %s status %s", signature, status)

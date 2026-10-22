@@ -10,8 +10,9 @@ BASE = "https://api.honeypot.is"
 _BURN = {"0x000000000000000000000000000000000000dead", "0x0000000000000000000000000000000000000000"}
 
 
-def check(address: str, chain_id: int) -> dict:
-    d = http.get_json("%s/v2/IsHoneypot?address=%s&chainID=%d" % (BASE, quote(address), chain_id), ttl=300)
+def check(address: str, chain_id: int, fresh: bool = False) -> dict:
+    d = http.get_json("%s/v2/IsHoneypot?address=%s&chainID=%d" % (BASE, quote(address), chain_id), ttl=300,
+                      allow_stale=not fresh)
     sim = d.get("simulationResult") or {}
     code = d.get("contractCode") or {}
     summary = d.get("summary") or {}
@@ -33,8 +34,9 @@ def check(address: str, chain_id: int) -> dict:
     }
 
 
-def top_holders(address: str, chain_id: int, exclude=()) -> dict:
-    d = http.get_json("%s/v1/TopHolders?address=%s&chainID=%d" % (BASE, quote(address), chain_id), ttl=300)
+def top_holders(address: str, chain_id: int, exclude=(), fresh: bool = False) -> dict:
+    d = http.get_json("%s/v1/TopHolders?address=%s&chainID=%d" % (BASE, quote(address), chain_id), ttl=300,
+                      allow_stale=not fresh)
     total = float(d.get("totalSupply") or 0)
     skip = {a.lower() for a in exclude if a} | _BURN
     pcts = []

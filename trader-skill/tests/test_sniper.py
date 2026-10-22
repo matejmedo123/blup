@@ -33,6 +33,12 @@ def cand(**kw):
     return c
 
 
+def verified(chain="solana", without=()):
+    """The checks the sniper needs positively answered before it may buy."""
+    names = ("mint_authority", "freeze_authority", "lp_locked", "top10") if chain == "solana" else ("honeypot", "top10")
+    return [{"name": n, "ok": True, "severity": "critical", "penalty": 0} for n in names if n not in without]
+
+
 class Settings(TraderTestCase):
     def s(self, **kw):
         cfg = config.load_config()
@@ -68,23 +74,52 @@ class Safety(Settings):
                                 "metrics": {}}
         return r
 
-    def judge(self, checks, p=None, verdict="SAFE"):
+    def judge(self, checks, p=None, verdict="SAFE", chain="solana"):
         mod, st = sn(), self.s()  # both before skills.load is patched (it loads the sniper too)
         with mock.patch.object(mod.skills, "load", return_value=self.rug(checks, verdict)):
             self.n = getattr(self, "n", 0) + 1  # a token of its own each time: answers are cached per token
-            return mod.safety(cand(address="T%d" % self.n), p or pair(), st, mc.ts(NOW))
+            return mod.safety(cand(chain=chain, address="T%d" % self.n), p or pair(), st, mc.ts(NOW))
 
     def test_a_critical_failure_or_no_answer_is_no(self):
         crit = {"name": "mint_authority", "ok": False, "severity": "critical", "penalty": 40}
-        self.assertFalse(self.judge([crit], verdict="DANGER")["ok"])
+        self.assertFalse(self.judge(verified(without=["mint_authority"]) + [crit], verdict="DANGER")["ok"])
         down = {"name": "safety_source", "ok": False, "severity": "high", "penalty": 20}
         self.assertFalse(self.judge([down], verdict="RISKY")["ok"])
-        self.assertTrue(self.judge([{"name": "liquidity", "ok": True, "severity": "critical", "penalty": 0}])["ok"])
+        self.assertTrue(self.judge(verified())["ok"])
 
     def test_a_curve_has_no_lp_to_lock(self):
         lp = {"name": "lp_locked", "ok": False, "severity": "critical", "penalty": 30, "reason": "LP not locked"}
-        self.assertFalse(self.judge([lp], verdict="DANGER")["ok"])
-        self.assertTrue(self.judge([lp, {"name": "x", "ok": True}], p=pair(dex="pumpfun"), verdict="DANGER")["ok"])
+        self.assertFalse(self.judge(verified(without=["lp_locked"]) + [lp], verdict="DANGER")["ok"])
+        self.assertTrue(self.judge(verified(without=["lp_locked"]) + [lp], p=pair(dex="pumpfun"), verdict="DANGER")["ok"])
+
+    def test_could_not_verify_is_no_never_a_pass(self):
+        unknown = {"name": "freeze_authority", "ok": None, "severity": "medium", "penalty": 10}
+        r = self.judge(verified(without=["freeze_authority"]) + [unknown])
+        self.assertFalse(r["ok"])
+        self.assertIn("not verified: freeze authority", r["reasons"][0])
+        self.assertEqual(r["score"], 90)  # an unanswered check costs its points too
+        self.assertFalse(self.judge(verified(without=["top10"]))["ok"])  # not even asked: not verified either
+        # EVM (paper only): the honeypot simulation must have run; LP locks can't be read there from free sources
+        lp_unknown = {"name": "lp_locked", "ok": None, "severity": "medium", "penalty": 10}
+        evm = pair(chain="base", dex="uniswap")
+        self.assertTrue(self.judge(verified("base") + [lp_unknown], p=evm, chain="base")["ok"])
+        hp_unknown = {"name": "honeypot", "ok": None, "severity": "high", "penalty": 15}
+        self.assertFalse(self.judge(verified("base", without=["honeypot"]) + [hp_unknown], p=evm, chain="base")["ok"])
+
+    def test_a_report_without_the_authorities_is_not_enough(self):
+        """RugCheck's short summary (the fallback when the full report fails) has no mint or freeze authority: the
+        real check marks them "unknown" — and the sniper doesn't buy what it couldn't check."""
+        mod, st = sn(), self.s()
+        rug = load("trader-rugcheck", "rugcheck")
+        summary = {"risks": [{"name": "Freeze Authority still enabled", "value": "", "level": "danger",
+                              "description": "Tokens can be frozen", "score": 7500}],
+                   "score": 7501, "score_normalised": 45, "lpLockedPct": 100}
+        with mock.patch.object(rug.rugcheck_api, "report", return_value=summary) as rep, \
+                mock.patch.object(mod.skills, "load", return_value=rug):
+            r = mod.safety(cand(address="FRZ"), pair(liquidity_usd=150000.0), st, mc.ts(NOW))
+        self.assertFalse(r["ok"])
+        self.assertIn("mint authority", r["reasons"][0])
+        self.assertTrue(rep.call_args[1].get("fresh"))  # and never an older cached report
 
 
 class RoundTrip(Settings):
@@ -92,6 +127,30 @@ class RoundTrip(Settings):
         rt = sn().roundtrip(cand(chain="base"), pair(chain="base", dex="uniswap", liquidity_usd=20000.0), self.s())
         # $10 into $10k a side: 0.1 % impact each way, 0.3 % fee each way, $0.05 gas each way
         self.assertAlmostEqual(rt["loss_pct"], 2 * (0.1 + 0.3) + 100 * 2 * 0.05 / 10, places=2)
+
+    def test_jupiter_says_no_route_or_says_nothing_and_never_an_old_quote(self):
+        import io
+        import time as _time
+        import urllib.error
+        import urllib.request
+        os.environ.pop("TRADER_OFFLINE", None)  # restored by tearDown
+        jup = sn().jupiter
+        url = "%s/quote?inputMint=MINT&outputMint=%s&amount=1000&slippageBps=300" % (jup.BASE, jup.SOL_MINT)
+        http._get_cache().set(url, '{"inAmount":"1000","outAmount":"500000000","routePlan":[]}',
+                              fetched_at=_time.time() - 3600)  # it sold fine an hour ago
+
+        def answer(code):
+            def fake(req, timeout=None):
+                raise urllib.error.HTTPError(req.full_url, code, "x", {}, io.BytesIO(b'{"error":"no route"}'))
+            return fake
+        with mock.patch.object(urllib.request, "urlopen", side_effect=answer(400)):
+            with self.assertRaises(jup.NoRoute):
+                jup.quote("MINT", jup.SOL_MINT, 1000, 300)
+        with mock.patch.object(urllib.request, "urlopen", side_effect=answer(429)), \
+                mock.patch.object(http.time, "sleep"):
+            with self.assertRaises(http.SourceError) as cm:
+                jup.quote("MINT", jup.SOL_MINT, 1000, 300)
+        self.assertNotIsInstance(cm.exception, jup.NoRoute)  # no answer is not an answer about the token
 
     def test_solana_asks_jupiter_both_ways_and_no_route_is_a_honeypot(self):
         quotes = iter([{"out_raw": 150_000_000, "price_impact_pct": 0, "route": []},       # 1 SOL = $150
@@ -385,3 +444,317 @@ class LiveOrders(Settings):
             mod.sell(pos, 0.5, "take profit", mod.settings(cfg), cfg, mc.ts(NOW), 20.0)
             mod.sell(pos, 1.0, "stop", mod.settings(cfg), cfg, mc.ts(NOW), 20.0)
         self.assertEqual(swaps, [400, 400])  # half of 1,000 would be 500 — the wallet holds 400
+
+    def test_a_live_sale_sells_only_what_its_own_buys_brought_in(self):
+        cfg = self.live_cfg()
+        mod = sn()
+        rpc = mock.Mock()
+        rpc.get_token_balance.return_value = (5.0, 5000, 3)  # the wallet holds more of it than the bot bought
+        swaps = []
+        with mock.patch.object(mod, "_rpc", return_value=rpc), \
+                mock.patch.object(mod, "_swap", side_effect=lambda i, o, amt, *a, **k: swaps.append(amt) or
+                                  {"signature": "S", "status": "confirmed", "quote": {"outAmount": "1000000"}}), \
+                mock.patch.object(mod, "sol_usd", side_effect=http.SourceError("jupiter", "down")):
+            fill = mod.sell({"mode": "live", "address": "MINT", "tokens_raw": 1000, "symbol": "FROG"}, 1.0, "stop",
+                            mod.settings(cfg), cfg, mc.ts(NOW), 7.5)
+        self.assertEqual(swaps, [1000])
+        # the SOL price is asked before the sale; without it the quote's value stands — nothing after a confirmed
+        # sale may fail its bookkeeping
+        self.assertEqual((fill["usd"], fill["sold_raw"]), (7.5, 1000))
+
+    def test_an_answer_that_may_have_been_broadcast_is_looked_up(self):
+        self.live_cfg()
+        mod = sn()
+        from shared import solana
+        rpc = mock.Mock()
+        rpc.confirm.return_value = "confirmed"
+        with mock.patch.object(solana, "swap", side_effect=solana.SolanaError("returned another signature",
+                                                                             signature="SIG2")), \
+                mock.patch.object(mod, "_rpc", return_value=rpc):
+            self.assertEqual(mod._swap("A", "B", 100, 300, 1000)["signature"], "SIG2")
+        rpc.confirm.assert_called_once_with("SIG2")
+
+
+class LiveBuyIsBookedBeforeItIsSent(Settings):
+    """A live buy that was sent must be in the book whatever happens next — or the next cycle buys it again."""
+    NOW = NOW
+
+    def setUp(self):
+        super().setUp()
+        from shared import solana
+        config.ensure_home()
+        os.environ["SNIPER_SOL_SECRET"] = solana.b58encode(solana.new_keypair()[0])
+        self.addCleanup(os.environ.pop, "SNIPER_SOL_SECRET", None)
+        self.cfg = config.load_config()
+        self.cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE)
+        self.rpc = mock.Mock()
+        self.rpc.get_token_balance.return_value = (0.0, 250, 6)  # dust of it from before: not ours
+        self.rpc.signature_status.return_value = None
+        self.sent = []
+
+    def fake_swap(self, i, o, amt, slip, prio, before_send=None):
+        before_send("SIG%d" % (len(self.sent) + 1), {})
+        self.sent.append(amt)
+        raise RuntimeError("swap not confirmed: timeout")  # the answer is lost after the send
+
+    def cycle(self, at):
+        mod = sn()
+        with mock.patch.object(mod, "discover", return_value=[cand()]), \
+                mock.patch.object(mod, "market_data", return_value={("solana", "MINT"): pair()}), \
+                mock.patch.object(mod, "safety", return_value={"ok": True, "score": 90, "verdict": "SAFE",
+                                                                 "reasons": []}), \
+                mock.patch.object(mod, "roundtrip", return_value={"loss_pct": 2.0, "tokens_raw": 10_000_000,
+                                                                    "sol_usd": 150.0, "route": []}), \
+                mock.patch.object(mod, "x_mentions", return_value=None), \
+                mock.patch.object(mod, "track_outcomes", return_value=0), \
+                mock.patch.object(mod, "value_now", return_value=(10.0, 1e-6)), \
+                mock.patch.object(mod, "_wallet_usd", return_value=50.0), \
+                mock.patch.object(mod, "_rpc", return_value=self.rpc), \
+                mock.patch.object(mod, "_swap", side_effect=self.fake_swap):
+            return mod.cycle(self.cfg, mc.ts(NOW) + at)
+
+    def book(self):
+        return state.read_json("sniper/book.json")
+
+    def test_a_lost_answer_is_settled_from_the_wallet_never_bought_again(self):
+        first = self.cycle(0)
+        self.assertEqual(first["decisions"][0]["action"], "sent")
+        pos = self.book()["positions"]["solana:MINT"]
+        self.assertEqual((pos["status"], pos["buy_tx"], pos["pre_raw"]), ("unconfirmed", "SIG1", 250))
+        self.assertEqual(self.book()["days"][NOW[:10]]["trades"], 1)
+        for at in (45, 90):
+            res = self.cycle(at)
+            self.assertEqual(res["decisions"][0]["reasons"], ["already holding it"])
+        self.assertEqual(len(self.sent), 1)
+        self.rpc.get_token_balance.return_value = (5.0, 5_000_250, 6)  # it landed
+        res = self.cycle(135)
+        pos = self.book()["positions"]["solana:MINT"]
+        self.assertEqual((pos["status"], pos["tokens_raw"]), ("open", 5_000_000))  # only what arrived on top
+        self.assertAlmostEqual(pos["entry_price"], 10.0 / 5_000_000)
+        self.assertEqual(pos["peak_price"], pos["entry_price"])
+        self.assertIn("went through", " ".join(res["actions"]))
+        self.assertEqual(len(self.sent), 1)
+
+    def test_the_book_has_it_before_it_is_sent(self):
+        def dies(i, o, amt, slip, prio, before_send=None):
+            before_send("SIG1", {})
+            self.sent.append(amt)
+            raise KeyboardInterrupt  # the process is stopped in the middle of the send
+        self.fake_swap = dies
+        with self.assertRaises(KeyboardInterrupt):
+            self.cycle(0)
+        pos = self.book()["positions"]["solana:MINT"]
+        self.assertEqual((pos["status"], pos["buy_tx"]), ("sending", "SIG1"))
+        self.fake_swap = lambda *a, **k: self.fail("sent again")
+        self.cycle(45)  # settled from the wallet, never sent again
+        self.assertEqual(len(self.sent), 1)
+
+    def test_a_buy_that_never_landed_leaves_the_book_and_is_not_retried_today(self):
+        self.cycle(0)
+        self.cycle(60)  # too early to tell: the transaction could still land
+        self.assertIn("solana:MINT", self.book()["positions"])
+        res = self.cycle(200)  # its blockhash has expired and the cluster never saw it
+        self.assertNotIn("solana:MINT", self.book()["positions"])
+        self.assertIn("never went through", " ".join(res["actions"]))
+        self.assertEqual(res["decisions"][0]["reasons"], ["traded in the last 24 h"])
+        self.assertEqual(len(self.sent), 1)
+
+    def test_a_failed_transaction_is_settled_at_once(self):
+        self.cycle(0)
+        self.rpc.signature_status.return_value = 'failed: {"InstructionError":[2,{"Custom":6001}]}'
+        self.cycle(45)
+        self.assertNotIn("solana:MINT", self.book()["positions"])
+
+    def test_nothing_sent_nothing_booked(self):
+        def no_route(*a, **k):
+            raise http.SourceError("jupiter", "swap: HTTP 400")  # failed before signing: nothing left the machine
+        self.fake_swap = no_route
+        res = self.cycle(0)
+        self.assertEqual(res["decisions"][0]["action"], "error")
+        self.assertEqual((self.book() or {}).get("positions", {}), {})
+
+
+class KillSwitch(Settings):
+    NOW = NOW
+
+    def setUp(self):
+        super().setUp()
+        config.ensure_home()
+        config.update_file("config.json", {"sniper": {"enabled": True}})
+        base = {"chain": "solana", "dex": "pumpswap", "strategy": "momentum", "opened_at": NOW, "entry_price": 1e-6,
+                "cost_usd": 10.0, "stop_pct": 27.0, "peak_price": 1e-6, "mode": "paper", "price_unit": "raw",
+                "tokens_raw": 10_000_000, "url": ""}
+        state.write_json("sniper/book.json", {"positions": {
+            "solana:A": dict(base, address="A", symbol="A"), "solana:B": dict(base, address="B", symbol="B")},
+            "days": {}, "traded": {}})
+
+    def kill(self, fail_on=()):
+        mod = sn()
+
+        def fake_sell(pos, part, reason, *a):
+            if pos["address"] in fail_on:
+                raise RuntimeError("swap not confirmed: timeout")
+            return {"usd": 9.0, "part": part, "reason": reason, "at": NOW}
+        with mock.patch.object(mod, "market_data", return_value={}), \
+                mock.patch.object(mod, "value_now", return_value=(9.0, 9e-7)), \
+                mock.patch.object(mod, "sell", side_effect=fake_sell):
+            return self.run_tool("trader-sniper", "sniper", ["kill"])
+
+    def test_off_first_then_each_sale_on_its_own(self):
+        code, out, _ = self.kill(fail_on=("B",))
+        self.assertEqual(code, 1)
+        self.assertFalse(config.load_config()["sniper"]["enabled"])
+        self.assertEqual(list(state.read_json("sniper/book.json")["positions"]), ["solana:B"])
+        self.assertIn("B: sale failed", out)
+        code, out, _ = self.kill()
+        self.assertEqual(code, 0)
+        self.assertEqual(state.read_json("sniper/book.json")["positions"], {})
+        self.assertEqual([t["symbol"] for t in state.read_jsonl("sniper/trades.jsonl")], ["A", "B"])  # A once
+
+    def test_a_running_loop_buys_nothing_after_the_switch(self):
+        config.update_file("config.json", {"sniper": {"enabled": False}})  # the kill switch, mid-cycle
+        cfg = config.load_config()
+        cfg["sniper"]["enabled"] = True  # what the loop read when the cycle began
+        mod = sn()
+        with mock.patch.object(mod, "manage"), \
+                mock.patch.object(mod, "discover", return_value=[cand(address="C")]), \
+                mock.patch.object(mod, "market_data", return_value={("solana", "C"): pair()}), \
+                mock.patch.object(mod, "safety", return_value={"ok": True, "score": 90, "verdict": "SAFE",
+                                                                 "reasons": []}), \
+                mock.patch.object(mod, "roundtrip", return_value={"loss_pct": 2.0, "tokens_raw": 10_000_000,
+                                                                    "sol_usd": 150.0, "route": []}), \
+                mock.patch.object(mod, "x_mentions", return_value=None), \
+                mock.patch.object(mod, "track_outcomes", return_value=0), \
+                mock.patch.object(mod, "buy") as buy:
+            res = mod.cycle(cfg, mc.ts(NOW))
+        self.assertEqual(res["decisions"][0]["reasons"], ["the sniper was switched off"])
+        buy.assert_not_called()
+
+
+class RunLoop(Settings):
+    NOW = NOW
+
+    def test_one_failed_cycle_does_not_end_the_loop(self):
+        config.ensure_home()
+        config.update_file("config.json", {"sniper": {"enabled": True}})
+        mod = sn()
+        ok = {"at": NOW, "mode": "paper", "actions": [], "decisions": [], "notes": [], "open": 0}
+        with mock.patch.object(mod, "cycle", side_effect=[state.LockTimeout("book busy"), ok]) as cyc, \
+                mock.patch.object(mod.time, "sleep"):
+            code, out, _ = self.run_tool("trader-sniper", "sniper", ["run", "--loop", "--max-cycles", "2"])
+        self.assertEqual((code, cyc.call_count), (0, 2))
+        self.assertIn("cycle failed", out)
+
+
+class ReviewedExits(Settings):
+    NOW = NOW
+
+    def raw_position(self, **kw):
+        p = {"chain": "solana", "address": "MINT", "symbol": "FROG", "dex": "pumpswap", "strategy": "momentum",
+             "opened_at": NOW, "entry_price": 1e-6, "cost_usd": 10.0, "stop_pct": 27.0, "peak_price": 1e-6,
+             "mode": "paper", "price_unit": "raw", "tokens_raw": 10_000_000, "url": "", "entry_liquidity": 80000.0}
+        p.update(kw)
+        return p
+
+    def manage(self, book, quote, at=600, md=None):
+        mod = sn()
+        acts = []
+        with mock.patch.object(mod, "market_data", return_value={("solana", "MINT"): pair()} if md is None else md), \
+                mock.patch.object(mod, "sol_usd", return_value=150.0), \
+                mock.patch.object(mod, "safety", return_value={"ok": True, "verdict": "SAFE", "reasons": []}), \
+                mock.patch.object(mod.jupiter, "quote", side_effect=quote):
+            mod.manage(book, self.s(), config.load_config(), mc.ts(NOW) + at, acts)
+        return acts
+
+    @staticmethod
+    def worth(usd_for_all, raw=10_000_000):
+        return lambda a, b, amt, slip: {"out_raw": int(usd_for_all * amt / raw / 150.0 * 1e9), "in_raw": amt,
+                                        "price_impact_pct": 0, "route": []}
+
+    def test_after_taking_profit_a_new_high_is_not_a_trailing_stop(self):
+        config.ensure_home()
+        mod = sn()
+        pos = mod.buy(cand(), pair(), {"strategy": "momentum", "why": "x", "stop_pct": 25},
+                      {"tokens_raw": 10_000_000, "sol_usd": 150.0, "loss_pct": 2.0}, self.s(), config.load_config(),
+                      mc.ts(NOW))
+        self.assertEqual(pos["peak_price"], pos["entry_price"])  # per raw unit, like every price it is compared with
+        self.assertEqual(pos["stop_pct"], 27.0)  # the strategy's 25 % plus the 2 % the round trip costs
+        book = {"positions": {"solana:MINT": pos}, "days": {}, "traded": {}}
+        self.manage(book, self.worth(16.0))  # +60 %: half is sold
+        self.assertTrue(book["positions"]["solana:MINT"]["sold_part"])
+        self.manage(book, self.worth(17.0), at=660)  # +70 %, higher still
+        self.assertIn("solana:MINT", book["positions"])
+
+    def test_no_answer_from_jupiter_is_no_price_not_a_zero(self):
+        config.ensure_home()
+        book = {"positions": {"solana:MINT": self.raw_position()}, "days": {}, "traded": {}}
+        self.manage(book, http.SourceError("jupiter", "HTTP 429", 429))
+        self.assertIn("solana:MINT", book["positions"])
+        jup = sn().jupiter
+        acts = self.manage(book, jup.NoRoute("jupiter", "no route"))  # once can be Jupiter's hiccup
+        self.assertIn("solana:MINT", book["positions"])
+        self.assertIn("once more", " ".join(acts))
+        self.manage(book, jup.NoRoute("jupiter", "no route"))  # twice in a row is the token
+        self.assertEqual(book["positions"], {})
+        self.assertIn("no way to sell", state.read_jsonl("sniper/trades.jsonl")[-1]["exit_reason"])
+
+    def test_a_paper_pool_without_market_data_waits_then_counts_as_gone(self):
+        config.ensure_home()
+        pos = {"chain": "base", "address": "TOK", "symbol": "TOK", "dex": "uniswap", "strategy": "momentum",
+               "opened_at": NOW, "entry_price": 1.0, "cost_usd": 10.0, "stop_pct": 27.0, "peak_price": 1.0,
+               "entry_liquidity": 100000.0, "mode": "paper", "price_unit": "usd", "tokens": 10.0, "url": ""}
+        book = {"positions": {"base:TOK": pos}, "days": {}, "traded": {}}
+        for i in range(sn().GONE_AFTER - 1):
+            self.manage(book, None, at=60 * i, md={})
+        self.assertIn("base:TOK", book["positions"])
+        self.manage(book, None, at=900, md={})
+        self.assertEqual(book["positions"], {})
+
+    def test_every_sale_is_on_disk_at_once(self):
+        config.ensure_home()
+        book = {"positions": {"solana:MINT": self.raw_position()}, "days": {}, "traded": {}}
+        self.manage(book, self.worth(5.0))  # −50 %: stop
+        self.assertEqual(state.read_json("sniper/book.json")["positions"], {})
+
+
+class ReviewedBudget(Settings):
+    NOW = NOW
+
+    def test_the_daily_limit_counts_open_losses_and_the_next_trades_risk(self):
+        s, now = self.s(), mc.ts(NOW)
+        # $30 a day; the next trade can lose $10 × (25 % stop + 8 % round trip) = $3.30
+        book = {"positions": {"solana:X": {"cost_usd": 10.0, "value_usd": 4.0}},
+                "days": {NOW[:10]: {"trades": 3, "pnl_usd": -20.0}}, "traded": {}}
+        self.assertEqual(sn().budget_refusal(book, s, now, "solana:A"), "")  # 20 + 6 + 3.30 = 29.30
+        book["positions"]["solana:X"]["value_usd"] = 3.0  # 20 + 7 + 3.30 = 30.30
+        self.assertIn("open positions included", sn().budget_refusal(book, s, now, "solana:A"))
+
+    def test_a_stop_inside_the_noise_is_no_trade(self):
+        config.ensure_home()
+        mod = sn()
+        with mock.patch.object(mod, "manage"), \
+                mock.patch.object(mod, "discover", return_value=[cand()]), \
+                mock.patch.object(mod, "market_data", return_value={("solana", "MINT"): pair()}), \
+                mock.patch.object(mod, "safety", return_value={"ok": True, "score": 90, "verdict": "SAFE",
+                                                                 "reasons": []}), \
+                mock.patch.object(mod, "roundtrip", return_value={"loss_pct": 2.0, "tokens_raw": 10_000_000,
+                                                                    "sol_usd": 150.0, "route": []}), \
+                mock.patch.object(mod, "signal", return_value={"strategy": "pullback", "why": "x", "stop_pct": 0.4}), \
+                mock.patch.object(mod, "x_mentions", return_value=None), \
+                mock.patch.object(mod, "track_outcomes", return_value=0):
+            res = mod.cycle(config.load_config(), mc.ts(NOW))
+        self.assertEqual(res["decisions"][0]["action"], "skipped")
+        self.assertIn("wiggle", res["decisions"][0]["reasons"][0])
+
+    def test_the_key_file_must_be_private(self):
+        config.ensure_home()
+        path = config.trader_home() / "secrets.env"
+        path.write_text("SNIPER_SOL_SECRET=x\n", encoding="ascii")
+        os.chmod(str(path), 0o644)
+        cfg = config.load_config()
+        cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE)
+        ok, missing = sn().live_readiness(cfg)
+        self.assertFalse(ok)
+        self.assertIn("private", " ".join(missing))
+        os.chmod(str(path), 0o600)
+        self.assertTrue(sn().live_readiness(cfg)[0])

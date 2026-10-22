@@ -60,6 +60,14 @@ POOL_FEE_PCT = {"pumpfun": 1.0, "pumpswap": 0.25, "raydium": 0.25, "meteora": 0.
 NETWORK_COST_USD = {"solana": 0.02, "bsc": 0.10, "base": 0.05, "ethereum": 4.0}
 MAJORS = {"SOL", "WSOL", "USDC", "USDT", "WETH", "ETH", "WBNB", "BNB", "CBBTC", "WBTC", "JUP", "BONK"}
 CHECKPOINTS = (("m15", 900), ("h1", 3600), ("h4", 14400), ("h24", 86400))
+# what must be positively verified before a buy — "could not check" is a no, never a pass
+MUST_VERIFY = {"solana": {"mint_authority", "freeze_authority", "lp_locked", "top10"}}
+MUST_VERIFY_EVM = {"honeypot", "top10"}  # LP locks aren't readable from free sources there: EVM is paper only
+MIN_STOP_PCT = 5.0        # a strategy stop closer than this to the price is noise, not a stop
+UNSETTLED = ("sending", "unconfirmed")  # a live buy whose outcome the wallet hasn't shown yet
+SETTLE_AFTER_SEC = 180    # a Solana transaction can't land once its blockhash expired (~1–2 min)
+GONE_AFTER = 10           # cycles without market data before a paper position counts its pool as gone
+LOCK_WAIT = 900           # a cycle with several sales (each up to a minute to confirm) can hold the book that long
 
 
 # --- settings -----------------------------------------------------------------------------------------------
@@ -83,6 +91,9 @@ def live_readiness(cfg: dict) -> tuple:
         missing.append('config sniper.live_confirmation must be exactly "%s"' % LIVE_PHRASE)
     if not secrets.has("SNIPER_SOL_SECRET"):
         missing.append("a bot wallet (sniper.py wallet new — then fund it with a small amount of SOL)")
+    warn = secrets.file_warning()
+    if warn:
+        missing.append("a private key file — " + warn)
     return (not missing), missing
 
 
@@ -232,21 +243,29 @@ def safety(c: dict, pair: dict, s: dict, now_ts: float) -> dict:
         return hit["r"]
     rug = skills.load("trader-rugcheck", "rugcheck")
     try:
-        res = rug.check(None, pair=pair, write=False)
+        res = rug.check(None, pair=pair, write=False, fresh=True)
     except Exception as exc:  # noqa: BLE001 — no answer is no green light
         r = {"ok": False, "score": 0, "verdict": "UNKNOWN", "reasons": ["safety check failed: %s" % type(exc).__name__],
              "metrics": {}}
     else:
         curve = pair.get("dex") in CURVE_DEXES
         exempt = {"lp_locked", "liquidity"} if curve else set()
-        failed = [k for k in res.get("checks") or [] if k.get("ok") is False and k["name"] not in exempt]
+        checks = [k for k in res.get("checks") or [] if k["name"] not in exempt]
+        failed = [k for k in checks if k.get("ok") is False]
         critical = [k for k in failed if k.get("severity") == "critical"]
-        score = max(0, 100 - sum(int(k.get("penalty") or 0) for k in failed))
+        # "could not verify" costs its points too — a check that didn't answer is not a check that passed
+        score = max(0, 100 - sum(int(k.get("penalty") or 0) for k in checks if k.get("ok") is not True))
         reasons = [r for r in res.get("reasons") or []
                    if not (curve and ("LP" in r or "iquidity" in r))]
-        unverified = any(k["name"] == "safety_source" for k in failed)  # RugCheck / honeypot.is didn't answer
+        seen = {k["name"]: k.get("ok") for k in checks}
+        must = MUST_VERIFY.get(c["chain"], MUST_VERIFY_EVM) - exempt
+        # missing (RugCheck / honeypot.is didn't answer) or "unknown": not verified
+        unverified = sorted(n for n in must if seen.get(n) is None)
+        if unverified:
+            reasons.insert(0, "not verified: %s — no buy without it" % ", ".join(n.replace("_", " ") for n in unverified))
         r = {"ok": not critical and not unverified and score >= float(s["min_safety_score"]),
-             "score": score, "verdict": res.get("verdict"), "reasons": reasons[:6], "metrics": res.get("metrics") or {}}
+             "score": score, "verdict": res.get("verdict"), "reasons": reasons[:6], "metrics": res.get("metrics") or {},
+             "unverified": unverified}
     cache[key] = {"t": now_ts, "r": r}
     if len(cache) > 500:
         for k in sorted(cache, key=lambda k: cache[k].get("t", 0))[:100]:
@@ -255,9 +274,20 @@ def safety(c: dict, pair: dict, s: dict, now_ts: float) -> dict:
     return r
 
 
+_SOL_PX = {}
+
+
 def sol_usd() -> float:
-    q = jupiter.quote(jupiter.SOL_MINT, jupiter.USDC_MINT, 10 ** 9, 50)
-    return q["out_raw"] / 1e6
+    """SOL in USD from a live Jupiter quote — when Jupiter doesn't answer, the last one from the past 5 minutes
+    (SOL rarely moves enough in that time to matter for a $10 order), never anything older."""
+    try:
+        q = jupiter.quote(jupiter.SOL_MINT, jupiter.USDC_MINT, 10 ** 9, 50)
+    except http.SourceError:
+        if _SOL_PX and time.time() - _SOL_PX["t"] < 300:
+            return _SOL_PX["px"]
+        raise
+    _SOL_PX.update(px=q["out_raw"] / 1e6, t=time.time())
+    return _SOL_PX["px"]
 
 
 def roundtrip(c: dict, pair: dict, s: dict) -> dict:
@@ -427,8 +457,14 @@ def budget_refusal(book: dict, s: dict, now_ts: float, key: str) -> str:
         return "%s in meme positions — the cap is %s" % (fmt.money(open_usd), fmt.money(float(s["max_open_usd"])))
     if day["trades"] >= int(s["max_trades_per_day"]):
         return "%d trades today (max %s)" % (day["trades"], s["max_trades_per_day"])
-    if -day["pnl_usd"] >= float(s["daily_loss_usd"]):
-        return "lost %s today — the daily limit is %s" % (fmt.money(-day["pnl_usd"]), fmt.money(float(s["daily_loss_usd"])))
+    # today's realized result, what the open positions are down now, and what the next trade can lose to its stop:
+    # a new buy never takes the day past the limit (it can't stop open positions from falling — their stops do)
+    lost = -float(day["pnl_usd"]) + sum(max(0.0, float(p.get("cost_usd") or 0) - float(p["value_usd"]))
+                                        for p in book["positions"].values() if p.get("value_usd") is not None)
+    at_risk = float(s["trade_usd"]) * min(100.0, float(s["exits"]["stop_pct"]) + float(s["max_roundtrip_loss_pct"])) / 100
+    if lost + at_risk > float(s["daily_loss_usd"]) + 1e-9:
+        return "lost %s today (open positions included) — one more trade could pass the daily limit of %s" % (
+            fmt.money(max(0.0, lost)), fmt.money(float(s["daily_loss_usd"])))
     return ""
 
 
@@ -450,15 +486,17 @@ def _wallet_usd(px_sol: float) -> float:
     return _rpc().get_balance(kp.pubkey_b58) / 1e9 * px_sol
 
 
-def _swap(input_mint: str, output_mint: str, amount_raw: int, slippage_bps: int, priority: int) -> dict:
+def _swap(input_mint: str, output_mint: str, amount_raw: int, slippage_bps: int, priority: int,
+          before_send=None) -> dict:
     """One swap from the bot wallet. A send whose answer was lost is looked up before anything else — never sent
-    a second time (it may have gone through)."""
+    a second time (it may have gone through). ``before_send(signature, quote)`` records it before it leaves."""
     solana, kp = _wallet()
     rpc = _rpc()
     try:
-        res = solana.swap(rpc, kp, input_mint, output_mint, int(amount_raw), int(slippage_bps), int(priority))
-    except solana.TransportError as exc:
-        sig = getattr(exc, "signature", None)
+        res = solana.swap(rpc, kp, input_mint, output_mint, int(amount_raw), int(slippage_bps), int(priority),
+                          before_send=before_send)
+    except solana.SolanaError as exc:
+        sig = getattr(exc, "signature", None)  # set whenever it may have been broadcast
         if not sig:
             raise
         res = {"signature": sig, "status": rpc.confirm(sig), "quote": {}}
@@ -467,15 +505,21 @@ def _swap(input_mint: str, output_mint: str, amount_raw: int, slippage_bps: int,
     return res
 
 
-def buy(c: dict, pair: dict, sig: dict, rt: dict, s: dict, cfg: dict, now_ts: float) -> dict:
-    """A position {…} — paper fills at the quoted price; live sends the swap from the bot wallet."""
+def buy(c: dict, pair: dict, sig: dict, rt: dict, s: dict, cfg: dict, now_ts: float, record=None) -> dict:
+    """A position {…} — paper fills at the quoted price; live sends the swap from the bot wallet. A live buy is put
+    in the book through ``record(pos)`` the moment it is signed, before it is sent: whatever happens after (a lost
+    answer, a slow node, the process killed), the book knows, and the next cycle settles it instead of buying again.
+
+    Stops are measured on what selling would really bring back, so the strategy's stop (a distance from the
+    market price) gets the round trip's cost on top — otherwise a stop tighter than that cost fires at once."""
     usd = float(s["trade_usd"])
     price = float(pair.get("price_usd") or 0)
     live = is_live(cfg) and c["chain"] in LIVE_CHAINS
     pos = {"chain": c["chain"], "address": c["address"], "symbol": (pair.get("base") or {}).get("symbol") or "",
            "pair": pair.get("pair_address") or "", "dex": pair.get("dex") or "", "url": pair.get("url") or "",
            "strategy": sig["strategy"], "why": sig["why"], "opened_at": market_clock.iso(now_ts),
-           "entry_price": price, "cost_usd": usd, "stop_pct": float(sig["stop_pct"]), "peak_price": price,
+           "entry_price": price, "cost_usd": usd,
+           "stop_pct": round(float(sig["stop_pct"]) + max(0.0, float(rt.get("loss_pct") or 0)), 2),
            "entry_liquidity": pair.get("liquidity_usd"), "mode": "live" if live else "paper", "sold_part": False}
     if c["chain"] == "solana" and rt.get("tokens_raw"):
         pos["tokens_raw"] = int(rt["tokens_raw"])
@@ -486,19 +530,63 @@ def buy(c: dict, pair: dict, sig: dict, rt: dict, s: dict, cfg: dict, now_ts: fl
         pos["entry_price"] = price * (1 + impact / 100.0)
         pos["tokens"] = usd / pos["entry_price"] if pos["entry_price"] else 0.0
         pos["price_unit"] = "usd"
-    if live:
-        _solana, kp = _wallet()
-        held = _wallet_usd(rt["sol_usd"])
-        if held > float(s["wallet_cap_usd"]):
-            raise RuntimeError("the bot wallet holds %s — over its cap of %s; move the rest out first" % (
-                fmt.money(held), fmt.money(float(s["wallet_cap_usd"]))))
-        res = _swap(jupiter.SOL_MINT, c["address"], int(usd / rt["sol_usd"] * 1e9), int(s["slippage_bps"]),
-                    int(s["priority_lamports"]))
-        _ui, raw, _dec = _rpc().get_token_balance(kp.pubkey_b58, c["address"])
-        if int(raw) <= 0:
-            raise RuntimeError("bought (%s) but the wallet shows no %s yet" % (res.get("signature"), pos["symbol"]))
-        pos.update(tokens_raw=int(raw), entry_price=usd / max(1, int(raw)), buy_tx=res.get("signature"))
+    pos["peak_price"] = pos["entry_price"]  # the trailing stop compares like with like: the position's own unit
+    if not live:
+        return pos
+    _solana, kp = _wallet()
+    held = _wallet_usd(rt["sol_usd"])
+    if held > float(s["wallet_cap_usd"]):
+        raise RuntimeError("the bot wallet holds %s — over its cap of %s; move the rest out first" % (
+            fmt.money(held), fmt.money(float(s["wallet_cap_usd"]))))
+    if record is None:
+        raise RuntimeError("a live buy needs its record in the book first")
+    # what the wallet held of this token before: only what arrives on top is ours from this buy
+    pos.update(status="sending", pre_raw=int(_rpc().get_token_balance(kp.pubkey_b58, c["address"])[1]), tokens_raw=0)
+
+    def before_send(signature, _quote):
+        pos.update(buy_tx=signature, sent_at=market_clock.iso(now_ts))
+        record(pos)
+    try:
+        _swap(jupiter.SOL_MINT, c["address"], int(usd / rt["sol_usd"] * 1e9), int(s["slippage_bps"]),
+              int(s["priority_lamports"]), before_send=before_send)
+    except Exception as exc:  # noqa: BLE001
+        if not pos.get("buy_tx"):
+            raise  # nothing left the machine
+        pos.update(status="unconfirmed", note=str(exc)[:200])
+        return pos
+    try:
+        _settle(None, None, pos, now_ts, [])
+    except Exception as exc:  # noqa: BLE001 — confirmed, but the wallet can't be read right now: settled next cycle
+        pos.update(status="unconfirmed", note="wallet not readable yet: %s" % str(exc)[:160])
     return pos
+
+
+def _settle(book, key, pos: dict, now_ts: float, actions: list) -> None:
+    """A live buy whose outcome isn't known yet — the wallet decides. Tokens arrived on top of what it held before:
+    an open position of exactly that many. Nothing arrived, and the transaction failed or is unknown to the
+    cluster once it could no longer land: nothing was bought, the position goes (the day's trade count and the
+    24 h block on the token stay). Anything else waits for the next cycle."""
+    _solana, kp = _wallet()
+    rpc = _rpc()
+    raw = int(rpc.get_token_balance(kp.pubkey_b58, pos["address"])[1]) - int(pos.get("pre_raw") or 0)
+    if raw > 0:
+        entry = float(pos["cost_usd"]) / raw
+        pos.update(status="open", tokens_raw=raw, entry_price=entry, peak_price=entry)
+        pos.pop("note", None)
+        if book is not None:
+            actions.append("%s: the buy went through (%s) — managed like any position from now" % (
+                pos["symbol"], pos.get("buy_tx")))
+        return
+    st = rpc.signature_status(pos["buy_tx"]) if pos.get("buy_tx") else None
+    waited = now_ts - market_clock.ts(pos.get("sent_at") or pos["opened_at"])
+    if st and not st.startswith("failed"):
+        pos.update(status="unconfirmed", note="landed (%s), tokens not in the wallet yet" % st)
+        return
+    if book is not None and (st or waited >= SETTLE_AFTER_SEC):
+        del book["positions"][key]
+        actions.append("%s: the buy never went through (%s) — nothing bought" % (pos["symbol"], st or "not found"))
+        return
+    pos["status"] = "unconfirmed"
 
 
 def value_now(pos: dict, pair: dict, s: dict) -> tuple:
@@ -507,10 +595,12 @@ def value_now(pos: dict, pair: dict, s: dict) -> tuple:
         px = sol_usd()
         try:
             q = jupiter.quote(pos["address"], jupiter.SOL_MINT, int(pos["tokens_raw"]), int(s["slippage_bps"]))
-        except http.SourceError:
-            return 0.0, 0.0  # no route back: as good as nothing
-        usd = q["out_raw"] / 1e9 * px
+        except jupiter.NoRoute:
+            return 0.0, 0.0  # Jupiter answered: nothing routes back — as good as nothing
+        usd = q["out_raw"] / 1e9 * px  # a Jupiter that doesn't answer raises: no price this cycle, not a zero
         return usd, usd / max(1, int(pos["tokens_raw"]))
+    if not pair:
+        raise http.SourceError("dexscreener", "no market data for %s" % pos.get("symbol"))
     price = float(pair.get("price_usd") or 0)
     liq = float(pair.get("liquidity_usd") or 0)
     gross = price * float(pos.get("tokens") or 0)
@@ -525,14 +615,22 @@ def sell(pos: dict, part: float, reason: str, s: dict, cfg: dict, now_ts: float,
     if pos.get("mode") == "live":
         _solana, kp = _wallet()
         held = int(_rpc().get_token_balance(kp.pubkey_b58, pos["address"])[1])
-        amount = held if part >= 1.0 else min(held, int(int(pos["tokens_raw"]) * part))  # never more than it holds
+        mine = int(pos.get("tokens_raw") or 0)
+        # only what its own buys brought in, and never more than the wallet holds
+        amount = min(held, mine if part >= 1.0 else int(mine * part))
         if amount <= 0:
             return {"usd": 0.0, "part": part, "reason": reason + " (nothing left in the wallet)",
-                    "at": market_clock.iso(now_ts)}
+                    "at": market_clock.iso(now_ts), "sold_raw": 0}
+        try:
+            px_sol = sol_usd()  # before the sale: nothing after a confirmed sale may fail its bookkeeping
+        except http.SourceError:
+            px_sol = None
         # a falling meme coin moves fast: the sale gets twice the entry's slippage room
         res = _swap(pos["address"], jupiter.SOL_MINT, amount, int(s["slippage_bps"]) * 2, int(s["priority_lamports"]))
-        got = int((res.get("quote") or {}).get("outAmount") or 0) / 1e9 * sol_usd() or usd_now * part
+        out = int((res.get("quote") or {}).get("outAmount") or 0)
+        got = out / 1e9 * px_sol if out and px_sol else usd_now * part
         pos.setdefault("sell_txs", []).append(res.get("signature"))
+        return {"usd": round(got, 4), "part": part, "reason": reason, "at": market_clock.iso(now_ts), "sold_raw": amount}
     return {"usd": round(got, 4), "part": part, "reason": reason, "at": market_clock.iso(now_ts)}
 
 
@@ -545,12 +643,32 @@ def manage(book: dict, s: dict, cfg: dict, now_ts: float, actions: list) -> None
     cands = [{"chain": p["chain"], "address": p["address"]} for p in book["positions"].values()]
     md = market_data(cands, now_ts)
     for key, pos in list(book["positions"].items()):
+        if pos.get("status") in UNSETTLED:
+            try:
+                _settle(book, key, pos, now_ts, actions)
+            except Exception as exc:  # noqa: BLE001 — the wallet can't be read: next cycle
+                actions.append("%s: buy not settled yet (%s)" % (pos["symbol"], exc))
+            state.write_json(BOOK, book)
+            continue
         pair = md.get((pos["chain"], pos["address"])) or {}
+        pos["no_data"] = 0 if pair else int(pos.get("no_data") or 0) + 1
         try:
             usd, px = value_now(pos, pair, s)
-        except http.SourceError:
-            continue
-        pos["peak_price"] = max(float(pos.get("peak_price") or 0), px)
+        except http.SourceError as exc:
+            if pos["no_data"] < GONE_AFTER:
+                if pos["no_data"] in (1, 5):
+                    actions.append("%s: no price this cycle (%s) — exits checked again next cycle" % (pos["symbol"], exc))
+                continue
+            usd, px = 0.0, 0.0  # no market data for ten cycles: the pool is gone
+        if usd <= 0 and pos.get("price_unit") == "raw":
+            pos["no_route"] = int(pos.get("no_route") or 0) + 1
+            if pos["no_route"] < 2:  # one "no route" can be Jupiter's hiccup; two in a row is the token
+                actions.append("%s: Jupiter finds no way to sell it — once more, then out" % pos["symbol"])
+                continue
+        else:
+            pos.pop("no_route", None)
+        if px > 0:
+            pos["peak_price"] = max(float(pos.get("peak_price") or 0), px)
         pos["value_usd"] = round(usd, 4)
         entry = float(pos["entry_price"]) or 1e-18
         gain = 100.0 * (px / entry - 1)
@@ -567,8 +685,8 @@ def manage(book: dict, s: dict, cfg: dict, now_ts: float, actions: list) -> None
             reason = "trailing stop, %.0f %% under the high" % ex["trail_pct"]
         elif held_h >= float(ex["time_stop_hours"]):
             reason = "time stop (%g h)" % ex["time_stop_hours"]
-        else:
-            saf = safety(pos, pair, s, now_ts) if pair else {"ok": True}
+        elif pair:  # without market data there is nothing to re-check against; Jupiter's quote above still is
+            saf = safety(pos, pair, s, now_ts)
             if saf.get("verdict") == "DANGER" and any("rugged" in r.lower() or "authority" in r.lower()
                                                       for r in saf.get("reasons") or []):
                 reason = "turned dangerous: %s" % (saf["reasons"] or ["?"])[0]
@@ -583,13 +701,15 @@ def manage(book: dict, s: dict, cfg: dict, now_ts: float, actions: list) -> None
                 pos["sold_part"] = True
                 pos["realized_usd"] = round(float(pos.get("realized_usd") or 0) + fill["usd"], 4)
                 if pos.get("tokens_raw"):
-                    pos["tokens_raw"] = int(int(pos["tokens_raw"]) * (1 - part))
+                    sold = fill.get("sold_raw", int(int(pos["tokens_raw"]) * part))
+                    pos["tokens_raw"] = max(0, int(pos["tokens_raw"]) - int(sold))
                 if pos.get("tokens"):
                     pos["tokens"] = float(pos["tokens"]) * (1 - part)
                 actions.append("%s: sold %.0f %% at %+.0f %% — the rest trails %.0f %% under the high" % (
                     pos["symbol"], 100 * part, gain, ex["trail_pct"]))
         except Exception as exc:  # noqa: BLE001 — a failed sale is retried next cycle; said out loud
             actions.append("%s: sale failed (%s) — retried next cycle" % (pos["symbol"], exc))
+        state.write_json(BOOK, book)  # each sale on disk at once: a crash later in the loop can't undo its record
 
 
 def _close(book: dict, key: str, pos: dict, fill: dict, now_ts: float, actions: list, cfg: dict) -> None:
@@ -614,8 +734,7 @@ def cycle(cfg: dict, now_ts: float = None, trade: bool = True) -> dict:
     s = settings(cfg)
     now_ts = now_ts or market_clock.now_utc().timestamp()
     actions, notes, decisions = [], [], []
-    book = _book()
-    with state.locked("sniper/book.json", timeout=30):
+    with state.locked(BOOK, timeout=LOCK_WAIT):
         book = _book()
         manage(book, s, cfg, now_ts, actions)
         state.write_json(BOOK, book)
@@ -656,37 +775,59 @@ def cycle(cfg: dict, now_ts: float = None, trade: bool = True) -> dict:
                     rec["x_mentions_1h"] = x_mentions(pair, cfg) if sig else None
                     if not sig:
                         rec.update(action="watched", reasons=["no strategy fired"])
+                    elif float(sig["stop_pct"]) < MIN_STOP_PCT:
+                        rec.update(strategy=sig["strategy"], action="skipped", reasons=[
+                            "its stop would sit only %.1f %% under the price — the first wiggle would take it"
+                            % float(sig["stop_pct"])])
                     else:
                         rec.update(strategy=sig["strategy"], signal=sig["why"])
-                        with state.locked("sniper/book.json", timeout=30):
+                        with state.locked(BOOK, timeout=LOCK_WAIT):
                             book = _book()
                             refusal = budget_refusal(book, s, now_ts, key)
+                            if not refusal and trade and s.get("enabled") and not settings(
+                                    config.load_config()).get("enabled"):
+                                refusal = "the sniper was switched off"  # the kill switch, during this cycle
                             if refusal:
                                 rec.update(action="skipped", reasons=[refusal])
                             elif not trade:
                                 rec.update(action="signal", reasons=["scan only"])
                             else:
-                                try:
-                                    pos = buy(c, pair, sig, rt, s, cfg, now_ts)
-                                except Exception as exc:  # noqa: BLE001
-                                    rec.update(action="error", reasons=["buy failed: %s" % exc])
-                                else:
-                                    book["positions"][key] = pos
-                                    book["traded"][key] = now_ts
-                                    _day(book, now_ts)["trades"] += 1
-                                    state.write_json(BOOK, book)
-                                    rec.update(action="bought", mode=pos["mode"])
-                                    line = "bought %s %s (%s, %s): %s" % (
-                                        fmt.money(pos["cost_usd"]), pos["symbol"], sig["strategy"], pos["mode"],
-                                        sig["why"])
-                                    actions.append(line)
-                                    notify.send("trade_opened", "Sniper: %s" % pos["symbol"], line + " · " +
-                                                (pair.get("url") or ""), cfg)
+                                _buy_and_book(book, key, c, pair, sig, rt, s, cfg, now_ts, rec, actions)
         state.append_jsonl(CANDIDATES, rec)
         decisions.append(rec)
     track_outcomes(now_ts)
     return {"at": market_clock.iso(now_ts), "mode": "live" if is_live(cfg) else "paper", "actions": actions,
             "decisions": decisions, "notes": notes, "open": len(_book()["positions"])}
+
+
+def _buy_and_book(book, key, c, pair, sig, rt, s, cfg, now_ts, rec, actions) -> None:
+    """Under the book's lock: buy, and put the position in the book — a live one before it is sent."""
+    booked = []
+
+    def record(p):
+        if not booked:
+            book["positions"][key] = p
+            book["traded"][key] = now_ts
+            _day(book, now_ts)["trades"] += 1
+            booked.append(True)
+        state.write_json(BOOK, book)
+    try:
+        pos = buy(c, pair, sig, rt, s, cfg, now_ts, record=record)
+    except Exception as exc:  # noqa: BLE001
+        rec.update(action="error", reasons=["buy failed: %s" % exc])
+        return
+    record(pos)
+    if pos.get("status") in UNSETTLED:
+        rec.update(action="sent", mode=pos["mode"], reasons=["not confirmed yet (%s) — settled from the wallet next "
+                                                             "cycle, never sent again" % pos.get("note", "")])
+        actions.append("sent a buy of %s %s — not confirmed yet, the next cycle looks it up" % (
+            fmt.money(pos["cost_usd"]), pos["symbol"]))
+        return
+    rec.update(action="bought", mode=pos["mode"])
+    line = "bought %s %s (%s, %s): %s" % (fmt.money(pos["cost_usd"]), pos["symbol"], sig["strategy"], pos["mode"],
+                                         sig["why"])
+    actions.append(line)
+    notify.send("trade_opened", "Sniper: %s" % pos["symbol"], line + " · " + (pair.get("url") or ""), cfg)
 
 
 # --- what happened afterwards -------------------------------------------------------------------------------
@@ -793,11 +934,53 @@ def status_text(cfg: dict) -> str:
         "LIVE" if ok else "PAPER", fmt.money(float(s["trade_usd"])), fmt.money(float(s["max_open_usd"])),
         day["trades"], s["max_trades_per_day"], fmt.money(day["pnl_usd"]))]
     for p in book["positions"].values():
-        lines.append("  %-10s %-9s %s → %s  (%s, %s)" % (p["symbol"], p["strategy"], fmt.money(p["cost_usd"]),
-                                                        fmt.money(p.get("value_usd")), p["mode"], p["url"]))
+        lines.append("  %-10s %-9s %s → %s  (%s%s, %s)" % (
+            p["symbol"], p["strategy"], fmt.money(p["cost_usd"]), fmt.money(p.get("value_usd")), p["mode"],
+            ", buy not settled yet" if p.get("status") in UNSETTLED else "", p["url"]))
     if not ok:
         lines.append("Live: off — " + "; ".join(missing))
     return "\n".join(lines)
+
+
+def sell_out(args, cfg: dict, s: dict) -> int:
+    """`sell <address>` or `kill`. The kill switch turns the sniper off FIRST — a loop that is running buys nothing
+    more (it re-reads the switch under the book's lock before every buy) — then sells every position, each on its
+    own: one failed sale doesn't stop the others, and every sale is in the book the moment it is done."""
+    actions, failed = [], []
+    if args.action == "kill":
+        config.update_file("config.json", {"sniper": {"enabled": False}})
+        actions.append("sniper switched off (sniper.enabled = false)")
+    now_ts = market_clock.now_utc().timestamp()
+    reason = "by hand" if args.action == "sell" else "kill switch"
+    try:
+        with state.locked(BOOK, timeout=LOCK_WAIT):
+            book = _book()
+            todo = [k for k, p in book["positions"].items() if args.action == "kill" or p["address"] == args.target]
+            md = market_data([book["positions"][k] for k in todo], now_ts)
+            for key in todo:
+                pos = book["positions"][key]
+                try:
+                    if pos.get("status") in UNSETTLED:
+                        _settle(book, key, pos, now_ts, actions)
+                        if key not in book["positions"]:
+                            continue
+                        if pos.get("status") in UNSETTLED:
+                            failed.append("%s: its buy isn't settled yet — run this again in a minute" % pos["symbol"])
+                            continue
+                    try:
+                        usd, _ = value_now(pos, md.get((pos["chain"], pos["address"])) or {}, s)
+                    except http.SourceError:
+                        usd = float(pos.get("value_usd") or 0)  # the last known value; the sale itself asks again
+                    _close(book, key, pos, sell(pos, 1.0, reason, s, cfg, now_ts, usd), now_ts, actions, cfg)
+                except Exception as exc:  # noqa: BLE001
+                    failed.append("%s: sale failed (%s) — run this again" % (pos["symbol"], exc))
+                finally:
+                    state.write_json(BOOK, book)
+    except state.LockTimeout as exc:
+        failed.append("the book is busy (%s) — run this again" % exc)
+    lines = actions + failed
+    cli.emit(args, "\n".join(lines) or "nothing to sell", {"actions": actions, "failed": failed})
+    return 1 if failed else 0
 
 
 def build_parser():
@@ -829,8 +1012,15 @@ def main(argv=None) -> int:
             cli.fail('the sniper is off — set "sniper": {"enabled": true} in config.json (paper unless live is set up)')
         n = 0
         while True:
-            res = cycle(cfg, trade=args.action == "run")
-            cli.emit(args, cycle_text(res), res)
+            try:
+                res = cycle(cfg, trade=args.action == "run")
+            except Exception as exc:  # noqa: BLE001 — one bad cycle must not leave open positions without exits
+                if not (args.action == "run" and args.loop):
+                    raise
+                cli.emit(args, "SNIPER · cycle failed (%s: %s) — next try in %ss" % (
+                    type(exc).__name__, str(exc)[:200], s["interval_sec"]), {"error": str(exc)[:200]})
+            else:
+                cli.emit(args, cycle_text(res), res)
             n += 1
             if not (args.action == "run" and args.loop) or (args.max_cycles and n >= args.max_cycles):
                 return 0
@@ -877,23 +1067,7 @@ def main(argv=None) -> int:
                  {"address": addr, "usd": bal})
         return 0
     if args.action in ("sell", "kill"):
-        actions = []
-        now_ts = market_clock.now_utc().timestamp()
-        with state.locked("sniper/book.json", timeout=30):
-            book = _book()
-            md = market_data([{"chain": p["chain"], "address": p["address"]} for p in book["positions"].values()], now_ts)
-            for key, pos in list(book["positions"].items()):
-                if args.action == "sell" and pos["address"] != args.target:
-                    continue
-                usd, _ = value_now(pos, md.get((pos["chain"], pos["address"])) or {}, s)
-                _close(book, key, pos, sell(pos, 1.0, "by hand" if args.action == "sell" else "kill switch", s, cfg,
-                                            now_ts, usd), now_ts, actions, cfg)
-            state.write_json(BOOK, book)
-        if args.action == "kill":
-            config.update_file("config.json", {"sniper": {"enabled": False}})
-            actions.append("sniper switched off (sniper.enabled = false)")
-        cli.emit(args, "\n".join(actions) or "nothing to sell", {"actions": actions})
-        return 0
+        return sell_out(args, cfg, s)
     return 0
 
 

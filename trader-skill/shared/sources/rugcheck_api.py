@@ -16,11 +16,12 @@ _NON_HOLDER_TYPES = {"AMM", "LOCKER", "BURN", "CEX", "PROGRAM", "POOL"}
 _BURN = {"1nc1nerator11111111111111111111111111111111", "11111111111111111111111111111111"}
 
 
-def report(mint: str) -> dict:
+def report(mint: str, fresh: bool = False) -> dict:
+    """``fresh``: never an older cached copy when RugCheck doesn't answer — for a decision about money now."""
     try:
-        return http.get_json("%s/tokens/%s/report" % (BASE, quote(mint)), ttl=300)
+        return http.get_json("%s/tokens/%s/report" % (BASE, quote(mint)), ttl=300, allow_stale=not fresh)
     except http.SourceError:
-        return http.get_json("%s/tokens/%s/report/summary" % (BASE, quote(mint)), ttl=300)
+        return http.get_json("%s/tokens/%s/report/summary" % (BASE, quote(mint)), ttl=300, allow_stale=not fresh)
 
 
 def summarize(rep: dict, pair_address: str = "") -> dict:

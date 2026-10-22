@@ -222,9 +222,9 @@ def _sanitize_report(rep):
     return out
 
 
-def _solana_checks(ck, mint, pair, warnings, sources):
+def _solana_checks(ck, mint, pair, warnings, sources, fresh=False):
     try:
-        rep = rugcheck_api.report(mint)
+        rep = rugcheck_api.report(mint, fresh=fresh)
         summ = rugcheck_api.summarize(_sanitize_report(rep), pair.get("pair_address") or "")
         sources["rugcheck"] = "ok"
     except http.SourceError as exc:
@@ -267,12 +267,12 @@ def _solana_checks(ck, mint, pair, warnings, sources):
     return summ
 
 
-def _evm_checks(ck, chain, address, pair, warnings, sources):
+def _evm_checks(ck, chain, address, pair, warnings, sources, fresh=False):
     chain_id = symbols.HONEYPOT_CHAIN_ID.get(chain)
     hp = None
     if chain_id:
         try:
-            hp = honeypot.check(address, chain_id)
+            hp = honeypot.check(address, chain_id, fresh=fresh)
             sources["honeypot"] = "ok"
         except http.SourceError as exc:
             sources["honeypot"] = "unavailable"
@@ -315,7 +315,8 @@ def _evm_checks(ck, chain, address, pair, warnings, sources):
             ck.add("proxy", "Upgradeable proxy", False, "low", "proxy", 5, "the logic can be swapped later",
                    "Contract is an upgradeable proxy — rules can change after you buy")
     try:
-        th = honeypot.top_holders(address, chain_id, exclude=[pair.get("pair_address") or ""]) if chain_id else None
+        th = honeypot.top_holders(address, chain_id, exclude=[pair.get("pair_address") or ""],
+                                  fresh=fresh) if chain_id else None
     except http.SourceError as exc:
         warnings.append("honeypot.is top holders unavailable: %s" % exc)
         th = None
@@ -326,8 +327,9 @@ def _evm_checks(ck, chain, address, pair, warnings, sources):
     return out
 
 
-def check(symbol, pair=None, write=True) -> dict:
-    """Run every check for one token and (by default) save trader/rugcheck/{chain}-{address}.json."""
+def check(symbol, pair=None, write=True, fresh=False) -> dict:
+    """Run every check for one token and (by default) save trader/rugcheck/{chain}-{address}.json. ``fresh``: a
+    source that doesn't answer counts as unavailable, never as its older cached report (the sniper, about to buy)."""
     warnings = []
     if pair:
         sym = symbols.meme_symbol(pair["chain"], pair["base"]["address"], pair["base"].get("symbol") or "")
@@ -347,13 +349,13 @@ def check(symbol, pair=None, write=True) -> dict:
                "creator_pct": None}
     if sym.chain == "solana":
         sources["honeypot"] = "n/a"
-        summ = _solana_checks(ck, sym.address, pair, warnings, sources)
+        summ = _solana_checks(ck, sym.address, pair, warnings, sources, fresh=fresh)
         for k in ("mint_authority", "freeze_authority", "lp_locked_pct", "top10_pct", "top_holder_pct",
                   "creator_pct"):
             metrics[k] = summ.get(k)
     elif evm:
         sources["rugcheck"] = "n/a"
-        metrics.update(_evm_checks(ck, sym.chain, sym.address, pair, warnings, sources))
+        metrics.update(_evm_checks(ck, sym.chain, sym.address, pair, warnings, sources, fresh=fresh))
     else:
         sources["rugcheck"] = sources["honeypot"] = "unsupported chain"
         ck.add("safety_source", "Safety data", False, "high", "unsupported chain", 20,
