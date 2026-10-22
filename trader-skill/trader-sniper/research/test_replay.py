@@ -18,8 +18,15 @@ def coin(bars, start=1_000_200, base_amt=1e8, quote_amt=1000.0):
 
 
 class Execution(unittest.TestCase):
+    """The replay's execution on hand-made candles — their volumes are not meant to move a pool, so the candles
+    are taken as given here (clamp_to_volume has its own test in test_moonbag)."""
+
     def setUp(self):
         self.s = R.sniper.settings({})
+        self._raw, R.RAW = R.RAW, True
+
+    def tearDown(self):
+        R.RAW = self._raw
 
     def test_baseline_stop_fills_at_low_and_counts_costs(self):
         # 1e-3 USD/token; at minute 10 we buy, then a bar dips 50 %

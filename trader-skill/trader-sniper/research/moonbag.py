@@ -12,7 +12,9 @@ the last part is never sold — a free moonbag — and the bot moves on to the n
 
 Same sample, pool model and costs as replay.py: 40 graduated coins a day for 61 days (dead ones included),
 constant-product depth from the pool's starting reserves (PumpSwap burns the LP, so only trades move it),
-0.3 % fee and $0.05 network fee per swap. Every decision is made on a closed bar and filled at the next bar's
+0.3 % fee and $0.05 network fee per swap, the sniper's $25k liquidity floor at the buy, and candles cleaned by
+replay.clamp_to_volume (a print the bar's volume couldn't have moved the pool to is not a price you could
+trade at). Every decision is made on a closed bar and filled at the next bar's
 open — what a bot that polls sees — unless a variant says otherwise.
 """
 from __future__ import annotations
@@ -44,6 +46,7 @@ STAKE = 10.0
 TEST_FROM = "2026-09-27"
 TRADES_PER_DAY = 20
 BANKROLL = 100.0             # the bot wallet: €10 a buy out of it, every sale back into it
+MIN_LIQUIDITY_USD = float(R.sniper.settings({})["min_liquidity_usd"])
 
 
 # ----------------------------------------------------------------------------- data
@@ -88,11 +91,17 @@ class Coin:
         self.sol = sol
         self.k = res["base_amt"] * res["quote_amt"]
         self.quote_sol = res.get("quote_mint") == R.WSOL
+        s0 = sol.at(self.start) if self.quote_sol else 1.0
+        self.p_grad = res["quote_amt"] / res["base_amt"] * s0     # the price it graduated at, from the reserves
         edge = self.start + FIVE_MIN_HOURS * 3600
-        five = [(b[0], 300) + tuple(b[1:5]) for b in b5 if self.start // 300 * 300 <= b[0] < edge]
-        hour = [(b[0], 3600) + tuple(b[1:5]) for b in b1h if b[0] >= edge]
-        # (t, length, open, high, low, close), positive prices only
-        self.bars = [b for b in five + hour if min(b[2:]) > 0]
+        five = [[b[0]] + list(b[1:6]) + [300] for b in b5 if self.start // 300 * 300 <= b[0] < edge]
+        hour = [[b[0]] + list(b[1:6]) + [3600] for b in b1h if b[0] >= edge]
+        bars = [b for b in five + hour if min(b[1:5]) > 0]
+        self.clamped = 0
+        if not R.RAW and bars:
+            bars, self.clamped = R.clamp_to_volume(bars, res["quote_amt"] * s0, lambda t: self.reserve(t, 1.0))
+        # (t, length, open, high, low, close)
+        self.bars = [(b[0], b[6], b[1], max(b[1], b[2], b[4]), min(b[1], b[3], b[4]), b[4]) for b in bars]
         self.gap = False
 
     def reserve(self, ts, px):
@@ -164,12 +173,13 @@ def simulate(c: Coin, v: dict):
     if v["bundle"] and (c.curve_minutes is None or c.curve_minutes < 10):
         return None
     bars = c.bars
-    p0 = bars[0][2]                       # the first trade on PumpSwap: the graduation price
+    p0 = c.p_grad
     t_watch = c.start + 60 * v["wait_min"]
     i = 0
     lo = p0
     while i < len(bars) and bars[i][0] + bars[i][1] <= t_watch:
-        lo = min(lo, bars[i][4])
+        if bars[i][0] >= c.start:         # the bar of the migration itself still holds the curve's trades
+            lo = min(lo, bars[i][4])
         i += 1
     if i == 0 or i >= len(bars):
         return None                       # no trade before or after the watch: nothing to judge or buy
@@ -178,6 +188,8 @@ def simulate(c: Coin, v: dict):
         return None
     entry_bar = bars[i]
     t_in, px_in = entry_bar[0], entry_bar[2]
+    if 2 * c.reserve(t_in, px_in) < MIN_LIQUIDITY_USD:
+        return None                       # the sniper's own floor: too thin to get €10 in and out
     tokens = c.buy(t_in, px_in, STAKE)
     entry_px = STAKE / tokens             # what one token really cost us
     flows = [(t_in, -STAKE - GAS_USD)]

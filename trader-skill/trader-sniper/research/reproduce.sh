@@ -44,13 +44,15 @@ history)
   python3 -I history.py enrich             # DexScreener pairs (graduation time of curve coins)
   python3 -I history.py bars               # pump.fun 5-min candles (newest 1000)
   GT_INTERVAL=10 python3 -I history.py bars --gt   # GeckoTerminal for coins whose start was cut off
+  python3 -I moonbag.py fetch              # hourly candles: each graduated coin's life after its first 80 h
   curl -sS "https://api.kraken.com/0/public/OHLC?pair=SOLUSD&interval=1440" -o data/hist/kraken_solusd_1d.json
   curl -sS "https://api.kraken.com/0/public/OHLC?pair=SOLUSD&interval=60" -o data/hist/kraken_solusd_1h.json
   ;;
 backtest|"")
   mkdir -p results
-  python3 -B -m unittest -q test_backtest test_replay
+  python3 -B -m unittest -q test_backtest test_replay test_moonbag
   python3 -I backtest.py > results/forward_report.txt
   python3 -I replay.py > results/history_report.txt
+  if [ -f data/hist/bars1h.jsonl ]; then python3 -I moonbag.py > results/moonbag_report.txt; fi
   ;;
 esac

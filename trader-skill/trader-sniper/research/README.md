@@ -12,26 +12,56 @@ included** (no survivorship). `replay.py` imports `trader-sniper/sniper.py` and 
 `signal`, `MIN_STOP_PCT` and `budget_refusal` decide, with the exits of `manage()`, on 5-minute candles:
 €10 a trade, at most €100 open, 10 positions, 20 trades a day, €30 daily loss, costs (PumpSwap / pump.fun
 fee, price impact from the pool's own reserves, network fee). Buys fill at the next bar's open, stops at the
-bar's low. Rules fixed on the first 5 weeks (train), judged on the last 3½ (test).
+bar's low. Rules fixed on the first 5 weeks (train), judged on the last 3½ (test). The candles are cleaned
+first (`clamp_to_volume`): pump.fun's candles carry broken prints — a dust trade at a price 1,000× off, an
+open from the curve's first minute — and in a constant-product pool a bar can only move the price as far as
+its own volume pushes the reserve; anything outside that is pulled back. 86 % of the corrections are within
+±5 % (SOL-price noise); the rest are the broken prints. It barely moved the result (−€345 raw, −€341 clean).
 
 3,366 coins, 22 Aug – 21 Oct 2026 (`results/history_report.txt`):
 
 | €10 a trade, €100 cap | Trades | Won | Mean per trade | Total € | 90 % range (by day) | Ended in a rug |
 |---|---|---|---|---|---|---|
-| **The sniper as configured** | 136 | 26 % | −25 % | **−€345** | −€467 … −€224 | 34 % |
-| — last 3½ weeks only (test) | 33 | 30 % | −10 % | −€34 | −€81 … +€26 | 9 % |
-| — momentum / breakout / pullback | 111 / 17 / 8 | | −24 % / −35 % / −24 % | | | |
-| Stops filled exactly at the stop (best case) | 139 | 40 % | +0.3 % | +€4 | −€58 … +€67 | 35 % |
-| Without coins whose curve filled in < 10 min (bundled launches — a stand-in for the holder checks) | 37 | 30 % | −4 % | −€13 | −€49 … +€24 | 5 % |
-| Buying every coin 10 min after launch | 843 | 10 % | −20 % | −€1,681 | | 15 % |
+| **The sniper as configured** | 139 | 26 % | −25 % | **−€341** | −€460 … −€219 | 32 % |
+| — last 3½ weeks only (test) | 34 | 29 % | −9 % | −€29 | −€75 … +€26 | 6 % |
+| — momentum / breakout / pullback | 115 / 16 / 8 | | −23 % / −39 % / −24 % | | | |
+| Stops filled exactly at the stop (best case) | 142 | 39 % | 0 % | −€0.48 | −€62 … +€63 | 33 % |
+| Without coins whose curve filled in < 10 min (bundled launches — a stand-in for the holder checks) | 40 | 28 % | −2 % | −€9 | −€41 … +€25 | 2 % |
+| Buying every coin 10 min after launch | 864 | 10 % | −19 % | −€1,595 | | 15 % |
 
-Only one week of ten ended ahead (+€10). The pattern behind most losses: flat bot volume, a stair-step pump
+Only one week of ten ended ahead (+€17). The pattern behind most losses: flat bot volume, a stair-step pump
 that looks like momentum, then one −99.9 % candle. 78 % of graduated coins filled their curve in under ten
 minutes — bundled launches where insiders hold the supply.
 
 The sample is ~40 of the ~1,500 graduations a day. The real bot would see far more candidates and run into
 its 20-trades-a-day and €30-a-day caps; at about −€2.50 a trade that is a bot that loses its daily limit on
 most days.
+
+## The moonbag ladder — after graduation, half at every 2×, the rest rides free (`moonbag.py`)
+
+The idea: watch a coin after it graduates to PumpSwap; if it holds up, buy €10; at 2× sell half (the stake is
+back), at 4× half of the rest, at 8× half again … never sell the last part, and move on to the next coin. The
+same graduated coins (2,087 with a SOL pool), their whole life since — 5-minute candles for the first 80 h,
+hourly ones after (up to 60 days) — cleaned as above, the sniper's $25k liquidity floor, decided on a closed
+bar and filled at the next bar's open, fees, price impact, network fees (`results/moonbag_report.txt`).
+
+The plain idea was fixed before looking: wait 30 min, buy only if the price is still at or above where it
+graduated and never fell under half of it, half at every doubling, no stop, keep the rest.
+
+| €10 a trade | Trades | Won | Reached 2× | Mean per trade | Wallet: €100 → |
+|---|---|---|---|---|---|
+| **The plain idea**, first 5 weeks | 245 | 19 % | 31 % | −€6.05 | €4.94 after 22 buys (short of €10 on day 2) |
+| **The plain idea**, last 3½ weeks | 110 | 27 % | 26 % | −€4.56 | €1.63 after 13 buys |
+| Best of 128 variants on the first 5 weeks (wait 30 min, half at 1.5×, stop −50 %, out after 24 h without a sale) | 250 | 16 % | 51 % | −€4.11 | €7.10 |
+| — the same on the last 3½ weeks | 117 | 17 % | 38 % | −€3.68 | €9.83 after 32 buys |
+
+**0 of 128 variants** (wait 5 / 15 / 30 / 60 min, with or without the hold-up check, with or without bundled
+launches, half at 1.5× or 2×, stop −50 % or none, out after 24 h or keep) were ahead on either period.
+Of the coins the plain idea buys, 32 % ever reach 2×, 2 % reach 10×, none 100×. The arithmetic: selling half
+at 2× only gets the €10 back on the third that get there; the other two thirds lose most of their €10. To
+break even, the half kept from each coin that doubled would have to bring in about €18–20 more on average;
+what was left of them at the end was worth a few cents each (the best single trades: +€51, +€41, +€34). The
+moonbags that do moon are too rare to pay for the rest.
 
 ## One day forward — 22 Oct 2026 (`results/forward_report.txt`)
 
@@ -57,7 +87,8 @@ history in free sources (four.meme's API is geo-blocked, GeckoTerminal can't lis
 
 ```bash
 sh reproduce.sh history     # ~2 h: the last 62 days from the Solana public RPC + pump.fun candles
-sh reproduce.sh backtest    # offline: both reports into results/
+python3 moonbag.py fetch    # ~15 min: hourly candles for the graduated coins (their life after 80 h)
+sh reproduce.sh backtest    # offline: the reports into results/ (moonbag.py too)
 sh reproduce.sh collect     # ~6 h: today's new pools, forward
 ```
 Stdlib only. Downloads go to `data/` (not in git). `tests/test_sniper_research.py` keeps the replay running

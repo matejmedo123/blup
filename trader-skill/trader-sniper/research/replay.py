@@ -80,6 +80,30 @@ class SolPrice:
 
 # ----------------------------------------------------------------------------- coins
 
+RAW = bool(os.environ.get("REPLAY_RAW"))   # 1 = the candles as served, without clamp_to_volume (to compare)
+
+
+def clamp_to_volume(bars, y0, depth_at):
+    """The prices a constant-product pool could have shown. In one bar the quote reserve moves at most by the
+    volume traded in it (all of it one way), so a print outside that band was not a trade in this pool — a dust
+    trade at a broken price, another venue, a bad candle — and is pulled back into it. Real runs carry their
+    volume and pass. bars: [t, o, h, l, c, v, …] (v in USD); depth_at(t): the reserve at price 1 (reserve =
+    depth · √price); y0: the reserve before the first bar. → (bars, how many were pulled in)."""
+    out, n, y = [], 0, y0
+    for b in bars:
+        t, o, h, l, c, v = b[:6]
+        a = depth_at(t)
+        if a <= 0 or y is None or y <= 0:
+            out.append(list(b))
+            continue
+        lo, hi = (max(0.0, y - v) / a) ** 2, ((y + v) / a) ** 2
+        fixed = [min(hi, max(lo, x)) for x in (o, h, l, c)]
+        n += fixed != [o, h, l, c]
+        out.append([t] + fixed + list(b[5:]))
+        y = a * math.sqrt(fixed[3]) if fixed[3] > 0 else y
+    return out, n
+
+
 class Coin:
     """One sampled coin: sparse 5-minute bars (as GeckoTerminal/pump.fun serve them) plus a
     constant-product depth model."""
@@ -100,8 +124,6 @@ class Coin:
         if res["kind"] == "grad":   # the PumpSwap pair's own history starts at the migration
             t0 = int(res.get("block_ts") or res["ts"]) // STEP * STEP
             bars = [b for b in bars if b[0] >= t0]
-        self.bars = [Candle(int(b[0]), b[1], max(b[1], b[2], b[4]), min(b[1], b[3], b[4]), b[4], b[5]) for b in bars]
-        self.bt = [b.t for b in self.bars]
         self.sol = sol
         self.grad_ts = None
         self.k = None
@@ -112,8 +134,17 @@ class Coin:
                 self.k = res["base_amt"] * res["quote_amt"]
                 q = res.get("quote_mint")
                 self.quote_kind = "sol" if q == WSOL else ("usd" if q in STABLE_QUOTES else None)
+            sq = sol.at(self.start) if self.quote_kind == "sol" else 1.0
+            y0 = res["quote_amt"] * sq if self.k and self.quote_kind else None   # the reserve it graduated with
         else:
             self.Lc = curve_L_per_sqrt_sol
+            y0 = 30.0 * sol.at(self.start)       # a new curve: 30 virtual SOL
+        self.clamped = 0
+        if not RAW and bars:
+            bars, self.clamped = clamp_to_volume(bars, y0, lambda t: self.quote_reserve(t, 1.0))
+        self.bars = [Candle(int(b[0]), b[1], max(b[1], b[2], b[4]), min(b[1], b[3], b[4]), b[4], b[5]) for b in bars]
+        self.bt = [b.t for b in self.bars]
+        if self.kind != "grad":
             for p in ds or []:
                 if p.get("dex") == "pumpswap" and p.get("created_ms"):
                     self.grad_ts = int(p["created_ms"] / 1000)

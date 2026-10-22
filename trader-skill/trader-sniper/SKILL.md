@@ -10,9 +10,10 @@ by default), only after the checks below, and follows every candidate — bought
 see whether the checks and strategies are worth anything before you risk more.
 
 **What the tests found (22 Oct 2026, `research/README.md`): no edge.** Its own rules replayed on 61 days of
-pump.fun history (3,366 coins, dead ones included): 136 trades, 26 % won, −25 % a trade, **−€345** on the
+pump.fun history (3,366 coins, dead ones included): 139 trades, 26 % won, −25 % a trade, **−€341** on the
 €10 / €100 budget; break-even only if every stop filled exactly at its price. One day of new pools forward:
-break-even at best. The real sniper on paper, live: 3 trades, 3 losses, two of them rugged minutes after a
+break-even at best. Selling half at every doubling after graduation and keeping the rest (the moonbag
+ladder): 0 of 128 variants ahead. The real sniper on paper, live: 3 trades, 3 losses, two of them rugged minutes after a
 +60 % run. So live trading waits until its own paper record pays: at least `paper_proof_min_trades` (30)
 paper trades in the last `paper_proof_days` (30), ahead in total (`report` shows where it stands).
 

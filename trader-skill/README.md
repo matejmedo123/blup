@@ -419,11 +419,16 @@ the typical year is +10 % (3 years: €1,545) with drops under −20 %.
 
 `/trader-sniper`'s own rules replayed on 61 days of pump.fun history (22 Aug – 21 Oct 2026, 3,366 coins
 sampled evenly per day from the Solana chain, dead and rugged ones included; €10 a trade, €100 cap, fees and
-price impact): **136 trades, 26 % won, −25 % a trade, −€345** (90 % range −€467 … −€224). Best case — every
-stop filled exactly at its price — break-even (+€4). Buying every coin 10 minutes after launch: −€1,681. One
-day of new pools forward (Solana, BSC, Base): break-even at best. The real sniper on paper, live data, the
-same afternoon: 3 trades, 3 losses (−$17.51), two rugged minutes after a +60 % run. Details, caveats and
-how to re-run it: `trader-sniper/research/README.md`.
+price impact): **139 trades, 26 % won, −25 % a trade, −€341** (90 % range −€460 … −€219). Best case — every
+stop filled exactly at its price — break-even (−€0.48). Buying every coin 10 minutes after launch: −€1,595.
+One day of new pools forward (Solana, BSC, Base): break-even at best. The real sniper on paper, live data,
+the same afternoon: 3 trades, 3 losses (−$17.51), two rugged minutes after a +60 % run.
+
+**The moonbag ladder** — watch a coin after it graduates, buy €10 if it holds up, sell half at every
+doubling, keep the last part for free, next coin — on the same coins and their whole life since (up to 60
+days): **0 of 128 variants ahead**. The plain version lost €4.56–6.05 a €10 trade; a €100 wallet was down to
+€2–10 within days. Only a third of the coins it buys ever double, and what is kept after selling half is
+almost always worth nothing later. Details, caveats and how to re-run both: `trader-sniper/research/README.md`.
 
 So the sniper stays on paper until its **own paper record pays** — at least 30 paper trades in the last 30
 days, ahead in total — before live trading can start (`sniper.live_needs_paper_proof`, on by default).

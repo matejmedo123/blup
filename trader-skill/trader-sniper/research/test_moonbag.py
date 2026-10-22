@@ -13,14 +13,14 @@ class FlatSol:
         return 100.0
 
 
-def coin(closes, curve_minutes=30.0, start=T0, deep=True):
-    """5-minute bars from closes (open = previous close, high/low = max/min of the two)."""
-    # depth at price p: sqrt(base × quote × p × SOL) USD on the quote side — ~$300M deep, or $100 thin
+def coin(closes, curve_minutes=30.0, start=T0, deep=True, volume=1e12):
+    """5-minute bars from closes (open = previous close, high/low = max/min of the two), graduated at 1.0."""
+    # the reserve at price p is quote × SOL × √p: $100 billion deep — or $10,000 at the sniper's floor
     res = {"mint": "M%d" % start, "day": "2026-09-01", "block_ts": start, "ts": start,
-           "base_amt": 1e15 if deep else 100.0, "quote_amt": 1e9 if deep else 1.0, "quote_mint": R.WSOL}
+           "base_amt": 1e11 if deep else 1e4, "quote_amt": 1e9 if deep else 100.0, "quote_mint": R.WSOL}
     bars, prev = [], closes[0]
     for i, c in enumerate(closes):
-        bars.append([start + 300 * i, prev, max(prev, c), min(prev, c), c, 1.0])
+        bars.append([start + 300 * i, prev, max(prev, c), min(prev, c), c, volume])
         prev = c
     return M.Coin(res, bars, [], FlatSol(), curve_minutes)
 
@@ -75,7 +75,7 @@ class Watch(unittest.TestCase):
         self.assertIsNotNone(M.simulate(up, variant(wait_min=30, watch="held")))
         below = coin([1.0] * 3 + [0.9] * 10)
         self.assertIsNone(M.simulate(below, variant(wait_min=30, watch="held")))
-        dipped = coin([1.0, 0.45, 1.0, 1.1, 1.2, 1.2, 1.2, 1.3, 1.3])
+        dipped = coin([1.0, 1.0, 0.45, 1.0, 1.1, 1.2, 1.2, 1.2, 1.3, 1.3])
         self.assertIsNone(M.simulate(dipped, variant(wait_min=30, watch="held")))
         self.assertIsNotNone(M.simulate(dipped, variant(wait_min=30, watch="none")))
 
@@ -84,10 +84,27 @@ class Watch(unittest.TestCase):
         self.assertIsNone(M.simulate(coin([1.0] * 5, curve_minutes=None), variant(bundle=True)))
         self.assertIsNotNone(M.simulate(coin([1.0] * 5, curve_minutes=3.0), variant(bundle=False)))
 
-    def test_price_impact_in_a_thin_pool(self):
-        thin = M.simulate(coin([1.0] * 5, deep=False), variant())
+    def test_price_impact_and_the_liquidity_floor(self):
+        self.assertIsNone(M.simulate(coin([1.0] * 5, deep=False), variant()))  # $20k in the pool: under $25k
+        floor = M.MIN_LIQUIDITY_USD
+        try:
+            M.MIN_LIQUIDITY_USD = 0
+            thin = M.simulate(coin([1.0] * 5, deep=False), variant())
+        finally:
+            M.MIN_LIQUIDITY_USD = floor
         deep = M.simulate(coin([1.0] * 5), variant())
-        self.assertLess(thin["pnl"], deep["pnl"] - 1)
+        self.assertLess(thin["pnl"], deep["pnl"] - 0.015)  # $10 into $10,000 each way: ~0.1 % impact a side
+
+    def test_a_print_the_volume_could_not_make_is_no_price(self):
+        # a dormant coin, then one hour "at" 1,000× on $20 of volume, then back: the pool never went there
+        c = coin([1.0, 1.0, 1.0, 1000.0, 1000.0, 1.0, 1.0], volume=20.0)
+        self.assertLess(max(b[3] for b in c.bars), 1.01)
+        self.assertGreater(c.clamped, 0)
+        self.assertEqual(M.simulate(c, variant())["sales"], 0)
+        # a real run carries its volume: 4× needs the reserve to double — $100bn of buying in this deep pool
+        real = coin([1.0, 1.0, 2.0, 4.0, 4.0], volume=2e11)
+        self.assertEqual(real.clamped, 0)
+        self.assertGreaterEqual(M.simulate(real, variant())["sales"], 1)
 
 
 class Wallet(unittest.TestCase):
