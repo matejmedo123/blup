@@ -87,6 +87,22 @@ lives on what is kept, and what is kept is usually rugged between two candles (0
   hourly bars, 664 variants: the 3 frozen on the first period lost €3.8–3.9 a trade on the second (one rule
   was +€0.27 and turned negative with fills an hour later). Two "established" pools with ~$200k of liquidity
   went to zero during the test.
+- **Following "smart" wallets** — 789,523 trades from 228,555 wallets in the first 30 minutes after
+  graduation of 1,787 coins. The 57 wallets that bought early and often are graduation snipers and scalpers
+  (three quarters of their buys in the first minute, a median round trip of 1.02× before costs), and their
+  scores are no better than shuffled outcomes give. The 3 lists frozen on the first period lost €2.93–5.43 a
+  €10 trade on the second; their buys came with a lower +50 %-first rate (28–30 %) than no signal at all.
+- **Speed alone, as an outsider** — 1,984 new coins (all launches, not just graduates), 167,229 trades from
+  their first 10 minutes: buying in the next slot, 2 slots, 5 s, 10 s, 30 s or 60 s after the create loses
+  7–9 % a trade after pump.fun's 1.25 % fee per side (measured on chain) and a 0.001 SOL tip; the typical coin
+  doesn't move (median −7.2 % = costs), and even a perfect exit within 5 minutes is negative at a 0.005 SOL
+  tip. 87 % of launches have a dev buy inside the create transaction; 31 % also have other wallets in the
+  creation slot, taking a median 17 % of the supply. Slot-level speed needs a paid Geyser / ShredStream feed
+  and Jito — and the delays it would unlock lose the same.
+- **ChatGPT's swing playbook** (7+ days old, $250k volume, breakout-retest / pullback / recovery on 4 h bars,
+  +2R partial, trailing stop), 90 eligible Solana memes from CoinGecko's category (27 % dead today):
+  −0.32R a trade on the first period, −0.30R on the second; the one positive variant lives on a single
+  10× trade and turns negative with +1 % slippage.
 - **What others found** — no published strategy that pays a retail buyer on new meme coins: 74 % of Solana
   meme-coin buyers lose money while sandwich bots win every week (Bitquery); insiders take ~80 % of realized
   profit (memescope); the snipers that do win are funded by the deployers and buy in the creation block (Pine
