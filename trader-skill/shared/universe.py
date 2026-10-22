@@ -257,8 +257,15 @@ def _crypto_picks(cfg: dict, broker):
             excluded[sym.key] = "wrapped token"
             continue
         if symbols.is_meme_base(sym.base):
-            excluded[sym.key] = "meme coin — never auto-traded"
-            continue
+            pol = symbols.memes_policy(cfg)
+            rank = row.get("rank")
+            if pol is None:
+                excluded[sym.key] = "meme coin — off (autopilot.memes.enabled)"
+                continue
+            if rank is None or int(rank) > pol["max_rank"]:
+                excluded[sym.key] = "meme coin outside the top %d by market cap (%s)" % (
+                    pol["max_rank"], "#%s" % rank if rank is not None else "rank unknown")
+                continue
         vol = row.get("volume_24h")
         if min_vol and vol is not None and float(vol) < min_vol:
             excluded[sym.key] = "24h volume %s below %s" % (_money(vol), _money(min_vol))
@@ -307,8 +314,9 @@ def _compose(cfg: dict, asset: str, picks: list, quote: str, blocked: dict, excl
         if k in reasons:
             continue
         why = blocked.get(k) or next((blocked[b] for b in symbols.block_keys(k) if b in blocked), None)
-        if not why and asset == "crypto" and k.endswith(quote) and symbols.is_meme_base(k[: -len(quote)]):
-            why = "meme coin — never auto-traded (watch it with /trader-scanner)"
+        if not why and asset == "crypto" and k.endswith(quote) and symbols.is_meme_base(k[: -len(quote)]) and \
+                symbols.memes_policy(cfg) is None:
+            why = "meme coin — off (autopilot.memes.enabled; watch it with /trader-scanner)"
         if why:
             excluded[k] = why
             continue

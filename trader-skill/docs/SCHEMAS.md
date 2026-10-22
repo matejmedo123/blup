@@ -846,8 +846,8 @@ good settings, manages exits and takes no new entries until the file is fixed.
   an order sent twice is refused as a duplicate and found again (Alpaca, and the simulator) instead of doubled.
 * A daily signal is judged once: only on the newest closed bar, and `book.handled` is read across the last 7 days
   (older days are pruned); a signal id already in the book is never traded again.
-* Meme coins listed on exchanges (`symbols.MEME_BASES`: DOGE, SHIB, PEPE, BONK, WIF, …) are never auto-traded —
-  left out of the universe, the playbook coins and refused by `judge`.
+* Meme coins listed on exchanges (`symbols.MEME_BASES`: DOGE, SHIB, PEPE, BONK, WIF, …) are left out of the
+  universe, the playbook coins and refused by `judge` — unless `autopilot.memes.enabled` (v3.11).
 * Waiting entries count for `risk.open_book` (open positions, exposure) and hold their cash in the simulator.
 * While positions or entries are open, failing cycles back off for at most `HOLDING_BACKOFF_SEC` (120 s).
 * `replay` runs only on the simulator and never next to a running daemon; it writes no heartbeat.
@@ -1189,3 +1189,16 @@ background thread (and to its last hour when the disk is low).
 * A coin traded only on daily (or 1h/4h) rules is not scanned on 5-minute bars every cycle.
 * Sub-step dust: when what is left after the bot's sale is under one broker increment, the whole position is
   closed — that may include a sub-increment amount of your own coins (it can't be sold on its own anyway).
+
+## v3.11 — established meme coins, only when you switch them on
+
+`autopilot.memes` (default `{"enabled": false, "max_rank": 40, "min_listed_days": 365, "risk_mult": 0.5}`;
+`autopilot.py profile --memes` switches it on). A meme coin listed on the exchanges (`symbols.MEME_BASES`, any lot
+spelling) may then be traded like any coin, but only:
+* while it is among the top `max_rank` coins by market cap (CoinGecko `market_cap_rank`; unknown rank = no) — the
+  universe checks it every refresh, and playbook coins never bring a meme coin in by themselves;
+* when the backtest lab validated it — in the point-in-time lab a meme coin is a member of a period only after
+  `min_listed_days` of history before that period (`lab.pit_members(min_days=…)`, `lab.PAST_MEMES`);
+* when its daily history on the exchange is at least `min_listed_days` long (`autopilot.meme_refusal`);
+* at `risk_mult` × the normal risk (a "meme coin" gate in the decision).
+DEX tokens (asset `meme`: pump.fun, Raydium, …) are never auto-traded and never sent to a broker.

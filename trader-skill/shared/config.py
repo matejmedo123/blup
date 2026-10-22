@@ -55,6 +55,10 @@ DEFAULT_CONFIG = {
         "max_new_trades_per_day": 5,
         "flatten_on_kill": True,
         "daily_loss_action": "kill",  # or "stop_entries": no new entries until tomorrow, positions keep their stops
+        # established meme coins on the big exchanges (DOGE, SHIB, PEPE…), only when you switch it on: among the
+        # biggest by market cap, a year on the exchange, validated by the lab, traded at a fraction of the risk.
+        # Tokens on a DEX (pump.fun & co.) are never auto-traded.
+        "memes": {"enabled": False, "max_rank": 40, "min_listed_days": 365, "risk_mult": 0.5},
         "sim_starting_cash": 25000,
         "live_confirmation": "",
         "universe": {

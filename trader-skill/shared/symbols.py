@@ -35,9 +35,19 @@ _LOT_PREFIX = re.compile(r"^(?:1000000|100000|10000|1000|1M|K)(?=[A-Z])")
 
 
 def is_meme_base(base) -> bool:
-    """A meme coin, however the exchange spells its lot size — never auto-traded."""
+    """A meme coin listed on the big exchanges, however the exchange spells its lot size. Auto-traded only when
+    ``autopilot.memes.enabled`` (see ``memes_policy``); a DEX token (asset "meme") never is."""
     b = str(base or "").strip().upper()
     return b in MEME_BASES or _LOT_PREFIX.sub("", b) in MEME_BASES
+
+
+def memes_policy(cfg: dict):
+    """The established-meme-coin settings when switched on (autopilot.memes.enabled), else None."""
+    m = ((cfg or {}).get("autopilot") or {}).get("memes") or {}
+    if m.get("enabled") is not True:
+        return None
+    return {"max_rank": int(m.get("max_rank") or 40), "min_listed_days": int(m.get("min_listed_days") or 365),
+            "risk_mult": min(1.0, max(0.1, float(m.get("risk_mult") if m.get("risk_mult") is not None else 0.5)))}
 
 
 def block_keys(text) -> set:

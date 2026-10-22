@@ -33,8 +33,9 @@ stock universe for the next open.
 6. **Its own universe** (`autopilot/universe.json`, `autopilot.universe.mode: "auto"`): ~150 liquid US
    stocks ranked by today's gap + move (top 40) plus Yahoo's most active / day gainers above $2B market
    cap, and the 20 most traded coins (no stablecoins or wrapped tokens; only what the broker can trade) —
-   always including your watchlists, never anything in `exclude` or `blocked_symbols`, **never meme
-   coins**. Each symbol is scanned once per closed 5-minute bar within a per-cycle time budget.
+   always including your watchlists, never anything in `exclude` or `blocked_symbols`, **no meme coins**
+   unless you switch on established ones (`autopilot.memes`: top 40 by market cap, a year listed, lab-validated,
+   half the risk) — never DEX tokens. Each symbol is scanned once per closed 5-minute bar within a per-cycle time budget.
 7. **Crypto only from the backtest lab** (`autopilot.playbook`): a coin is traded only with a setup,
    timeframe (5m, the 1h / 4h swing setups, or the daily trend breakout / dip-in-uptrend, which only
    trade while Bitcoin is above its 200-day average) and exit the lab validated on data it never saw
@@ -237,7 +238,8 @@ Point to the dashboard for the full picture. Always include the disclaimer.
 
 ## Never
 
-* Never auto-trade meme coins, never touch wallets, keys or seed phrases.
+* Never auto-trade DEX meme tokens, never touch wallets, keys or seed phrases. Exchange-listed meme coins only
+  when the user switched them on (`autopilot.memes.enabled`), and then only established ones at reduced risk.
 * Never switch to live by itself, never edit the live opt-in fields for the user, never print a key.
 * Never retry an order blindly — after a timeout it looks the order up by client id first.
 * Never exceed the limits in `limits.json` or the autopilot caps; never trade a setup whose backtest

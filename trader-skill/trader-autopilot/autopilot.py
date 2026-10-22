@@ -1379,6 +1379,7 @@ def add_playbook_coins(uni: dict, pbs: dict, cfg: dict, limits: dict, broker=Non
         if key in have:
             continue
         sym = data.as_symbol(key, "crypto")
+        # a meme coin comes in only through the universe, which checks its market-cap rank today
         if symbols.blocked_hits((key, sym.base, sym.display), banned) or symbols.is_meme_base(sym.base) or \
                 (tradable is not None and sym.base not in tradable):
             continue
@@ -1882,6 +1883,25 @@ def ai_review(plan: dict, desk: dict, cfg: dict) -> tuple:
     return None, {"name": "AI desk", "ok": True, "detail": "unavailable (%s) — rule-based decision used" % why}, info
 
 
+def meme_refusal(c: dict, cfg: dict) -> str:
+    """'' when an exchange-listed meme coin may be traded: switched on, validated by the lab (which only counts it
+    while it was among the biggest coins), and a year of daily history behind it. Else why not."""
+    pol = symbols.memes_policy(cfg)
+    disp = c["sym"].display
+    if pol is None:
+        return "%s is a meme coin — off unless you switch it on (autopilot.memes.enabled)" % disp
+    if not c.get("playbook"):
+        return "%s is a meme coin — traded only when the backtest lab validated it" % disp
+    try:  # its whole daily history: listed long enough to have lived through more than one hype
+        bars = data.get_candles(c["sym"], "1d", days=pol["min_listed_days"] + 10, asset="crypto").candles
+    except Exception as exc:  # noqa: BLE001
+        return "%s is a meme coin and its daily history is unavailable (%s)" % (disp, type(exc).__name__)
+    age = (bars[-1].t - bars[0].t) / 86400.0 if bars else 0.0
+    if age < pol["min_listed_days"] - 2:
+        return "%s is a meme coin with %d days on the exchange — under %d" % (disp, age, pol["min_listed_days"])
+    return ""
+
+
 def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, acct: dict,
           learned: dict = None) -> dict:
     """Everything between "a rule fired" and "an order is at the broker". Returns the decision record."""
@@ -1889,8 +1909,13 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     base = {"id": c["id"], "symbol": sym.display, "asset": asset, "setup": c["setup"]}
     if c.get("skip"):
         return _decision(reasons=[c["skip"]], **base)
-    if asset == "meme" or (asset == "crypto" and symbols.is_meme_base(sym.base)):  # DOGE, 1000PEPE… (not WEN stock)
-        return _decision(reasons=["%s is a meme coin — meme coins are never auto-traded" % sym.display], **base)
+    if asset == "meme":  # a DEX token: never through a broker, never on its own
+        return _decision(reasons=["%s is a DEX meme token — never auto-traded" % sym.display], **base)
+    meme = asset == "crypto" and symbols.is_meme_base(sym.base)  # DOGE, 1000PEPE… (not WEN stock)
+    if meme:
+        why_not = meme_refusal(c, cfg)
+        if why_not:
+            return _decision(reasons=[why_not], **base)
     if c["id"] in book["items"]:  # one signal, one trade — its record in the book is never overwritten
         return _decision(reasons=["this signal was already traded (%s)" % book["items"][c["id"]].get("status")],
                          **base)
@@ -1964,6 +1989,11 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
                       "detail": "risk × %g — %s%s" % (conf, conf_why, " (limits.json still caps it)" if conf > 1
                                                        else "")})
     mult *= conf
+    if asset == "crypto" and symbols.is_meme_base(sym.base):
+        m = symbols.memes_policy(cfg)["risk_mult"]
+        mult *= m
+        gates.append({"name": "meme coin", "ok": True, "detail": "risk × %g — an established meme coin "
+                      "(autopilot.memes.risk_mult)" % m})
     if plan.get("runner_note"):
         gates.append({"name": "let winners ride", "ok": True, "detail": plan["runner_note"]})
     lev, lev_why = config.leverage(cfg, limits, asset, broker.name)
@@ -3155,6 +3185,9 @@ def build_parser():
                    help="profile: no ETF trend while crypto is in a bear market (default: on)")
     p.add_argument("--cash-yield", type=float, default=4.0,
                    help="profile: %% a year idle cash earns in the simulator — today's T-bill yield (default 4)")
+    p.add_argument("--memes", action="store_true",
+                   help="profile: also trade established meme coins on the exchange (top 40 by market cap, a year "
+                        "listed, validated by the lab, half the risk) — never DEX tokens")
     p.add_argument("--no-runner", action="store_true",
                    help="profile: sell the whole trend breakout at its exit (default: let two thirds of a winner ride)")
     return p
@@ -3167,7 +3200,7 @@ MAX_PROFILE_RISK = 5.0
 
 
 def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, runner: bool = True,
-                  etf: bool = True, cash_yield: float = 4.0) -> tuple:
+                  etf: bool = True, cash_yield: float = 4.0, memes: bool = False) -> tuple:
     """(config changes, limits changes) for daily trend following on the biggest coins.
 
     Every number is what the portfolio backtest used, and only what it tested trades: the intraday stock setups
@@ -3194,6 +3227,7 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
                          "playbook": {"top": 10, "setups": TREND_SETUPS, "timeframes": ["1d"], "max_risk_pct": risk},
                          "universe": {"crypto": {"top_n": 10}},
                          "setups": {"stock": []}, "daily_loss_action": "stop_entries",
+                         "memes": {"enabled": bool(memes)},
                          "adapt": {"loss_streak": 7, "symbol_loss_streak": 5, "min_trades": 20,
                                    "max_drawdown_pct": 35}}}
     day = 5 * risk  # five full losses in one day, then no new entries until tomorrow
@@ -3236,6 +3270,10 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
                      "trades the same trend rule on ETFs that move unlike crypto — gold, the dollar, commodities, "
                      "bonds, energy, the indexes — held for days, only those the ETF lab validated; idle cash counts "
                      "%g%% a year in the simulator (T-bills)." % c_cfg["cash_yield_pct"])
+    if c_cfg["autopilot"].get("memes", {}).get("enabled"):
+        lines.append("Meme coins: established ones on the exchange too (DOGE, SHIB, PEPE…) — only while among the "
+                     "top 40 by market cap, a year listed and validated by the lab, at half the risk. Tokens on a DEX "
+                     "are never traded.")
     if c_cfg["autopilot"]["runner"]["enabled"]:
         lines.append("Let winners ride: when a trend breakout's exit comes in profit while the coin is above its "
                      "200-day average, the bot sells a third and lets two thirds ride until a daily close below the "
@@ -3439,7 +3477,7 @@ def main(argv=None) -> int:
     if args.action == "profile":
         capital = float(args.capital if args.capital is not None else (cfg.get("account_size") or 0))
         changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital, not args.no_runner,
-                                not args.no_etf, args.cash_yield)
+                                not args.no_etf, args.cash_yield, args.memes)
         if args.write:
             config.update_file("config.json", changes[0])
             config.update_file("limits.json", changes[1])

@@ -84,6 +84,8 @@ WAVES ZEC DASH XMR ATOM MATIC POL AVAX UNI FIL LUNA FTT NEAR SAND MANA AXS APE G
 CHZ AAVE SUSHI CRV 1INCH GALA OP ARB APT SUI WLD TIA SEI INJ ORDI FET RNDR RENDER KAVA COMP MKR SNX YFI ZIL ENJ BAT
 ZRX OMG NANO HBAR ICP EGLD GRT KSM RUNE CAKE DYDX ENA TAO TON HYPE ZRO LUNC SRM ANKR CELR ONE HNT KLAY FLOW XEM NULS
 BTG STRAT ARDR LSK STORM MCO""".split()
+# meme coins that were among the biggest at some point — in the point-in-time universe only with autopilot.memes on
+PAST_MEMES = """DOGE SHIB PEPE BONK WIF FLOKI TRUMP 1000SATS BOME NEIRO PENGU FARTCOIN""".split()
 ALPACA_CRYPTO_FEE_BPS = 25.0  # Alpaca's crypto taker fee at the lowest volume tier, per side
 PIT_LOOKBACK_DAYS = 30        # a coin's size = its dollar volume over the 30 days before a period starts
 SEGMENT_GAP_DAYS = 7          # a longer gap in a coin's history = delisted and relisted (old LUNA vs LUNA 2.0)
@@ -230,12 +232,16 @@ def fold_bounds(now_ts: int, days: float, folds: int) -> tuple:
     return start_ts, [int(start_ts + i * (now_ts - start_ts) / float(k + 1)) for i in range(1, k + 1)] + [int(now_ts)]
 
 
-def pit_members(daily: dict, starts: list, n: int) -> list:
-    """For each period start, the keys of the ``n`` coins with the most dollar volume in the 30 days before it."""
+def pit_members(daily: dict, starts: list, n: int, min_days: dict = None) -> list:
+    """For each period start, the keys of the ``n`` coins with the most dollar volume in the 30 days before it.
+    min_days: {key: days} a coin must have been listed before it counts (meme coins: a year)."""
     out = []
     for t0 in starts:
         sized = []
         for key, bars in daily.items():
+            need = (min_days or {}).get(key)
+            if need and (not bars or bars[0].t > t0 - need * 86400):
+                continue
             vol = [b.c * b.v for b in bars if t0 - PIT_LOOKBACK_DAYS * 86400 <= b.t < t0]
             if len(vol) >= PIT_LOOKBACK_DAYS - 5:
                 sized.append((sum(vol), key))
@@ -834,8 +840,10 @@ def universe(args, cfg) -> tuple:
         return [symbols.parse(s.strip(), asset="crypto", quote=quote) for s in args.symbols.split(",") if s.strip()], \
             "your list"
     uni = data.crypto_universe(args.top + 20, quote)  # spares for the gold tokens and meme coins dropped below
+    pol = symbols.memes_policy(cfg)
     coins = [c["symbol"] for c in uni["coins"] if c["symbol"].base not in universe_mod.COMMODITY_BACKED
-             and not symbols.is_meme_base(c["symbol"].base)]   # the autopilot never trades them
+             and (not symbols.is_meme_base(c["symbol"].base)   # meme coins only when switched on, and big
+                  or (pol is not None and c.get("rank") is not None and int(c["rank"]) <= pol["max_rank"]))]
     return coins[:args.top], "top %d by 24h volume (%s)" % (args.top, uni["source"])
 
 
@@ -877,10 +885,12 @@ def run(args, ctx) -> dict:
     if pit:  # every coin that was ever big, delisted ones too — sized by its dollar volume at each period start
         quote = cfg.get("quote_currency") or "USDT"
         have = {s.key for s in syms}
-        skip = set(symbols.STABLECOINS) | set(symbols.WRAPPED) | set(symbols.MEME_BASES) | \
-            set(universe_mod.COMMODITY_BACKED)
-        past = [symbols.parse(b + quote, asset="crypto", quote=quote) for b in PAST_MAJORS
-                if b not in skip and not symbols.is_meme_base(b)]
+        memes = symbols.memes_policy(cfg)
+        skip = set(symbols.STABLECOINS) | set(symbols.WRAPPED) | set(universe_mod.COMMODITY_BACKED) | \
+            (set() if memes else set(symbols.MEME_BASES))
+        past = [symbols.parse(b + quote, asset="crypto", quote=quote) for b in PAST_MAJORS + (
+                    PAST_MEMES if memes else [])
+                if b not in skip and (memes or not symbols.is_meme_base(b))]
         longest = max(tf_days(t, args) for t in tfs) + PIT_LOOKBACK_DAYS + 2
         for sym, got, err in fetch_all(syms + [s for s in past if s.key not in have], "1d", longest):
             if err or not got or not got[0]:
@@ -900,7 +910,9 @@ def run(args, ctx) -> dict:
         coins = []
         if pit:
             start_ts, bounds = fold_bounds(now_ts, days, args.folds)
-            members = pit_members(daily, [start_ts] + bounds[:-1], args.top)
+            pol = symbols.memes_policy(cfg)
+            young = {k: pol["min_listed_days"] for k in daily if pol and symbols.is_meme_base(base_of[k][0].base)}
+            members = pit_members(daily, [start_ts] + bounds[:-1], args.top, young)
             keys = sorted(set().union(*members) | {s.key for s in syms})  # same order every run (hash seeds vary)
             if interval == "1d":  # already loaded, split into listings
                 loaded = [(base_of[k][1], [c for c in daily[k] if c.t >= now_ts - days * 86400])

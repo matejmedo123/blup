@@ -68,8 +68,10 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
      the trend profile below loosens these to fit a strategy that wins only 30–40 % of its trades),
   7. desk verdict GO — and, if you enable the optional **AI desk**, Claude doesn't veto it (it can only
      say no, never yes to something the rules rejected) — then sizing and a risk PASS against `limits.json`,
-  8. stocks and crypto only — **meme coins are never auto-traded** (no wallets, no keys, ever), and that
-     includes meme coins listed on exchanges (DOGE, SHIB, PEPE, BONK, WIF, …).
+  8. stocks and crypto only — **meme tokens on a DEX are never auto-traded** (no wallets, no keys, ever).
+     Meme coins listed on the exchanges (DOGE, SHIB, PEPE, BONK, WIF, …) are off too unless you switch them on
+     (`profile --memes` or `autopilot.memes.enabled`): then only the established ones — among the top 40 by
+     market cap, a year on the exchange, validated by the lab like any coin — at half the risk.
 
   It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries in the last
   30 minutes of the session (15:30 ET, 12:30 on early-close days) or a 4th day trade under $25,000 at
@@ -283,6 +285,20 @@ idle cash, median of 30 orders of same-day signals; € and $ treated alike):
 Started on any week since mid-2018, point in time: a typical year ends at €1,232 (1 in 10 below €965), a
 typical three years at €2,687 (1 in 10 below €1,897). That is the honest expectation for crypto — the
 same order as holding BTC, with far smaller drops.
+
+**With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
+listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
+
+| €1,000, profile 1× | Since 1 Jan 2020 | Last 3 years | Last 12 months | 3 years, typical |
+|---|---|---|---|---|
+| Without meme coins | €12,789 | €2,365 | €1,133 | €2,687 |
+| With them, half risk | €12,845 (19 meme trades: −€288) | €2,680 (15: +€63) | €1,125 | €2,984 |
+| With them, full 2 % | €13,443 (17: −€749) | €2,841 (14: +€118) | €1,112 | €3,097 |
+
+Only DOGE, SHIB and PEPE ever qualified and traded. The year-on-the-exchange rule kept DOGE's early 2021 run
+out of the honest test (DOGE joined the top 10 only in late January 2021); in a "today's top 40" hindsight run
+DOGE alone turns €44k into €71k since 2020 — and costs money over the last 3 years. Meme coins add a little
+variety, not an edge; the lab decides each week whether any of them trades.
 
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
