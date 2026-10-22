@@ -265,8 +265,37 @@ after 7 losses in a row (at a 35 % win rate seven in a row happen by chance ≈ 
 4× the account; the % limits grow with it. It also lets winners ride (below; `--no-runner` turns that
 off). It never touches the broker, live mode, keys or `autopilot.enabled`.
 
-**€1,000 with the bot's own rules** (2 % risk, BTC 200-day switch, 10 biggest coins, costs and 10 %/yr
-borrowing cost included — the past, not a forecast):
+#### Re-checked on 22 Oct 2026 — read this before the older tables below
+
+The tables further down were made with a fixed coin list that **included DOGE** (a meme coin the bot never
+trades — it made most of their 2021) and with 0.13 % costs instead of Alpaca's 0.25 % crypto fee. Re-run
+with today's code (the lab's own trades, 2 % risk sized at the worst entry price, 0.28 % per side, 4 % on
+idle cash, median of 30 orders of same-day signals; € and $ treated alike):
+
+| €1,000, profile 1× | Since 1 Jan 2020 | Last 3 years | Last 12 months | Worst drop |
+|---|---|---|---|---|
+| Today's 10 biggest coins (hindsight: ZEC alone made €11.6k) | €44,436 | €5,210 | €1,373 | −26 % |
+| **Coins chosen point in time** (the 10 biggest on each day, delisted ones included) | **€12,757** | **€2,365** | **€1,133** | −30 % |
+| Only the pairs today's lab validates (no ETF: it validates none) | €13,811 | €2,554 | €1,170 | −22 % |
+| Older table's coin list, without DOGE | €19,635 | €2,132 | €1,143 | −29 % |
+| BTC bought and held | €11,687 | €2,812 | €777 | −77 % |
+
+Started on any week since mid-2018, point in time: a typical year ends at €1,232 (1 in 10 below €965), a
+typical three years at €2,687 (1 in 10 below €1,897). That is the honest expectation for crypto — the
+same order as holding BTC, with far smaller drops.
+
+Three things these numbers show:
+* **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
+  all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
+  on unseen data → no trades), and it is why the bot can lag a backtest that trades everything.
+* **The dollar backstop.** `profile` writes $ limits at 4× your capital (a guard against a misread equity).
+  Once the account has grown past 4×, they cap the risk (€14,851 instead of €44,436 since 2020 in the
+  hindsight row). The bot now says so in its notes and once by notification; re-run
+  `autopilot.py profile --capital <your equity> --write` when it does.
+* **Leverage 1.5× adds nothing here** (€37,661 vs €44,436 since 2020) and Alpaca has no crypto margin anyway.
+
+**€1,000 with the bot's own rules — older estimate, see above** (2 % risk, BTC 200-day switch, 10 biggest
+coins incl. DOGE, costs 0.13 % and 10 %/yr borrowing cost included — the past, not a forecast):
 
 | | 1× | 1.5× | 2× | worst drop |
 |---|---|---|---|---|
@@ -308,8 +337,8 @@ Every week the lab re-checks it on unseen periods; when riding on stops paying (
 costing more than 3 points of profit chance), the bot goes back to selling everything by itself
 (`autopilot.runner.require_lab`).
 
-**€1,000, profile + two thirds ride** (10 biggest coins, 2 % risk, median of 30 signal orders — the order
-of same-day signals alone moves a result by ±20 %):
+**€1,000, profile + two thirds ride — older estimate, incl. DOGE; see the re-check above** (10 biggest
+coins, 2 % risk, median of 30 signal orders — the order of same-day signals alone moves a result by ±20 %):
 
 | | Sell everything 1× | Two thirds ride 1× | Two thirds ride 1.5× | worst drop |
 |---|---|---|---|---|
@@ -384,7 +413,8 @@ first daily close below the 50-day EMA during market hours; and in the simulator
 `cash_yield_pct` (T-bills). At Alpaca, idle cash earns what your account pays — holding a T-bill ETF
 (SGOV) yourself is the manual equivalent.
 
-**€1,000 started on any week since mid-2018** (382 one-year, 278 three-year windows; 2 % risk, 1×):
+**€1,000 started on any week since mid-2018 — older estimate, 0.13 % costs; see the re-check above** (382
+one-year, 278 three-year windows; 2 % risk, 1×):
 
 | | Crypto only | + T-bills | + ETF trend in crypto bear markets |
 |---|---|---|---|

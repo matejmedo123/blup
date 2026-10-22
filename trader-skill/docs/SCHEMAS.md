@@ -1120,3 +1120,43 @@ background thread (and to its last hour when the disk is low).
 * Deploy never ships a nested `trader/` folder or `.env`; a request carrying a credential (the X token, the
   ntfy token) follows no redirect;
   an infinite limit in `limits.json` is refused; the risk of a daily entry is measured at its slack limit.
+
+## v3.10 — round six: a €1,000 account, the runner's part sale, the simulator's coarse bars
+
+### Limits and the daily loss
+* `autopilot.daily_loss_action`: `"kill"` (default — cancel entries, sell what the bot holds if
+  `flatten_on_kill`, stay killed until resumed) or `"stop_entries"` (no new entries until tomorrow UTC;
+  positions keep their stops and exits). `profile` writes `"stop_entries"`: a trend trade held for weeks is
+  not sold because one day was bad.
+* `usd_limits_binding`: a `*_usd` limit that now cuts below its `%` twin (the profile's 4× backstop after
+  the account grew) is listed in the cycle notes and notified once (`usd_limits_told` in `state.json`), with
+  the `profile --capital <equity> --write` command to re-derive it. The bot never raises a limit itself.
+* `profile` refuses `--capital` ≤ 0, inf or nan, and `--cash-yield` outside 0–20.
+
+### One account at a time
+* `account()` carries `account_id` (simulator: `sim-<created_at>`; Alpaca: the account number);
+  `account_key()` = `broker/mode/account_id`. Equity lines carry `account`; `day.json` carries `account`.
+  A switch (paper → live, a deleted `sim.json`) starts the day's equity and the drawdown peak again — another
+  account's equity is no loss. `_realized_today` counts only trades of the same broker and live/paper.
+
+### Quantities and partial fills
+* `broker.qty_step(symbol, asset)` (Alpaca crypto: `min_trade_increment`; else 0). At the fill the bot's
+  crypto quantity is floored to it, so the stop covers the whole trade; a sale whose remainder is under one
+  step closes the position (fee dust goes with it). The minimum-order error shows the quantity asked.
+* A runner's part sale that times out is cancelled and confirmed before the whole is sold; the KILL cancels
+  it too and marks the ride `failed`. An order `done_for_day` is booked only when it ends.
+
+### Your own holdings (`yours_today`)
+* Each symbol keeps `whole` (the whole position) besides your `qty`: a split is judged on the whole position.
+  On a new UTC day the baseline is yesterday's last quantity and price (the day's start equity is yesterday's
+  last equity too).
+
+### Simulator
+* `_walk_series`: the 5-minute bars, or — only when they start after the first bar the walk needs (stocks:
+  the next session's open) — hourly, then daily bars, cached apart (`_coarse`). Marks, `_last_close` and
+  market sales stay on 5-minute prices; a failed download waits a cycle. `walked_step` remembers a coarse
+  walk; a bar is walked when its end lies past the end of the last bar walked.
+
+### State
+* A rotation part claimed by a process that died (`.<archive>.<id>.<pid>.claimed`, older than an hour) goes
+  back to `.pending` and is archived.
