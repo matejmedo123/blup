@@ -289,6 +289,13 @@ Started on any week since mid-2018, point in time: a typical year ends at €1,2
 typical three years at €2,687 (1 in 10 below €1,897). That is the honest expectation for crypto — the
 same order as holding BTC, with far smaller drops.
 
+**The real bot, replayed week by week through the last 12 months** (`autopilot.py replay`, simulator,
+€1,000 profile, one cycle an hour, and before every week the lab run it would have had that day — not
+today's): **€1,169.76** (+17 %), worst drop 5 % hour by hour. BTC was under its 200-day average from November
+2025 to 19 August 2026, so for ten months the bot held cash at 4 % (+€33); then 11 trades in two months, 7
+won, +€131 (ZEC +€95). BTC held over the same year: €777. The backtest row of the lab's validated pairs says
+€1,170 for the same 12 months — the running bot and the backtest agree.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
