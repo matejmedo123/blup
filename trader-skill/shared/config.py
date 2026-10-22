@@ -55,6 +55,8 @@ DEFAULT_CONFIG = {
         "exits": {"stop_pct": 25, "take_profit_pct": 50, "take_profit_part": 0.5, "trail_pct": 25,
                   "time_stop_hours": 6, "liquidity_drop_pct": 30, "recheck_min": 15},
         "x_mentions": True, "candidates_per_cycle": 12, "interval_sec": 45,
+        # live only after the sniper's own paper record says it works: the backtests found no edge
+        "live_needs_paper_proof": True, "paper_proof_min_trades": 30, "paper_proof_days": 30,
         "live_confirmation": "",
     },
     "autopilot": {

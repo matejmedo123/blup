@@ -9,3 +9,8 @@ __pycache__/
 trader.env
 *.env
 !*.env.example
+# the sniper study's downloaded data (re-created by trader-sniper/research/reproduce.sh)
+trader-sniper/research/data/
+trader-sniper/research/results/*.json
+trader-sniper/research/results/*.jsonl
+trader-sniper/research/results/*.csv

@@ -9,6 +9,13 @@ description: Meme-coin sniper for DEX tokens — pump.fun, PumpSwap, Raydium, Me
 by default), only after the checks below, and follows every candidate — bought or not — for a day, so you can
 see whether the checks and strategies are worth anything before you risk more.
 
+**What the tests found (22 Oct 2026, `research/README.md`): no edge.** Its own rules replayed on 61 days of
+pump.fun history (3,366 coins, dead ones included): 136 trades, 26 % won, −25 % a trade, **−€345** on the
+€10 / €100 budget; break-even only if every stop filled exactly at its price. One day of new pools forward:
+break-even at best. The real sniper on paper, live: 3 trades, 3 losses, two of them rugged minutes after a
++60 % run. So live trading waits until its own paper record pays: at least `paper_proof_min_trades` (30)
+paper trades in the last `paper_proof_days` (30), ahead in total (`report` shows where it stands).
+
 ## What it does each cycle (every `interval_sec`, 45 s by default)
 
 1. **Season** — which chain and launchpad has the busy new pools now (GeckoTerminal trending pools younger
@@ -57,10 +64,14 @@ python3 "${CLAUDE_SKILL_DIR}/sniper.py" run --loop      # needs "sniper": {"enab
 python3 "${CLAUDE_SKILL_DIR}/sniper.py" status
 python3 "${CLAUDE_SKILL_DIR}/sniper.py" report          # every candidate 15 min / 1 h / 4 h / 24 h later
 python3 "${CLAUDE_SKILL_DIR}/sniper.py" sell <address>  # or: kill — sell everything and switch off
+sh "${CLAUDE_SKILL_DIR}/research/reproduce.sh" history   # re-run the historical study (~2 h), then: backtest
 ```
 
 ## Live (Solana only)
 
+0. Run it on paper first (`run --loop` with `enabled: true`) until `sniper.py report` says *paper proof
+   for live: yes*. `sniper.live_needs_paper_proof: false` skips that — only if you accept trading rules
+   nothing has shown to work.
 1. `sniper.py wallet new` — a new keypair for the bot alone; the key goes to `trader/secrets.env` (0600) and is
    never printed. Send it a small amount of SOL only.
 2. `config.json` → `"sniper": {"enabled": true, "mode": "live", "live_confirmation": "I ACCEPT MEME COIN RISK"}`.

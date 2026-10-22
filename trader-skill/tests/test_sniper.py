@@ -315,7 +315,7 @@ class Live(Settings):
         config.ensure_home()
         cfg = config.load_config()
         self.assertFalse(sn().live_readiness(cfg)[0])
-        cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE)
+        cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE, live_needs_paper_proof=False)
         self.assertFalse(sn().live_readiness(cfg)[0])  # no wallet
         os.environ["SNIPER_SOL_SECRET"] = "x"
         try:
@@ -326,6 +326,31 @@ class Live(Settings):
             self.assertFalse(sn().live_readiness(cfg)[0])
         finally:
             os.environ.pop("SNIPER_SOL_SECRET", None)
+
+    def test_live_waits_for_a_paper_record_that_pays(self):
+        config.ensure_home()
+        cfg = config.load_config()
+        cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE)
+        os.environ["SNIPER_SOL_SECRET"] = "x"
+        self.addCleanup(os.environ.pop, "SNIPER_SOL_SECRET", None)
+        ok, missing = sn().live_readiness(cfg)
+        self.assertFalse(ok)
+        self.assertIn("0 paper trades", " ".join(missing))
+        now = mc.now_utc()
+
+        def trade(pnl, days_ago=1, mode="paper"):
+            state.append_jsonl("sniper/trades.jsonl", {"mode": mode, "pnl_usd": pnl,
+                                                       "closed_at": mc.iso(now.timestamp() - days_ago * 86400)})
+        for _ in range(29):
+            trade(1.0)
+        trade(50.0, mode="live")  # live trades are not paper proof
+        trade(90.0, days_ago=40)  # nor are paper trades from before the window
+        self.assertFalse(sn().live_readiness(cfg)[0])  # 29 trades: one short
+        trade(-30.0)
+        self.assertFalse(sn().live_readiness(cfg)[0])  # 30 trades, but behind in total
+        trade(2.0)
+        self.assertTrue(sn().live_readiness(cfg)[0])
+        self.assertEqual(sn().paper_proof(sn().settings(cfg))["trades"], 31)
 
     def test_paper_on_other_chains_even_when_live(self):
         self.assertEqual(sn().LIVE_CHAINS, ("solana",))
@@ -396,7 +421,7 @@ class LiveOrders(Settings):
         os.environ["SNIPER_SOL_SECRET"] = solana.b58encode(solana.new_keypair()[0])
         self.addCleanup(os.environ.pop, "SNIPER_SOL_SECRET", None)
         cfg = config.load_config()
-        cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE)
+        cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE, live_needs_paper_proof=False)
         return cfg
 
     def test_a_wallet_over_its_cap_buys_nothing(self):
@@ -486,7 +511,7 @@ class LiveBuyIsBookedBeforeItIsSent(Settings):
         os.environ["SNIPER_SOL_SECRET"] = solana.b58encode(solana.new_keypair()[0])
         self.addCleanup(os.environ.pop, "SNIPER_SOL_SECRET", None)
         self.cfg = config.load_config()
-        self.cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE)
+        self.cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE, live_needs_paper_proof=False)
         self.rpc = mock.Mock()
         self.rpc.get_token_balance.return_value = (0.0, 250, 6)  # dust of it from before: not ours
         self.rpc.signature_status.return_value = None
@@ -752,7 +777,7 @@ class ReviewedBudget(Settings):
         path.write_text("SNIPER_SOL_SECRET=x\n", encoding="ascii")
         os.chmod(str(path), 0o644)
         cfg = config.load_config()
-        cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE)
+        cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE, live_needs_paper_proof=False)
         ok, missing = sn().live_readiness(cfg)
         self.assertFalse(ok)
         self.assertIn("private", " ".join(missing))

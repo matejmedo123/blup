@@ -71,7 +71,7 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
      say no, never yes to something the rules rejected) — then sizing and a risk PASS against `limits.json`,
   8. stocks and crypto only — **the autopilot never trades meme tokens on a DEX** and never touches a wallet
      or key; that is the separate `/trader-sniper`'s job — paper by default, live only on Solana from a
-     wallet of its own with a hard cap, never from yours.
+     wallet of its own with a hard cap, never from yours, and only once its own paper record pays.
      Meme coins listed on the exchanges (DOGE, SHIB, PEPE, BONK, WIF, …) are off too unless you switch them on
      (`profile --memes` or `autopilot.memes.enabled`): then only the established ones — among the top 40 by
      market cap, a year on the exchange, validated by the lab like any coin — at half the risk.
@@ -414,6 +414,19 @@ the typical year is +10 % (3 years: €1,545) with drops under −20 %.
   slippage against the signal), skipped (with the reason), **missed** (no record — the bot was down or data
   failed) or **extra** (a trade the rules don't explain). Missed, extra, errors or slippage above twice
   the assumed cost → "check" and a phone notification.
+
+### The meme-coin sniper — tested, no edge found
+
+`/trader-sniper`'s own rules replayed on 61 days of pump.fun history (22 Aug – 21 Oct 2026, 3,366 coins
+sampled evenly per day from the Solana chain, dead and rugged ones included; €10 a trade, €100 cap, fees and
+price impact): **136 trades, 26 % won, −25 % a trade, −€345** (90 % range −€467 … −€224). Best case — every
+stop filled exactly at its price — break-even (+€4). Buying every coin 10 minutes after launch: −€1,681. One
+day of new pools forward (Solana, BSC, Base): break-even at best. The real sniper on paper, live data, the
+same afternoon: 3 trades, 3 losses (−$17.51), two rugged minutes after a +60 % run. Details, caveats and
+how to re-run it: `trader-sniper/research/README.md`.
+
+So the sniper stays on paper until its **own paper record pays** — at least 30 paper trades in the last 30
+days, ahead in total — before live trading can start (`sniper.live_needs_paper_proof`, on by default).
 
 ### Bear markets — what was tested, what the bot does
 

@@ -1231,3 +1231,9 @@ before the buy, `note`), `"open"` (settled; absent on paper). `tokens_raw` is wh
 `Rpc.signature_status(sig)` is one look through the ledger history. `jupiter.quote` raises `jupiter.NoRoute` for
 an answer without a route and plain `SourceError` for no answer; neither the quotes nor the sniper's safety
 reports (`rugcheck.check(..., fresh=True)`) are ever served from an older cached copy.
+
+Live also needs a paper record that pays: `live_needs_paper_proof` (default true), `paper_proof_min_trades`
+(30), `paper_proof_days` (30) — that many closed paper trades in `trades.jsonl` within that many days, with a
+positive total `pnl_usd`. `sniper.py report --json` carries it as `paper_proof` {ok, trades, pnl_usd, need, text}.
+The study that motivated it lives in `trader-sniper/research/` (stdlib; `reproduce.sh history|backtest|collect`,
+downloads in `research/data/`, not in git).

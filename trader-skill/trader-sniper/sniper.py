@@ -19,7 +19,8 @@ stop, a time stop, and it is sold at once when the liquidity drains or the token
 bought or not, is followed for a day — `sniper.py report` shows which checks and strategies would have paid.
 
 Paper by default. Live only on Solana, only from a wallet of its own (`sniper.py wallet new`), with a hard cap on
-what that wallet may hold, and only after `sniper.mode "live"` and `sniper.live_confirmation` are set.
+what that wallet may hold, only after `sniper.mode "live"` and `sniper.live_confirmation` are set — and only once
+its own paper record pays (`paper_proof`): the backtests found no edge in these rules.
 
 Examples:
   python3 sniper.py season                  # where meme coins trade now
@@ -94,7 +95,28 @@ def live_readiness(cfg: dict) -> tuple:
     warn = secrets.file_warning()
     if warn:
         missing.append("a private key file — " + warn)
+    if s.get("live_needs_paper_proof", True):
+        proof = paper_proof(s)
+        if not proof["ok"]:
+            missing.append("a paper record that pays — %s (switch the check off with sniper.live_needs_paper_proof "
+                           "false only if you accept trading a strategy nothing has shown to work)" % proof["text"])
     return (not missing), missing
+
+
+def paper_proof(s: dict, now_ts: float = None) -> dict:
+    """The sniper's own paper trades of the last `paper_proof_days`: live needs at least `paper_proof_min_trades`
+    of them, ahead in total after costs. Two months of pump.fun history and the first live paper day both lost
+    money with these rules — so the default is: prove it here first, with nothing at stake."""
+    now_ts = now_ts or market_clock.now_utc().timestamp()
+    since = now_ts - float(s.get("paper_proof_days", 30)) * 86400
+    trades = [t for t in state.tail_jsonl(TRADES, 2000)
+              if t.get("mode") == "paper" and t.get("closed_at") and market_clock.ts(t["closed_at"]) >= since]
+    n, pnl = len(trades), round(sum(float(t.get("pnl_usd") or 0) for t in trades), 2)
+    need = int(s.get("paper_proof_min_trades", 30))
+    ok = n >= need and pnl > 0
+    return {"ok": ok, "trades": n, "pnl_usd": pnl, "need": need,
+            "text": "%d paper trades in the last %s days, %s in total (live needs at least %d, ahead in total)" % (
+                n, s.get("paper_proof_days", 30), fmt.money(pnl), need)}
 
 
 def is_live(cfg: dict) -> bool:
@@ -1040,6 +1062,9 @@ def main(argv=None) -> int:
             parts = ["%s %+.0f%% %.0f%%↑ %.0f%%☠" % (k, row[k]["median_pct"], 100 * row[k]["up"], 100 * row[k]["rugged"])
                      for k, _ in CHECKPOINTS if k in row]
             lines.append("  %-50s n=%-4d %s" % (g[:50], row["n"], " · ".join(parts)))
+        proof = paper_proof(s)
+        rep["paper_proof"] = proof
+        lines.append("Paper proof for live: %s — %s" % ("yes" if proof["ok"] else "not yet", proof["text"]))
         cli.emit(args, "\n".join(lines), rep)
         return 0
     if args.action == "check-live":
