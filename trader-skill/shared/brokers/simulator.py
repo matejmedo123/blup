@@ -26,6 +26,20 @@ KEEP_DAYS = 30  # finished orders and fills older than this move to the archive:
 FINAL = ("filled", "canceled", "expired", "rejected")
 
 
+def _first_bar_due(since_ts: int, asset: str) -> int:
+    """The start of the first bar a walk from ``since_ts`` needs: for stocks, the next session's open."""
+    if asset != "stock":
+        return int(since_ts) + market_clock.interval_seconds(INTERVAL)
+    d = market_clock.et_date(market_clock.from_ts(since_ts))
+    for _ in range(10):
+        if market_clock.is_trading_day(d):
+            start, end = market_clock.session_bounds(d)
+            if since_ts < market_clock.ts(end):
+                return max(int(since_ts), market_clock.ts(start))
+        d = market_clock.next_trading_day(d)
+    return int(since_ts)
+
+
 def _r(x, nd=6):
     return round(float(x), nd) if x is not None else None
 
@@ -38,7 +52,7 @@ class SimBroker(Broker):
         self.cfg = cfg or config.load_config()
         self._candles = {}
         self._spans = {}  # (symbol, asset) → the oldest time the fetched series surely covers
-        self._steps = {}  # (symbol, asset) → bar length of that series (5 min, or a fallback's)
+        self._coarse = {}  # (symbol, asset) → (hourly or daily bars, bar seconds, oldest time they were fetched for)
         self.save_error = None
         self.sync_errors = {}  # symbol → why its orders could not be checked this sync
         self.book = state.read_json(BOOK) or self._new_book()
@@ -76,6 +90,7 @@ class SimBroker(Broker):
         return market_clock.now_utc()
 
     def _series(self, symbol: str, asset: str, since_ts: int = None):
+        """5-minute bars — what marks, market fills and the walk use."""
         key = (symbol, asset)
         now_ts = int(self._now().timestamp())
         # fetched again only when an older bar is needed than the series holds (a 2-day series first, then
@@ -85,29 +100,41 @@ class SimBroker(Broker):
             if since_ts:
                 span_days = max(span_days, (now_ts - since_ts) / 86400.0 + 1.0)
             days = int(span_days) + 1 if asset == "stock" else span_days
-            # an order older than the 5-minute history (a replay of last winter's ETF trade) is walked on hourly
-            # or daily bars instead — coarser, never skipped
-            slack = 4 * 86400 if asset == "stock" else 3600  # weekends and holidays have no bars
-            why = None
-            for interval in (INTERVAL,) + (FALLBACK if since_ts else ()):
-                try:
-                    bars = data.get_candles(data_symbol(symbol, asset), interval, days=days).candles
-                except data.DataUnavailable as exc:
-                    why = exc
-                    continue
-                if since_ts and interval != FALLBACK[-1] and (not bars or bars[0].t > since_ts + slack):
-                    why = "%s bars start %s, after %s" % (interval, market_clock.iso(bars[0].t) if bars else "nowhere",
-                                                         market_clock.iso(since_ts))
-                    continue
-                self._candles[key], self._steps[key] = bars, market_clock.interval_seconds(interval)
-                break
-            else:
-                raise BrokerError("no prices for %s: %s" % (symbol, why))
+            try:
+                self._candles[key] = data.get_candles(data_symbol(symbol, asset), INTERVAL, days=days).candles
+            except data.DataUnavailable as exc:
+                raise BrokerError("no prices for %s: %s" % (symbol, exc))
             self._spans[key] = now_ts - int(span_days * 86400) + 86400
         return self._candles[key]
 
-    def _step(self, symbol: str, asset: str) -> int:
-        return self._steps.get((symbol, asset)) or market_clock.interval_seconds(INTERVAL)
+    def _walk_series(self, symbol: str, asset: str, since_ts: int) -> tuple:
+        """(bars, bar seconds) to walk an order from ``since_ts``: the 5-minute bars, or — when they don't reach
+        back that far (Yahoo keeps ~60 days of them; a replay of last winter's ETF trade) — hourly, then daily
+        bars. Coarser, never skipped. A download that failed is no reason to fall back: the walk waits a cycle."""
+        bars = self._series(symbol, asset, since_ts)
+        first = _first_bar_due(since_ts, asset)
+        if bars and bars[0].t <= first:
+            return bars, market_clock.interval_seconds(INTERVAL)
+        key = (symbol, asset)
+        have = self._coarse.get(key)
+        if have and have[2] <= since_ts:
+            return have[0], have[1]
+        now_ts = int(self._now().timestamp())
+        days = (now_ts - since_ts) / 86400.0 + 2.0
+        why = "5-minute bars start %s, after %s" % (market_clock.iso(bars[0].t) if bars else "nowhere",
+                                                   market_clock.iso(since_ts))
+        for interval in FALLBACK:
+            try:
+                coarse = data.get_candles(data_symbol(symbol, asset), interval,
+                                          days=int(days) + 1 if asset == "stock" else days).candles
+            except data.DataUnavailable as exc:
+                why = exc
+                continue
+            if coarse and (coarse[0].t <= first or interval == FALLBACK[-1]):
+                step = market_clock.interval_seconds(interval)
+                self._coarse[key] = (coarse, step, since_ts)
+                return coarse, step
+        raise BrokerError("no prices for %s: %s" % (symbol, why))
 
     def _last_close(self, symbol: str, asset: str) -> float:
         bars = self._series(symbol, asset)
@@ -165,21 +192,24 @@ class SimBroker(Broker):
         now_ts = int(self._now().timestamp())
         open_orders = [o for o in self.book["orders"] if o["status"] in ("new", "held")]
         walked = self.book.setdefault("walked", {})
+        walked_step = self.book.setdefault("walked_step", {})
         for symbol in list(walked):
             if not any(o["symbol"] == symbol for o in open_orders):
                 del walked[symbol]
+                walked_step.pop(symbol, None)
         for symbol in sorted({o["symbol"] for o in open_orders}):
             mine = [o for o in open_orders if o["symbol"] == symbol]
             asset = mine[0]["asset"]
             since = min(int(o.get("active_from") or market_clock.ts(o["submitted_at"])) for o in mine)
             done = int(walked.get(symbol) or 0)
             try:
-                series = self._series(symbol, asset, max(since, done))
+                series, step = self._walk_series(symbol, asset, max(since, done))
             except BrokerError as exc:  # one symbol without prices: its orders wait, every other symbol's still fill
                 self.sync_errors[symbol] = str(exc)
                 continue
-            step = self._step(symbol, asset)
-            bars = [c for c in series if c.t >= since - step and c.t > done and c.t + step <= now_ts]
+            # a bar counts once its end lies past the end of the last bar walked (a 5-minute one, unless noted)
+            done_end = done + int(walked_step.get(symbol) or market_clock.interval_seconds(INTERVAL)) if done else 0
+            bars = [c for c in series if c.t >= since - step and c.t + step > done_end and c.t + step <= now_ts]
             for bar in bars:
                 live = [o for o in mine if o["status"] == "new"]
                 if not live:
@@ -207,6 +237,10 @@ class SimBroker(Broker):
                             self._fill(o, o["limit_price"], bar.t + step)
             if bars:
                 walked[symbol] = bars[-1].t
+                if step != market_clock.interval_seconds(INTERVAL):
+                    walked_step[symbol] = step
+                else:
+                    walked_step.pop(symbol, None)
             # day orders that never filled expire at the session close
             for o in mine:
                 if (o["status"] in ("new", "held") and o.get("expires_at")
@@ -286,7 +320,8 @@ class SimBroker(Broker):
                 "buying_power": _r(max(0.0, cash + (lev - 1) * max(equity, 0.0) - self._reserved()), 2),
                 "borrowed": _r(max(0.0, -cash), 2), "interest_paid": _r(self.book.get("interest_paid") or 0, 2),
                 "interest_earned": _r(self.book.get("interest_earned") or 0, 2),
-                "currency": "USD", "starting_cash": self.book.get("starting_cash"), "mode": self.mode}
+                "currency": "USD", "starting_cash": self.book.get("starting_cash"), "mode": self.mode,
+                "account_id": "sim-%s" % self.book.get("created_at")}  # a deleted sim.json is another account
 
     def _reserved(self) -> float:
         """Buy orders still waiting hold their cash, as at a real broker — two can't spend the same dollars."""

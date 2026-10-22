@@ -249,7 +249,8 @@ class AlpacaBroker(Broker):
                 "status": a.get("status"), "blocked": "; ".join(why) or None,
                 "crypto_ok": a.get("crypto_status") in (None, "ACTIVE"),
                 "daytrade_count": int(_f(a.get("daytrade_count")) or 0),
-                "pattern_day_trader": bool(a.get("pattern_day_trader"))}
+                "pattern_day_trader": bool(a.get("pattern_day_trader")),
+                "account_id": a.get("account_number") or a.get("id")}
 
     def positions(self) -> list:
         out = []
@@ -349,12 +350,21 @@ class AlpacaBroker(Broker):
             return qty
         lot = self._crypto_lot(symbol)
         step = lot.get("min_trade_increment")
+        asked = qty
         if step:
             qty = math.floor(qty / step + 1e-9) * step
         if lot.get("min_order_size") and qty < lot["min_order_size"] - 1e-12:
-            raise BrokerError("%s %s is below Alpaca's minimum order of %s" % (_fmt_qty(qty), symbol,
+            raise BrokerError("%s %s is below Alpaca's minimum order of %s" % (_fmt_qty(asked), symbol,
                                                                               _fmt_qty(lot["min_order_size"])))
         return qty
+
+    def qty_step(self, symbol: str, asset: str) -> float:
+        if asset != "crypto":
+            return 0.0
+        try:
+            return float(self._crypto_lot(symbol).get("min_trade_increment") or 0)
+        except Exception:  # noqa: BLE001 — no lot info: no flooring, as before
+            return 0.0
 
     def place_entry(self, order: dict) -> dict:
         asset = order["asset"]

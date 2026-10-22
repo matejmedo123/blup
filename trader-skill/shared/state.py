@@ -380,11 +380,18 @@ def _archive_part(dest: Path, part: str) -> None:
 def _archive_pending(dest: Path) -> None:
     """Old parts a full disk kept out of their archives (in ``dest``'s folder). Each is claimed by a rename first, so two
     rotations never add the same one twice."""
+    for stale in dest.parent.glob(".*.gz.*.claimed"):  # claimed by a rotation that died before it was done
+        try:
+            if time.time() - stale.stat().st_mtime > 3600:
+                os.replace(str(stale), str(stale).rsplit(".", 2)[0] + ".pending")
+        except OSError:
+            pass
     for old in sorted(dest.parent.glob(".*.gz.*.pending")):  # ".<archive name>.<random>.pending"
         target = dest.parent / old.name[1:-len(".pending")].rsplit(".", 1)[0]  # yesterday's archive, perhaps
         mine = str(old)[:-len(".pending")] + ".%d.claimed" % os.getpid()
         try:
             os.rename(str(old), mine)
+            os.utime(mine)  # claimed now: not "stale" to another rotation while this one appends
         except OSError:
             continue  # taken by another rotation
         try:

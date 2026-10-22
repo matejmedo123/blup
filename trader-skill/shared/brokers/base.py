@@ -81,6 +81,10 @@ class Broker:
         """Stocks: bracket (entry limit + take-profit limit + stop). Crypto: the entry limit only."""
         raise NotImplementedError
 
+    def qty_step(self, symbol: str, asset: str) -> float:
+        """The smallest quantity step an order may have (Alpaca's crypto trade increment); 0 = any."""
+        return 0.0
+
     def place_stop(self, symbol: str, qty: float, stop_price: float, client_order_id: str = None,
                    asset: str = "crypto", limit_price: float = None) -> dict:
         raise NotImplementedError

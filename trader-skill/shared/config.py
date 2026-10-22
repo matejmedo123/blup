@@ -54,6 +54,7 @@ DEFAULT_CONFIG = {
                   "tm_paths": 2000, "max_trigger_age_bars": 1},
         "max_new_trades_per_day": 5,
         "flatten_on_kill": True,
+        "daily_loss_action": "kill",  # or "stop_entries": no new entries until tomorrow, positions keep their stops
         "sim_starting_cash": 25000,
         "live_confirmation": "",
         "universe": {

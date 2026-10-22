@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
 import signal
 import socket
@@ -188,7 +189,8 @@ def _write_broker_files(broker, acct, positions, orders, book, realized_today):
     state.write_json("broker/orders.json", keep)  # the newest 200 (and every open one), not the oldest
     unreal = sum(float(p.get("unrealized_pl") or 0) for p in positions)
     line = {"at": market_clock.iso(market_clock.now_utc()), "equity": acct.get("equity"), "cash": acct.get("cash"),
-            "unrealized": round(unreal, 2), "realized_today": round(realized_today, 2), "mode": broker.mode}
+            "unrealized": round(unreal, 2), "realized_today": round(realized_today, 2), "mode": broker.mode,
+            "account": account_key(broker, acct)}
     for k in ("borrowed", "interest_paid", "interest_earned"):  # only when leverage or cash interest is in play
         if acct.get(k):
             line[k] = acct[k]
@@ -196,23 +198,59 @@ def _write_broker_files(broker, acct, positions, orders, book, realized_today):
     return line
 
 
-def _day_loss(now, equity, yours: float = 0.0) -> tuple:
+def usd_limits_binding(cfg: dict, limits: dict, equity) -> list:
+    """Dollar limits that now cut below their percentage twins: written for a smaller account (the profile's 4×
+    backstop), they hold the bot back as it grows — the user decides whether to raise them."""
+    try:
+        eq = float(equity)
+    except (TypeError, ValueError):
+        return []
+    out = []
+    risk = float(cfg.get("risk_per_trade_pct") or 0)
+    pairs = [("global", "max_daily_loss_usd", "max_daily_loss_pct")]
+    pairs += [(a, "max_risk_per_trade_usd", "max_risk_per_trade_pct") for a in ("crypto", "stock")]
+    for sec, usd_key, pct_key in pairs:
+        lim = limits.get(sec) or {}
+        usd, pct = lim.get(usd_key), lim.get(pct_key)
+        if pct is None and usd_key == "max_risk_per_trade_usd":
+            pct = risk or None
+        if usd is None or pct is None or eq <= 0:
+            continue
+        if eq * float(pct) / 100.0 > float(usd) * 1.05:
+            out.append("%s.%s %s is below %g%% of equity %s (%s) — it now caps the bot; raise it or run "
+                       "`autopilot.py profile --capital %d --write`" % (
+                           sec, usd_key, fmt.money(usd), float(pct), fmt.money(eq),
+                           fmt.money(eq * float(pct) / 100.0), int(eq)))
+    return out
+
+
+def account_key(broker, acct: dict) -> str:
+    """Which account an equity figure belongs to: another broker, mode or a fresh simulator starts a new record."""
+    return "%s/%s/%s" % (broker.name, broker.mode, (acct or {}).get("account_id") or "-")
+
+
+def _day_loss(now, equity, yours: float = 0.0, account: str = None) -> tuple:
     """(loss today in $, equity at the start of the UTC day). Positions are held for days, so their whole unrealized
     P&L is not today's: the loss is how far equity fell since the day began (closed trades included) less what your
-    own holdings lost today (``yours``, from ``yours_today``), and never less than what closed at a loss today."""
+    own holdings lost today (``yours``, from ``yours_today``), and never less than what closed at a loss today.
+    After a switch of account (``account``: paper → live, a fresh simulator) the day starts again at its equity."""
     doc = state.read_json(DAY, {}) or {}
     day = _today(now)
     if equity is not None:
+        if account and doc.get("account") and doc["account"] != account:
+            doc = {"day": day, "start_equity": float(equity), "account": account}  # not a loss: another account
+        doc.setdefault("account", account)
         if doc.get("day") != day:
             yesterday = (market_clock.parse_iso(now).date() - timedelta(days=1)).isoformat()
             # after downtime the last equity seen is days old — those days' losses are not today's
             start = doc.get("last_equity", equity) if doc.get("day") == yesterday else equity
-            doc = dict({k: doc[k] for k in ("yours", "yours_day") if k in doc}, day=day, start_equity=start)
+            doc = dict({k: doc[k] for k in ("yours", "yours_day", "account") if k in doc}, day=day,
+                       start_equity=start)
         doc["last_equity"] = float(equity)
         state.write_json(DAY, doc)
     start = doc.get("start_equity") if doc.get("day") == day else None
     drop = float(start) - float(equity) + float(yours or 0) if start is not None and equity is not None else 0.0
-    return max(drop, -_realized_today(now), 0.0), start
+    return max(drop, -_realized_today(now, account), 0.0), start
 
 
 def _killed_today(now, mark: bool = False) -> bool:
@@ -224,11 +262,16 @@ def _killed_today(now, mark: bool = False) -> bool:
     return doc.get("killed") == _today(now)
 
 
-def _realized_today(now) -> float:
+def _realized_today(now, account: str = None) -> float:
+    """P&L of the trades closed today — with ``account``, only those of that broker and mode."""
     day = _today(now)
     total = 0.0
+    name, mode = (account.split("/")[:2] + [None])[:2] if account else (None, None)
     for t in (state.read_json("journal.json", {}) or {}).get("trades") or []:
         if t.get("status") == "closed" and ((t.get("exit") or {}).get("time") or "")[:10] == day:
+            if name and t.get("broker") and (t["broker"] != name or ("paper" in t and (t["paper"] is False)
+                                                                      != (mode == "live"))):
+                continue
             total += float(t.get("pnl_usd") or 0)
     return total
 
@@ -339,12 +382,14 @@ def _sell_own(broker, it: dict, held: float = None, limit_price: float = None) -
     closed only when all of it is this trade's — shares or coins you hold yourself on the same symbol are never
     sold."""
     room = CRYPTO_FEE_IN_COIN + 1e-4 if it["asset"] == "crypto" else 1e-6  # the fee left out of its quantity
+    step = broker.qty_step(it["symbol"], it["asset"]) if hasattr(broker, "qty_step") else 0.0
     if limit_price is not None:
         qty = float(it["qty"]) if held is None else min(float(it["qty"]), float(held))
         o = broker.place_exit(it["symbol"], qty, "limit", limit_price=limit_price, asset=it["asset"],
                               client_order_id="%s-x%d" % (it["order_id"], int(time.time() * 1000)))
         it.update(exit_limit=float(limit_price), exit_limit_at=market_clock.iso(market_clock.now_utc()))
-    elif held is not None and float(held) <= float(it["qty"]) * (1 + room):
+    elif held is not None and (float(held) <= float(it["qty"]) * (1 + room)
+                               or (step and float(held) - float(it["qty"]) < step - 1e-12)):
         o = broker.close_position(it["symbol"])  # all ours — also clears crypto fee dust a sized sell would leave
         it.pop("exit_limit", None), it.pop("exit_limit_at", None)
     else:
@@ -538,15 +583,22 @@ def yours_today(now, positions: list, book: dict, orders: list, broker=None) -> 
     moves nothing (cash ↔ coins); what they moved before you sold stays counted for the day."""
     doc = state.read_json(DAY, {}) or {}
     day = _today(now)
-    mine = doc.get("yours") if doc.get("yours_day") == day else None
-    fresh = mine is None  # a new day (or the first cycle since the upgrade): counting starts now
+    yesterday = (market_clock.parse_iso(now).date() - timedelta(days=1)).isoformat()
+    if doc.get("yours_day") == day:
+        mine = doc.get("yours") or {}
+    elif doc.get("yours_day") == yesterday:  # the day's start equity is yesterday's last — so is this baseline
+        mine = {sym: dict(v, move=0.0) for sym, v in (doc.get("yours") or {}).items() if float(v.get("qty") or 0)}
+    else:
+        mine = None
+    fresh = mine is None  # after days away (or the first cycle since the upgrade): counting starts now
     mine = mine or {}
     bot = _bot_qty(book, orders, broker)
     seen = set()
     for p in positions or []:
         sym = p.get("symbol")
         try:
-            qty = max(0.0, float(p.get("qty") or 0) - bot.get(sym, 0.0))
+            whole = float(p.get("qty") or 0)
+            qty = max(0.0, whole - bot.get(sym, 0.0))
             last = float(p.get("last") or 0)
         except (TypeError, ValueError):
             continue
@@ -556,11 +608,14 @@ def yours_today(now, positions: list, book: dict, orders: list, broker=None) -> 
         was = mine.get(sym) or {}
         move = float(was.get("move") or 0)
         q0, p0 = float(was.get("qty") or 0), float(was.get("last") or 0)
+        w0 = float(was.get("whole") or q0)
         if not fresh and q0 > 0 and p0 > 0:
-            split = qty > 0 and abs(last / p0 - 1) > 0.3 and abs(qty * last / (q0 * p0) - 1) < 0.02
-            if not split:  # a split scales quantity and price together: no gain, no loss
+            # a split scales the whole position's quantity and price together (the bot's share is rescaled later
+            # this cycle): no gain, no loss
+            split = whole > 0 and w0 > 0 and abs(last / p0 - 1) > 0.3 and abs(whole * last / (w0 * p0) - 1) < 0.02
+            if not split:
                 move += q0 * (last - p0)
-        mine[sym] = {"qty": round(qty, 10), "last": last, "move": round(move, 2)}
+        mine[sym] = {"qty": round(qty, 10), "whole": round(whole, 10), "last": last, "move": round(move, 2)}
     for sym, was in mine.items():
         if sym not in seen:  # sold (or gone): what it moved today stays, nothing more
             was["qty"] = 0.0
@@ -699,6 +754,9 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
                 # Alpaca takes the fee out of the coins later in the day (or you hold the coin too, so the position
                 # can't show it): the stop and the exits never count the fee as the bot's to sell
                 qty = round(qty * (1 - CRYPTO_FEE_IN_COIN), 9)
+            step = broker.qty_step(it["symbol"], it["asset"]) if hasattr(broker, "qty_step") else 0.0
+            if step and qty > step:  # the stop, the journal and the sales all count what the broker can sell
+                qty = round(math.floor(qty / step + 1e-9) * step, 12)
             o = dict(o, filled_qty=qty)
             trade = _open_trade(it, o, cfg, limits)
             it.update(status="open", filled_at=o.get("filled_at"), entry_fill=o.get("filled_avg_price"),
@@ -754,11 +812,12 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
             elif (o and o.get("status") in ("canceled", "expired", "rejected")) or (
                     (not o or o.get("status") in OPEN_ORDER)
                     and now.timestamp() - market_clock.ts(ride.get("asked_at") or it["placed_at"]) > 6 * step):
-                if o and o.get("status") in OPEN_ORDER:
-                    try:
-                        broker.cancel(o["id"])
-                    except BrokerError:
-                        pass
+                if o and o.get("status") in OPEN_STATUSES:  # cancelled and confirmed first: what of it sold is
+                    wait = _cancel_own_sells(broker, it, orders, live=o)  # booked next cycle, never sold twice
+                    if wait:
+                        actions.append("partial sale of %s: %s" % (it["symbol"], wait))
+                        return actions
+                    o = dict(o, status="canceled")
                 # its protective stop is already cancelled, so sell everything now rather than wait
                 ride["status"] = "failed"
                 if o and _part_sold(o, it):  # what of the part did sell is sold: only the rest goes now
@@ -960,8 +1019,8 @@ def _part_sold(o: dict, it: dict) -> bool:
         filled = float(o.get("filled_qty") or 0)
     except (TypeError, ValueError):
         return False
-    return (o.get("side") == "sell" and o.get("status") in ("canceled", "expired", "rejected", "done_for_day")
-            and filled > 1e-12 and o.get("id") not in (it.get("parts_booked") or ()))
+    return (o.get("side") == "sell" and o.get("status") in ("canceled", "expired", "rejected")  # done_for_day
+            and filled > 1e-12 and o.get("id") not in (it.get("parts_booked") or ()))  # may still trade tomorrow
 
 
 def start_ride(broker, it: dict, sold: dict, cfg: dict = None) -> list:
@@ -1208,7 +1267,15 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
                 queued, it, (p or {}).get("last"), market_clock.now_utc()):
             problems.append("%s: its sale is queued at the broker" % it["symbol"])  # a stock after hours: the open
             return problems
-        wait = _cancel_own_sells(broker, it, orders, _live_stop(it, orders))
+        live = _live_stop(it, orders)
+        ride = it.get("runner") or {}
+        part = _find(orders, ride.get("sell_order_id")) if ride.get("status") == "selling" else None
+        if part and part.get("status") in OPEN_STATUSES:
+            live = part  # the part sale on its way: cancelled and confirmed before the whole goes
+        wait = _cancel_own_sells(broker, it, orders, live)
+        if not wait and ride.get("status") == "selling":
+            ride["status"] = "failed"  # the reconcile must not sell everything a second time
+            it["exit_note"] = (it.get("exit_note") or "") + " · the partial sale was cancelled by the kill switch"
         if wait:  # the KILL stays on and the next cycle sells — never a sale out of your own shares
             problems.append("%s: %s" % (it["symbol"], wait))
         elif p and float(p.get("qty") or 0) > 1e-9:
@@ -2230,15 +2297,24 @@ def _cycle(approved=None) -> dict:
         kill_reason = "kill switch (%s)" % (control.get("by") or "control")
     else:
         yours = best_effort("your own holdings", lambda: yours_today(now, positions, book, orders, broker)) or 0.0
-        loss, start = best_effort("daily loss", lambda: _day_loss(now, acct.get("equity"), yours)) or (0.0, None)
+        loss, start = best_effort("daily loss", lambda: _day_loss(now, acct.get("equity"), yours,
+                                                                 account_key(broker, acct))) or (0.0, None)
         glob = limits.get("global") or {}
         caps = [float(glob["max_daily_loss_usd"])] if glob.get("max_daily_loss_usd") is not None else []
         if glob.get("max_daily_loss_pct") is not None and start:
             caps.append(float(start) * float(glob["max_daily_loss_pct"]) / 100.0)
         killed_today = best_effort("daily loss", lambda: _killed_today(now), True)
         if caps and loss >= min(caps) and not killed_today:
-            kill_reason = "daily loss %s reached the %s limit" % (fmt.money(-loss), fmt.money(min(caps)))
+            why = "daily loss %s reached the %s limit" % (fmt.money(-loss), fmt.money(min(caps)))
             best_effort("daily loss", lambda: _killed_today(now, mark=True))
+            if ap.get("daily_loss_action") == "stop_entries":  # a strategy that holds for weeks: no fire sale
+                actions.append("DAILY LIMIT: %s — no new entries until tomorrow (UTC); positions keep their stops"
+                               % why)
+                errors.append("%s — no new entries until tomorrow (UTC)" % why)
+                notify.send("paused", "Daily loss limit — no new entries today", why + ". Positions keep their "
+                            "stops and exits; new entries resume tomorrow (UTC).", cfg, priority="high")
+            else:
+                kill_reason = why
         elif caps and loss >= min(caps):  # resumed after today's kill: still no new trades until tomorrow
             errors.append("daily loss %s is past the %s limit — no new entries until tomorrow (UTC)" % (
                 fmt.money(-loss), fmt.money(min(caps))))
@@ -2369,6 +2445,12 @@ def _cycle(approved=None) -> dict:
     playbook = {"required": pbs["required"], "problem": pbs.get("problem"), "generated_at": pb.get("generated_at"),
                 "valid_until": pb.get("valid_until"), "entries": len(pb.get("entries") or {}),
                 "coins": sorted(pbs.get("by_coin") or {})}
+    binding = usd_limits_binding(cfg, limits, acct.get("equity")) if acct else []
+    uni_notes = list(uni_notes) + binding
+    told = "|".join(b.split(" is below")[0] for b in binding)
+    if told and told != prev.get("usd_limits_told"):
+        notify.send("learned", "A dollar limit now holds the bot back", "; ".join(binding), cfg)
+    common["usd_limits_told"] = told
     st = _state(status=status, message=msg, today=today, equity=line, last_errors=last_errors,
                 universe={"stock": n_st, "crypto": n_cr}, notes=(uni_notes + (notes if status == "running" else []))[-20:],
                 playbook=playbook, **common)
@@ -3062,6 +3144,10 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
     """
     if not 0 < risk <= MAX_PROFILE_RISK:
         raise ValueError("--risk must be above 0 and at most %g%% per trade" % MAX_PROFILE_RISK)
+    if not (isinstance(capital, (int, float)) and math.isfinite(capital) and capital > 0):
+        raise ValueError("--capital must be an amount above 0 (e.g. 1000)")
+    if not (math.isfinite(float(cash_yield)) and 0 <= float(cash_yield) <= 20):
+        raise ValueError("--cash-yield must be between 0 and 20 (% a year)")
     for name, x in (("--leverage", lev), ("--stock-leverage", stock_lev)):
         if not 1.0 <= x <= config.LEVERAGE_HARD_CAP:
             raise ValueError("%s must be between 1 and %g" % (name, config.LEVERAGE_HARD_CAP))
@@ -3073,7 +3159,7 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
                          "etf_trend": {"enabled": bool(etf), "when": "crypto_bear"},
                          "playbook": {"top": 10, "setups": TREND_SETUPS, "timeframes": ["1d"], "max_risk_pct": risk},
                          "universe": {"crypto": {"top_n": 10}},
-                         "setups": {"stock": []},
+                         "setups": {"stock": []}, "daily_loss_action": "stop_entries",
                          "adapt": {"loss_streak": 7, "symbol_loss_streak": 5, "min_trades": 20,
                                    "max_drawdown_pct": 35}}}
     day = 5 * risk  # five full losses in one day, then no new entries until tomorrow
@@ -3317,9 +3403,7 @@ def main(argv=None) -> int:
         cli.emit(args, health.text(res["health"]) + "\n\n" + shadow.text(res["shadow"]), res)
         return 0
     if args.action == "profile":
-        capital = float(args.capital or cfg.get("account_size") or 0)
-        if capital <= 0:
-            raise ValueError("--capital must be positive")
+        capital = float(args.capital if args.capital is not None else (cfg.get("account_size") or 0))
         changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital, not args.no_runner,
                                 not args.no_etf, args.cash_yield)
         if args.write:

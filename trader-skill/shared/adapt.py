@@ -141,6 +141,11 @@ def _equity(prev: dict, now_ts: float) -> dict:
             if basis_ts is not None and ts < basis_ts:
                 continue
             value = float(row["equity"])
+            acct = row.get("account")
+            if acct and eq.get("account") and acct != eq["account"]:
+                eq["peak"] = None  # paper → live, a fresh simulator: another account's peak is no drawdown here
+            if acct:
+                eq["account"] = acct
             eq["peak"] = value if eq.get("peak") is None else max(float(eq["peak"]), value)
             eq["last"], eq["last_at"] = value, at
     eq["offset"] = offset
