@@ -314,3 +314,32 @@ class TheLabScoresWhatTheBotCanTake(TraderTestCase):
         v = lab.runner_verdict("trend_breakout", {"expectancy_r": 0.0, "profit_chance": 0.5}, [], [], pairs)
         self.assertFalse(v["helps"])
         self.assertIn("after 2022", v["judged_on"])
+
+
+from tests import test_lab as _tl  # noqa: E402
+
+
+class ADailyOnlyCoinNeedsNoFiveMinuteBars(_tl.DailyAutopilot):
+    def test_is_scanned_on_its_daily_bars_alone(self):
+        asked, scanning = [], []
+        inner, real_find = data.get_candles, ap().find_triggers
+
+        def spy(symbol, interval="5m", **kw):
+            if scanning:
+                asked.append((data.as_symbol(symbol, kw.get("asset")).key, interval))
+            return inner(symbol, interval, **kw)
+
+        def find(*a, **kw):
+            scanning.append(1)
+            try:
+                return real_find(*a, **kw)
+            finally:
+                scanning.pop()
+        with mock.patch.object(data, "get_candles", side_effect=spy), mock.patch.object(ap(), "find_triggers", find):
+            res = ap().run_cycle(self.NOW, approved=True)
+        self.assertNotEqual(res["status"], "error", res)
+        self.assertIn(("ETHUSDT", "1d"), asked)
+        self.assertNotIn(("ETHUSDT", "5m"), asked)  # its playbook rules are daily: no 5-minute scan every cycle
+
+
+_only_own(ADailyOnlyCoinNeedsNoFiveMinuteBars, _tl.DailyAutopilot)

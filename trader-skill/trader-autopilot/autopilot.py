@@ -1441,6 +1441,16 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None, pbs: dict
             done.append(raw)
             try:
                 sym = data.as_symbol(raw, asset)
+            except (symbols.SymbolError, ValueError) as exc:
+                notes.append("%s: %s" % (raw, exc))
+                continue
+            entries = pbs["by_coin"].get(sym.key) if asset == "crypto" and pbs["required"] else None
+            for e in [e for e in entries or [] if e["interval"] != INTERVAL]:
+                # only the newest closed bar, as in the backtest: a day-old signal would buy at yesterday's close
+                found += _series_candidates(sym, e, memo, handled, holding, now_ts, 0, notes)
+            if entries is not None and not any(e["interval"] == INTERVAL for e in entries):
+                continue  # daily / swing rules only: no 5-minute bars to download every cycle
+            try:
                 key = (sym.key, asset)
                 if key not in memo:
                     memo[key] = data.get_candles(sym, INTERVAL, days=3 if asset == "stock" else 2)
@@ -1450,10 +1460,6 @@ def find_triggers(cfg: dict, book: dict, memo: dict, uni: dict = None, pbs: dict
                 continue
             if not series.candles:
                 continue
-            entries = pbs["by_coin"].get(sym.key) if asset == "crypto" and pbs["required"] else None
-            for e in [e for e in entries or [] if e["interval"] != INTERVAL]:
-                # only the newest closed bar, as in the backtest: a day-old signal would buy at yesterday's close
-                found += _series_candidates(sym, e, memo, handled, holding, now_ts, 0, notes)
             # crypto: the window of the newest CLOSED bar — just after 00:00 UTC that is yesterday's, and its last
             # bar (23:55) is judged like any other; stocks: only while the session runs
             probe = bar if asset == "crypto" else now_ts - 1
