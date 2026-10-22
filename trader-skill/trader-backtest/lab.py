@@ -597,11 +597,13 @@ def runner_verdict(setup: str, without: dict, ride_rs: list, folds: list, pairs:
             "folds": [{"without_r": round(a, 3), "with_r": round(b, 3)} for a, b in folds]}
 
 
-def together(rule_setups: list, coins: list, interval: str, cost: float, context: dict = None) -> dict:
+def together(rule_setups: list, coins: list, interval: str, cost: float, context: dict = None,
+             riding: set = ()) -> dict:
     """The rule-exit setups the bot runs side by side, traded the way it trades them: one position per coin — a
-    coin held by one setup (until its ride ends) is skipped by the others; on the same day the earlier setup in
-    the list goes first. → {setup: {coin key: entry times the bot would have taken}}. Scored one by one, two
-    trend setups firing on the same coins would count trades the bot never makes."""
+    coin held by one setup (until its ride ends, for the setups in ``riding``) is skipped by the others; on the
+    same day the earlier setup in the list goes first. → {setup: {coin key: entry times the bot would have
+    taken}}. Scored one by one, two trend setups firing on the same coins would count trades the bot never
+    makes."""
     taken = {st: {} for st in rule_setups}
     for sym, candles, _ in coins:
         rows = []
@@ -609,7 +611,7 @@ def together(rule_setups: list, coins: list, interval: str, cost: float, context
             ends = {}
             for ts, res in rule_trades(candles, st, interval, cost, context, ends):
                 end, ride_end = ends.get(ts, (ts, ts))
-                rows.append((ts, rank, st, ride_end if RUNNER_KEY in res else end))
+                rows.append((ts, rank, st, ride_end if st in riding and RUNNER_KEY in res else end))
         busy_until = 0
         for ts, _, st, until in sorted(rows):
             if ts <= busy_until:
@@ -935,15 +937,23 @@ def run(args, ctx) -> dict:
                 except (data.DataUnavailable, ValueError) as exc:
                     notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
             context = dict(context or {}, btc_up=setups.regime_map(btc) if btc else {})
-        rule_fam = [st for st in fam_setups if setups.exit_rule(st)]
-        shared = together(rule_fam, coins, interval, cost, context) if len(rule_fam) > 1 else {}
+        tradable = {s.key for s in syms} if pit else None
+        alone = {st: study_family(st, interval, coins, now_ts, args, exit_mod, cost, context, members, tradable)
+                 for st in fam_setups}
+        # the setups that will trade, scored again side by side: one that failed blocks nothing, and a coin stays
+        # held until the ride ends only where the ride is switched on and the lab says it pays
+        ride_on = bool(((cfg.get("autopilot") or {}).get("runner") or {}).get("enabled"))
+        live = [st for st in fam_setups if setups.exit_rule(st) and alone[st][0]["validated"]]
+        riding = {st for st in live if ride_on and (alone[st][0].get("runner") or {}).get("helps")}
+        shared = together(live, coins, interval, cost, context, riding) if len(live) > 1 else {}
         for setup in fam_setups:
-            fam, coin_rows, coin_picks = study_family(setup, interval, coins, now_ts, args, exit_mod, cost, context,
-                                                      members, {s.key for s in syms} if pit else None,
-                                                      shared.get(setup))
-            fam["coins_loaded"] = len(coins)
             if setup in shared:
-                fam["shared_with"] = [st for st in rule_fam if st != setup]
+                fam, coin_rows, coin_picks = study_family(setup, interval, coins, now_ts, args, exit_mod, cost,
+                                                          context, members, tradable, shared[setup])
+                fam["shared_with"] = [st for st in live if st != setup]
+            else:
+                fam, coin_rows, coin_picks = alone[setup]
+            fam["coins_loaded"] = len(coins)
             if asset == "stock":
                 fam["when"] = (context or {}).get("when") or "always"  # crypto_bear: only the days the bot trades it
             families.append(fam)

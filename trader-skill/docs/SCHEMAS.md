@@ -1173,3 +1173,19 @@ background thread (and to its last hour when the disk is low).
 * ETFs (`etf_context`: `fill: "next_open"`): bought and sold on a rule exit at the next open; a day the bot
   would not trade (`entry_ok`) is skipped before the one-at-a-time walk, so it never blocks a later signal.
 * Coins and pooled rows are ordered by (time, coin) — the same profit chance on every run.
+
+### Verification of round six (v3.10)
+* `_queued_exit`: an exit sent earlier in the same cycle (the reconcile's sale after a runner's failed part
+  sale) is looked up at the broker when the cycle's order list doesn't hold it — working or filled, the exits
+  and the KILL don't sell again.
+* `daily_loss_action: "stop_entries"` holds for the rest of the UTC day once reached — a bounce doesn't lift
+  it. A value other than `"kill"` / `"stop_entries"` is a config error (`config._CHOICES`).
+* On an account switch the day starts again without your old holdings' move (`yours` = 0 that cycle) and
+  without trades closed before the switch (`day.json` → `account_since`); adapt keeps each account's peak
+  (`peaks`), so going back to an account restores its own drawdown.
+* The dollar-limit notice names limits.json first and is sent once per set of binding limits.
+* Lab: setups are scored alone first; only those that validate are scored again side by side, and a coin is
+  held until the ride ends only where `autopilot.runner.enabled` and the lab says the ride pays.
+* A coin traded only on daily (or 1h/4h) rules is not scanned on 5-minute bars every cycle.
+* Sub-step dust: when what is left after the bot's sale is under one broker increment, the whole position is
+  closed — that may include a sub-increment amount of your own coins (it can't be sold on its own anyway).

@@ -57,7 +57,7 @@ class DollarLimitsWrittenForASmallerAccount(TraderTestCase):
         self.assertEqual(ap().usd_limits_binding(cfg, limits, 1000.0), [])
         bound = ap().usd_limits_binding(cfg, limits, 10000.0)
         self.assertEqual(len(bound), 2)
-        self.assertTrue(all("profile --capital 10000" in b for b in bound))
+        self.assertTrue(all("--capital 10000" in b and "limits.json" in b for b in bound))
 
     def test_the_profile_refuses_a_capital_of_zero(self):
         for bad in (0.0, -5.0, float("inf"), float("nan")):
@@ -263,7 +263,7 @@ class TheLabScoresWhatTheBotCanTake(TraderTestCase):
         ctx = {"btc_up": setups.regime_map(coin)}
         sym = data.as_symbol("BTCUSDT", "crypto")
         both = ["trend_ema", "trend_breakout"]
-        taken = lab.together(both, [(sym, coin, None)], "1d", 0.0026, ctx)
+        taken = lab.together(both, [(sym, coin, None)], "1d", 0.0026, ctx, riding={"trend_breakout"})
         held = []
         for st in both:
             ends = {}
@@ -273,7 +273,7 @@ class TheLabScoresWhatTheBotCanTake(TraderTestCase):
             for ts, res in alone:
                 if ts in mine:
                     end, ride_end = ends[ts]
-                    held.append((ts, ride_end if lab.RUNNER_KEY in res else end))
+                    held.append((ts, ride_end if st == "trend_breakout" and lab.RUNNER_KEY in res else end))
         alone_n = sum(len(lab.rule_trades(coin, st, "1d", 0.0026, ctx)) for st in both)
         self.assertLess(len(held), alone_n)  # the bot can't take them all
         held.sort()
@@ -343,3 +343,89 @@ class ADailyOnlyCoinNeedsNoFiveMinuteBars(_tl.DailyAutopilot):
 
 
 _only_own(ADailyOnlyCoinNeedsNoFiveMinuteBars, _tl.DailyAutopilot)
+
+
+class SoldOnceInACycle(_ta.OnlyWhatTheBotOwns):
+    """A sale sent earlier this cycle (the reconcile's, after a runner's failed part sale) is not in the order list
+    read at the start of the cycle: the exits and the KILL look it up instead of selling again."""
+    def setUp(self):
+        super().setUp()
+        self.it.update(status="open", filled_at="2026-10-20T14:02:00Z", time_stop="2026-10-20T14:30:00Z",
+                       exit_order_id="x-fresh")
+        self.pos = [{"symbol": "NVDA", "asset": "stock", "qty": 25.0, "last": 101.0}]  # 15 of them yours
+
+    def test_the_exits_do_not_sell_it_again(self):
+        ap().manage_exits(self.b, self.book, self.pos, [], self.cfg)  # lookup: x-fresh is working
+        self.assertFalse([c for c in self.b.calls if c[0] in ("exit", "close")], self.b.calls)
+
+    def test_nor_does_the_kill(self):
+        ap().kill(self.b, self.book, self.cfg, "test", [], self.pos)
+        self.assertFalse([c for c in self.b.calls if c[0] in ("exit", "close")], self.b.calls)
+
+    def test_a_filled_one_is_booked_not_sold_again(self):
+        class Filled(Seller):
+            def lookup(self, order_id):
+                return [{"id": order_id, "status": "filled", "filled_qty": 10}]
+        b = Filled()
+        ap().manage_exits(b, self.book, self.pos, [], self.cfg)
+        self.assertFalse([c for c in b.calls if c[0] in ("exit", "close")], b.calls)
+
+
+_only_own(SoldOnceInACycle, _ta.OnlyWhatTheBotOwns)
+
+
+class TheDailyLimitHoldsAllDay(_ta.Day):
+    def test_a_bounce_does_not_lift_it(self):
+        self.cfg(daily_loss_action="stop_entries")
+        state.write_json("autopilot/day.json", {"day": "2026-10-20", "start_equity": 30000.0})
+        self.cycle("2026-10-20T13:50:00Z")
+        doc = state.read_json("autopilot/day.json")
+        doc["start_equity"] = 20000.0  # equity bounced well above the day's start
+        state.write_json("autopilot/day.json", doc)
+        res = self.cycle("2026-10-20T13:55:00Z")
+        self.assertTrue(any("reached today" in e for e in res["errors"]), res["errors"])
+        self.assertFalse([d for d in _ta.decisions() if d["action"] == "taken"])
+
+    def test_a_typo_is_refused_not_read_as_kill(self):
+        self.cfg(daily_loss_action="stop-entries")
+        with self.assertRaises(config.ConfigError):
+            config.load_config()
+
+
+_only_own(TheDailyLimitHoldsAllDay, _ta.Day)
+
+
+class SwitchingAccounts(TraderTestCase):
+    NOW = "2026-10-20T15:00:00Z"
+
+    def test_your_holdings_and_the_old_accounts_trades_are_no_loss(self):
+        config.ensure_home()
+        now = mc.now_utc()
+        ap()._day_loss(now, 25000.0, 0.0, "alpaca/paper/A")
+        state.write_json("journal.json", {"trades": [{"status": "closed", "pnl_usd": -900.0, "broker": "alpaca",
+                                                      "paper": True, "exit": {"time": "2026-10-20T14:00:00Z"}}]})
+        self.assertEqual(ap()._day_loss(now, 1000.0, 5000.0, "alpaca/paper/B")[0], 0.0)  # a fresh paper account
+        self.assertEqual(ap()._day_loss(now, 990.0, 0.0, "alpaca/paper/B")[0], 10.0)
+
+    def test_back_on_an_account_its_own_peak_counts_again(self):
+        config.ensure_home()
+        for at, eq, acct in (("2026-10-20T13:00:00Z", 25000.0, "alpaca/live/L"),
+                             ("2026-10-20T13:30:00Z", 100000.0, "alpaca/paper/P"),
+                             ("2026-10-20T14:00:00Z", 15000.0, "alpaca/live/L")):
+            state.append_jsonl("broker/equity.jsonl", {"at": at, "equity": eq, "account": acct})
+        doc = adapt.evaluate(config.load_config(), "2026-10-20T15:00:00Z")
+        self.assertEqual((doc["equity_peak"], doc["drawdown_pct"]), (25000.0, 40.0))
+
+
+class TheLabsRideOnlyWhereItRides(TraderTestCase):
+    def test_a_coin_is_free_at_the_exit_when_the_ride_is_off(self):
+        from shared import setups
+        lab = load("trader-backtest", "lab")
+        coin = _trend_coin()
+        ctx = {"btc_up": setups.regime_map(coin)}
+        sym = data.as_symbol("BTCUSDT", "crypto")
+        both = ["trend_ema", "trend_breakout"]
+        n = lambda t: sum(len(v.get(sym.key, ())) for v in t.values())  # noqa: E731
+        off = lab.together(both, [(sym, coin, None)], "1d", 0.0026, ctx)
+        on = lab.together(both, [(sym, coin, None)], "1d", 0.0026, ctx, riding={"trend_breakout"})
+        self.assertGreater(n(off), n(on))

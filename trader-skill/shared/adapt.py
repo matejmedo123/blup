@@ -143,7 +143,14 @@ def _equity(prev: dict, now_ts: float) -> dict:
             value = float(row["equity"])
             acct = row.get("account")
             if acct and eq.get("account") and acct != eq["account"]:
-                eq["peak"] = None  # paper → live, a fresh simulator: another account's peak is no drawdown here
+                # paper → live, a fresh simulator: another account's peak is no drawdown here — and back on an
+                # account, its own peak counts again
+                peaks = eq.setdefault("peaks", {})
+                if eq.get("peak") is not None:
+                    peaks[eq["account"]] = eq["peak"]
+                eq["peak"] = peaks.get(acct)
+                if len(peaks) > 20:
+                    del peaks[next(iter(peaks))]
             if acct:
                 eq["account"] = acct
             eq["peak"] = value if eq.get("peak") is None else max(float(eq["peak"]), value)

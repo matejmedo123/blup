@@ -278,6 +278,8 @@ MIN_INTERVAL_SEC = 5
 warnings = []   # settings that were fixed up on load (an explicit null limit → its default); the autopilot shows them
 
 
+# text settings with a fixed set of values: a typo must not quietly mean the default
+_CHOICES = {"daily_loss_action": ("kill", "stop_entries")}
 # keys without a default value that still must be numbers (a typo like "two thirds" would fail mid-trade)
 _NUMBER_KEYS = ("keep", "min_sma", "max_bars", "top_n", "top")
 
@@ -332,6 +334,9 @@ def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = ""
             problems.append("%s must be a list [ … ], not %s" % (here, json.dumps(value)))
         elif kind == "text" and not isinstance(value, str):
             problems.append("%s must be text in quotes, not %s" % (here, json.dumps(value)))
+        elif kind == "text" and key in _CHOICES and value not in _CHOICES[key]:
+            problems.append("%s must be one of %s, not %s" % (here, " / ".join('"%s"' % c for c in _CHOICES[key]),
+                                                               json.dumps(value)))
 
 
 def validate(name: str, doc: dict, defaults: dict) -> dict:

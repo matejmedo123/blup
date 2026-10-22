@@ -217,8 +217,8 @@ def usd_limits_binding(cfg: dict, limits: dict, equity) -> list:
         if usd is None or pct is None or eq <= 0:
             continue
         if eq * float(pct) / 100.0 > float(usd) * 1.05:
-            out.append("%s.%s %s is below %g%% of equity %s (%s) — it now caps the bot; raise it or run "
-                       "`autopilot.py profile --capital %d --write`" % (
+            out.append("%s.%s %s is below %g%% of equity %s (%s) — it now caps the bot; raise it in limits.json "
+                       "(or re-run `autopilot.py profile` with your own options and --capital %d)" % (
                            sec, usd_key, fmt.money(usd), float(pct), fmt.money(eq),
                            fmt.money(eq * float(pct) / 100.0), int(eq)))
     return out
@@ -238,19 +238,22 @@ def _day_loss(now, equity, yours: float = 0.0, account: str = None) -> tuple:
     day = _today(now)
     if equity is not None:
         if account and doc.get("account") and doc["account"] != account:
-            doc = {"day": day, "start_equity": float(equity), "account": account}  # not a loss: another account
+            # not a loss: another account — nor are the old one's holdings or the trades it closed today
+            doc = {"day": day, "start_equity": float(equity), "account": account,
+                   "account_since": market_clock.iso(now)}
+            yours = 0.0
         doc.setdefault("account", account)
         if doc.get("day") != day:
             yesterday = (market_clock.parse_iso(now).date() - timedelta(days=1)).isoformat()
             # after downtime the last equity seen is days old — those days' losses are not today's
             start = doc.get("last_equity", equity) if doc.get("day") == yesterday else equity
-            doc = dict({k: doc[k] for k in ("yours", "yours_day", "account") if k in doc}, day=day,
-                       start_equity=start)
+            doc = dict({k: doc[k] for k in ("yours", "yours_day", "account", "account_since") if k in doc},
+                       day=day, start_equity=start)
         doc["last_equity"] = float(equity)
         state.write_json(DAY, doc)
     start = doc.get("start_equity") if doc.get("day") == day else None
     drop = float(start) - float(equity) + float(yours or 0) if start is not None and equity is not None else 0.0
-    return max(drop, -_realized_today(now, account), 0.0), start
+    return max(drop, -_realized_today(now, account, doc.get("account_since")), 0.0), start
 
 
 def _killed_today(now, mark: bool = False) -> bool:
@@ -262,8 +265,9 @@ def _killed_today(now, mark: bool = False) -> bool:
     return doc.get("killed") == _today(now)
 
 
-def _realized_today(now, account: str = None) -> float:
-    """P&L of the trades closed today — with ``account``, only those of that broker and mode."""
+def _realized_today(now, account: str = None, since: str = None) -> float:
+    """P&L of the trades closed today — with ``account``, only those of that broker and mode; with ``since``
+    (the switch to this account, a fresh simulator), only those closed after it."""
     day = _today(now)
     total = 0.0
     name, mode = (account.split("/")[:2] + [None])[:2] if account else (None, None)
@@ -271,6 +275,8 @@ def _realized_today(now, account: str = None) -> float:
         if t.get("status") == "closed" and ((t.get("exit") or {}).get("time") or "")[:10] == day:
             if name and t.get("broker") and (t["broker"] != name or ("paper" in t and (t["paper"] is False)
                                                                       != (mode == "live"))):
+                continue
+            if since and ((t.get("exit") or {}).get("time") or "") < since:
                 continue
             total += float(t.get("pnl_usd") or 0)
     return total
@@ -398,6 +404,22 @@ def _sell_own(broker, it: dict, held: float = None, limit_price: float = None) -
                               client_order_id="%s-x%d" % (it["order_id"], int(time.time() * 1000)))
         it.pop("exit_limit", None), it.pop("exit_limit_at", None)
     it["exit_order_id"] = o.get("id")
+    return o
+
+
+def _queued_exit(broker, it: dict, orders: list):
+    """This trade's exit order — also one sent earlier in this same cycle (the reconcile's sale of a runner whose
+    part sale failed), which the order list read at the start of the cycle can't hold: looked up at the broker,
+    so the exits and the KILL never sell it a second time out of coins you hold yourself."""
+    oid = it.get("exit_order_id")
+    if not oid:
+        return None
+    o = _find(orders, oid)
+    if o is None:
+        try:
+            o = next((x for x in broker.lookup(oid) if x.get("id") == oid), None)
+        except BrokerError:
+            o = None
     return o
 
 
@@ -1192,9 +1214,11 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
         else:
             it["runner"]["status"] = "skipped"
             it["exit_note"] = it.get("exit_note", "") + " · sold everything: " + why_not
-    queued = _find(orders, it.get("exit_order_id")) if it.get("exit_order_id") else None
+    queued = _queued_exit(broker, it, orders)
     if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(queued, it, last, now):
         return actions  # its sale is on its way (sent earlier, or a stock's waiting for the open)
+    if queued and queued.get("status") in ("filled", "partially_filled"):
+        return actions  # sold (or selling) already: the next sync books it
     wait = _cancel_own_sells(broker, it, orders, live)
     if wait:
         actions.append("%s exit for %s waits: %s" % (reason, it["symbol"], wait))
@@ -1262,11 +1286,13 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
     elif it["status"] == "open" and flatten:
         it["exit_reason"], it["exit_note"] = "manual", "kill switch: %s" % reason
         p = pos_by.get(it["symbol"])
-        queued = _find(orders, it.get("exit_order_id")) if it.get("exit_order_id") else None
+        queued = _queued_exit(broker, it, orders)
         if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(
                 queued, it, (p or {}).get("last"), market_clock.now_utc()):
             problems.append("%s: its sale is queued at the broker" % it["symbol"])  # a stock after hours: the open
             return problems
+        if queued and queued.get("status") in ("filled", "partially_filled"):
+            return problems  # sold already — the next sync books it
         live = _live_stop(it, orders)
         ride = it.get("runner") or {}
         part = _find(orders, ride.get("sell_order_id")) if ride.get("status") == "selling" else None
@@ -2321,6 +2347,8 @@ def _cycle(approved=None) -> dict:
                             "stops and exits; new entries resume tomorrow (UTC).", cfg, priority="high")
             else:
                 kill_reason = why
+        elif killed_today and ap.get("daily_loss_action") == "stop_entries":  # a bounce doesn't lift it
+            errors.append("the daily loss limit was reached today — no new entries until tomorrow (UTC)")
         elif caps and loss >= min(caps):  # resumed after today's kill: still no new trades until tomorrow
             errors.append("daily loss %s is past the %s limit — no new entries until tomorrow (UTC)" % (
                 fmt.money(-loss), fmt.money(min(caps))))
@@ -2454,9 +2482,9 @@ def _cycle(approved=None) -> dict:
     binding = usd_limits_binding(cfg, limits, acct.get("equity")) if acct else []
     uni_notes = list(uni_notes) + binding
     told = "|".join(b.split(" is below")[0] for b in binding)
-    if told and told != prev.get("usd_limits_told"):
+    if told and told != prev.get("usd_limits_told"):  # once per set of limits — equity hovering at the line
         notify.send("learned", "A dollar limit now holds the bot back", "; ".join(binding), cfg)
-    common["usd_limits_told"] = told
+    common["usd_limits_told"] = told or prev.get("usd_limits_told") or ""  # doesn't send it again and again
     st = _state(status=status, message=msg, today=today, equity=line, last_errors=last_errors,
                 universe={"stock": n_st, "crypto": n_cr}, notes=(uni_notes + (notes if status == "running" else []))[-20:],
                 playbook=playbook, **common)
