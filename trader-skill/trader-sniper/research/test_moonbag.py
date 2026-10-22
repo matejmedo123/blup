@@ -136,5 +136,15 @@ class Wallet(unittest.TestCase):
         self.assertLess(out["flows"][-1][0] - out["entry_t"], 24 * 3600 + 900)
 
 
+class SolPriceIsKnownWhenUsed(unittest.TestCase):
+    def test_a_bar_s_open_never_its_later_close(self):
+        day, hour = 86400, 3600
+        rows = [[T0, 100.0, 140.0, 90.0, 130.0], [T0 + day, 130.0, 131.0, 120.0, 125.0],
+                [T0 + day, 129.0, 129.5, 128.0, 129.2]]            # an hourly bar at the same start
+        sol = R.SolPrice(rows)
+        self.assertEqual(sol.at(T0 + 12 * hour), 100.0)            # mid-day: the open, not the 130 close
+        self.assertEqual(sol.at(T0 + day + 60), 129.0)             # the hourly bar wins over the daily one
+
+
 if __name__ == "__main__":
     unittest.main()

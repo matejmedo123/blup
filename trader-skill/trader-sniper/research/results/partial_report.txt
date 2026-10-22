@@ -1,0 +1,14 @@
+216 variants · positive on TRAIN: 0 · positive on TEST: 0
+best 12 on TRAIN (mean € per €10 trade) and the same on TEST:
+  wait 30 any   +20% sell 75% stop -20% rest trail | TRAIN n=250 won 16% -2.21€ | TEST n=118 -2.52€
+  wait 30 any   +20% sell 75% stop -20% rest be    | TRAIN n=250 won 16% -2.21€ | TEST n=118 -2.84€
+  wait 60 held  +20% sell 75% stop -30% rest trail | TRAIN n=196 won 12% -2.23€ | TEST n= 63 -1.91€
+  wait 30 any   +20% sell 75% stop -30% rest trail | TRAIN n=250 won 16% -2.24€ | TEST n=118 -2.54€
+  wait 60 held  +20% sell 75% stop -20% rest trail | TRAIN n=196 won 11% -2.24€ | TEST n= 63 -1.84€
+  wait 60 held  +20% sell 75% stop -30% rest be    | TRAIN n=196 won 13% -2.25€ | TEST n= 63 -1.42€
+  wait 30 held  +20% sell 75% stop -20% rest be    | TRAIN n=245 won 16% -2.26€ | TEST n=111 -2.75€
+  wait 60 held  +30% sell 75% stop -30% rest trail | TRAIN n=196 won 19% -2.27€ | TEST n= 63 -1.94€
+  wait 60 any   +20% sell 75% stop -30% rest trail | TRAIN n=200 won 12% -2.27€ | TEST n= 71 -1.97€
+  wait 60 held  +20% sell 75% stop -20% rest be    | TRAIN n=196 won 12% -2.27€ | TEST n= 63 -1.36€
+  wait 30 held  +20% sell 75% stop -20% rest trail | TRAIN n=245 won 15% -2.28€ | TEST n=111 -2.47€
+  wait 60 any   +20% sell 75% stop -30% rest be    | TRAIN n=200 won 14% -2.29€ | TEST n= 71 -1.51€

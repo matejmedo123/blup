@@ -58,20 +58,23 @@ TRAIN_SHARE = 0.6
 # ----------------------------------------------------------------------------- SOL price
 
 class SolPrice:
-    def __init__(self):
-        self.t, self.p = [], []
-        for name in ("kraken_solusd_1d.json", "kraken_solusd_1h.json"):
-            path = os.path.join(HIST, name)
-            if not os.path.exists(path):
-                continue
-            d = json.load(open(path))
-            rows = [v for k, v in d["result"].items() if k != "last"][0]
-            for r in rows:
-                self.t.append(int(r[0]))
-                self.p.append(float(r[4]))
-        z = sorted(set(zip(self.t, self.p)))
-        self.t = [a for a, _ in z]
-        self.p = [b for _, b in z]
+    """SOL in USD at a moment, from Kraken's daily and hourly bars — each bar's OPEN, known when it starts. (A
+    bar's close is only known when it ends: taking it would look up to a day ahead.) Hourly bars, where there
+    are any, win over the daily one starting at the same time."""
+
+    def __init__(self, rows=None):
+        by_t = {}
+        if rows is None:
+            rows = []
+            for name in ("kraken_solusd_1d.json", "kraken_solusd_1h.json"):   # daily first, hourly overrides
+                path = os.path.join(HIST, name)
+                if os.path.exists(path):
+                    d = json.load(open(path))
+                    rows += [v for k, v in d["result"].items() if k != "last"][0]
+        for r in rows:
+            by_t[int(r[0])] = float(r[1])
+        self.t = sorted(by_t)
+        self.p = [by_t[t] for t in self.t]
 
     def at(self, ts):
         i = bisect.bisect_right(self.t, ts) - 1
