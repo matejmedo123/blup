@@ -423,6 +423,24 @@ More winners and a bigger edge per trade, in every period. One caution: the volu
 by looking at all of 2018–2026, so the lab's walk-forward here confirms it but cannot fully prove it — the
 portfolio test with a 2024–2026 hold-out decides whether it replaces the plain breakout by default.
 
+**More risk per trade: 5–10 %?** (23 Oct 2026, the user's ask; the same verified harness, €1,000, max 5
+positions, one per coin, 0.28 % a side, idle cash at 0 %). At the bot's 25 % position cap, more risk changes
+almost nothing — the cap binds first; the cap has to go to 50 % for it to matter:
+
+| €1,000, both rules, cap 50 % | 2 % risk | **5 % risk** | 7.5 % | 10 % |
+|---|---|---|---|---|
+| BTC + ETH, since 2020 | €3,510 · +20 %/yr · −18 % | **€9,893 · +40 % · −37 %** | €11,399 · +43 % · −41 % | €11,610 · +43 % · −41 % |
+| … volume breakout + EMA | €4,019 · +23 % · −17 % | **€10,793 · +42 % · −24 %** | €10,932 · +42 % · −31 % | €10,870 · +42 % · −33 % |
+| BTC + ETH, last 3 years | €1,393 · +12 % · −18 % | €1,954 · +25 % · −37 % | €1,970 · +25 % · −41 % | €2,006 · +26 % · −41 % |
+| 15 coins, last 3 years | €1,391 · +12 % · −35 % | €897 · **−4 %** · −52 % | €728 · −10 % · −62 % | €643 · −14 % · −66 % |
+| 15 coins, last 12 months | €1,122 · +12 % · −10 % | €1,022 · +2 % · −13 % | €992 · −1 % · −14 % | €974 · −3 % · −14 % |
+
+On two coins, 5 % risk roughly doubles the yearly return for a deeper drawdown; past 5 % nothing more is
+gained. On a broad basket it is the opposite: with five positions open at 5–10 % each, a run of losers takes
+25–50 % of the account at once and the last three years end *below* the start — that is betting past the
+Kelly fraction, not boldness. Fewer slots (5 % × 2 positions) did not rescue the broad basket either (+4 %/yr,
+−40 %). So: more risk only on a concentrated BTC + ETH book, never across many coins.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
