@@ -430,6 +430,11 @@ days): **0 of 128 variants ahead**. The plain version lost €4.51–6.05 a €1
 €2–10 within days. Only a third of the coins it buys ever double, and what is kept after selling half is
 almost always worth nothing later. Details, caveats and how to re-run both: `trader-sniper/research/README.md`.
 
+Also tested on the same history, all behind after costs: a partial at +20 % with the rest kept (0 of 216
+variants), buying right after graduation and selling at +30 %, coins still trading days later, ~45
+selection features, copying "smart" wallets, being first after the launch as an outsider, and three ChatGPT
+playbooks — scalping −0.66R, intraday −0.63R and swing −0.30R a trade on the period they were not chosen on.
+
 So the sniper stays on paper until its **own paper record pays** — at least 30 paper trades in the last 30
 days, ahead in total — before live trading can start (`sniper.live_needs_paper_proof`, on by default).
 

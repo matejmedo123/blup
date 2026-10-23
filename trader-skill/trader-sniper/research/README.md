@@ -74,7 +74,16 @@ above (`results/partial_report.txt`): **0 of 216 ahead** on either period; the b
 70 % of these coins do reach +20 % first — but selling 75 % at +20 % only brings back €9 of the €10, so the trade
 lives on what is kept, and what is kept is usually rugged between two candles (0.3× or 0.003× at the next open).
 
-## Also tested on 22 Oct (scratch studies, results only)
+## Also tested on 22–23 Oct (scratch studies, results only)
+
+- **Buy right after graduation, sell all at +30 %** — the first PumpSwap bar after the migration, $10k floor,
+  1,215 coins: 42–49 % reach the target, −€1.56 to −€2.36 a €10 trade; 24–47 % of the trades lose over 90 %
+  in one candle, and one of those wipes out two or three winners.
+- **What the big winners had in common** — 3× or 10× OUR entry price within 7 days, normal 50–100 SOL
+  graduations only: bought at graduation, 12–16 % reach 3× and 1–2.5 % reach 10×; bought 30 minutes later,
+  6–7 % and ~1 %. Two connections hold on both periods (3×, 30 minutes in): a slower curve, not a bundled
+  launch (10–12 % against 4–6 %), and steady volume rather than one burst (10–15 % against ~0 %). They
+  double the odds of 3× and still leave ~88 % of the picks short of it — as trading rules they lost (below).
 
 - **Which coins win, known at graduation** — ~45 features (curve speed, volume path, run-up and drawdown so
   far, hour and weekday, how many coins graduated in the last hour, SOL's move, pump.fun metadata: socials,
@@ -103,6 +112,16 @@ lives on what is kept, and what is kept is usually rugged between two candles (0
   +2R partial, trailing stop), 90 eligible Solana memes from CoinGecko's category (27 % dead today):
   −0.32R a trade on the first period, −0.30R on the second; the one positive variant lives on a single
   10× trade and turns negative with +1 % slippage.
+- **ChatGPT's scalping and intraday plans** (1-min breakout-retest / pullback, 15-5-1-min breakout /
+  pullback / flag, half at +1R or +1.5R, the rest on a trail; −3R day stop, 3 losses in a row stop) on two
+  universes: pump.fun graduates in their first 80 h, from 2.5 M ticks (fills ≥ 2 s after the bar, pump.fun
+  fee measured on the fills: median 0.52 % a side), and 10 big Solana meme pools (TRUMP, PENGU, WIF, FARTCOIN,
+  POPCAT, PNUT, MEW, BOME, GOAT, MOODENG) on 1-min bars. As written the rules almost never fire (0 trades on
+  the graduates). 48 combinations of the strict and a looser set, none positive on the first period; the 5
+  frozen ones on the second: −0.66R a trade scalping (n = 83) and −0.63R intraday (n = 28) on the big pools,
+  6–7 % winners, €100 → €89.85 in 25 days. The graduates gave 16 trades in two months — too few to judge;
+  the one positive cell (5 trades) lives on a single +35 % minute and turns negative at +1 % slippage. Why: a
+  median stop of 0.77 % against ~1.1 % of round-trip costs at €10, and entries that drift −0.4 % before costs.
 - **What others found** — no published strategy that pays a retail buyer on new meme coins: 74 % of Solana
   meme-coin buyers lose money while sandwich bots win every week (Bitquery); insiders take ~80 % of realized
   profit (memescope); the snipers that do win are funded by the deployers and buy in the creation block (Pine
