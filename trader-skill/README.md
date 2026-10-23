@@ -295,6 +295,11 @@ today's): **€1,169.76** (+17 %), worst drop 5 % hour by hour. BTC was under it
 2025 to 19 August 2026, so for ten months the bot held cash at 4 % (+€33); then 11 trades in two months, 7
 won, +€131 (ZEC +€95). BTC held over the same year: €777. The backtest row of the lab's validated pairs says
 €1,170 for the same 12 months — the running bot and the backtest agree.
+Replayed again on 23 Oct 2026 with the chosen split (`profile --risk 2 --core-risk 3 --fixed-risk`), same weekly
+labs: **€1,172.50**, worst drop 6.7 % (with the confidence halving left on: €1,168.12, 6.0 %). BTC and ETH
+traded at 3 % (BTC's first trade +1.47R = +€43.63 against +€21.78 halved), the rest at 2 %; the bigger
+positions took the cash the August XRP breakout needed and ZEC was bought later ($800 instead of $564), so
+the year ends about where 2 % everywhere did.
 
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
