@@ -511,6 +511,31 @@ momentum (the better two of BTC, QQQ, gold, long bonds over six months) made +24
 hold-out and does not move with the bot — worth paper trading, not yet deploying. And 5 % risk with a 50 % cap
 on ten coins again swung from +89 %/yr to −14 %/yr depending on which two or three coins got the cash.
 
+**Everything connected — the combined test** (23 Oct 2026; 21 allocations fixed in advance across six
+sleeves with their own capital: the bot, a BTC + ETH book at 5 %, cross-asset dual momentum, funding carry,
+US stock trend, 12-ETF trend; picked on 2020-01 → 2024-06 by return per unit of drawdown, judged once on
+2024-07 → 2026-10). The pick, a quarter each in the bot, the BTC + ETH book, dual momentum and US stocks:
+
+| €1,000 | Selection | Hold-out | Full 2020 → 2026 | Worst month |
+|---|---|---|---|---|
+| **Bot alone** | €6,701 · +53 %/yr · −31 % | **€1,928 · +33 % · −23 %** | **€12,922** · +46 % · −31 % | −22 % |
+| Four sleeves, 25 % each | €5,195 · +44 % · −22 % | €1,627 · +24 % · **−15 %** | €8,197 · +36 % · −26 % | −15 % |
+
+Combining cuts the drawdown by about a third and made a little more per unit of drawdown on the hold-out —
+but **less money in every window**: none of the 21 allocations beat the bot alone in euros. What it buys is
+independence from one trade: without the November 2024 XRP trade the bot's hold-out falls to +8 %/yr, the
+combination's only to +17 %. The bot's own BTC + ETH book is no diversifier (correlation 0.7–0.8); dual
+momentum, US stocks and ETFs are (0.1–0.5). So the bot stays as it is for the most money; the combination is
+the steadier option for someone who wants smaller drops and accepts ~9 points a year less.
+
+**Where all this leaves the bot** (94 variants in five pre-registered studies plus the lab, 23 Oct 2026): the
+deployed daily trend rules at 2 % risk on the top 10 coins point in time had the best return per unit of
+drawdown of everything tested and the most money of everything without hindsight; nothing else held up on
+the 2024–2026 hold-out by more than one trade's worth. Realistic expectation: +20 to +35 % in a year with a
+crypto trend, 0 to +8 % without one, drawdowns of −25 to −35 %. The free improvement is the cash: 4 % a year
+on idle money turned the €12,922 into €15,490 since 2020 — in the simulator that is `cash_yield_pct`; at a
+broker it means holding a T-bill fund (e.g. SGOV) with the idle cash yourself.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
