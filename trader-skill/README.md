@@ -479,6 +479,27 @@ too sparse, the alt-season switch −4 %/yr, the chandelier stop cut the big run
 positions use up the cash and the +30R XRP trade of November 2024 — €500 of the bot's €700 hold-out profit —
 was never taken. One trade carries every hold-out total here; differences of a few hundred euros are noise.
 
+**New strategy classes, first batch** (23 Oct 2026; 24 variants fixed in advance, picked on 2020-01 →
+2024-06 by return per unit of drawdown, judged once on 2024-07 → 2026-10; the bot simulation came out at
+€13,146 / −29.9 % since 2020 against €12,757 / −30 % here):
+
+| €1,000 | Selection 2020-01 → 2024-06 | Hold-out 2024-07 → 2026-10 |
+|---|---|---|
+| **Bot as deployed** | €7,107 · +55 %/yr · −24 % | **€1,850 · +31 %/yr · −23 %** |
+| Momentum rotation, top 5 of 20 by 30-day return | €5,930 · +49 % · −61 % | €539 · **−23 %** · −67 % |
+| BTC + ETH trend, full allocation, 40 % vol target | €7,423 · +56 % · −27 % | €1,158 · +7 % · −23 % |
+| Dual momentum BTC / ETH / SOL | €33,497 · +118 % · −56 % | €897 · −5 % · −46 % |
+| Funding carry BTC + ETH (market neutral) | +11 %/yr · −0.3 % | +4 %/yr (Binance funding +1.6 %, Hyperliquid +5.4 %) |
+| BTC bought and held | €8,700 · +62 % · −77 % | €1,293 · +12 % · −53 % |
+
+The dual-momentum figure depends on SOL being on its list with hindsight; chosen point in time it ends at
+€2.4k at −77 %. Momentum rotation beat random coin picks from the same list but the whole alt list sank. The
+volatility-targeted trend was positive in both windows yet earned less than the bot in each and moves with it
+(correlation 0.75). Funding carry is a different return stream (correlation 0.19) but paid ~10 %/yr only in
+2020–21 and 0–5 % since — in bull markets, when the bot is already invested; on the bot's idle cash it added
++1.4 points a year before mid-2024 and cost −1.4 after. Nothing here earns more per unit of drawdown than
+the deployed rules.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
