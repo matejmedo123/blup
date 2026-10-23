@@ -332,6 +332,12 @@ borrows, the account is set to 2× at most. `profile --venue bybit` makes the si
 The adapter is built to the documented API and tested on simulated replies — Bybit blocks the US cloud it was
 written in, so its first real connection is the testnet on your machine.
 
+The setup as it would run at Bybit (point in time, BTC + ETH 3 %, the rest 2 %, 0.18 % a side, margin at
+20 %/yr, nothing on idle cash, no ETF leg — selection / hold-out / since 2020 / worst drop): Bybit 1× €8,786 /
+€1,667 / €14,784 / −32 %; **Bybit 1.5× €9,684 / €1,901 / €18,582 / −33 %**; for reference Alpaca 1× with the
+ETF leg and 4 % on cash €9,529 / €1,498 / €15,452 / −30 %. Moving to Bybit gives up the T-bill yield and the
+ETF leg; the margin more than wins it back.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
