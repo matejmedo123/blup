@@ -29,7 +29,7 @@ if not os.path.isdir(os.path.join(_ROOT, "shared")):
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from shared import cli, data, fmt, indicators, market_clock, setups, skills, state, symbols, trade_sim  # noqa: E402
+from shared import cli, config, data, fmt, indicators, market_clock, setups, skills, state, symbols, trade_sim  # noqa: E402
 from shared.indicators import Candle  # noqa: E402
 
 DEFAULT_PATHS = 10000
@@ -293,9 +293,16 @@ def position(plan, asset, lv, order, ctx, size_usd_arg) -> dict:
         risk_usd = qty * risk / lv["entry"] if unit == "usd" else qty * risk
         return {"qty": qty, "unit": unit, "risk_usd": risk_usd, "source": "trader/orders.json (%s)" % order.get("id")}
     account = float(ctx.cfg.get("account_size") or 0)
-    risk_pct = float(ctx.cfg.get("risk_per_trade_pct") or 0)
+    sym = None
+    if asset != "meme":
+        try:
+            sym = data.as_symbol(plan.get("symbol_raw") or plan.get("symbol") or "", asset)
+        except symbols.SymbolError:
+            sym = None
+    risk_pct = config.risk_pct_for(ctx.cfg, sym) if sym is not None else float(ctx.cfg.get("risk_per_trade_pct") or 0)
     budget = account * risk_pct / 100.0
-    cap_pct = float((ctx.limits.get(asset) or {}).get("max_position_pct") or 100)
+    lim = config.limits_for(ctx.limits, asset, sym) if sym is not None else (ctx.limits.get(asset) or {})
+    cap_pct = float(lim.get("max_position_pct") or 100)
     cap_usd = account * cap_pct / 100.0
     if asset == "meme":
         usd = size_usd_arg or min(budget * lv["entry"] / risk, cap_usd)

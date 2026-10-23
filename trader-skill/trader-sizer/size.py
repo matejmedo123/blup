@@ -97,7 +97,7 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
                size_usd: float = None, leverage: float = None) -> dict:
     sym = symbol_of(plan)
     asset = plan.get("asset") or sym.asset
-    lim = limits.get(asset) or {}
+    lim = config.limits_for(limits, asset, sym)
     entry = float(plan["entry"]["price"])
     stop = float(plan["stop"]["price"])
     target = float((plan.get("target") or {}).get("price") or 0) or None
@@ -112,7 +112,7 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
     account = float(account if account is not None else (cfg.get("account_size") or 0))
     if account <= 0:
         raise ValueError("account size must be positive (set account_size in trader/config.json)")
-    risk_pct = float(risk_pct if risk_pct is not None else cfg.get("risk_per_trade_pct", 0.5))
+    risk_pct = float(risk_pct if risk_pct is not None else config.risk_pct_for(cfg, sym))
     caps = []
     budget_cfg = account * risk_pct / 100.0
     budget = budget_cfg

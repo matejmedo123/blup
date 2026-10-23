@@ -94,6 +94,7 @@ python3 "${CLAUDE_SKILL_DIR}/autopilot.py" pause | resume
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" kill --confirm KILL   # cancel everything, close everything
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" check-live
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" profile --risk 2 --leverage 1.5 --capital 1000 [--write]
+python3 "${CLAUDE_SKILL_DIR}/autopilot.py" profile --risk 2 --core-risk 3 --capital 1000 --write  # BTC + ETH 3 %
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" check                 # is it normal? did it do what the rules say?
 # offline: replay the fixture day in the simulator (NVDA taken, TSLA/BTC skipped with reasons)
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" replay --from 2026-10-20T13:35:00Z --to 2026-10-20T20:00:00Z --approve --offline

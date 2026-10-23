@@ -707,6 +707,22 @@ max_drawdown_pct: 35}`; limits — crypto `max_open_positions 5`, `max_position_
 `max_daily_loss_pct = 5 × risk` (crypto, stock, global) and dollar backstops at 4× the account. Risk is 0–5 %,
 leverage 1–2. Never touches `broker`, `mode`, `paper`, `live_confirmation`, keys or `autopilot.enabled`.
 
+### Per-coin risk — `profile --core-risk 3 [--core-coins BTC,ETH]`
+```json
+// config.json
+"risk_by_symbol": {"BTC": 3.0, "ETH": 3.0},          // % risk per trade for these bases; others: risk_per_trade_pct
+// limits.json
+"crypto": {"symbols": {"BTC": {"max_risk_per_trade_pct": 3.0, "max_risk_per_trade_usd": 120, "max_position_pct": 50}}}
+```
+Keys are the symbol's base, upper case. A `risk_by_symbol` value is a number above 0 and at most 5
+(`SYMBOL_RISK_HARD_CAP`); a `<stock|crypto>.symbols.<BASE>` entry may set only `max_risk_per_trade_pct` (≤ 5),
+`max_risk_per_trade_usd` and `max_position_pct` — anything else is a config error. `config.risk_pct_for(cfg,
+symbol)` and `config.limits_for(limits, asset, symbol)` resolve them; the sizer, the risk check, the autopilot
+(`_scaled`, `confidence_mult`, `usd_limits_binding`) and the replay use those. Meme tokens never read
+`risk_by_symbol`. The profile writes both mappings whole (`config.update_file(..., replace=...)`), so a re-run
+with other coins or without `--core-risk` removes the old entries; with a split the daily loss limits are
+5 × the larger risk. The decision's gates gain `"risk for BTC"` when a coin has its own risk.
+
 ## v3.3 — let winners ride (sell a third, keep two thirds while the trend lasts)
 
 ### Setup rule (`shared/setups.py`)

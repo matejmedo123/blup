@@ -544,6 +544,21 @@ took half the account, so in November there was no cash for the XRP breakout tha
 because their losing trades were bigger too. With idle cash at 4 % the picture is the same (hold-out €1,045
 against €2,053).
 
+**Chosen for the paper run (23 Oct 2026): BTC + ETH at 3 %, the rest at 2 %** — the most money since 2020
+(€15,470 against €12,922) at the same worst drop (−32 %), less on the hold-out (€1,656 against €1,928). Set it
+with `--core-risk`:
+
+```bash
+python3 trader-autopilot/autopilot.py profile --risk 2 --core-risk 3 --capital 1000 --write
+```
+
+It writes `risk_by_symbol {"BTC": 3, "ETH": 3}` to config.json and `crypto.symbols.{BTC,ETH}` to limits.json
+(3 % per trade, a position up to 50 % of the account, a $ backstop at 4× the account); every other coin keeps
+2 % and 25 %. The sizer, the risk check and the replay all read the coin's own entry; a losing streak or a
+less sure lab scales BTC's 3 % the same way it scales the 2 %, and `playbook.max_risk_pct` (2) never cuts
+BTC below its own 3 %. The daily loss stop becomes 5 × 3 % = 15 %. A DEX token that calls itself BTC never
+gets the core risk. `--core-coins` names other coins; a re-run without `--core-risk` removes the split.
+
 **Where all this leaves the bot** (94 variants in five pre-registered studies plus the lab, 23 Oct 2026): the
 deployed daily trend rules at 2 % risk on the top 10 coins point in time had the best return per unit of
 drawdown of everything tested and the most money of everything without hindsight; nothing else held up on

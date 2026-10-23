@@ -185,7 +185,7 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
     now_iso = market_clock.iso(now)
     sym = symbol_of(order)
     asset = order.get("asset") or sym.asset
-    lim = limits.get(asset) or {}
+    lim = config.limits_for(limits, asset, sym)
     glob = limits.get("global") or {}
     # the account the order was sized against (the broker's equity for the autopilot), else the configured size
     account = float((order.get("sizing") or {}).get("account_size") or cfg.get("account_size") or 0)

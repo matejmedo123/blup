@@ -221,6 +221,16 @@ def usd_limits_binding(cfg: dict, limits: dict, equity) -> list:
                        "(or re-run `autopilot.py profile` with your own options and --capital %d)" % (
                            sec, usd_key, fmt.money(usd), float(pct), fmt.money(eq),
                            fmt.money(eq * float(pct) / 100.0), int(eq)))
+    for sec in ("crypto", "stock"):
+        for name, one in sorted(((limits.get(sec) or {}).get("symbols") or {}).items()):
+            if not isinstance(one, dict) or one.get("max_risk_per_trade_usd") is None or eq <= 0:
+                continue
+            pct = one.get("max_risk_per_trade_pct")
+            pct = float(pct) if pct is not None else config.risk_pct_for(cfg, name)
+            if eq * pct / 100.0 > float(one["max_risk_per_trade_usd"]) * 1.05:
+                out.append("%s.symbols.%s.max_risk_per_trade_usd %s is below %g%% of equity %s — it now caps %s; "
+                           "raise it in limits.json (or re-run `autopilot.py profile` with --capital %d)" % (
+                               sec, name, fmt.money(one["max_risk_per_trade_usd"]), pct, fmt.money(eq), name, int(eq)))
     return out
 
 
@@ -1818,19 +1828,25 @@ def _scaled(cfg: dict, limits: dict, asset: str, mult: float) -> tuple:
         return cfg, limits
     cfg2, lim2 = copy.deepcopy(cfg), copy.deepcopy(limits)
     cfg2["risk_per_trade_pct"] = float(cfg.get("risk_per_trade_pct", 0.5)) * mult
+    # a coin's own risk (risk_by_symbol) scales the same way — a losing streak halves BTC's 3 % too
+    cfg2["risk_by_symbol"] = {k: float(v) * mult for k, v in (cfg.get("risk_by_symbol") or {}).items()}
     lim = lim2.get(asset) or {}
-    if mult < 1 and lim.get("max_risk_per_trade_usd") is not None:
-        lim["max_risk_per_trade_usd"] = float(lim["max_risk_per_trade_usd"]) * mult
+    if mult < 1:
+        for one in [lim] + [e for e in (lim.get("symbols") or {}).values() if isinstance(e, dict)]:
+            if one.get("max_risk_per_trade_usd") is not None:
+                one["max_risk_per_trade_usd"] = float(one["max_risk_per_trade_usd"]) * mult
     return cfg2, lim2
 
 
 DEFAULT_RISK_TIERS = ((0.9, 2.0), (0.8, 1.5), (0.7, 1.0), (0.0, 0.5))
 
 
-def confidence_mult(entry: dict, cfg: dict) -> tuple:
+def confidence_mult(entry: dict, cfg: dict, symbol=None) -> tuple:
     """(multiplier, reason): size by how sure the backtest lab is — its profit chance on trades it never saw.
 
     Bigger only with enough unseen trades behind it, never above max_risk_mult, never past limits.json.
+    ``symbol``: the coin, for its own risk per trade (risk_by_symbol) — playbook.max_risk_pct stops a boost past
+    it, never cuts the coin below the risk you set for it.
     """
     pb_cfg = (cfg.get("autopilot") or {}).get("playbook") or {}
     if not entry or not pb_cfg.get("confidence_sizing", True):
@@ -1848,10 +1864,12 @@ def confidence_mult(entry: dict, cfg: dict) -> tuple:
     if mult > 1 and n < min_n:
         mult, why = 1.0, why + " — too few to size up (want ≥ %d)" % min_n
     mult = min(mult, float(pb_cfg.get("max_risk_mult") or 2.0))
-    base = float(cfg.get("risk_per_trade_pct", 0.5))
+    base = config.risk_pct_for(cfg, symbol) if symbol is not None else float(cfg.get("risk_per_trade_pct", 0.5))
     top = pb_cfg.get("max_risk_pct")
-    if top is not None and base > 0 and base * mult > float(top) + 1e-9:
-        mult, why = float(top) / base, why + " — capped at %g%% per trade (playbook.max_risk_pct)" % float(top)
+    if top is not None:
+        top = max(float(top), base)
+    if top is not None and base > 0 and base * mult > top + 1e-9:
+        mult, why = top / base, why + " — capped at %g%% per trade (playbook.max_risk_pct)" % top
     return mult, why
 
 
@@ -1983,7 +2001,12 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     if mult < 1:
         gates.append({"name": "learned · risk multiplier", "ok": True,
                       "detail": "risk × %g — %s" % (mult, (learned or {}).get("risk_reason") or "losing streak")})
-    conf, conf_why = confidence_mult(c.get("playbook"), cfg)
+    conf, conf_why = confidence_mult(c.get("playbook"), cfg, sym)
+    own = (cfg.get("risk_by_symbol") or {}).get(str(sym.base).upper())
+    if own is not None:
+        gates.append({"name": "risk for %s" % sym.base, "ok": True,
+                      "detail": "%g%% per trade (config risk_by_symbol; the other coins %g%%)" % (
+                          config.risk_pct_for(cfg, sym), float(cfg.get("risk_per_trade_pct", 0.5)))})
     if conf_why:
         gates.append({"name": "confidence sizing", "ok": True,
                       "detail": "risk × %g — %s%s" % (conf, conf_why, " (limits.json still caps it)" if conf > 1
@@ -3190,6 +3213,11 @@ def build_parser():
                         "listed, validated by the lab, half the risk) — never DEX tokens")
     p.add_argument("--no-runner", action="store_true",
                    help="profile: sell the whole trend breakout at its exit (default: let two thirds of a winner ride)")
+    p.add_argument("--core-risk", type=float,
+                   help="profile: %% risk per trade for the core coins (default: the same as --risk); 3 = the "
+                        "backtested split, BTC and ETH at 3 %% with a position up to 50 %% of the account")
+    p.add_argument("--core-coins", default="BTC,ETH",
+                   help="profile: the core coins --core-risk applies to (default BTC,ETH)")
     return p
 
 
@@ -3197,10 +3225,13 @@ def build_parser():
 
 TREND_SETUPS = ["trend_ema", "trend_breakout"]
 MAX_PROFILE_RISK = 5.0
+# the profile owns the per-coin risk: a re-run replaces these mappings whole, so an old split cannot linger
+PROFILE_REPLACES = {"config.json": ("risk_by_symbol",), "limits.json": ("crypto.symbols",)}
 
 
 def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, runner: bool = True,
-                  etf: bool = True, cash_yield: float = 4.0, memes: bool = False) -> tuple:
+                  etf: bool = True, cash_yield: float = 4.0, memes: bool = False, core_risk: float = None,
+                  core_coins=("BTC", "ETH")) -> tuple:
     """(config changes, limits changes) for daily trend following on the biggest coins.
 
     Every number is what the portfolio backtest used, and only what it tested trades: the intraday stock setups
@@ -3208,9 +3239,21 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
     wins 30–40 % of trades: three losses in a row happen in a quarter of all stretches there, so they are no
     warning; seven (≈ 5 %) are. The drawdown pause sits above the worst drop of the backtest (−30 %), so it
     fires only when reality is worse than eight years of history.
+
+    ``core_risk``: its own risk per trade for ``core_coins`` (the backtested split: BTC and ETH at 3 %, the rest
+    at 2 %). Above ``risk`` their position may reach half the account — at 25 % a 3 % trade with a 3×ATR stop
+    would be cut back to the 2 % size and the split would do nothing.
     """
     if not 0 < risk <= MAX_PROFILE_RISK:
         raise ValueError("--risk must be above 0 and at most %g%% per trade" % MAX_PROFILE_RISK)
+    core_risk = risk if core_risk is None else core_risk
+    if not (isinstance(core_risk, (int, float)) and math.isfinite(core_risk) and 0 < core_risk <= MAX_PROFILE_RISK):
+        raise ValueError("--core-risk must be above 0 and at most %g%% per trade" % MAX_PROFILE_RISK)
+    coins = sorted({str(c).strip().upper() for c in core_coins if str(c).strip()})
+    if core_risk != risk and not coins:
+        raise ValueError("--core-coins is empty — name the coins --core-risk is for (e.g. BTC,ETH)")
+    if not all(c.isalnum() for c in coins):
+        raise ValueError("--core-coins takes coin names like BTC,ETH")
     if not (isinstance(capital, (int, float)) and math.isfinite(capital) and capital > 0):
         raise ValueError("--capital must be an amount above 0 (e.g. 1000)")
     if not (math.isfinite(float(cash_yield)) and 0 <= float(cash_yield) <= 20):
@@ -3230,7 +3273,7 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
                          "memes": {"enabled": bool(memes)},
                          "adapt": {"loss_streak": 7, "symbol_loss_streak": 5, "min_trades": 20,
                                    "max_drawdown_pct": 35}}}
-    day = 5 * risk  # five full losses in one day, then no new entries until tomorrow
+    day = 5 * max(risk, core_risk)  # five full losses in one day, then no new entries until tomorrow
     lim = {"global": {"max_daily_loss_pct": day, "max_daily_loss_usd": backstop(day)},
            "crypto": {"max_open_positions": 5, "max_position_pct": 25, "max_total_exposure_pct": 100,
                       "allow_leverage": lev > 1, "max_leverage": lev, "max_risk_per_trade_pct": risk,
@@ -3239,14 +3282,19 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
            "stock": {"allow_margin": stock_lev > 1, "max_leverage": stock_lev, "max_risk_per_trade_pct": risk,
                      "max_risk_per_trade_usd": backstop(risk), "max_daily_loss_pct": day,
                      "max_daily_loss_usd": backstop(day)}}
+    # always written, so a re-run with one risk for all clears an old split instead of leaving it behind
+    split = core_risk != risk
+    cfg["risk_by_symbol"] = {c: core_risk for c in coins} if split else {}
+    lim["crypto"]["symbols"] = {c: {"max_risk_per_trade_pct": core_risk, "max_risk_per_trade_usd": backstop(core_risk),
+                                    "max_position_pct": 50 if core_risk > risk else 25} for c in coins} if split else {}
     return cfg, lim
 
 
-def _flat(d: dict, prefix: str = "") -> dict:
+def _flat(d: dict, prefix: str = "", leaves: tuple = ()) -> dict:
     out = {}
     for k, v in d.items():
-        if isinstance(v, dict):
-            out.update(_flat(v, prefix + k + "."))
+        if isinstance(v, dict) and prefix + k not in leaves:
+            out.update(_flat(v, prefix + k + ".", leaves))
         else:
             out[prefix + k] = v
     return out
@@ -3262,9 +3310,18 @@ def _get(d: dict, dotted: str):
 
 def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
     c_cfg, c_lim = changes
-    lines = ["PROFILE · daily trend following on the 10 biggest coins · %g%% risk · crypto %g× · stocks %g×%s" % (
-        c_cfg["risk_per_trade_pct"], c_cfg["leverage"]["crypto"], c_cfg["leverage"]["stock"],
+    core = c_cfg.get("risk_by_symbol") or {}
+    lines = ["PROFILE · daily trend following on the 10 biggest coins · %g%% risk%s · crypto %g× · stocks %g×%s" % (
+        c_cfg["risk_per_trade_pct"],
+        " (%s %g%%)" % (" + ".join(sorted(core)), list(core.values())[0]) if core else "",
+        c_cfg["leverage"]["crypto"], c_cfg["leverage"]["stock"],
         " · winners ride" if c_cfg["autopilot"]["runner"]["enabled"] else "")]
+    if core:
+        r = list(core.values())[0]
+        pos = ((c_lim.get("crypto") or {}).get("symbols") or {}).get(sorted(core)[0], {}).get("max_position_pct")
+        lines.append("Core coins: %s risk %g%% per trade (a position up to %g%% of the account), every other coin "
+                     "%g%%. The split the backtest ran: more money where the trends are the most reliable." % (
+                         " and ".join(sorted(core)), r, pos or 25, c_cfg["risk_per_trade_pct"]))
     if c_cfg["autopilot"]["etf_trend"]["enabled"]:
         lines.append("Bear markets: while Bitcoin is below its 200-day average (no crypto trend to follow), the bot "
                      "trades the same trend rule on ETFs that move unlike crypto — gold, the dollar, commodities, "
@@ -3280,7 +3337,7 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
                      "50-day EMA, with the stop moved to the buy price — only while this week's lab run says it pays.")
     for name, cur, ch in (("config.json", cfg, c_cfg), ("limits.json", limits, c_lim)):
         lines.append(name + ":")
-        for key, new in _flat(ch).items():
+        for key, new in _flat(ch, leaves=PROFILE_REPLACES[name]).items():
             old = _get(cur, key)
             lines.append("  %-44s %s%s" % (key, json.dumps(new), "" if old == new else "   (was %s)" % json.dumps(old)))
     if (cfg.get("autopilot") or {}).get("broker") == "alpaca" and c_cfg["leverage"]["crypto"] > 1:
@@ -3477,10 +3534,11 @@ def main(argv=None) -> int:
     if args.action == "profile":
         capital = float(args.capital if args.capital is not None else (cfg.get("account_size") or 0))
         changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital, not args.no_runner,
-                                not args.no_etf, args.cash_yield, args.memes)
+                                not args.no_etf, args.cash_yield, args.memes, args.core_risk,
+                                args.core_coins.split(","))
         if args.write:
-            config.update_file("config.json", changes[0])
-            config.update_file("limits.json", changes[1])
+            config.update_file("config.json", changes[0], replace=PROFILE_REPLACES["config.json"])
+            config.update_file("limits.json", changes[1], replace=PROFILE_REPLACES["limits.json"])
         cli.emit(args, profile_text(cfg, ctx.limits, changes, args.write),
                  {"config": changes[0], "limits": changes[1], "written": bool(args.write)})
         return 0

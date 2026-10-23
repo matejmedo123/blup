@@ -19,6 +19,9 @@ DEFAULT_CONFIG = {
     "account_size": 25000,
     "account_currency": "USD",
     "risk_per_trade_pct": 0.5,
+    # a different risk per trade for some coins or stocks, e.g. {"BTC": 3, "ETH": 3} — the rest keep
+    # risk_per_trade_pct; limits.json <asset>.symbols must allow it too (see risk_pct_for / limits_for)
+    "risk_by_symbol": {},
     # positions may use borrowed money only up to this multiple of equity, and only when limits.json allows it
     # (allow_margin / allow_leverage + max_leverage); see leverage() below
     "leverage": {"stock": 1.0, "crypto": 1.0},
@@ -179,6 +182,7 @@ DEFAULT_LIMITS = {
         "allow_margin": False,
         "max_leverage": 1.0,
         "allow_options": False,
+        "symbols": {},
     },
     "crypto": {
         "max_risk_per_trade_usd": 200,
@@ -190,6 +194,9 @@ DEFAULT_LIMITS = {
         "allow_shorts": False,
         "allow_leverage": False,
         "max_leverage": 1.0,
+        # per-coin limits that replace the ones above for that coin only, e.g.
+        # {"BTC": {"max_risk_per_trade_pct": 3, "max_risk_per_trade_usd": 120, "max_position_pct": 50}}
+        "symbols": {},
     },
     "meme": {
         "max_risk_per_trade_usd": 50,
@@ -210,6 +217,9 @@ DEFAULT_LIMITS = {
 # No file can lift this: past 2× a normal day's move against a full book eats the account.
 LEVERAGE_HARD_CAP = 2.0
 LEVERAGE_ASSETS = ("stock", "crypto")
+# risk_by_symbol and the per-symbol limits may change only these, and never past this risk per trade
+SYMBOL_LIMIT_KEYS = ("max_risk_per_trade_pct", "max_risk_per_trade_usd", "max_position_pct")
+SYMBOL_RISK_HARD_CAP = 5.0
 
 SUBDIRS = ("cache", "reports", "rugcheck", "timemachine", "backtests", "autopilot", "broker")
 
@@ -320,10 +330,44 @@ def _kind(key: str, default):
     return None
 
 
+def _check_symbols(here: str, value, defaults: dict, where: str, problems: list) -> None:
+    """risk_by_symbol {"BTC": 3} and limits <asset>.symbols {"BTC": {...}}: every entry a number or an object of
+    the known per-symbol keys — a typo here must not quietly mean "no special limit"."""
+    if not isinstance(value, dict):
+        problems.append("%s must be an object { … }, not %s" % (here, json.dumps(value)))
+        return
+    for name, entry in value.items():
+        at = "%s.%s" % (here, name)
+        if here == "risk_by_symbol":
+            if isinstance(entry, bool) or not isinstance(entry, (int, float)) or entry != entry or \
+                    not 0 < entry <= SYMBOL_RISK_HARD_CAP:
+                problems.append("%s must be a risk per trade above 0 and at most %g (%%), not %s" % (
+                    at, SYMBOL_RISK_HARD_CAP, json.dumps(entry)))
+            continue
+        if not isinstance(entry, dict):
+            problems.append("%s must be an object like {\"max_position_pct\": 50}, not %s" % (at, json.dumps(entry)))
+            continue
+        unknown = sorted(k for k in entry if k not in SYMBOL_LIMIT_KEYS)
+        if unknown:
+            problems.append("%s: only %s can be set per symbol, not %s" % (at, ", ".join(SYMBOL_LIMIT_KEYS),
+                                                                            ", ".join(unknown)))
+        _check({k: v for k, v in entry.items() if k in SYMBOL_LIMIT_KEYS},
+               {k: (defaults or {}).get(k) for k in SYMBOL_LIMIT_KEYS}, where, problems, at + ".")
+        pct = entry.get("max_risk_per_trade_pct")
+        if isinstance(pct, (int, float)) and not isinstance(pct, bool) and pct > SYMBOL_RISK_HARD_CAP:
+            problems.append("%s.max_risk_per_trade_pct must be at most %g" % (at, SYMBOL_RISK_HARD_CAP))
+
+
 def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = "") -> None:
     for key, value in list(doc.items()):
         here = path + key
         default = (defaults or {}).get(key)
+        if here == "risk_by_symbol" or (key == "symbols" and path in ("stock.", "crypto.")):
+            if value is None:
+                doc[key] = {}
+            else:
+                _check_symbols(here, value, defaults, where, problems)
+            continue
         kind = _kind(key, default)
         if here == "leverage" and isinstance(value, (int, float)) and not isinstance(value, bool):
             kind = "number"  # "leverage": 1.5 — one multiple for every asset class, still read by leverage()
@@ -383,14 +427,27 @@ def _load(name: str, defaults: dict) -> dict:
     return validate(name, deep_merge(defaults, user), defaults)
 
 
-def update_file(name: str, changes: dict) -> dict:
-    """Merge ``changes`` into your own trader/<name> (not the defaults) and save it atomically."""
+def update_file(name: str, changes: dict, replace: tuple = ()) -> dict:
+    """Merge ``changes`` into your own trader/<name> (not the defaults) and save it atomically.
+
+    ``replace``: dotted keys ("crypto.symbols") whose value in ``changes`` takes the place of the old one instead
+    of merging into it — so a mapping can lose an entry (a merge only ever adds)."""
     path = ensure_home() / name
     try:
         user = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise ConfigError("cannot read %s (%s) — fix or delete it to restore defaults" % (path, exc))
     merged = deep_merge(user if isinstance(user, dict) else {}, changes)
+    for dotted in replace:
+        *parents, last = dotted.split(".")
+        src, dst = changes, merged
+        for part in parents:
+            src, dst = (src or {}).get(part), dst.get(part)
+            if not isinstance(src, dict) or not isinstance(dst, dict):
+                break
+        else:
+            if last in src:
+                dst[last] = copy.deepcopy(src[last])
     defaults = {"config.json": DEFAULT_CONFIG, "limits.json": DEFAULT_LIMITS}.get(name)
     if defaults is not None:  # never write a file that every tool would then refuse to read
         validate(name, deep_merge(defaults, json.loads(json.dumps(merged))), defaults)
@@ -404,6 +461,30 @@ def load_config() -> dict:
 
 def load_limits() -> dict:
     return _load("limits.json", DEFAULT_LIMITS)
+
+
+def _base(symbol) -> str:
+    return str(getattr(symbol, "base", symbol) or "").upper()
+
+
+def risk_pct_for(cfg: dict, symbol) -> float:
+    """The risk per trade (% of the account) for this coin or stock: config risk_by_symbol, else risk_per_trade_pct.
+    ``symbol`` is a parsed symbol or its base ("BTC")."""
+    # a DEX token can call itself BTC: the core coins' risk never reaches meme tokens
+    over = None if getattr(symbol, "asset", None) == "meme" else (cfg.get("risk_by_symbol") or {}).get(_base(symbol))
+    if over is not None:
+        return min(float(over), SYMBOL_RISK_HARD_CAP)
+    return float(cfg.get("risk_per_trade_pct", 0.5))
+
+
+def limits_for(limits: dict, asset: str, symbol) -> dict:
+    """limits.json for one asset class with that symbol's own entries (``<asset>.symbols.<BASE>``) on top."""
+    lim = dict((limits or {}).get(asset) or {})
+    over = (lim.pop("symbols", None) or {}).get(_base(symbol)) or {}
+    lim.update({k: v for k, v in over.items() if k in SYMBOL_LIMIT_KEYS})
+    if over.get("max_risk_per_trade_pct") is not None:
+        lim["max_risk_per_trade_pct"] = min(float(over["max_risk_per_trade_pct"]), SYMBOL_RISK_HARD_CAP)
+    return lim
 
 
 def leverage(cfg: dict, limits: dict, asset: str, broker: str = None) -> tuple:
