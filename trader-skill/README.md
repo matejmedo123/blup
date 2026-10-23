@@ -528,6 +528,22 @@ combination's only to +17 %. The bot's own BTC + ETH book is no diversifier (cor
 momentum, US stocks and ETFs are (0.1–0.5). So the bot stays as it is for the most money; the combination is
 the steadier option for someone who wants smaller drops and accepts ~9 points a year less.
 
+**The user's plan: BTC + ETH at 5 %, every other coin at 2 %** (one account, the bot's real universe — top
+10 point in time — max 5 positions; BTC and ETH positions up to 50 % of the account, the rest up to 25 %):
+
+| €1,000 at the end of | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 23 Oct 2026 |
+|---|---|---|---|---|---|---|---|
+| **Bot today, everything at 2 %** | €2,111 | €4,688 | €4,677 | €7,112 | €9,633 | €9,919 | **€12,922** |
+| BTC + ETH 5 %, the rest 2 % | €2,579 | €6,241 | €6,227 | €10,235 | €11,643 | €9,963 | €10,893 |
+| BTC + ETH 3 %, the rest 2 % | €2,404 | €5,737 | €5,724 | €9,308 | €13,579 | €13,080 | €15,470 |
+
+Ahead until 2023, behind since: on the 2024-07 → 2026-10 hold-out the plan made −1 %/yr against the bot's
++33 % (3 % on BTC + ETH: +24 %). The reason is cash, not the coins: in October 2024 a BTC position at 5 % risk
+took half the account, so in November there was no cash for the XRP breakout that made the bot's year
+(+€527); BTC + ETH themselves earned *less* at 5 % than at 2 % over that stretch (+€118 against +€145),
+because their losing trades were bigger too. With idle cash at 4 % the picture is the same (hold-out €1,045
+against €2,053).
+
 **Where all this leaves the bot** (94 variants in five pre-registered studies plus the lab, 23 Oct 2026): the
 deployed daily trend rules at 2 % risk on the top 10 coins point in time had the best return per unit of
 drawdown of everything tested and the most money of everything without hindsight; nothing else held up on
