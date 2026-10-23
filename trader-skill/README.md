@@ -446,6 +446,27 @@ shared — the gain mostly disappears, because the core coins compete for the sa
 +11 → +15 %/yr (deployed rules, 5 % core) and +16 → +19 %/yr (volume breakout + EMA, 3 % core) at the same
 −32…−37 % drawdown; last 12 months slightly worse at the higher core risk (+12 → +6 %, +7 → −1 %).
 
+**Watching more — more coins, stocks, every rule at once?** (23 Oct 2026, the user's "it watches too
+little"; €1,000, 2 % risk, coins point in time from Binance's full listing including delisted pairs, the
+choice made on 2020-01 → 2024-06 and judged once on 2024-07 → 2026-10; the generator matched the lab's own
+trades one by one). No broader set-up beat the deployed one:
+
+| €1,000, 5 slots | Since 2020 | Hold-out 2024-07 → | Last 12 months |
+|---|---|---|---|
+| **Deployed** (top 10, trend breakout + EMA) | **€11,352 · +43 %/yr · −34 %** | €1,447 · +17 % · −25 % | €1,095 |
+| … volume breakout instead (the pick) | €10,760 · +42 % · −35 % | €1,559 · +21 % · −27 % | €1,117 |
+| Top 20 / 30 / 50 coins | €10,949 / 11,854 / 6,361 · −46…−55 % | +9 % / +13 % / 0 % | |
+| + 164 US stocks in the same account | €5,045 · +27 % · −39 % | €1,806 · +29 % · −24 % | €1,425 |
+| + every daily rule at once | €3,779 · +22 % · −39 % | €1,294 · +12 % | €1,369 |
+| 1.5× leverage | €11,638 · +43 % · −34 % | €1,477 · +18 % | €1,095 |
+| BTC bought and held | €11,252 · +43 % · −77 % | €1,290 · +12 % · −53 % | €748 |
+
+Coins ranked 11–50 had no edge at all (−0.05 to −0.52R a trade on the hold-out against +0.65R for the top
+10). Stocks in the same account helped the last two years but took the cash the crypto trades needed (210
+crypto trades since 2020 fell to 24). Eight slots instead of five did better in every period (€13,597 since
+2020, +22 %/yr on the hold-out) at a −40 % drawdown — read off the grid, not a pre-registered hypothesis, and
+the clean-room audit found ten slots worse than five, so slots stay at five until the combined test below.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
