@@ -122,6 +122,13 @@ lives on what is kept, and what is kept is usually rugged between two candles (0
   6–7 % winners, €100 → €89.85 in 25 days. The graduates gave 16 trades in two months — too few to judge;
   the one positive cell (5 trades) lives on a single +35 % minute and turns negative at +1 % slippage. Why: a
   median stop of 0.77 % against ~1.1 % of round-trip costs at €10, and entries that drift −0.4 % before costs.
+- **€50 a trade out of €500 instead of €10 out of €100** (23 Oct) — the user's idea that the fixed costs are
+  what kills it. The same history, five times the size: the sniper −24.1 % a trade (−€1,638; at €10 −24.8 %,
+  −€339), TEST −8.2 % with the same CI around zero; the ladder 0 of 128 ahead, the plain idea −€22.30 a trade
+  on TEST and a €500 wallet down to €11; the +20 % partial 0 of 216 (−€6.4 to −€13.8 a trade on TEST); ChatGPT
+  scalping on the big pools −0.54R at €50 and −0.52R at €100 against −0.66R at €10 (−€29 to −€35 over the 25
+  TEST days at €50), intraday −0.53R, and +1 % slippage makes every one of them worse than at €10 (−2.1R).
+  Size only scales the loss: the fixed fees were worth ~0.1R, the stops and the rugs are the rest.
 - **What others found** — no published strategy that pays a retail buyer on new meme coins: 74 % of Solana
   meme-coin buyers lose money while sandwich bots win every week (Bitquery); insiders take ~80 % of realized
   profit (memescope); the snipers that do win are funded by the deployers and buy in the creation block (Pine
