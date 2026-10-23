@@ -500,6 +500,17 @@ volatility-targeted trend was positive in both windows yet earned less than the 
 +1.4 points a year before mid-2024 and cost −1.4 after. Nothing here earns more per unit of drawdown than
 the deployed rules.
 
+**Third batch — filters against chop, dynamic risk, cross-asset momentum** (23 Oct 2026; 27 variants fixed in
+advance, same split). The bot at 2 % on the hold-out: **€1,928, +33 %/yr, −23 %**. Market-chop filters (BTC
+ADX > 20 / 25, share of the top 30 above their 50-day average > 50 / 60 %), leaders-only (beats BTC over 30 or
+60 days), weekly confirmation, re-entry after a stop, and dynamic risk 2–5 % (by trend strength, after wins,
+by the strategy's own equity curve) — none beat it. Every gate's removed trades had a *positive* average R in
+both windows: the filters mostly threw winners away. The best hold-out row, breadth > 50 % at 2 % (€2,053,
++37 %/yr, −20 %), trailed the bot on the selection window and leads by one trade's worth. Cross-asset dual
+momentum (the better two of BTC, QQQ, gold, long bonds over six months) made +24 %/yr at −17 % on the
+hold-out and does not move with the bot — worth paper trading, not yet deploying. And 5 % risk with a 50 % cap
+on ten coins again swung from +89 %/yr to −14 %/yr depending on which two or three coins got the cash.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
