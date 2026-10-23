@@ -38,6 +38,7 @@ class FakeBybit:
         self.calls, self.script = [], {}
         self.orders = {}  # orderId → order record (what realtime/history list)
         self.n = 0
+        self.prices = {"BTCUSDC": "70000", "SOLUSDC": "100", "BTCUSDT": "70010", "DOGEUSDC": "0.2"}
 
     def on(self, path, *replies):
         self.script.setdefault(path, []).extend(replies)
@@ -61,6 +62,8 @@ class FakeBybit:
             return ok({"timeSecond": "1792800000", "timeNano": "1792800000000000000"})
         if path == "/v5/market/instruments-info":
             return ok({"category": "spot", "list": INSTRUMENTS})
+        if path == "/v5/market/tickers":
+            return ok({"category": "spot", "list": [{"symbol": k, "lastPrice": v} for k, v in self.prices.items()]})
         if path == "/v5/spot-margin-trade/state":
             return ok({"spotLeverage": "2", "spotMarginMode": "1", "effectiveLeverage": "1"})
         if path == "/v5/order/create":
@@ -248,10 +251,18 @@ class BybitAdapter(BybitBase):
                             {"coin": "BTC", "walletBalance": "0.02", "spotBorrow": "0", "usdValue": "1400"}]}]}))
         b = self.broker(lev=1.5)
         a = b.account()
-        self.assertEqual((a["equity"], a["cash"], a["borrowed"]), (1500.0, -300.0, 300.0))
-        self.assertEqual(a["buying_power"], -300.0 + 1500.0)  # the account's 2×: the autopilot caps at its own 1.5×
+        # equity is priced by the bot from the tickers: −300 cash + 0.02 BTC × 70,000 (not Bybit's 1,500)
+        self.assertEqual((a["equity"], a["cash"], a["borrowed"]), (1100.0, -300.0, 300.0))
+        self.assertEqual(a["buying_power"], -300.0 + 1100.0)  # the account's 2×: the autopilot caps at its own 1.5×
         pos = b.positions()
-        self.assertEqual([(p["symbol"], p["qty"], round(p["last"])) for p in pos], [("BTC/USD", 0.02, 70000)])
+        self.assertEqual([(p["symbol"], p["qty"], p["last"]) for p in pos], [("BTC/USD", 0.02, 70000.0)])
+
+    def test_a_coin_that_is_not_collateral_still_has_its_price_and_value(self):
+        self.ex.on("/v5/account/wallet-balance", ok({"list": [{"totalEquity": "100", "coin": [
+            {"coin": "USDC", "walletBalance": "100", "spotBorrow": "0", "usdValue": "100"},
+            {"coin": "SOL", "walletBalance": "3", "spotBorrow": "0", "usdValue": "0"}]}]}))
+        p = self.broker().positions()[0]
+        self.assertEqual((p["symbol"], p["last"], p["market_value"]), ("SOL/USD", 100.0, 300.0))
 
     def test_a_filled_buy_reports_the_coins_received_after_the_fee(self):
         b = self.broker()
@@ -400,3 +411,93 @@ class BrokerTest(BybitBase):
         self.assertTrue(res["ok"], res)
         self.assertIn("equity $1,000.00", "\n".join(res["lines"]))
         self.assertFalse([c for c in self.ex.calls if c["method"] == "POST"])
+
+
+class ReviewFixes(BybitBase):
+    """What a read of the real API docs found: replies that mean "maybe", stops above the price, and the rest."""
+
+    def entry(self, b, cid="ord-r1"):
+        return b.place_entry({"symbol": "BTC/USD", "asset": "crypto", "qty": 0.01, "limit_price": 69000,
+                              "client_order_id": cid})
+
+    def test_a_maybe_reply_is_looked_up_and_never_called_a_refusal(self):
+        b = self.broker()
+        real = self.ex.default
+
+        def lands_then_maybe(path, q, body):
+            if path == "/v5/order/create":
+                real(path, q, body)
+                return {"retCode": 170146, "retMsg": "Order creation timeout", "result": {}}
+            return real(path, q, body)
+        with mock.patch.object(self.ex, "default", side_effect=lands_then_maybe):
+            o = self.entry(b)
+        self.assertEqual(o["client_order_id"], "ord-r1")
+        self.assertEqual(len(self.ex.posts("/v5/order/create")), 1)
+
+    def test_a_maybe_reply_with_nothing_found_yet_is_never_sent_again(self):
+        b = self.broker()
+        self.ex.on("/v5/order/create", {"retCode": 10016, "retMsg": "Service is restarting", "result": {}})
+        with mock.patch.object(bybit_mod.time, "sleep"):
+            with self.assertRaises(BrokerError) as cm:
+                b.place_exit("BTC/USD", 0.01, "market", client_order_id="ord-r2-x1")
+        self.assertIn("may or may not have been placed", str(cm.exception))
+        self.assertEqual(len(self.ex.posts("/v5/order/create")), 1, "a sale is never sent twice")
+
+    def test_a_duplicate_whose_lookup_fails_still_says_maybe(self):
+        b = self.broker()
+        self.ex.on("/v5/order/create", {"retCode": 170141, "retMsg": "Duplicate clientOrderId.", "result": {}})
+        for _ in range(8):
+            self.ex.on("/v5/order/realtime", socket.timeout("timed out"))
+        with mock.patch.object(bybit_mod.time, "sleep"):
+            with self.assertRaises(BrokerError) as cm:
+                self.entry(b, "ord-r3")
+        self.assertIn("may or may not have been placed", str(cm.exception))
+
+    def test_a_stop_at_or_above_the_price_is_not_placed(self):
+        b = self.broker()
+        for stop in (70000, 71000):
+            with self.assertRaises(BrokerError) as cm:
+                b.place_stop("BTC/USD", 0.01, stop, client_order_id="ord-r4-stop")
+            self.assertIn("not below the price", str(cm.exception))
+        self.assertFalse(self.ex.posts("/v5/order/create"))
+        b.place_stop("BTC/USD", 0.01, 65000, client_order_id="ord-r4-stop")
+        self.assertEqual(len(self.ex.posts("/v5/order/create")), 1)
+
+    def test_the_page_cursor_is_sent_as_bybit_encoded_it(self):
+        b = self.broker()
+        self.ex.on("/v5/order/realtime", ok({"list": [], "nextPageCursor": "page_args%3Dfd43%26symbol%3D6%26"}),
+                   ok({"list": [], "nextPageCursor": ""}))
+        b.open_orders()
+        second = [c for c in self.ex.calls if c["path"] == "/v5/order/realtime"][1]
+        self.assertIn("cursor=page_args%3Dfd43%26symbol%3D6%26", second["raw_query"])
+
+    def test_cancel_without_an_answer_is_an_error_and_bybits_done_codes_are_done(self):
+        b = self.broker()
+        for _ in range(4):
+            self.ex.on("/v5/order/realtime", socket.timeout("timed out"))
+        with mock.patch.object(bybit_mod.time, "sleep"):
+            with self.assertRaises(BrokerError):
+                b.cancel("oid-x")
+        s = b.place_stop("BTC/USD", 0.001, 65000, client_order_id="ord-r5-stop")
+        self.ex.on("/v5/order/cancel", {"retCode": 170142, "retMsg": "Order has been cancelled", "result": {}})
+        self.assertEqual(b.cancel(s["id"])["status"], "canceled")
+        self.ex.on("/v5/order/cancel", {"retCode": 170139, "retMsg": "Order has been filled.", "result": {}})
+        with self.assertRaises(BrokerError):
+            b.cancel(s["id"])
+
+    def test_usdc_is_never_switched_as_collateral_and_normal_account_margin_is_not_lending(self):
+        b = self.broker(lev=1.5)
+        self.entry(b, "ord-r6")
+        self.assertFalse(self.ex.posts("/v5/account/set-collateral-switch"))
+        INSTRUMENTS[0]["marginTrading"] = "normalSpotOnly"
+        self.addCleanup(INSTRUMENTS[0].__setitem__, "marginTrading", "utaOnly")
+        b._info = {}
+        self.assertEqual(b.tradable("crypto"), set())
+
+    def test_a_site_without_margin_says_what_to_do(self):
+        b = self.broker(lev=1.5)
+        self.ex.on("/v5/order/create", {"retCode": 170359, "retMsg": "The current site does not support leveraged "
+                                        "trading", "result": {}})
+        with self.assertRaises(BrokerError) as cm:
+            self.entry(b, "ord-r7")
+        self.assertIn("--leverage 1", str(cm.exception))

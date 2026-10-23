@@ -43,6 +43,10 @@ INFO_TTL = 6 * 3600
 MAX_LEVERAGE = 2  # the account-wide spot margin leverage the adapter sets: never above LEVERAGE_HARD_CAP
 LINK_MAX = 36     # Bybit's orderLinkId limit — longer client ids travel as a hash (see _link)
 IDS_FILE = "broker/bybit_ids.json"
+# replies that do not say no: the order may well be in the book (Bybit sends them with HTTP 200)
+UNSURE_CODES = {"10000", "10016", "170007", "170032", "170035", "170146"}
+LENDS = ("both", "utaOnly")  # marginTrading values a Unified account can borrow on
+NO_COLLATERAL_SWITCH = ("USDT", "USDC")  # always collateral: Bybit refuses to switch them
 
 # Bybit order status → the Alpaca-style statuses the autopilot reads
 STATUS = {"New": "new", "Created": "new", "Untriggered": "new", "Active": "new", "PartiallyFilled": "partially_filled",
@@ -168,7 +172,7 @@ class BybitBroker(Broker):
         """One HTTP round trip → the parsed reply. Raises urllib errors and ConnectionError unchanged."""
         params = {k: v for k, v in (params or {}).items() if v is not None}
         if method == "GET":
-            query = urllib.parse.urlencode(params)
+            query = urllib.parse.urlencode(params, safe="%")  # Bybit's page cursor comes already encoded
             url = self.base + path + ("?" + query if query else "")
             body, payload = None, query
         else:
@@ -293,8 +297,7 @@ class BybitBroker(Broker):
             self.notes.append("Bybit instrument list unavailable: %s" % exc)
             return None
         lev = config.leverage(self.cfg, config.load_limits(), "crypto", self.name)[0]
-        return {v["base"] for v in info.values() if v["quote"] == self.quote
-                and (lev <= 1 or v["margin"] not in ("none", ""))}
+        return {v["base"] for v in info.values() if v["quote"] == self.quote and (lev <= 1 or v["margin"] in LENDS)}
 
     def qty_step(self, symbol: str, asset: str) -> float:
         try:
@@ -351,25 +354,52 @@ class BybitBroker(Broker):
         return out
 
     # -- reads ---------------------------------------------------------------------------------------
-    def account(self) -> dict:
+    def _prices(self) -> dict:
+        """Last spot price of every coin in USD, from the tickers — never from the wallet's usdValue, which is 0
+        for a coin that is not collateral and whose basis (balance or net of loans) Bybit does not document."""
+        rows = self._get("/v5/market/tickers", {"category": "spot"}, signed=False).get("list") or []
+        last = {str(r.get("symbol") or "").upper(): _f(r.get("lastPrice")) for r in rows if isinstance(r, dict)}
+        out = {"USDC": 1.0, "USDT": 1.0, "USD": 1.0}
+        for pair, px in last.items():
+            if not px:
+                continue
+            for q in ("USDC", "USDT", "USD"):
+                if pair.endswith(q) and len(pair) > len(q):
+                    out.setdefault(pair[: -len(q)], px)
+        if "EUR" not in out and last.get("USDCEUR"):
+            out["EUR"] = 1.0 / last["USDCEUR"]
+        return out
+
+    def _wallet(self) -> tuple:
+        """(cash in USD — negative while a margin loan is open, {coin: net quantity held}, prices)."""
         res = self._get("/v5/account/wallet-balance", {"accountType": "UNIFIED"})
         acct = (res.get("list") or [{}])[0] or {}
-        equity = _f(acct.get("totalEquity")) or 0.0
-        cash = 0.0
+        prices, cash, coins = self._prices(), 0.0, {}
         for c in acct.get("coin") or []:
             name = str(c.get("coin") or "").upper()
-            if name not in STABLES:
+            if not name:
                 continue
-            bal, borrow = _f(c.get("walletBalance")) or 0.0, _f(c.get("spotBorrow")) or 0.0
-            usd = _f(c.get("usdValue"))
-            rate = (usd / bal) if (usd is not None and bal) else 1.0
-            cash += (bal - borrow) * rate  # negative while the margin loan is open
+            # walletBalance − spotBorrow (Bybit: "Old walletBalance = New walletBalance − spotBorrow")
+            net = (_f(c.get("walletBalance")) or 0.0) - (_f(c.get("spotBorrow")) or 0.0)
+            if name in STABLES:
+                rate = prices.get(name)
+                if rate is None:
+                    self.notes.append("no %s price on Bybit — that balance is left out of the cash" % name)
+                    continue
+                cash += net * rate
+            elif net > 0:
+                coins[name] = net
+        return cash, coins, prices
+
+    def account(self) -> dict:
+        cash, coins, prices = self._wallet()
+        # equity priced by the bot the same way for every coin (cash plus what the coins are worth now)
+        equity = cash + sum(q * (prices.get(c) or 0.0) for c, q in coins.items())
         lev = self._margin_leverage()
         return {"equity": equity, "cash": cash, "buying_power": cash + (lev - 1) * equity,
                 "last_equity": None, "currency": "USD", "mode": self.mode, "status": "ACTIVE", "blocked": None,
                 "crypto_ok": True, "daytrade_count": 0, "pattern_day_trader": False,
-                "account_id": "bybit-%s" % self.mode, "borrowed": max(0.0, -cash),
-                "available": _f(acct.get("totalAvailableBalance"))}
+                "account_id": "bybit-%s" % self.mode, "borrowed": max(0.0, -cash)}
 
     def _margin_leverage(self) -> float:
         try:
@@ -381,20 +411,12 @@ class BybitBroker(Broker):
         return min(float(_f(st.get("spotLeverage")) or 1.0), float(MAX_LEVERAGE))
 
     def positions(self) -> list:
-        res = self._get("/v5/account/wallet-balance", {"accountType": "UNIFIED"})
-        acct = (res.get("list") or [{}])[0] or {}
+        _, coins, prices = self._wallet()
         out = []
-        for c in acct.get("coin") or []:
-            name = str(c.get("coin") or "").upper()
-            if not name or name in STABLES:
-                continue
-            qty = (_f(c.get("walletBalance")) or 0.0) - (_f(c.get("spotBorrow")) or 0.0)
-            if qty <= 0:
-                continue
-            usd = _f(c.get("usdValue"))
-            last = (usd / qty) if usd and qty else None
+        for name, qty in sorted(coins.items()):
+            last = prices.get(name)
             out.append({"symbol": name + "/USD", "asset": "crypto", "qty": qty, "avg_entry": None, "last": last,
-                        "market_value": usd, "unrealized_pl": None, "opened_at": None})
+                        "market_value": qty * last if last else None, "unrealized_pl": None, "opened_at": None})
         return out
 
     def open_orders(self) -> list:
@@ -406,13 +428,8 @@ class BybitBroker(Broker):
         """Open orders (stops included) plus Bybit's recent history — what fills and cancels the cycle reads."""
         ids = self._ids()
         live = self._orders("/v5/order/realtime", {"category": "spot", "openOnly": 0, "limit": 50})
-        params = {"category": "spot", "limit": 50}
-        if since:
-            try:
-                params["startTime"] = int(market_clock.ts(since) * 1000)
-            except (TypeError, ValueError):
-                pass
-        hist = self._orders("/v5/order/history", params)
+        # the last 7 days (Bybit's default window): a startTime would read 7 days from it, not up to now
+        hist = self._orders("/v5/order/history", {"category": "spot", "limit": 50})
         seen, out = set(), []
         for o in live + hist:
             if o.get("orderId") in seen:
@@ -429,11 +446,14 @@ class BybitBroker(Broker):
                 return self._order(rows[0])
         return None
 
-    def lookup(self, order_id: str) -> list:
+    def lookup(self, order_id: str, strict: bool = False) -> list:
+        """strict: a failed lookup raises — "not found" must mean Bybit said so, not that it did not answer."""
         for path in ("/v5/order/realtime", "/v5/order/history"):
             try:
                 rows = self._get(path, {"category": "spot", "orderId": order_id}).get("list") or []
             except BrokerError:
+                if strict:
+                    raise
                 continue
             if rows:
                 return [self._order(rows[0])]
@@ -449,10 +469,11 @@ class BybitBroker(Broker):
         if self._prepared:
             return
         self._prepared = True
-        steps = (("/v5/spot-margin-trade/switch-mode", {"spotMarginMode": "1"}),
+        steps = [("/v5/spot-margin-trade/switch-mode", {"spotMarginMode": "1"}),
                  ("/v5/spot-margin-trade/set-leverage", {"leverage": str(MAX_LEVERAGE)}),
-                 ("/v5/account/set-collateral-switch", {"coin": self.quote, "collateralSwitch": "ON"}),
-                 ("/v5/spot-margin-trade/set-auto-repay-mode", {"currency": self.quote, "autoRepayMode": "1"}))
+                 ("/v5/spot-margin-trade/set-auto-repay-mode", {"currency": self.quote, "autoRepayMode": "1"})]
+        if self.quote not in NO_COLLATERAL_SWITCH:
+            steps.insert(2, ("/v5/account/set-collateral-switch", {"coin": self.quote, "collateralSwitch": "ON"}))
         for path, body in steps:
             try:
                 self._call("POST", path, body, retries=1)
@@ -461,31 +482,34 @@ class BybitBroker(Broker):
                 self.notes.append("Bybit %s: %s" % (path.rsplit("/", 1)[-1], exc))
 
     def _post_order(self, body: dict, cid: str = None) -> dict:
-        """POST once; on a timeout, a 5xx or a duplicate id find out whether it landed before trying again."""
+        """POST once — never twice. An unclear outcome (a timeout, a 5xx, a "maybe" reply, a duplicate id) is
+        looked up by its client id; not found yet is "may or may not have been placed", for the next cycle to look
+        up again — never a second order (placement is asynchronous, and a sale sent twice sells your coins)."""
         self._clock_sync()
-        for attempt in range(2):
-            try:
-                res = self._call("POST", "/v5/order/create", body)
-                found = self.lookup(res.get("orderId")) if res.get("orderId") else []
-                # placement is asynchronous: a just-sent order may not be listed yet — then it reads as new
-                return found[0] if found else order_dict(
-                    id=res.get("orderId"), client_order_id=cid, status="new", symbol=self._pack(body["symbol"]),
-                    asset="crypto", side=body["side"].lower(), type=body["orderType"].lower(), qty=_f(body.get("qty")),
-                    limit_price=_f(body.get("price")), stop_price=_f(body.get("triggerPrice")), filled_qty=0.0)
-            except _Refused as exc:
-                low = exc.msg.lower()
-                if "duplicate" in low or ("orderlinkid" in low and "exist" in low):
-                    found = self.find_client(cid) if cid else None
-                    if found:
-                        self.log("post_recovered", client_order_id=cid, order_id=found.get("id"))
-                        return found
-                    raise BrokerError("Bybit order may or may not have been placed: %s — it is looked up again" % exc)
+        try:
+            res = self._call("POST", "/v5/order/create", body)
+        except _Refused as exc:
+            low = exc.msg.lower()
+            if "170359" == str(exc.code) or "not support leveraged" in low:
+                raise BrokerError("Bybit offers no spot margin to this account (%s) — trade at 1× "
+                                  "(profile --leverage 1) or switch margin on at Bybit" % exc)
+            if not (str(exc.code) in UNSURE_CODES or "duplicate" in low or ("orderlinkid" in low and "exist" in low)):
                 raise BrokerError("Bybit rejected the order: %s" % exc)
-            except BrokerError as exc:
-                failure = str(exc)
-            if not cid:
-                raise BrokerError("Bybit order may or may not have been placed (%s) and has no client id to check — "
-                                  "look in Bybit before doing anything else" % failure)
+            failure = str(exc)
+        except BrokerError as exc:
+            failure = str(exc)
+        else:
+            found = self.lookup(res.get("orderId")) if res.get("orderId") else []
+            # placement is asynchronous: a just-sent order may not be listed yet — then it reads as new
+            return found[0] if found else order_dict(
+                id=res.get("orderId"), client_order_id=cid, status="new", symbol=self._pack(body["symbol"]),
+                asset="crypto", side=body["side"].lower(), type=body["orderType"].lower(), qty=_f(body.get("qty")),
+                limit_price=_f(body.get("price")), stop_price=_f(body.get("triggerPrice")), filled_qty=0.0)
+        if not cid:
+            raise BrokerError("Bybit order may or may not have been placed (%s) and has no client id to check — "
+                              "look in Bybit before doing anything else" % failure)
+        for wait in (0.0, 1.0):
+            time.sleep(wait)
             try:
                 found = self.find_client(cid)
             except BrokerError as exc:
@@ -494,11 +518,8 @@ class BybitBroker(Broker):
             if found:
                 self.log("post_recovered", client_order_id=cid, order_id=found.get("id"))
                 return found
-            if attempt == 0:
-                time.sleep(1.0)
-                continue
-            raise BrokerError("Bybit order may or may not have been placed: it failed twice (%s) and nothing was "
-                              "found under %s yet — it is looked up again" % (failure, cid))
+        raise BrokerError("Bybit order may or may not have been placed (%s): nothing under %s yet — it is looked up "
+                          "again, never sent twice" % (failure, cid))
 
     def place_entry(self, order: dict) -> dict:
         if order.get("asset") != "crypto":
@@ -511,7 +532,7 @@ class BybitBroker(Broker):
         borrow = lev > 1.0 + 1e-9 and config.leverage(self.cfg, config.load_limits(), "crypto", self.name,
                                                       sym.split("/", 1)[0])[0] > 1.0
         if borrow:
-            if lot.get("margin") in (None, "none", ""):
+            if lot.get("margin") not in LENDS:
                 raise BrokerError("Bybit does not lend on %s right now — not bought with leverage" % self._pair(sym))
             self._prepare_margin()
         body = {"category": "spot", "symbol": self._pair(sym), "side": "Buy", "orderType": "Limit",
@@ -527,6 +548,14 @@ class BybitBroker(Broker):
         """A stop at the exchange: Bybit sets the coins aside and sells at market the moment the price trades at
         the stop (with limit_price: a limit sell at that price instead)."""
         lot = self._lot(symbol)
+        last = self._prices().get(self._pair(symbol)[: -len(self.quote)])
+        if not last:
+            raise BrokerError("no %s price from Bybit — a stop is not placed blind" % self._pair(symbol))
+        if float(stop_price) >= last:
+            # a spot TP/SL has no direction: at or above the price it would act as a take-profit, or at once —
+            # the bot's own stop check sells instead
+            raise BrokerError("stop %s is not below the price %s — not placed at Bybit; the bot sells itself" % (
+                _fmt_price(stop_price, lot.get("tick")), _fmt_price(last, lot.get("tick"))))
         body = {"category": "spot", "symbol": self._pair(symbol), "side": "Sell",
                 "orderType": "Limit" if limit_price is not None else "Market",
                 "qty": self._qty(symbol, qty), "triggerPrice": _fmt_price(stop_price, lot.get("tick")),
@@ -556,9 +585,9 @@ class BybitBroker(Broker):
         return dict(res, leg="exit")
 
     def cancel(self, order_id: str) -> dict:
-        found = self.lookup(order_id)
+        found = self.lookup(order_id, strict=True)  # no answer is an error, never "it is gone"
         if not found:
-            return {"id": order_id, "status": "canceled"}  # gone already (filled or canceled) — like Alpaca's 404
+            return {"id": order_id, "status": "canceled"}  # Bybit has no such order — like Alpaca's 404
         o = found[0]
         if o.get("status") not in ("new", "partially_filled", "accepted"):
             return {"id": order_id, "status": o.get("status")}
@@ -568,7 +597,11 @@ class BybitBroker(Broker):
         try:
             self._call("POST", "/v5/order/cancel", body)
         except _Refused as exc:
-            if "not exist" not in exc.msg.lower() and "too late" not in exc.msg.lower():
+            if str(exc.code) == "170139" or "has been filled" in exc.msg.lower():
+                raise BrokerError("Bybit cancel refused: the order has been filled (%s)" % exc)
+            done = str(exc.code) in ("170142", "170190", "110001") or any(
+                w in exc.msg.lower() for w in ("not exist", "too late", "has been cancel", "has been finished"))
+            if not done:
                 raise BrokerError("Bybit cancel refused: %s" % exc)
         self.log("cancel", order_id=order_id)
         return {"id": order_id, "status": "canceled"}

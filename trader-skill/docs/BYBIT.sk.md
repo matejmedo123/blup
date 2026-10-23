@@ -60,6 +60,25 @@ Bybit EU GmbH (Viedeň) má licenciu MiCA pre celý EHP vrátane Slovenska, pon�
    `autopilot.broker "bybit"`, `autopilot.mode "live"`, `"paper": false`, živé kľúče a
    `autopilot.live_confirmation "I ACCEPT REAL MONEY RISK"`. Overenie: `autopilot.py check-live`.
 
+## Poistky v napojení (po kontrole oproti dokumentácii Bybitu)
+
+* Odpovede, ktoré neznamenajú „nie“ (časový limit, reštart servera, „order creation timeout“…), bot nepovažuje
+  za odmietnutie: príkaz si dohľadá podľa svojho ID. Ak ho ešte nevidí, **nikdy ho nepošle druhýkrát** —
+  pozrie sa znova v ďalšom cykle.
+* Stop sa na burzu pošle len **pod aktuálnou cenou** (spot TP/SL nemá smer — nad cenou by fungoval ako
+  take-profit). Ak cena stop preskočila, bot predá sám.
+* Hotovosť a hodnotu účtu počíta bot sám z cien (tickery), nie z poľa `usdValue`, ktoré je pri coine bez
+  kolaterálu nulové.
+* Rušenie príkazu: ak Bybit neodpovie, je to chyba (skúsi znova), nie „zrušené“.
+* Ak Bybit EU tvojmu účtu spot maržu neponúkne (chyba 170359), bot to povie a odporučí `--leverage 1`.
+
+## Čo sa dá overiť až u teba
+
+* Či `isLeverage=1` požičia len chýbajúcu časť (dokumentácia to len naznačuje).
+* Či Bybit EU ponúka spot maržu tvojmu účtu (podľa správ od leta 2026 áno, do 10×).
+* Testnet je globálny Bybit, nie Bybit EU — overí API, nie špecifiká EÚ účtu. Preto po testnete začni na
+  ostrom účte s malou sumou.
+
 ## Dôležité upozornenia
 
 * **Z cloudového prostredia, kde bol bot vyvíjaný, sa na Bybit nedá pripojiť** (Bybit blokuje USA). Napojenie je

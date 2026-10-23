@@ -735,8 +735,13 @@ Spot only (category `spot`, Unified account): entries are GTC limit buys, `isLev
 `config.leverage(..., "bybit", coin)` allows more than 1× (then spot margin is switched on, account leverage
 set to 2, the quote coin made collateral and auto-repay switched on); stops are `orderFilter: tpslOrder` market
 sells (with `limit_price`: limit sells); sales and stops are always `isLeverage` 0. `account()`: `equity` =
-totalEquity, `cash` = Σ stable coins (walletBalance − spotBorrow) — negative while a loan is open, `borrowed`;
-`positions()`: every non-stable coin with a positive net balance, `BTC/USD` style. A filled buy's `filled_qty`
+the bot's own sum — `cash` (Σ stable coins walletBalance − spotBorrow, negative while a loan is open) plus every
+coin's net balance × its last spot price from `/v5/market/tickers` (never the wallet's `usdValue`: 0 for a coin
+that is not collateral), `borrowed`; `positions()`: every non-stable coin with a positive net balance, `BTC/USD`
+style, priced from the tickers. Order replies that do not say no (retCode 10000, 10016, 170007, 170032, 170035,
+170146, a duplicate id) are looked up by client id; an order is never sent twice. A stop at or above the last
+price is refused (spot TP/SL orders have no direction) and the bot's own stop check sells. 170359 (no spot margin
+on the site) names `--leverage 1`. A filled buy's `filled_qty`
 is net of the fee Bybit takes in the coin (`cumFeeDetail`). Client ids longer than 36 characters travel as a
 hash and map back through `broker/bybit_ids.json`. Statuses map to the Alpaca names (Untriggered → new, Triggered
 → accepted, PartiallyFilledCanceled → canceled). `autopilot.py broker-test`: read-only calls (account,
