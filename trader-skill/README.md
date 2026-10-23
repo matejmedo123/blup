@@ -411,6 +411,18 @@ pushed to 54–57 % wins on the first three periods, but no variant of it — th
 money on the fourth, so none of its changes can be validated. Random entries with the same exits: +0.08R
 at 21–24 % wins — the entries carry real information.
 
+The bot's own lab, coins chosen point in time (top 10 of each period's own time, 108 coins ever big,
+delisted ones included), walk-forward over ~8 years, the two rules side by side with one position per coin:
+
+| Pair of rules | Held in every period | Breakout rule out of sample | Trend following out of sample |
+|---|---|---|---|
+| trend_ema + trend_breakout (deployed) | 1 of 2 | +1.03 / +0.19 / +0.78R · 45 % wins · +0.59R · 67 % | failed period 1's training |
+| trend_ema + **trend_breakout_vol** | **2 of 2** | **+2.47 / +0.42 / +1.09R · 53 % wins · +1.05R · 83 %** | +1.56 / +0.65 / +0.28R · 32 % · +0.97R · 73 % |
+
+More winners and a bigger edge per trade, in every period. One caution: the volume filter itself was picked
+by looking at all of 2018–2026, so the lab's walk-forward here confirms it but cannot fully prove it — the
+portfolio test with a 2024–2026 hold-out decides whether it replaces the plain breakout by default.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
