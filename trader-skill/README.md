@@ -549,8 +549,15 @@ against €2,053).
 with `--core-risk`:
 
 ```bash
-python3 trader-autopilot/autopilot.py profile --risk 2 --core-risk 3 --capital 1000 --write
+python3 trader-autopilot/autopilot.py profile --risk 2 --core-risk 3 --capital 1000 --fixed-risk --write
 ```
+
+`--fixed-risk` matters: the trend breakout's profit chance in today's lab is 67 %, under the 70 % tier, so
+without it the bot halves every breakout — BTC and ETH would trade at 1.5 %, the rest at 1 %, not the split the
+backtest ran. With it the risk is exactly 3 % / 2 % (7 losses in a row still halve it, a −35 % drawdown still
+pauses the bot). Re-run on the pack's own lab trades (23 Oct 2026, median of 30 signal orders, 0.28 % a
+side, 4 % on idle cash, ETF leg on): coins chosen point in time, 2 % everywhere **€12,758 · −30 %**; the split
+**€15,452 · −30 %**; last 3 years €2,221 vs €2,132, last 12 months €1,133 both (three crypto trades).
 
 It writes `risk_by_symbol {"BTC": 3, "ETH": 3}` to config.json and `crypto.symbols.{BTC,ETH}` to limits.json
 (3 % per trade, a position up to 50 % of the account, a $ backstop at 4× the account); every other coin keeps

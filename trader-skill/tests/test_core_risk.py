@@ -174,6 +174,15 @@ class TheProfile(TraderTestCase):
         self.assertIn('risk_by_symbol', out)
         self.assertIn('(was {"BTC": 3.0})', out)
 
+    def test_fixed_risk_switches_off_the_confidence_halving_and_a_rerun_restores_it(self):
+        out, cfg, _ = self.run_profile("--core-risk", "3", "--fixed-risk")
+        self.assertIs(cfg["autopilot"]["playbook"]["confidence_sizing"], False)
+        self.assertIn("Fixed risk", out)
+        unsure = {"test": {"profit_chance": 0.55, "n": 60}}
+        self.assertEqual(ap().confidence_mult(unsure, config.load_config(), "BTC"), (1.0, None))
+        _, cfg, _ = self.run_profile("--core-risk", "3")
+        self.assertIs(cfg["autopilot"]["playbook"]["confidence_sizing"], True)
+
     def test_bad_values_are_refused(self):
         trend = ap().trend_profile
         for bad in (0, 6, float("nan")):

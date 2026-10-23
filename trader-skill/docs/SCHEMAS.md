@@ -722,6 +722,8 @@ symbol)` and `config.limits_for(limits, asset, symbol)` resolve them; the sizer,
 `risk_by_symbol`. The profile writes both mappings whole (`config.update_file(..., replace=...)`), so a re-run
 with other coins or without `--core-risk` removes the old entries; with a split the daily loss limits are
 5 × the larger risk. The decision's gates gain `"risk for BTC"` when a coin has its own risk.
+`--fixed-risk` writes `autopilot.playbook.confidence_sizing: false` (a run without it writes `true`): with
+`max_risk_pct` = the risk the tiers can only cut, so this keeps every trade at the risk as set.
 
 ## v3.3 — let winners ride (sell a third, keep two thirds while the trend lasts)
 

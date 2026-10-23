@@ -3218,6 +3218,9 @@ def build_parser():
                         "backtested split, BTC and ETH at 3 %% with a position up to 50 %% of the account")
     p.add_argument("--core-coins", default="BTC,ETH",
                    help="profile: the core coins --core-risk applies to (default BTC,ETH)")
+    p.add_argument("--fixed-risk", action="store_true",
+                   help="profile: always the risk you set — no halving when the lab is less than 70 %% sure "
+                        "(the losing-streak and drawdown rules still cut it)")
     return p
 
 
@@ -3231,7 +3234,7 @@ PROFILE_REPLACES = {"config.json": ("risk_by_symbol",), "limits.json": ("crypto.
 
 def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, runner: bool = True,
                   etf: bool = True, cash_yield: float = 4.0, memes: bool = False, core_risk: float = None,
-                  core_coins=("BTC", "ETH")) -> tuple:
+                  core_coins=("BTC", "ETH"), fixed_risk: bool = False) -> tuple:
     """(config changes, limits changes) for daily trend following on the biggest coins.
 
     Every number is what the portfolio backtest used, and only what it tested trades: the intraday stock setups
@@ -3243,6 +3246,9 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
     ``core_risk``: its own risk per trade for ``core_coins`` (the backtested split: BTC and ETH at 3 %, the rest
     at 2 %). Above ``risk`` their position may reach half the account — at 25 % a 3 % trade with a 3×ATR stop
     would be cut back to the 2 % size and the split would do nothing.
+
+    ``fixed_risk``: no confidence sizing. With ``max_risk_pct`` = the risk, the tiers can only cut (×0.5 under a
+    70 % profit chance), so this is the risk exactly as set — what the split backtest ran.
     """
     if not 0 < risk <= MAX_PROFILE_RISK:
         raise ValueError("--risk must be above 0 and at most %g%% per trade" % MAX_PROFILE_RISK)
@@ -3267,7 +3273,8 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
            "leverage": {"crypto": lev, "stock": stock_lev},
            "autopilot": {"sim_starting_cash": capital, "runner": {"enabled": bool(runner)},
                          "etf_trend": {"enabled": bool(etf), "when": "crypto_bear"},
-                         "playbook": {"top": 10, "setups": TREND_SETUPS, "timeframes": ["1d"], "max_risk_pct": risk},
+                         "playbook": {"top": 10, "setups": TREND_SETUPS, "timeframes": ["1d"], "max_risk_pct": risk,
+                                      "confidence_sizing": not fixed_risk},
                          "universe": {"crypto": {"top_n": 10}},
                          "setups": {"stock": []}, "daily_loss_action": "stop_entries",
                          "memes": {"enabled": bool(memes)},
@@ -3322,6 +3329,10 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
         lines.append("Core coins: %s risk %g%% per trade (a position up to %g%% of the account), every other coin "
                      "%g%%. The split the backtest ran: more money where the trends are the most reliable." % (
                          " and ".join(sorted(core)), r, pos or 25, c_cfg["risk_per_trade_pct"]))
+    if not c_cfg["autopilot"]["playbook"].get("confidence_sizing", True):
+        lines.append("Fixed risk: every trade at the risk above — no halving when the lab is less than 70 %% sure; "
+                     "7 losses in a row still halve it and a −%g%% drawdown still pauses the bot." % (
+                         c_cfg["autopilot"]["adapt"]["max_drawdown_pct"]))
     if c_cfg["autopilot"]["etf_trend"]["enabled"]:
         lines.append("Bear markets: while Bitcoin is below its 200-day average (no crypto trend to follow), the bot "
                      "trades the same trend rule on ETFs that move unlike crypto — gold, the dollar, commodities, "
@@ -3535,7 +3546,7 @@ def main(argv=None) -> int:
         capital = float(args.capital if args.capital is not None else (cfg.get("account_size") or 0))
         changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital, not args.no_runner,
                                 not args.no_etf, args.cash_yield, args.memes, args.core_risk,
-                                args.core_coins.split(","))
+                                args.core_coins.split(","), args.fixed_risk)
         if args.write:
             config.update_file("config.json", changes[0], replace=PROFILE_REPLACES["config.json"])
             config.update_file("limits.json", changes[1], replace=PROFILE_REPLACES["limits.json"])
