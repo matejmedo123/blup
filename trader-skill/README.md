@@ -299,7 +299,9 @@ Replayed again on 23 Oct 2026 with the chosen split (`profile --risk 2 --core-ri
 labs: **€1,172.50**, worst drop 6.7 % (with the confidence halving left on: €1,168.12, 6.0 %). BTC and ETH
 traded at 3 % (BTC's first trade +1.47R = +€43.63 against +€21.78 halved), the rest at 2 %; the bigger
 positions took the cash the August XRP breakout needed and ZEC was bought later ($800 instead of $564), so
-the year ends about where 2 % everywhere did.
+the year ends about where 2 % everywhere did. **With crypto at 1.5×** (`--leverage 1.5`, same weekly labs):
+**€1,315.01** (+31 %), worst drop 8.4 % — the August XRP breakout taken (+€43) and ZEC bought at $564 (+€191);
+interest on the borrowed cash came to €0.93 for the year.
 
 **What if there had been cash for those breakouts?** (pre-registered 23 Oct 2026, the pack's lab trades, coins
 point in time, median of 30 signal orders; selection 2020-01 → 2024-06 / hold-out 2024-07 → today):
