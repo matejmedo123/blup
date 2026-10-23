@@ -379,6 +379,17 @@ not comparable. Buy-and-hold beat every run over these three bull years (+146 % 
 and +15 % at 1 % risk), as the €1,000 tables above already say: the same order as holding, with far smaller
 drops, not more.
 
+**Clean-room audit** (23 Oct 2026): the two rules re-implemented from their written description alone, in
+separate code, on Coinbase Exchange candles instead of Binance, by an agent that was not allowed to read this
+pack's code. BTC + ETH since 2020, like for like (0.13 % a side, no cash yield): trend breakout **€2,436 vs
+€2,547 here**, trend following **€3,833 vs €4,063**, drawdowns −17.6 % / −17.1 % vs −16 % / −18 %; per trade
++0.35…+0.60R at 43–46 % wins and +0.6…+2.1R at 34–48 % — the same numbers within what two exchanges' prices
+explain. Both rules on ten of today's big coins since 2020: **€12,771 against the point-in-time €12,757**
+here; the €44,436 hindsight row did not reproduce, because half of those coins have no Coinbase history
+before 2021 and ZEC is not on Coinbase at all — the same reason that row is marked hindsight. Two things the
+audit adds: the median trade is negative in every multi-year sample (16–53 % of the profit is one trade, the
+edge is a few big winners), and ten position slots did worse than five (cash runs out, drawdown −43 %).
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
