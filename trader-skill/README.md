@@ -350,6 +350,21 @@ random entries into the same coins; on the dead-today coins every rule lost 8–
 itself, within 0–3 days of the base, would have caught the waves, and no rule tells that base from the 98 %
 of crashes that keep falling.
 
+**Smart money on Hyperliquid** (23 Oct 2026, via the Coinversa Pulse connector): the exchange's own
+classification of every wallet by profitability, on ten meme perps (FARTCOIN, PUMP, DOGE, kPEPE, PENGU, SPX,
+kBONK, TRUMP, WIF, MOODENG), 60 days hourly, rules fixed in advance, the last 20 days run once. Neither the
+profitable tiers' net positioning nor the crowd's (read contrarian) is a long-only signal: every test cell lost
+after 0.1 % costs (−42 to −65 € per €100 trade over 27–70 trades), the one marginal statistic (fading the
+crowd at 72 h) made no money and flips sign when the tiers are assigned from the last 30 days instead of
+all time — and the API itself marks the series `backtestSuitable: false`. Individual wallets: of 316 lifetime
+top earners on these coins, 39 of the 60 screened no longer trade, none passed the swing-trader filter, and
+copying 555 recent longs at the next hourly open lost (hit 40 %, −1.5 % a trade); the winners were dip
+entries, the losers chases — the edge, where there is one, is in the entry minute. Exchange-wide context:
+swing (+$76M) and holding (+$50M) make money, intraday (−$36M) and HFT (−$12M) lose it; the crowd tier lost on
+30 of the last 30 days. Two independent TEXT TO QUANT runs on Binance (PEPE 20-day breakout on 2× volume
+with a 25 % trail: +8 % in 3 years, −0.2 % on the last 30 %, grade F; DOGE buy-the-crash: +0.3 %, grade F)
+agree with the lab.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
