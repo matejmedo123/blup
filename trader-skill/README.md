@@ -467,6 +467,18 @@ crypto trades since 2020 fell to 24). Eight slots instead of five did better in 
 2020, +22 %/yr on the hold-out) at a −40 % drawdown — read off the grid, not a pre-registered hypothesis, and
 the clean-room audit found ten slots worse than five, so slots stay at five until the combined test below.
 
+**New rules, second batch** (23 Oct 2026; 13 variants fixed in advance, top 10 point in time, picked on
+2020-01 → 2024-06, judged once on 2024-07 → 2026-10; the engine matched the bot's trades one by one):
+pyramiding the breakout (adds at +1R / +2R), the Turtle 55/20 system, a Bollinger squeeze breakout, a weekly
+breakout, an alt-season switch on ETH/BTC and a chandelier stop. **None beat the deployed rules on the
+hold-out**: the bot €1,706 (+26 %/yr, −25 %), one pyramid add €1,672 (+25 %, −24 %) — a tie, the position
+cap blocked two thirds of the adds — the Turtle €1,334 (+13 %, −19 %), the squeeze no edge, the weekly rule
+too sparse, the alt-season switch −4 %/yr, the chandelier stop cut the big runs (+0.31R a trade against
++1.11R). Every 55-day high is also a 20-day high, so the Turtle never gets a trade beside the breakout. At
+5 % risk with a 50 % cap on the ten coins every rule lost on the hold-out (the bot −5 %/yr, −40 %): two
+positions use up the cash and the +30R XRP trade of November 2024 — €500 of the bot's €700 hold-out profit —
+was never taken. One trade carries every hold-out total here; differences of a few hundred euros are noise.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
