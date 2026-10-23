@@ -301,6 +301,24 @@ traded at 3 % (BTC's first trade +1.47R = +€43.63 against +€21.78 halved), t
 positions took the cash the August XRP breakout needed and ZEC was bought later ($800 instead of $564), so
 the year ends about where 2 % everywhere did.
 
+**What if there had been cash for those breakouts?** (pre-registered 23 Oct 2026, the pack's lab trades, coins
+point in time, median of 30 signal orders; selection 2020-01 → 2024-06 / hold-out 2024-07 → today):
+
+| €1,000, BTC + ETH 3 %, the rest 2 % | Selection | Hold-out | Since 2020 | Worst drop |
+|---|---|---|---|---|
+| As deployed (1×) | €9,529 | €1,498 | €15,452 | −30 % |
+| Buy what fits (≥ half the size) when cash runs short | €9,677 | €1,444 | €17,278 | −30 % |
+| BTC / ETH position cap 33 % instead of 50 % | €9,099 | €1,505 | €15,219 | −30 % |
+| Crypto 1.5× (`profile --leverage 1.5`, simulator only) | **€11,345** | **€1,885** | **€24,270** | −30 % |
+| Borrow exactly what is missing at 10 %/yr (upper bound) | €11,582 | €1,987 | €25,152 | −32 % |
+| 2 % everywhere, 1× / 1.5× | €7,194 / €8,285 | €1,615 / €1,899 | €12,758 / €17,404 | −30 % / −28 % |
+
+Only borrowed money helps: at 2–3 % risk with a 3×ATR stop one position is 20–45 % of the account, so five
+of them need more than the account — shrinking a position or capping BTC moves the shortfall around but does
+not remove it (both fail the pre-registered rule: > 5 % better in both windows). 1.5× passes it, at the same
+worst drop (the stop sets the risk; leverage only lets more trades run at once), but Alpaca has no crypto
+margin, so it exists in the simulator only.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
