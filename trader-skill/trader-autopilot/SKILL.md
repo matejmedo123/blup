@@ -93,6 +93,7 @@ python3 "${CLAUDE_SKILL_DIR}/autopilot.py" loop --approve        # keep trading 
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" pause | resume
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" kill --confirm KILL   # cancel everything, close everything
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" check-live
+python3 "${CLAUDE_SKILL_DIR}/autopilot.py" broker-test           # read-only: keys, account, coins (Bybit, Alpaca)
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" profile --risk 2 --leverage 1.5 --capital 1000 [--write]
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" profile --risk 2 --core-risk 3 --capital 1000 --fixed-risk --write  # BTC + ETH 3 %
 python3 "${CLAUDE_SKILL_DIR}/autopilot.py" check                 # is it normal? did it do what the rules say?

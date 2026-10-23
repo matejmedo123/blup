@@ -1,4 +1,5 @@
-"""Brokers the autopilot can trade through: the local simulator (default) or Alpaca (paper / live).
+"""Brokers the autopilot can trade through: the local simulator (default), Alpaca (paper / live) or Bybit EU
+(crypto spot and spot margin; paper = Bybit's testnet).
 
     get(cfg)            → the configured broker, or BrokerError saying exactly what is missing
     live_readiness(cfg) → (ok, [missing items]) for the live opt-in in docs/SCHEMAS.md
@@ -12,6 +13,12 @@ from .. import secrets
 from .base import Broker, BrokerError, broker_symbol, data_symbol  # noqa: F401
 
 LIVE_PHRASE = "I ACCEPT REAL MONEY RISK"
+REAL = ("alpaca", "bybit")  # the brokers that can hold real money
+LIVE_KEYS = {"alpaca": ("ALPACA_LIVE_KEY_ID", "ALPACA_LIVE_SECRET_KEY"), "bybit": ("BYBIT_LIVE_KEY", "BYBIT_LIVE_SECRET")}
+PAPER_KEYS = {"alpaca": ("ALPACA_PAPER_KEY_ID", "ALPACA_PAPER_SECRET_KEY"),
+              "bybit": ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET")}
+PAPER_HOW = {"alpaca": "free paper keys: alpaca.markets → Paper Trading → API Keys",
+             "bybit": "free testnet keys: testnet.bybit.com → API (test funds from the testnet faucet)"}
 
 
 def _ap(cfg: dict) -> dict:
@@ -30,13 +37,14 @@ def live_readiness(cfg: dict, book: bool = True) -> tuple:
     book then holds up new entries (the cycle says why), never the exits and the KILL of the live trades."""
     ap = _ap(cfg)
     missing = []
-    if (ap.get("broker") or "simulator") != "alpaca":
-        missing.append('config autopilot.broker must be "alpaca" (live trading needs a real broker)')
+    kind = ap.get("broker") or "simulator"
+    if kind not in REAL:
+        missing.append('config autopilot.broker must be "alpaca" or "bybit" (live trading needs a real broker)')
     if ap.get("mode") != "live":
         missing.append('config autopilot.mode must be "live"')
     if (cfg or {}).get("paper", True) is not False:
         missing.append("config paper must be false")
-    for name in ("ALPACA_LIVE_KEY_ID", "ALPACA_LIVE_SECRET_KEY"):
+    for name in LIVE_KEYS.get(kind, LIVE_KEYS["alpaca"]):
         if not secrets.has(name):
             missing.append("%s must be set (environment or trader/secrets.env)" % name)
     if (ap.get("live_confirmation") or "") != LIVE_PHRASE:
@@ -51,7 +59,7 @@ def live_readiness(cfg: dict, book: bool = True) -> tuple:
     except ValueError:
         items = []
     away = [it for it in items if it.get("status") in ("submitting", "pending", "open")
-            and (it.get("broker"), it.get("mode")) != ("alpaca", "live")]
+            and (it.get("broker"), it.get("mode")) != (kind, "live")]
     if away:
         missing.append("%d trade(s) from the simulator or the paper account are still open in autopilot/book.json "
                        "(%s) — close them there first (KILL), then `autopilot.py forget --confirm FORGET`" % (
@@ -60,29 +68,35 @@ def live_readiness(cfg: dict, book: bool = True) -> tuple:
 
 
 def paper_readiness(cfg: dict) -> tuple:
-    if (_ap(cfg).get("broker") or "simulator") == "simulator":
+    kind = _ap(cfg).get("broker") or "simulator"
+    if kind == "simulator":
         return True, []
-    missing = ["%s must be set — free paper keys: alpaca.markets → Paper Trading → API Keys" % n
-               for n in ("ALPACA_PAPER_KEY_ID", "ALPACA_PAPER_SECRET_KEY") if not secrets.has(n)]
+    missing = ["%s must be set — %s" % (n, PAPER_HOW[kind]) for n in PAPER_KEYS[kind] if not secrets.has(n)]
     return (not missing), missing
 
 
 def get(cfg: dict) -> Broker:
     ap = _ap(cfg)
     kind = ap.get("broker") or "simulator"
-    if kind not in ("simulator", "alpaca"):
-        raise BrokerError('unknown autopilot.broker %r — use "simulator" or "alpaca"' % kind)
+    if kind not in ("simulator",) + REAL:
+        raise BrokerError('unknown autopilot.broker %r — use "simulator", "alpaca" or "bybit"' % kind)
     if ap.get("mode") == "live":
         ok, missing = live_readiness(cfg, book=False)
         if not ok:
             raise BrokerError("live trading refused — missing: " + "; ".join(missing))
-        from .alpaca import AlpacaBroker
-        return AlpacaBroker("live", cfg)
+        return _real(kind)("live", cfg)
     if kind == "simulator":
         from .simulator import SimBroker
         return SimBroker(cfg)
     ok, missing = paper_readiness(cfg)
     if not ok:
-        raise BrokerError("Alpaca paper trading needs keys — missing: " + "; ".join(missing))
+        raise BrokerError("%s paper trading needs keys — missing: %s" % (kind.capitalize(), "; ".join(missing)))
+    return _real(kind)("paper", cfg)
+
+
+def _real(kind: str):
+    if kind == "bybit":
+        from .bybit import BybitBroker
+        return BybitBroker
     from .alpaca import AlpacaBroker
-    return AlpacaBroker("paper", cfg)
+    return AlpacaBroker

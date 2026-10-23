@@ -727,6 +727,24 @@ inside a `symbols` entry is a config error (it would replace the asset class's l
 key out instead. `risk_by_symbol` applies to crypto only — a stock ticker BTC or ETH (Grayscale's mini trusts)
 gets `risk_per_trade_pct`. `config.leverage(..., symbol)` keeps exchange-listed meme coins (`symbols.is_meme_base`)
 at 1×; the sizer does too and the risk check blocks a leveraged one (`no_leverage`).
+### Bybit EU broker (`shared/brokers/bybit.py`)
+`autopilot.broker: "bybit"` — paper = `https://api-testnet.bybit.com` (`BYBIT_TESTNET_KEY` / `_SECRET`), live =
+`autopilot.bybit.host` or `https://api.bybit.eu` (`BYBIT_LIVE_KEY` / `_SECRET`, plus the same five-step opt-in as
+Alpaca). `autopilot.bybit.quote` (default `"USDC"`) is the quote coin of the pairs (`BTC/USD` → `BTCUSDC`).
+Spot only (category `spot`, Unified account): entries are GTC limit buys, `isLeverage` 1 only when
+`config.leverage(..., "bybit", coin)` allows more than 1× (then spot margin is switched on, account leverage
+set to 2, the quote coin made collateral and auto-repay switched on); stops are `orderFilter: tpslOrder` market
+sells (with `limit_price`: limit sells); sales and stops are always `isLeverage` 0. `account()`: `equity` =
+totalEquity, `cash` = Σ stable coins (walletBalance − spotBorrow) — negative while a loan is open, `borrowed`;
+`positions()`: every non-stable coin with a positive net balance, `BTC/USD` style. A filled buy's `filled_qty`
+is net of the fee Bybit takes in the coin (`cumFeeDetail`). Client ids longer than 36 characters travel as a
+hash and map back through `broker/bybit_ids.json`. Statuses map to the Alpaca names (Untriggered → new, Triggered
+→ accepted, PartiallyFilledCanceled → canceled). `autopilot.py broker-test`: read-only calls (account,
+positions, open orders, coins) with their latency. `profile --venue bybit` writes `costs.crypto` 15 + 3 bps,
+`borrow_rate_pct` 20, `cash_yield_pct` 0, `autopilot.etf_trend.enabled` false and `autopilot.venue: "bybit"`;
+it never sets the broker. The daemon wakes 5 s after 00:00 UTC (`next_daily_close`) instead of waiting out
+its interval, so a daily signal is traded within seconds of the close.
+
 `--fixed-risk` writes `autopilot.playbook.confidence_sizing: false` (a run without it writes `true`): with
 `max_risk_pct` = the risk the tiers can only cut, so this keeps every trade at the risk as set.
 

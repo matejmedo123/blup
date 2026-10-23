@@ -48,6 +48,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from shared import config, disclaimer, market_clock, secrets, skills, state  # noqa: E402
+from shared import brokers  # noqa: E402
 
 STATIC = _HERE / "static"
 MAX_BODY = 16 * 1024
@@ -192,12 +193,13 @@ def _starting_cash(cfg: dict) -> float:
 
 def live_requirements(cfg: dict) -> list:
     ap = cfg.get("autopilot") or {}
+    kind = ap.get("broker") if ap.get("broker") in brokers.REAL else "alpaca"
+    keys = brokers.LIVE_KEYS[kind]
     return [
-        {"name": "autopilot.broker is \"alpaca\"", "ok": ap.get("broker") == "alpaca"},
+        {"name": "autopilot.broker is \"alpaca\" or \"bybit\"", "ok": ap.get("broker") in brokers.REAL},
         {"name": "autopilot.mode is \"live\"", "ok": ap.get("mode") == "live"},
         {"name": "top-level \"paper\": false", "ok": cfg.get("paper") is False},
-        {"name": "ALPACA_LIVE_KEY_ID and ALPACA_LIVE_SECRET_KEY set",
-         "ok": secrets.has("ALPACA_LIVE_KEY_ID") and secrets.has("ALPACA_LIVE_SECRET_KEY")},
+        {"name": "%s and %s set" % keys, "ok": all(secrets.has(k) for k in keys)},
         {"name": "autopilot.live_confirmation is \"%s\"" % LIVE_PHRASE, "ok": ap.get("live_confirmation") == LIVE_PHRASE},
     ]
 
@@ -336,6 +338,8 @@ def summary_view(app) -> dict:
         "news_updated_at": feed.get("updated_at") if isinstance(feed, dict) else None,
         "secrets": {"alpaca_paper": secrets.has("ALPACA_PAPER_KEY_ID") and secrets.has("ALPACA_PAPER_SECRET_KEY"),
                     "alpaca_live": secrets.has("ALPACA_LIVE_KEY_ID") and secrets.has("ALPACA_LIVE_SECRET_KEY"),
+                    "bybit_testnet": secrets.has("BYBIT_TESTNET_KEY") and secrets.has("BYBIT_TESTNET_SECRET"),
+                    "bybit_live": secrets.has("BYBIT_LIVE_KEY") and secrets.has("BYBIT_LIVE_SECRET"),
                     "x_token": secrets.has("X_BEARER_TOKEN"),
                     "telegram": secrets.has("TELEGRAM_BOT_TOKEN") and secrets.has("TELEGRAM_CHAT_ID"),
                     "ntfy_token": secrets.has("NTFY_TOKEN"), "anthropic": secrets.has("ANTHROPIC_API_KEY")},

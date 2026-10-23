@@ -3089,6 +3089,46 @@ def _watchdog() -> None:
         os._exit(70)
 
 
+def broker_test(cfg: dict) -> dict:
+    """Read-only calls to the configured broker — keys, IP binding, account, coins — and nothing is ever sent."""
+    lines, ok = [], True
+    try:
+        b = brokers.get(cfg)
+    except BrokerError as exc:
+        return {"ok": False, "lines": ["BROKER TEST · %s · %s" % ((cfg.get("autopilot") or {}).get("broker"), exc)]}
+    lines.append("BROKER TEST · %s · %s (read only — nothing is sent)" % (b.name, b.mode))
+    checks = (("account", lambda: b.account()), ("positions", lambda: b.positions()),
+              ("open orders", lambda: b.open_orders()), ("coins", lambda: b.tradable("crypto")))
+    for name, fn in checks:
+        t0 = time.time()
+        try:
+            v = fn()
+        except Exception as exc:  # noqa: BLE001 — every failure is the answer here
+            ok = False
+            lines.append("  ✗ %-11s %s" % (name, exc))
+            continue
+        ms = (time.time() - t0) * 1000
+        if name == "account":
+            detail = "equity %s · cash %s · buying power %s" % (fmt.money(v.get("equity")), fmt.money(v.get("cash")),
+                                                                fmt.money(v.get("buying_power")))
+        elif name == "coins":
+            detail = "no list (no restriction)" if v is None else "%d: %s" % (len(v), ", ".join(sorted(v)[:15]))
+        else:
+            detail = "%d" % len(v)
+        lines.append("  ✓ %-11s %s · %.0f ms" % (name, detail, ms))
+    for note in getattr(b, "notes", []) or []:
+        lines.append("  note: %s" % note)
+    return {"ok": ok, "lines": lines}
+
+
+DAILY_CLOSE_DELAY_SEC = 5  # the exchange's daily bar is final a moment after 00:00 UTC
+
+
+def next_daily_close(now: float) -> float:
+    """When the next daily crypto bar is complete (00:00 UTC plus a few seconds)."""
+    return (int(now // 86400) + 1) * 86400 + DAILY_CLOSE_DELAY_SEC
+
+
 def daemon(args, cfg) -> int:
     """Run forever: one cycle every interval_sec, crypto around the clock, stocks in the session."""
     if os.environ.get("TRADER_NOW") and not args.max_cycles:
@@ -3158,9 +3198,12 @@ def daemon(args, cfg) -> int:
                 except Exception:
                     pass
             waited = 0
+            close_at = next_daily_close(time.time())
             while waited < interval and stop["signal"] is None:
                 time.sleep(1)
                 waited += 1
+                if time.time() >= close_at:
+                    break  # the daily bar just closed: its signals are traded now, not up to a minute later
                 try:
                     if read_control()["run_once"]:
                         break
@@ -3186,7 +3229,7 @@ def daemon(args, cfg) -> int:
 def build_parser():
     p = cli.parser("autopilot.py", __doc__)
     p.add_argument("action", choices=("status", "run", "loop", "daemon", "pause", "resume", "kill", "replay",
-                                      "check-live", "universe", "learned", "notify-test", "profile", "check",
+                                      "check-live", "broker-test", "universe", "learned", "notify-test", "profile", "check",
                                       "forget"))
     p.add_argument("--once", action="store_true", help="run: a single cycle (default)")
     p.add_argument("--refresh", action="store_true", help="universe: rebuild it now instead of showing the cached one")
@@ -3218,6 +3261,10 @@ def build_parser():
                         "backtested split, BTC and ETH at 3 %% with a position up to 50 %% of the account")
     p.add_argument("--core-coins", default="BTC,ETH",
                    help="profile: the core coins --core-risk applies to (default BTC,ETH)")
+    p.add_argument("--venue", choices=("alpaca", "bybit"), default="alpaca",
+                   help="profile: the costs the simulator charges — alpaca (default) or bybit (Bybit EU spot: 0.15 %% "
+                        "a side, margin loans at 20 %% a year, no interest on idle cash, crypto only). It never "
+                        "switches the broker itself")
     p.add_argument("--fixed-risk", action="store_true",
                    help="profile: always the risk you set — no halving when the lab is less than 70 %% sure "
                         "(the losing-streak and drawdown rules still cut it)")
@@ -3228,13 +3275,16 @@ def build_parser():
 
 TREND_SETUPS = ["trend_ema", "trend_breakout"]
 MAX_PROFILE_RISK = 5.0
+# what the simulator charges for each venue the bot can trade at (profile --venue)
+VENUES = {"alpaca": {"fee_bps": 10.0, "slippage_bps": 3.0, "borrow_rate_pct": 10.0, "crypto_only": False},
+          "bybit": {"fee_bps": 15.0, "slippage_bps": 3.0, "borrow_rate_pct": 20.0, "crypto_only": True}}
 # the profile owns the per-coin risk: a re-run replaces these mappings whole, so an old split cannot linger
 PROFILE_REPLACES = {"config.json": ("risk_by_symbol",), "limits.json": ("crypto.symbols",)}
 
 
 def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, runner: bool = True,
                   etf: bool = True, cash_yield: float = 4.0, memes: bool = False, core_risk: float = None,
-                  core_coins=("BTC", "ETH"), fixed_risk: bool = False) -> tuple:
+                  core_coins=("BTC", "ETH"), fixed_risk: bool = False, venue: str = "alpaca") -> tuple:
     """(config changes, limits changes) for daily trend following on the biggest coins.
 
     Every number is what the portfolio backtest used, and only what it tested trades: the intraday stock setups
@@ -3246,6 +3296,10 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
     ``core_risk``: its own risk per trade for ``core_coins`` (the backtested split: BTC and ETH at 3 %, the rest
     at 2 %). Above ``risk`` their position may reach half the account — at 25 % a 3 % trade with a 3×ATR stop
     would be cut back to the 2 % size and the split would do nothing.
+
+    ``venue`` "bybit": the simulator charges what Bybit EU spot would — 0.15 % a side (its non-VIP taker fee, the
+    higher of the rates it quotes), margin loans at 20 % a year (conservative: the leverage study pays even at
+    75 %), nothing on idle cash (a stablecoin earns no interest under MiCA) and no ETF leg (Bybit has no stocks).
 
     ``fixed_risk``: no confidence sizing. With ``max_risk_pct`` = the risk, the tiers can only cut (×0.5 under a
     70 % profit chance), so this is the risk exactly as set — what the split backtest ran.
@@ -3269,6 +3323,8 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
     coins = sorted(coins)
     if core_risk != risk and not coins:
         raise ValueError("--core-coins is empty — name the coins --core-risk is for (e.g. BTC,ETH)")
+    if venue not in VENUES:
+        raise ValueError("--venue is one of %s" % ", ".join(sorted(VENUES)))
     if not (isinstance(capital, (int, float)) and math.isfinite(capital) and capital > 0):
         raise ValueError("--capital must be an amount above 0 (e.g. 1000)")
     if not (math.isfinite(float(cash_yield)) and 0 <= float(cash_yield) <= 20):
@@ -3303,6 +3359,13 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
     cfg["risk_by_symbol"] = {c: core_risk for c in coins} if split else {}
     lim["crypto"]["symbols"] = {c: {"max_risk_per_trade_pct": core_risk, "max_risk_per_trade_usd": backstop(core_risk),
                                     "max_position_pct": 50 if core_risk > risk else 25} for c in coins} if split else {}
+    v = VENUES[venue]
+    cfg["costs"] = {"crypto": {"fee_bps": v["fee_bps"], "slippage_bps": v["slippage_bps"]}}
+    cfg["borrow_rate_pct"] = v["borrow_rate_pct"]
+    if v["crypto_only"]:
+        cfg["cash_yield_pct"] = 0.0
+        cfg["autopilot"]["etf_trend"]["enabled"] = False
+    cfg["autopilot"]["venue"] = venue
     return cfg, lim
 
 
@@ -3338,6 +3401,11 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
         lines.append("Core coins: %s risk %g%% per trade (a position up to %g%% of the account), every other coin "
                      "%g%%. The split the backtest ran: more money where the trends are the most reliable." % (
                          " and ".join(sorted(core)), r, pos or 25, c_cfg["risk_per_trade_pct"]))
+    if c_cfg["autopilot"].get("venue") == "bybit":
+        lines.append("Venue Bybit EU: the simulator charges %g %% a side, %g %% a year on margin loans, nothing on idle "
+                     "cash, crypto only (no ETF leg). Trading there: autopilot.broker \"bybit\" — testnet keys for paper, "
+                     "see docs/BYBIT.sk.md." % ((c_cfg["costs"]["crypto"]["fee_bps"] + c_cfg["costs"]["crypto"]
+                                                 ["slippage_bps"]) / 100.0, c_cfg["borrow_rate_pct"]))
     if not c_cfg["autopilot"]["playbook"].get("confidence_sizing", True):
         lines.append("Fixed risk: every trade at the risk above — no halving when the lab is less than 70 %% sure; "
                      "7 losses in a row still halve it and a −%g%% drawdown still pauses the bot." % (
@@ -3552,6 +3620,10 @@ def main(argv=None) -> int:
             "\n  missing: %s" % m for m in missing)
         cli.emit(args, text, {"live_ready": ok, "missing": missing})
         return 0
+    if args.action == "broker-test":
+        res = broker_test(cfg)
+        cli.emit(args, "\n".join(res["lines"]), res)
+        return 0 if res["ok"] else 1
     if args.action == "check":
         res = run_checks(cfg)
         cli.emit(args, health.text(res["health"]) + "\n\n" + shadow.text(res["shadow"]), res)
@@ -3560,7 +3632,7 @@ def main(argv=None) -> int:
         capital = float(args.capital if args.capital is not None else (cfg.get("account_size") or 0))
         changes = trend_profile(args.risk, args.leverage, args.stock_leverage, capital, not args.no_runner,
                                 not args.no_etf, args.cash_yield, args.memes, args.core_risk,
-                                args.core_coins.split(","), args.fixed_risk)
+                                args.core_coins.split(","), args.fixed_risk, args.venue)
         if args.write:
             config.update_file("config.json", changes[0], replace=PROFILE_REPLACES["config.json"])
             config.update_file("limits.json", changes[1], replace=PROFILE_REPLACES["limits.json"])

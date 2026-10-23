@@ -319,6 +319,19 @@ not remove it (both fail the pre-registered rule: > 5 % better in both windows).
 worst drop (the stop sets the risk; leverage only lets more trades run at once), but Alpaca has no crypto
 margin, so it exists in the simulator only.
 
+**Where the leverage comes from decides whether it pays** (pre-registered 23 Oct 2026, same engine): perpetual
+futures charge funding on the *whole* position (Binance funding history since 2019: 10–15 %/yr on average, far
+more in bull runs — exactly when a trend follower holds), so Kraken perps at 1.5× made €11,397 since 2020 against
+€15,452 for spot at 1×. Spot *margin* charges interest only on the borrowed part, only while cash is short:
+€24,270 at 10 %/yr, €23,367 at 30 %, still €21,771 at 75 % — the same worst drop. Hence the **Bybit EU** broker
+(`autopilot.broker "bybit"`): MiCA-licensed for the EEA, spot margin, 0.1–0.15 % a side, v5 API; paper is
+Bybit's testnet. Stops sit at the exchange (TP/SL orders that sell at market on the trigger), a sale never
+borrows, the account is set to 2× at most. `profile --venue bybit` makes the simulator charge its costs (0.15 %
++ 0.03 % slippage a side, 20 %/yr on margin loans, no interest on idle cash, crypto only);
+`autopilot.py broker-test` checks the keys read-only. Setup in Slovak: [docs/BYBIT.sk.md](docs/BYBIT.sk.md).
+The adapter is built to the documented API and tested on simulated replies — Bybit blocks the US cloud it was
+written in, so its first real connection is the testnet on your machine.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
