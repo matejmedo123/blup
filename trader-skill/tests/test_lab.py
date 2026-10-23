@@ -66,7 +66,7 @@ class Grid(TraderTestCase):
             setups.evaluate("trend_pullback", w)
         self.assertEqual(set(setups.for_asset("crypto", "series")),
                          {"trend_pullback", "oversold_bounce", "band_bounce", "breakout_24", "dip_in_uptrend",
-                          "trend_breakout", "trend_ema", "breakout_volume"})
+                          "trend_breakout", "trend_breakout_vol", "trend_ema", "breakout_volume"})
 
 
 class Validation(TraderTestCase):
@@ -122,7 +122,7 @@ class OfflineRun(TraderTestCase):
         doc = state.read_json("backtests/lab-crypto.json")
         self.assertEqual(doc["timeframes"], ["5m", "1h", "4h", "1d"])
         self.assertEqual(doc["costs"]["round_trip_pct"], 0.26)
-        self.assertEqual(len(doc["families"]), 6 + 4 + 4 + 4)
+        self.assertEqual(len(doc["families"]), 6 + 4 + 4 + 5)
         pb = state.read_json("backtests/playbook.json")
         self.assertEqual(pb["entries"], {})  # 30 days of fixtures prove nothing
         self.assertTrue(all(not f["validated"] for f in doc["families"]))
@@ -483,6 +483,19 @@ class TrendBreakout(TraderTestCase):
         self.assertEqual(setups.series_signals("trend_breakout", coin, "1d", context={"btc_up": {}}), [])
         trades = lab().rule_trades(coin, "trend_breakout", "1d", 0.0, ctx)
         self.assertTrue(trades)
+
+    def test_volume_variant_is_the_breakout_on_volume_days_only(self):
+        coin = daily_uptrend(3, days=600)
+        ctx = {"btc_up": setups.regime_map(daily_uptrend(9, days=600))}
+        plain = {s["trigger"]["index"] for s in setups.series_signals("trend_breakout", coin, "1d", context=ctx)}
+        self.assertEqual(setups.series_signals("trend_breakout_vol", coin, "1d", context=ctx), [])  # flat volume
+        loud = [Candle(b.t, b.o, b.h, b.l, b.c, 2000.0 if k % 40 == 18 else b.v) for k, b in enumerate(coin)]
+        hits = {s["trigger"]["index"] for s in setups.series_signals("trend_breakout_vol", loud, "1d", context=ctx)}
+        self.assertTrue(hits)
+        self.assertTrue(hits <= plain)                         # never a day the plain breakout would not fire
+        self.assertTrue(all(k % 40 == 18 for k in hits))       # and only on the 2× volume days
+        self.assertEqual(setups.runner("trend_breakout_vol"), setups.runner("trend_breakout"))
+        self.assertEqual(setups.SETUPS["trend_breakout_vol"]["exit_rule"], setups.SETUPS["trend_breakout"]["exit_rule"])
 
     def test_rule_says_exit(self):
         below = {"type": "close_below_low", "n": 3}

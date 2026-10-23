@@ -80,6 +80,11 @@ SETUPS = {
                                       "text": "first daily close below the lowest close of the previous 10 days",
                                       "short": "close < 10-day low (≤ 120 d)"}},
 }
+# the trend breakout only on a day with 1.5× the 20-day volume: more of its trades won (48 % against 43 % on
+# 2018–2024, 46 % against 40 % on 2024–2026) at the same edge per trade — same stop, exit and runner; the lab
+# decides each week whether it trades
+SETUPS["trend_breakout_vol"] = dict(SETUPS["trend_breakout"], label="Trend breakout on volume (daily close above the "
+                                    "20-day high on 1.5× volume, BTC above its 200-day average)")
 SERIES_INTERVALS = ("1h", "4h", "1d")
 SERIES_WARMUP = 210          # bars before the first signal (the 200-bar EMA needs them)
 SERIES_COOLDOWN = 12         # bars after a signal before the same rule may fire again
@@ -574,14 +579,19 @@ def _series_hit(setup: str, candles, i: int, x: dict, context: dict = None):
         return ("trend confirmed: 20 EMA above the 50 EMA, close above the 20 EMA, higher highs and higher lows, " +
                 ("above its own 200-day average" if setup == "etf_trend" else "Bitcoin above its 200-day average"),
                 {"trigger_level": cl[i], "stop_ref": min(b.l for b in candles[i - 9:i + 1]), "ema50": x["ema50"][i]})
-    if setup == "trend_breakout":
+    if setup in ("trend_breakout", "trend_breakout_vol"):
         btc_up = (context or {}).get("btc_up")
         if not btc_up or not btc_up.get(c.t):
             return None
         hi = max(cl[i - 20:i])
         if cl[i] <= hi:
             return None
-        return ("daily close above the 20-day high %s, Bitcoin above its 200-day average" % fmt.price(hi),
+        on_vol = ""
+        if setup == "trend_breakout_vol":
+            if not (x["vol20"][i - 1] and c.v > 1.5 * x["vol20"][i - 1]):
+                return None
+            on_vol = " on %.1f× average volume" % (c.v / x["vol20"][i - 1])
+        return ("daily close above the 20-day high %s%s, Bitcoin above its 200-day average" % (fmt.price(hi), on_vol),
                 {"trigger_level": hi, "stop_ref": None, "low10": min(cl[i - 10:i])})
     if cl[i] <= x["ema200"][i]:
         return None  # every swing rule here is long-only and wants the long-term trend up

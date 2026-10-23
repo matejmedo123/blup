@@ -651,7 +651,7 @@ lab's test-period result (`"source": "backtest lab"`). Swing-setup ids use the b
 `{"symbol", "interval", "source", "from" (how far back it was asked for), "updated_at", "candles": [[t,o,h,l,c,v]]}`
 
 ### Rule-exit plans (daily setups)
-Plans from `trend_ema` / `trend_breakout` / `breakout_volume` / `dip_in_uptrend` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
+Plans from `trend_ema` / `trend_breakout` / `trend_breakout_vol` / `breakout_volume` / `dip_in_uptrend` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
 the setup's protective stop (`stop_rule`: 3×ATR, below the 10-day swing low, or 1 ATR under the broken
 high), a target out of reach (1000R — the lab's rule trades have no target either) and a time stop of `max_bars` days. The autopilot checks the rule after
 every daily close that happened after the fill and closes with `"reason": "rule"` (journal exit reason `rule`). The

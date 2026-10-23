@@ -50,7 +50,8 @@ python3 "${CLAUDE_SKILL_DIR}/lab.py" --fee-bps 25                     # e.g. Alp
   (trend pullback, oversold bounce, Bollinger-band bounce, 24-bar breakout — all long, all above the
   200 EMA), and two daily rules with built-in exits, both active only while Bitcoin is above its 200-day
   average: **trend_breakout** (close above the 20-day high; out at the first close below the 10-day
-  low, ≤ 60 days, 3×ATR stop) and **dip_in_uptrend** (3 lower closes, RSI(2) < 10, above the 50- and
+  low, ≤ 60 days, 3×ATR stop; **trend_breakout_vol** is the same rule only on a day with 1.5× the
+  20-day volume) and **dip_in_uptrend** (3 lower closes, RSI(2) < 10, above the 50- and
   200-day averages; out at the first close above the 5-day average, ≤ 10 days, 3×ATR stop), plus the
   user's cheat-sheet strategies **trend_ema** (20 EMA > 50 EMA, higher highs and lows; out below the
   50-day EMA; stop below the 10-day swing low) and **breakout_volume** (20-day high on 1.5× volume; out

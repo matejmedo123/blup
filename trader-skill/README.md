@@ -390,6 +390,27 @@ before 2021 and ZEC is not on Coinbase at all — the same reason that row is ma
 audit adds: the median trade is negative in every multi-year sample (16–53 % of the profit is one trade, the
 edge is a few big winners), and ten position slots did worse than five (cash runs out, drawdown −43 %).
 
+**More winners, same edge?** (23 Oct 2026, the user wants a higher win rate with a good reward-to-risk; 15
+coins on Binance 2018–2026, the history cut in four, variants fixed in advance, picked on the first three
+periods and judged on the fourth). Raising the win rate costs reward-to-risk, every time:
+
+| Trend breakout | Win rate (periods 1–3 → 4) | Avg win ÷ avg loss | Per trade (1–3 → 4) |
+|---|---|---|---|
+| As deployed (two thirds ride) | 42 % → 39 % | 9.2 → 2.6 | +1.89R → +0.23R |
+| Baseline exits | 43 % → 40 % | 4.1 → 2.4 | +0.72R → +0.19R |
+| **Only on 1.5× volume** | **48 % → 46 %** | 4.3 → 1.9 | **+0.96R → +0.20R** |
+| Half at +1R, stop to breakeven | 49 % → 48 % | 2.3 → 1.7 | +0.38R → +0.16R |
+| Volume + half at +1R | 54 % → 52 % | 2.3 → 1.4 | +0.51R → +0.15R |
+| Breakeven stop after +1R | 37 % → 35 % | 5.3 → 3.1 | +0.64R → +0.20R |
+
+The volume filter is the one change that buys more winners without giving up edge, so it is in the pack as
+`trend_breakout_vol` for the lab to judge week by week. Selling half at +1R gets past 50 % wins but takes a
+third of the edge and half the growth (BTC + ETH since 2020: +8 %/yr at −7 % drawdown instead of +14 % at
+−17 %); a breakeven stop *lowers* the win rate once costs are paid. Trend following (EMA 20/50) could be
+pushed to 54–57 % wins on the first three periods, but no variant of it — the deployed one included — made
+money on the fourth, so none of its changes can be validated. Random entries with the same exits: +0.08R
+at 21–24 % wins — the entries carry real information.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
