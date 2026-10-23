@@ -331,6 +331,25 @@ coin-weeks), the picks caught 0–1 %; the best any rule managed was one gem per
 momentum), with the shuffled baseline close behind. What the scores do measure: FOMO ≥ 30 means "something
 is happening now" with ~8 % odds of a double and ~50 % odds of a loss.
 
+**Riding the waves** (23 Oct 2026, the user's next question: not holding, "jump on the wave"): the whole
+CoinGecko meme category, dead coins included — 1,155 coins with a month or more of real trading (843 from
+CoinGecko, 312 from GeckoTerminal pools), 62 % dead today — over one year of daily data, rules fixed in
+advance. The waves are real: 724 tradeable doublings within 14 days, a median 2.6× in 9–14 days, a quarter
+of them in coins that are dead today, and half of the coins that waved once waved again, typically two weeks
+after the last wave ended. What they have in common is *where* they start, not *when*: a wave base is four
+times likelier on a day the coin is down > 20 % in a week or > 50 % in a month, twice as likely within 30
+days of the coin's last wave, likelier under $10M and three times less likely above $100M or after a +20 %
+week — and still one base per 50–75 such days against one per 200–250 overall. By the time a wave is
+visible (+25 % off the 20-day low on 2× volume, day 8–10) half the move is gone, two thirds of waves never
+show that signal before peaking, and 91–93 % of the signals are false starts; nothing separates the two
+with more than ~22 % precision. All eight pre-registered entries (volume surge, breakouts, two +15 % days,
+first green day after −80 %, FOMO crossing, the second wave of a coin) × three exits lost on the first eight
+months (−2.6 to −10.2 % a trade); the three least bad, run once on the last 12 weeks: −2.5 %, −1.6 % and
++2.6 % a trade — the last on a single +1,218 % trade (407 % of the cell; −8 % without it) — no better than
+random entries into the same coins; on the dead-today coins every rule lost 8–22 %. Only buying the crash
+itself, within 0–3 days of the base, would have caught the waves, and no rule tells that base from the 98 %
+of crashes that keep falling.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
