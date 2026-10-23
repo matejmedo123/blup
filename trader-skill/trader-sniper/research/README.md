@@ -129,6 +129,19 @@ lives on what is kept, and what is kept is usually rugged between two candles (0
   scalping on the big pools −0.54R at €50 and −0.52R at €100 against −0.66R at €10 (−€29 to −€35 over the 25
   TEST days at €50), intraday −0.53R, and +1 % slippage makes every one of them worse than at €10 (−2.1R).
   Size only scales the loss: the fixed fees were worth ~0.1R, the stops and the rugs are the rest.
+- **The fastest network access at the migration** (23 Oct; what a Geyser / shred feed + Jito bot could reach,
+  the one moment not yet measured at slot level) — 789,523 trades of 1,787 graduations, the 340 standard
+  pools whose migration slot is in the data (the quieter ones; the hot ones are missing their first 38–113 s),
+  PumpSwap fee measured at 1.15 %/side at these market caps, 0.001 SOL tip. In 59 % of them the migration
+  slot holds one atomic bundle: a 0.9877 SOL probe, then a 146–2,000 SOL buy that completes the curve, migrates
+  it and takes 60–95 % of the pool — the price is already a median 8.8× the creation price before anyone can
+  react. Every reachable entry (end of the migration slot, +1 / +2 slots, +2 / 5 / 15 / 60 s) lost at €10 on
+  all eight exits (−€0.4 to −€1.7 a trade TRAIN, −€0.8 to −€3.5 TEST, CIs below zero); the three TRAIN-only
+  positive cells live on one ×35 coin and lose without it and on TEST; at €50 everything is ~5× worse. The
+  wallets that really bought in slots +1 / +2: median +2 % marked and −11 % realised on TRAIN, −20 % / −70 %
+  on TEST. Thirty minutes after the migration the price is a median 0.07–0.09× the creation price: the
+  pool is drained by curve holders. The only positive rows are the unreachable "inside the bundle" and the
+  perfect-exit upper bound.
 - **What others found** — no published strategy that pays a retail buyer on new meme coins: 74 % of Solana
   meme-coin buyers lose money while sandwich bots win every week (Bitquery); insiders take ~80 % of realized
   profit (memescope); the snipers that do win are funded by the deployers and buy in the creation block (Pine
