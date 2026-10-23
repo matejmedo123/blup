@@ -310,6 +310,14 @@ out of the honest test (DOGE joined the top 10 only in late January 2021); in a 
 DOGE alone turns €44k into €71k since 2020 — and costs money over the last 3 years. Meme coins add a little
 variety, not an edge; the lab decides each week whether any of them trades.
 
+The lab itself, run on 23 Oct 2026 over every exchange-listed meme coin with Binance history (29 on daily
+bars, 35 on 4 h / 1 h: DOGE, SHIB, PEPE, BONK, WIF, FLOKI, TRUMP, PENGU, PNUT, BOME, TURBO, NEIRO, DOGS, NOT,
+ORDI, PEOPLE, …; 0.1 % a side), with all twelve setup × timeframe families: **nothing held and nothing was
+validated**. Daily: breakout on volume +0.12R in the last period only, trend breakout −0.01R, EMA trend
+−0.44R, the dip in an uptrend never had an edge on training data. Swing (4 h / 1 h): the 24-bar breakout
++0.03R, everything else had no exit with an edge on training data. Tuning every coin on its own found 80
+"winners" in training, 48 % of which stayed profitable afterwards — a coin flip.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
