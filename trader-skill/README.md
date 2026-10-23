@@ -318,6 +318,19 @@ validated**. Daily: breakout on volume +0.12R in the last period only, trend bre
 +0.03R, everything else had no exit with an edge on training data. Tuning every coin on its own found 80
 "winners" in training, 48 % of which stayed profitable afterwards — a coin flip.
 
+**A "meme radar" as a gem hunter** (23 Oct 2026): the user's page scores the 250 biggest meme coins with
+*History* (once exploded, held value, old, big) and *FOMO* (rising now, volume up, near the high). Replayed
+point in time over one year of daily data (47 Mondays, rules fixed in advance, the last 11 weeks never used
+for choosing): neither score nor any of ten rules built on them predicts the next 7, 14 or 30 days. History
+is *negatively* related to what follows in the survivor universe (the top decile lags the bottom by 4–31 %)
+and that relation vanishes once dead coins are included — it is survivorship, not a signal. FOMO's rank
+correlation is ≈ 0; the radar's own "both" picks (33 coin-weeks) lost a median 9 % in a week and 37 % in a
+month, and as a weekly top-10 portfolio −85 % / −80 % / −40 % on the test weeks while the 250 coins
+equal-weighted made +21 % / +26 % / +18 % and BTC +29–33 %. Of the real gems (+100 % in 30 days: 3–5 % of
+coin-weeks), the picks caught 0–1 %; the best any rule managed was one gem per nine signals (30-day
+momentum), with the shuffled baseline close behind. What the scores do measure: FOMO ≥ 30 means "something
+is happening now" with ~8 % odds of a double and ~50 % odds of a loss.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
