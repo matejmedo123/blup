@@ -365,6 +365,20 @@ swing (+$76M) and holding (+$50M) make money, intraday (−$36M) and HFT (−$12
 with a 25 % trail: +8 % in 3 years, −0.2 % on the last 30 %, grade F; DOGE buy-the-crash: +0.3 %, grade F)
 agree with the lab.
 
+**The autopilot's own daily trend rules on an independent engine** (23 Oct 2026, TEXT TO QUANT on Binance
+data, last 3 years, 0.07 % costs, 1 % risk a trade, one coin and one position per run — its free plan allows
+no cross-market condition, so the "BTC above its 200-day average" switch became each coin's own 200-day
+average): the trend breakout (close above the 20-day high, 3×ATR stop, out below the 10-day low or after 60
+days) made **+0.45R a trade on BTC** (17 trades, 35 % wins, profit factor 1.9) and **+1.13R on SOL** (13
+trades, 46 % wins, profit factor 4.3), positive on the untouched last 30 % of both runs, profitable in 3 of 6
+walk-forward windows, with the whole profit in the uptrend blocks and losses in chop — the same shape the lab
+reports (+0.3–0.8R, ~40 % wins, only while the trend is up). The engine grades both F for sample size: one
+coin gives 13–17 trades in three years, which is why the bot pools ten coins. Its trend-following rule fired
+only twice on ETH in that engine's wording (the EMA20/50 cross, not the lab's higher-highs confirmation) —
+not comparable. Buy-and-hold beat every run over these three bull years (+146 % BTC, +225 % SOL against +8 %
+and +15 % at 1 % risk), as the €1,000 tables above already say: the same order as holding, with far smaller
+drops, not more.
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
