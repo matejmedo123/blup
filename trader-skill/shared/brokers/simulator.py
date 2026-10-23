@@ -246,6 +246,10 @@ class SimBroker(Broker):
                 if (o["status"] in ("new", "held") and o.get("expires_at")
                         and now_ts >= market_clock.ts(o["expires_at"])):
                     o["status"] = "expired" if o.get("leg") == "entry" else "canceled"
+                    # its stop and target never become live — held forever they would be synced every cycle
+                    for child in self.book["orders"]:
+                        if child.get("parent_id") == o["id"] and child["status"] in ("new", "held"):
+                            child["status"] = "canceled"
         self._mark()
         self._charge_interest(now_ts)
         self._archive(now_ts)

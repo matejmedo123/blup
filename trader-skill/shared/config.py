@@ -348,10 +348,14 @@ def _check_symbols(here: str, value, defaults: dict, where: str, problems: list)
             problems.append("%s must be an object like {\"max_position_pct\": 50}, not %s" % (at, json.dumps(entry)))
             continue
         unknown = sorted(k for k in entry if k not in SYMBOL_LIMIT_KEYS)
+        for k in sorted(k for k, v in entry.items() if v is None and k in SYMBOL_LIMIT_KEYS):
+            # the asset class's own limit would be replaced by "no limit" — never quietly
+            problems.append("%s.%s is null — give it a number, or remove the key to use the %s limit" % (
+                at, k, here.split(".")[0]))
         if unknown:
             problems.append("%s: only %s can be set per symbol, not %s" % (at, ", ".join(SYMBOL_LIMIT_KEYS),
                                                                             ", ".join(unknown)))
-        _check({k: v for k, v in entry.items() if k in SYMBOL_LIMIT_KEYS},
+        _check({k: v for k, v in entry.items() if k in SYMBOL_LIMIT_KEYS and v is not None},
                {k: (defaults or {}).get(k) for k in SYMBOL_LIMIT_KEYS}, where, problems, at + ".")
         pct = entry.get("max_risk_per_trade_pct")
         if isinstance(pct, (int, float)) and not isinstance(pct, bool) and pct > SYMBOL_RISK_HARD_CAP:
@@ -367,6 +371,8 @@ def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = ""
                 doc[key] = {}
             else:
                 _check_symbols(here, value, defaults, where, problems)
+                if isinstance(value, dict):  # "btc" means BTC: the lookups use the base in upper case
+                    doc[key] = {str(k).strip().upper(): v for k, v in value.items()}
             continue
         kind = _kind(key, default)
         if here == "leverage" and isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -468,10 +474,11 @@ def _base(symbol) -> str:
 
 
 def risk_pct_for(cfg: dict, symbol) -> float:
-    """The risk per trade (% of the account) for this coin or stock: config risk_by_symbol, else risk_per_trade_pct.
-    ``symbol`` is a parsed symbol or its base ("BTC")."""
-    # a DEX token can call itself BTC: the core coins' risk never reaches meme tokens
-    over = None if getattr(symbol, "asset", None) == "meme" else (cfg.get("risk_by_symbol") or {}).get(_base(symbol))
+    """The risk per trade (% of the account) for this coin: config risk_by_symbol, else risk_per_trade_pct.
+    ``symbol`` is a parsed symbol or its base ("BTC"); stocks and DEX tokens always get risk_per_trade_pct."""
+    # coins only: a DEX token can call itself BTC, and BTC / ETH are also stock tickers (Grayscale's mini trusts)
+    over = None if getattr(symbol, "asset", None) not in (None, "crypto") else \
+        (cfg.get("risk_by_symbol") or {}).get(_base(symbol))
     if over is not None:
         return min(float(over), SYMBOL_RISK_HARD_CAP)
     return float(cfg.get("risk_per_trade_pct", 0.5))
@@ -487,16 +494,21 @@ def limits_for(limits: dict, asset: str, symbol) -> dict:
     return lim
 
 
-def leverage(cfg: dict, limits: dict, asset: str, broker: str = None) -> tuple:
+def leverage(cfg: dict, limits: dict, asset: str, broker: str = None, symbol=None) -> tuple:
     """(multiple, why): how far this asset class may go past the cash in the account.
 
     1.0 unless config ``leverage.<asset>`` asks for more AND limits.json allows it (``allow_margin`` for
     stocks, ``allow_leverage`` for crypto, at most ``max_leverage``). Never above LEVERAGE_HARD_CAP, never
     for meme coins, never for crypto at Alpaca (it has no crypto margin). Leverage only lets more money
-    work at once; the risk per trade is still set by the stop.
+    work at once; the risk per trade is still set by the stop. ``symbol``: the coin, so that a meme coin listed
+    on the exchanges (DOGE, PEPE…) stays at 1× too.
     """
     if asset not in LEVERAGE_ASSETS:
         return 1.0, None
+    if symbol is not None and asset == "crypto":
+        from shared import symbols as _symbols  # symbols reads no config: imported here only to keep config first
+        if _symbols.is_meme_base(_base(symbol)):
+            return 1.0, "%s is a meme coin — never leveraged, it stays at 1×" % _base(symbol)
     want = (cfg.get("leverage") or {}).get(asset) if isinstance(cfg.get("leverage"), dict) else cfg.get("leverage")
     try:
         want = float(want or 1.0)

@@ -722,6 +722,11 @@ symbol)` and `config.limits_for(limits, asset, symbol)` resolve them; the sizer,
 `risk_by_symbol`. The profile writes both mappings whole (`config.update_file(..., replace=...)`), so a re-run
 with other coins or without `--core-risk` removes the old entries; with a split the daily loss limits are
 5 × the larger risk. The decision's gates gain `"risk for BTC"` when a coin has its own risk.
+Keys are upper-cased when read (`"btc"` is BTC); `--core-coins BTCUSDT,eth/usd` is reduced to the bases. A `null`
+inside a `symbols` entry is a config error (it would replace the asset class's limit with "no limit"); leave the
+key out instead. `risk_by_symbol` applies to crypto only — a stock ticker BTC or ETH (Grayscale's mini trusts)
+gets `risk_per_trade_pct`. `config.leverage(..., symbol)` keeps exchange-listed meme coins (`symbols.is_meme_base`)
+at 1×; the sizer does too and the risk check blocks a leveraged one (`no_leverage`).
 `--fixed-risk` writes `autopilot.playbook.confidence_sizing: false` (a run without it writes `true`): with
 `max_risk_pct` = the risk the tiers can only cut, so this keeps every trade at the risk as set.
 

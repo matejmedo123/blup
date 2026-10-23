@@ -2019,7 +2019,7 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
                       "(autopilot.memes.risk_mult)" % m})
     if plan.get("runner_note"):
         gates.append({"name": "let winners ride", "ok": True, "detail": plan["runner_note"]})
-    lev, lev_why = config.leverage(cfg, limits, asset, broker.name)
+    lev, lev_why = config.leverage(cfg, limits, asset, broker.name, sym)
     if lev_why:
         gates.append({"name": "leverage", "ok": True, "detail": lev_why})
     s_cfg, s_limits = _scaled(cfg, limits, asset, mult)
@@ -3255,11 +3255,20 @@ def trend_profile(risk: float, lev: float, stock_lev: float, capital: float, run
     core_risk = risk if core_risk is None else core_risk
     if not (isinstance(core_risk, (int, float)) and math.isfinite(core_risk) and 0 < core_risk <= MAX_PROFILE_RISK):
         raise ValueError("--core-risk must be above 0 and at most %g%% per trade" % MAX_PROFILE_RISK)
-    coins = sorted({str(c).strip().upper() for c in core_coins if str(c).strip()})
+    coins = set()
+    for c in (str(c).strip() for c in core_coins):
+        if not c:
+            continue
+        try:  # BTCUSDT, BTC/USD and btc all mean BTC — the key the sizer looks up
+            base = symbols.parse(c, asset="crypto", quote="USDT").base.upper()
+        except symbols.SymbolError:
+            base = ""
+        if not base.isalnum():
+            raise ValueError("--core-coins takes coin names like BTC,ETH — not %r" % c)
+        coins.add(base)
+    coins = sorted(coins)
     if core_risk != risk and not coins:
         raise ValueError("--core-coins is empty — name the coins --core-risk is for (e.g. BTC,ETH)")
-    if not all(c.isalnum() for c in coins):
-        raise ValueError("--core-coins takes coin names like BTC,ETH")
     if not (isinstance(capital, (int, float)) and math.isfinite(capital) and capital > 0):
         raise ValueError("--capital must be an amount above 0 (e.g. 1000)")
     if not (math.isfinite(float(cash_yield)) and 0 <= float(cash_yield) <= 20):
@@ -3338,6 +3347,11 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
                      "trades the same trend rule on ETFs that move unlike crypto — gold, the dollar, commodities, "
                      "bonds, energy, the indexes — held for days, only those the ETF lab validated; idle cash counts "
                      "%g%% a year in the simulator (T-bills)." % c_cfg["cash_yield_pct"])
+        if not cfg.get("fractional_shares") and float(c_cfg["account_size"]) < 10000:
+            cap = float(c_cfg["account_size"]) * float((limits.get("stock") or {}).get("max_position_pct") or 25) / 100
+            lines.append("At %s with whole shares an ETF priced above about %s (SPY, QQQ, GLD…) rounds to 0 shares and "
+                         "is skipped — the backtest skipped them too; set \"fractional_shares\": true in config.json "
+                         "to trade them in the simulator." % (fmt.money(c_cfg["account_size"]), fmt.money(cap)))
     if c_cfg["autopilot"].get("memes", {}).get("enabled"):
         lines.append("Meme coins: established ones on the exchange too (DOGE, SHIB, PEPE…) — only while among the "
                      "top 40 by market cap, a year listed and validated by the lab, at half the risk. Tokens on a DEX "

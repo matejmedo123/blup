@@ -80,6 +80,10 @@ class Simulator(TraderTestCase):
         b._candles[("NVDA", "stock")] = [bar(0, 101.0, 101.5, 100.5, 101.2)]
         b.sync()
         self.assertEqual([o["status"] for o in b.orders() if o["leg"] == "entry"], ["expired"])
+        # its stop and target go with it — held forever, they were synced (and downloaded for) every cycle
+        self.assertEqual({o["leg"]: o["status"] for o in b.orders()},
+                         {"entry": "expired", "stop": "canceled", "target": "canceled"})
+        self.assertEqual(b.open_orders(), [])
 
     def test_market_exit_and_close_position(self):
         b = self.sim([bar(0, 100.0, 100.2, 99.9, 100.1), bar(1, 100.1, 100.6, 100.0, 100.5)])

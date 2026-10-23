@@ -237,7 +237,9 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
         # where the order goes: the autopilot's broker for its own orders, the connector for a manual ticket
         venue = (((cfg.get("autopilot") or {}).get("broker") or "simulator") if order.get("origin") == "autopilot"
                  else cfg.get("connector") or "alpaca")  # a manual ticket goes to Alpaca unless told otherwise
-        if asset == "meme" or lim.get(key) is not True:
+        if asset == "meme" or (asset == "crypto" and symbols.is_meme_base(sym.base)):
+            add("no_leverage", False, "%g× leverage on a meme coin — meme coins are never leveraged" % lev)
+        elif lim.get(key) is not True:
             add("no_leverage", False, "%g× %s is not allowed (limits.json %s.%s)" % (lev, word, asset, key))
         elif asset == "crypto" and venue == "alpaca":
             add("no_leverage", False, "%g× crypto leverage at Alpaca — Alpaca has no crypto margin" % lev)

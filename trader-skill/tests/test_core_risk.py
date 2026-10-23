@@ -46,6 +46,17 @@ class TheConfigChecksEveryCoinEntry(unittest.TestCase):
             with self.assertRaises(config.ConfigError, msg=repr(bad)):
                 self.check("limits.json", {"crypto": {"symbols": {"BTC": bad}}})
 
+    def test_a_null_inside_a_coins_limits_is_refused_not_read_as_no_limit(self):
+        for key in config.SYMBOL_LIMIT_KEYS:
+            with self.assertRaises(config.ConfigError, msg=key):
+                self.check("limits.json", {"crypto": {"symbols": {"BTC": {key: None}}}})
+
+    def test_keys_in_lower_case_mean_the_coin(self):
+        doc = self.check("config.json", {"risk_by_symbol": {"btc": 3, " eth ": 3}})
+        self.assertEqual(doc["risk_by_symbol"], {"BTC": 3, "ETH": 3})
+        doc = self.check("limits.json", {"crypto": {"symbols": {"btc": {"max_position_pct": 50}}}})
+        self.assertEqual(doc["crypto"]["symbols"], {"BTC": {"max_position_pct": 50}})
+
     def test_null_reads_as_no_split(self):
         doc = self.check("config.json", {"risk_by_symbol": None})
         self.assertEqual(doc["risk_by_symbol"], {})
@@ -62,6 +73,11 @@ class TheRiskForEachCoin(unittest.TestCase):
         cfg = {"risk_per_trade_pct": 2.0, "risk_by_symbol": {"BTC": 3.0, "BTCADDR": 3.0}}
         fake = symbols.meme_symbol("solana", "BTCADDR", "BTC")
         self.assertEqual(config.risk_pct_for(cfg, fake), 2.0)
+
+    def test_a_stock_ticker_btc_is_not_the_coin(self):
+        cfg = {"risk_per_trade_pct": 2.0, "risk_by_symbol": {"BTC": 3.0}}
+        self.assertEqual(config.risk_pct_for(cfg, symbols.parse("BTC", asset="stock", quote="USD")), 2.0)
+        self.assertEqual(config.risk_pct_for(cfg, symbols.parse("BTC", asset="crypto", quote="USDT")), 3.0)
 
     def test_never_above_the_hard_cap_even_when_a_file_says_so(self):
         self.assertEqual(config.risk_pct_for({"risk_by_symbol": {"BTC": 50}}, "BTC"), config.SYMBOL_RISK_HARD_CAP)
@@ -191,7 +207,12 @@ class TheProfile(TraderTestCase):
         with self.assertRaises(ValueError):
             trend(2, 1, 1, 1000.0, core_risk=3, core_coins=["", " "])
         with self.assertRaises(ValueError):
-            trend(2, 1, 1, 1000.0, core_risk=3, core_coins=["BTC/USD"])
+            trend(2, 1, 1, 1000.0, core_risk=3, core_coins=["B-T C!"])
+
+    def test_pair_names_mean_their_coin(self):
+        cfg, lim = ap().trend_profile(2, 1, 1, 1000.0, core_risk=3, core_coins=["BTCUSDT", "eth/usd", "btc"])
+        self.assertEqual(cfg["risk_by_symbol"], {"BTC": 3, "ETH": 3})
+        self.assertEqual(sorted(lim["crypto"]["symbols"]), ["BTC", "ETH"])
 
     def test_the_profile_never_touches_the_live_switches(self):
         cfg, _ = ap().trend_profile(2, 1, 1, 1000.0, core_risk=3)
@@ -217,3 +238,35 @@ class TheReplaySizesTheSameWay(TraderTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MemeCoinsAreNeverLeveraged(TraderTestCase):
+    """Exchange-listed meme coins (DOGE, PEPE…) — the autopilot's memes opt-in — stay at 1× like DEX tokens."""
+    NOW = DEMOS["btc"]["now"]
+
+    def lev_profile(self):
+        c_cfg, c_lim = ap().trend_profile(2, 1.5, 1, 1000.0, True, True, 4, True, 3)
+        return config.deep_merge(config.DEFAULT_CONFIG, c_cfg), config.deep_merge(config.DEFAULT_LIMITS, c_lim)
+
+    def test_config_leverage_says_no_for_doge_and_yes_for_sol(self):
+        cfg, lim = self.lev_profile()
+        doge = config.leverage(cfg, lim, "crypto", "simulator", symbols.parse("DOGEUSDT", asset="crypto", quote="USDT"))
+        self.assertEqual(doge[0], 1.0)
+        self.assertIn("meme coin", doge[1])
+        self.assertEqual(config.leverage(cfg, lim, "crypto", "simulator", "SOL")[0], 1.5)
+        self.assertEqual(config.leverage(cfg, lim, "crypto", "simulator", "1000PEPE")[0], 1.0)
+
+    def test_the_sizer_keeps_doge_at_one_times_and_the_gate_blocks_a_leveraged_doge(self):
+        cfg, lim = self.lev_profile()
+        cfg["connector"] = "simulator"
+        sizer, risk = load("trader-sizer", "size"), load("trader-risk", "risk")
+        doge = sizer.size_order(plan("DOGEUSDT", 0.20, 0.19), cfg, lim, account=1000.0)
+        self.assertEqual(doge["leverage"], 1.0)
+        self.assertLessEqual(doge["qty"] * 0.20, 250.0 + 1e-6)
+        sol = sizer.size_order(plan("SOLUSDT", 100, 99), cfg, lim, account=1000.0)
+        self.assertEqual(sol["leverage"], 1.5)
+        forced = sizer.size_order(plan("DOGEUSDT", 0.20, 0.19), cfg, lim, account=1000.0, leverage=1.5)
+        self.assertEqual(forced["leverage"], 1.0, "not even when asked")
+        forced["leverage"] = 1.5  # an order written by hand
+        res = risk.evaluate(forced, cfg, lim)
+        self.assertIn("no_leverage", {c["name"] for c in res["checks"] if not c["ok"]})

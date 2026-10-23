@@ -124,8 +124,8 @@ def size_order(plan: dict, cfg: dict, limits: dict, account: float = None, risk_
     if max_risk_pct is not None and budget > account * float(max_risk_pct) / 100.0 + 1e-9:
         budget = account * float(max_risk_pct) / 100.0
         caps.append("max_risk_per_trade_pct %s%% → risk budget %s" % (_num(max_risk_pct), fmt.money(budget)))
-    if asset == "meme":
-        lev = 1.0
+    if asset == "meme" or (asset == "crypto" and symbols.is_meme_base(sym.base)):
+        lev = 1.0  # meme coins are never leveraged, on a DEX or on an exchange
     else:
         # sized by hand, the order goes to the connector (Alpaca by default: no crypto margin there)
         lev = float(leverage) if leverage is not None else \
