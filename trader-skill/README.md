@@ -441,6 +441,11 @@ gained. On a broad basket it is the opposite: with five positions open at 5–10
 Kelly fraction, not boldness. Fewer slots (5 % × 2 positions) did not rescue the broad basket either (+4 %/yr,
 −40 %). So: more risk only on a concentrated BTC + ETH book, never across many coins.
 
+Mixed in one book — BTC + ETH at 3 % or 5 % (cap 50 %), the other 13 coins at 2 % (cap 25 %), five slots
+shared — the gain mostly disappears, because the core coins compete for the same slots: last 3 years
++11 → +15 %/yr (deployed rules, 5 % core) and +16 → +19 %/yr (volume breakout + EMA, 3 % core) at the same
+−32…−37 % drawdown; last 12 months slightly worse at the higher core risk (+12 → +6 %, +7 → −1 %).
+
 Three things these numbers show:
 * **The lab gate is strict.** From October 2025 to March 2026 the weekly lab validated no crypto pair at
   all, and the ETF lab validated nothing all year — the bot sat in cash. That is the design (no edge proven
