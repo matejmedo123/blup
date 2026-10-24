@@ -495,7 +495,7 @@ class Background(DashboardCase):
         (self.home / "config.json").write_text(json.dumps({"autopilot": {"enabled": True}}), encoding="utf-8")
         seen = {}
 
-        def fake_make_server(host, port, password, run_ap, news_every):
+        def fake_make_server(host, port, password, run_ap, news_every, approve=True):
             seen["run_ap"] = run_ap
             raise server.StartupError("stop here")
         with mock.patch.object(server, "make_server", fake_make_server):

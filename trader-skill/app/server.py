@@ -1038,7 +1038,8 @@ def _write_control(action: str, by: str) -> dict:
 # --- the app: background loops + sessions ------------------------------------------------------
 
 class DashboardApp:
-    def __init__(self, password: str = "", run_autopilot: bool = False, news_every: float = None):
+    def __init__(self, password: str = "", run_autopilot: bool = False, news_every: float = None,
+                 approve: bool = True):
         self.csrf = _pysecrets.token_urlsafe(32)
         self.login_lock = threading.Lock()
         self.login_fails = {}  # client → recent wrong-password times
@@ -1048,6 +1049,9 @@ class DashboardApp:
         self.sessions = {}
         self.lock = threading.Lock()
         self.run_autopilot = run_autopilot
+        # --autopilot is a standing approval; a loop started because autopilot.enabled was true asks the config
+        # again every cycle — switching it off there stops new entries
+        self.approve = approve
         self.news_every = news_every
         self.wake = threading.Event()
         self.stop_event = threading.Event()
@@ -1141,11 +1145,10 @@ class DashboardApp:
             return False
         return not (hb.get("pid") == os.getpid() and hb.get("host") == socket.gethostname())
 
-    @staticmethod
-    def _run_cycle(mod):
-        # this loop only runs when the user started it (--autopilot or autopilot.enabled): that is the
-        # standing approval — limits, desk and risk gates still apply to every order
-        kwargs = {"approved": True}
+    def _run_cycle(self, mod):
+        # started with --autopilot: that is the standing approval; started from autopilot.enabled: the config is
+        # read again each cycle — limits, desk and risk gates apply to every order either way
+        kwargs = {"approved": True if self.approve else None}
         if _accepts(mod.run_cycle, "runner"):
             kwargs["runner"] = "dashboard"
         return mod.run_cycle(**kwargs)
@@ -1593,14 +1596,14 @@ class StartupError(Exception):
 
 
 def make_server(host: str = "127.0.0.1", port: int = 8765, password: str = "", run_autopilot: bool = False,
-                news_every: float = None):
+                news_every: float = None, approve: bool = True):
     """Build (but don't start serving) the dashboard. Raises StartupError on unsafe settings."""
     config.ensure_home()
     password = password or secrets.get("TRADER_DASHBOARD_PASSWORD")
     if not is_loopback(host) and not password:
         raise StartupError("refusing to listen on %s without a password — set TRADER_DASHBOARD_PASSWORD "
                            "(environment or trader/secrets.env) or pass --password" % host)
-    app = DashboardApp(password, run_autopilot, news_every)
+    app = DashboardApp(password, run_autopilot, news_every, approve)
     httpd = ThreadingHTTPServer((host, port), make_handler(app))
     httpd.daemon_threads = True
     httpd.app = app
@@ -1648,7 +1651,8 @@ def main(argv=None) -> int:
     if news_every is None:
         news_every = 0 if config.is_offline() else float(((cfg.get("news") or {}).get("x") or {}).get("poll_minutes") or 15)
     try:
-        httpd, app = make_server(args.host, args.port, args.password, run_ap, news_every or None)
+        httpd, app = make_server(args.host, args.port, args.password, run_ap, news_every or None,
+                                 approve=bool(args.autopilot))
     except StartupError as exc:
         sys.stderr.write("trader: %s\n" % exc)
         return 2

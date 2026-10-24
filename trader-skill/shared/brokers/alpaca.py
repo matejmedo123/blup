@@ -223,7 +223,9 @@ class AlpacaBroker(Broker):
                           status=o.get("status"), filled_qty=_f(o.get("filled_qty")),
                           filled_avg_price=_f(o.get("filled_avg_price")), submitted_at=o.get("submitted_at"),
                           filled_at=o.get("filled_at"), leg=leg, parent_id=parent_id,
-                          time_in_force=o.get("time_in_force"), updated_at=o.get("updated_at"))
+                          time_in_force=o.get("time_in_force"), updated_at=o.get("updated_at"),
+                          # an order you edited at Alpaca: the old one points to its successor, the new one back
+                          replaced_by=o.get("replaced_by"), replaces=o.get("replaces"))
 
     def _flatten(self, raw: list) -> list:
         out = []

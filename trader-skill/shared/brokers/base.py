@@ -44,6 +44,11 @@ class Broker:
     name = "base"
     mode = "simulator"
 
+    def book_symbol(self, raw, asset: str = None) -> str:
+        """The name this broker's own positions and orders carry for a symbol — what the book stores, so a lookup
+        by it finds the position."""
+        return broker_symbol(raw, asset)
+
     # -- reads -----------------------------------------------------------------------------
     def sync(self) -> None:
         """Bring the broker's view up to date (the simulator processes fills here)."""

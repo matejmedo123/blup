@@ -32,7 +32,7 @@ import urllib.request
 
 from .. import config, market_clock, secrets, state
 from ..http import read_body
-from .base import Broker, BrokerError, order_dict
+from .base import broker_symbol, Broker, BrokerError, order_dict
 
 BASE = {"paper": "https://api-testnet.bybit.com", "live": "https://api.bybit.eu"}
 KEYS = {"paper": ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET"), "live": ("BYBIT_LIVE_KEY", "BYBIT_LIVE_SECRET")}
@@ -258,6 +258,12 @@ class BybitBroker(Broker):
                 base = base[: -len(q)]
                 break
         return base + self.quote
+
+    def book_symbol(self, raw, asset: str = None) -> str:
+        """Bybit's positions read BTC/USD whatever the quote (USDC, USDT): the book must name them the same way, or
+        a BTC/USDC trade would never find its position — no exits, no daily loss, a KILL that sells nothing."""
+        name = broker_symbol(raw, asset)
+        return name.split("/", 1)[0] + "/USD" if "/" in name else name
 
     def _pack(self, pair: str) -> str:
         pair = str(pair or "").upper()

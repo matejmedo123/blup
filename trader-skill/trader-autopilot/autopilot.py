@@ -322,6 +322,18 @@ def _live_stop(it: dict, orders: list):
     return None
 
 
+def _follow_replaced(it: dict, orders: list) -> None:
+    """Its stop or exit edited at the broker (Alpaca's replace gives the edited order a new id, and a new client id
+    unless one was sent): the trade follows it to its new id — or the bot would put a second stop in and its exit
+    would leave the edited one working on what you hold."""
+    for key in ("stop_order_id", "exit_order_id"):
+        for _ in range(5):  # a chain of edits
+            o = _find(orders, it.get(key))
+            if not o or o.get("status") != "replaced" or not o.get("replaced_by"):
+                break
+            it[key] = o["replaced_by"]
+
+
 def _mine(o: dict, it: dict) -> bool:
     """Is this order one of this trade's own (its bracket legs, its stop, its exits) — not the partial sale of a
     runner and not anything else on the same symbol (your own shares or coins)?"""
@@ -332,7 +344,9 @@ def _mine(o: dict, it: dict) -> bool:
     return bool((o.get("id") and o.get("id") in (it.get("exit_order_id"), it.get("stop_order_id")))
                 or (o.get("id") and o.get("id") in (it.get("leg_ids") or ()))
                 or (it.get("broker_order_id") and o.get("parent_id") == it.get("broker_order_id"))
-                or (it.get("order_id") and cid.startswith(it["order_id"]) and not cid.endswith("-part")))
+                or (it.get("order_id") and (cid == it["order_id"] or cid.startswith(it["order_id"] + "-"))
+                    and not cid.endswith("-part"))
+                or (o.get("replaces") and o.get("replaces") in (it.get("stop_order_id"), it.get("exit_order_id"))))
 
 
 SPLITS = (2, 3, 4, 5, 8, 10, 15, 20, 25, 30, 40, 50)
@@ -464,6 +478,8 @@ def _cancel_own_sells(broker, it: dict, orders: list, live=None) -> str:
     already sold — a second sale would come out of shares you hold yourself."""
     own = [o for o in orders if o.get("status") in OPEN_STATUSES and o.get("side") == "sell"
            and (o is live or _mine(o, it))]
+    if live is not None and live.get("id") and not any(o.get("id") == live["id"] for o in own):
+        own.append(live)  # placed after the order list was read (a fill this cycle): cancelled like the others
     ids = [o["id"] for o in own]  # a cancel already pending (asked last cycle) is waited for, not asked again
     for o in own:
         if o.get("status") not in OPEN_ORDER:
@@ -782,6 +798,16 @@ def reconcile(broker, book: dict, positions: list, orders: list, cfg: dict, limi
 
 def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limits: dict, now, step: int) -> list:
     actions = []
+    if it["status"] == "closed":  # a stop of its own still working after the trade closed: cancelled until gone
+        for o in orders:
+            if o.get("side") == "sell" and o.get("status") in OPEN_ORDER and _mine(o, it):
+                try:
+                    broker.cancel(o["id"])
+                    actions.append("cancelled %s's leftover %s order" % (it["symbol"], o.get("type") or "sell"))
+                except BrokerError as exc:
+                    actions.append("could not cancel %s's leftover %s order %s (%s) — tried again next cycle" % (
+                        it["symbol"], o.get("type") or "sell", o.get("id"), exc))
+        return actions
     if it["status"] == "submitting":  # sent, but the answer never reached the book (or never came)
         o = _find(orders, cid=it.get("order_id"))
         if o is None and now.timestamp() - market_clock.ts(it["placed_at"]) > 2 * step:
@@ -823,7 +849,13 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
                                    it["symbol"], fmt.qty(qty)))
                 return actions
             o = dict(o, filled_qty=qty)
-            trade = _open_trade(it, o, cfg, limits)
+            try:
+                trade = _open_trade(it, o, cfg, limits)
+            except Exception as exc:  # noqa: BLE001 — a journal that can't be written must not leave it unprotected
+                trade = {"id": None}
+                it["journal_error"] = "%s: %s" % (type(exc).__name__, exc)
+                actions.append("could not journal the fill of %s (%s) — protected anyway, journaled later" % (
+                    it["symbol"], it["journal_error"]))
             it.update(status="open", filled_at=o.get("filled_at"), entry_fill=o.get("filled_avg_price"),
                       trade_id=trade["id"], qty=qty, partial=bool(part),
                       # its bracket legs, remembered: weeks later the broker may list them without their parent
@@ -869,9 +901,27 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
                         pass
                     it["cancel_asked_at"] = market_clock.iso(now)
     elif it["status"] == "open":
+        if it.get("journal_error") and not it.get("trade_id"):  # the fill's journal entry, written once it can be
+            try:
+                trade = _open_trade(it, {"filled_qty": it["qty"], "filled_avg_price": it.get("entry_fill"),
+                                         "filled_at": it.get("filled_at")}, cfg, limits)
+                it["trade_id"] = trade["id"]
+                it.pop("journal_error", None)
+            except Exception as exc:  # noqa: BLE001
+                it["journal_error"] = "%s: %s" % (type(exc).__name__, exc)
         ride = it.get("runner") or {}
         if ride.get("status") == "selling":
-            o = _find(orders, ride.get("sell_order_id"))
+            o = _find(orders, ride.get("sell_order_id")) if ride.get("sell_order_id") else \
+                _find(orders, cid=it["order_id"] + "-part")
+            if o is None and not ride.get("sell_order_id"):
+                try:  # an answer that never came: the broker says whether the part sale exists
+                    o = broker.find_client(it["order_id"] + "-part")
+                except BrokerError as exc:
+                    actions.append("partial sale of %s: can't tell yet whether it went through (%s)" % (
+                        it["symbol"], exc))
+                    return actions
+            if o is not None and not ride.get("sell_order_id"):
+                ride["sell_order_id"] = o.get("id")
             if o and o.get("status") == "filled":
                 actions += start_ride(broker, it, o, cfg)
             elif (o and o.get("status") in ("canceled", "expired", "rejected")) or (
@@ -1041,6 +1091,10 @@ def sell_part(broker, it: dict, orders: list, cfg: dict = None) -> list:
         o = broker.place_exit(it["symbol"], ride["sell_qty"], "market", client_order_id=it["order_id"] + "-part",
                               asset=it["asset"])
     except BrokerError as exc:
+        if UNSURE_ORDER in str(exc):  # it may have sold: found by its client id next cycle, never sold twice
+            ride.update(status="selling", sell_order_id=None, asked_at=market_clock.iso(market_clock.now_utc()))
+            return ["the partial sale of %s may or may not have gone through (%s) — looked up next cycle" % (
+                it["symbol"], exc)]
         ride["status"] = "failed"
         it["exit_note"] = it.get("exit_note", "") + " · could not sell part (%s) — selling everything" % exc
         return ["could not sell part of %s: %s — closing all of it" % (it["symbol"], exc)]
@@ -1058,6 +1112,8 @@ def _book_part_sale(it: dict, o: dict, cfg: dict = None) -> list:
     sold = float(o.get("filled_qty") or 0)
     left = round(float(it["qty"]) - sold, 10)
     it.setdefault("parts_booked", []).append(o.get("id"))
+    total = float(it["qty"])
+    it["qty"] = left  # first: a journal that fails below must never leave the next stop sized on what was sold
     price = float(o.get("filled_avg_price") or 0) or float(it["stop"])
     at = o.get("filled_at") or o.get("updated_at") or o.get("canceled_at") or market_clock.iso(market_clock.now_utc())
     reason = "stop" if (o.get("leg") == "stop" or o.get("id") == it.get("stop_order_id")) else (
@@ -1071,12 +1127,11 @@ def _book_part_sale(it: dict, o: dict, cfg: dict = None) -> list:
         first["exit"]["broker_order_id"] = o.get("id")
         rest.update(id="%s-%d" % (first["id"], len(it["parts_booked"])), qty=left)
         first["notes"] = (first.get("notes") or "") + " · its %s order filled %s of %s, then was %s; the rest " \
-            "stays open as %s" % (o.get("type") or "sell", fmt.qty(sold), fmt.qty(it["qty"]), o.get("status"),
+            "stays open as %s" % (o.get("type") or "sell", fmt.qty(sold), fmt.qty(total), o.get("status"),
                                   rest["id"])
         journal.save_trade(first)
         journal.save_trade(rest)
         it["trade_id"] = rest["id"]
-    it["qty"] = left
     return ["%s: %s of its %s order filled before it was %s — booked, %s left" % (
         it["symbol"], fmt.qty(sold), o.get("type") or "sell", o.get("status"), fmt.qty(left))]
 
@@ -1218,6 +1273,14 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
         last = None
     if last is not None and not last > 0:  # 0, negative or NaN is a broken quote, not a price to sell at
         last = None
+    _follow_replaced(it, orders)
+    done = [o for o in orders if o.get("side") == "sell" and o.get("status") == "filled" and _mine(o, it)
+            and o.get("id") not in (it.get("parts_booked") or ())]
+    if done:
+        # its stop or exit already sold (a book read back from an older copy reopened it): the next sync books
+        # that fill — a sale, or a stop put back, now would be on what you hold yourself
+        return actions + ["%s: its sell order %s already filled — booked by the next sync" % (
+            it["symbol"], done[0].get("id"))]
     live = _live_stop(it, orders)
     if live is not None:
         if live.get("id") and not it.get("stop_order_id"):
@@ -1268,8 +1331,9 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
     queued = _queued_exit(broker, it, orders)
     if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(queued, it, last, now):
         return actions  # its sale is on its way (sent earlier, or a stock's waiting for the open)
-    if queued and queued.get("status") in ("filled", "partially_filled"):
-        return actions  # sold (or selling) already: the next sync books it
+    if queued and (queued.get("status") == "filled" or (
+            queued.get("status") == "partially_filled" and not _stale_exit(queued, it, last, now))):
+        return actions  # sold (or selling) already: the next sync books it — a stale part fill is cancelled below
     wait = _cancel_own_sells(broker, it, orders, live)
     if wait:
         actions.append("%s exit for %s waits: %s" % (reason, it["symbol"], wait))
@@ -1337,12 +1401,17 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
     elif it["status"] == "open" and flatten:
         it["exit_reason"], it["exit_note"] = "manual", "kill switch: %s" % reason
         p = pos_by.get(it["symbol"])
+        if p:
+            _split_check(it, p)  # a split since the last cycle: the sale is of what the bot holds now
+        _follow_replaced(it, orders)
         queued = _queued_exit(broker, it, orders)
         if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(
                 queued, it, (p or {}).get("last"), market_clock.now_utc()):
             problems.append("%s: its sale is queued at the broker" % it["symbol"])  # a stock after hours: the open
             return problems
-        if queued and queued.get("status") in ("filled", "partially_filled"):
+        if queued and (queued.get("status") == "filled" or (
+                queued.get("status") == "partially_filled" and not _stale_exit(
+                    queued, it, (p or {}).get("last"), market_clock.now_utc()))):
             return problems  # sold already — the next sync books it
         live = _live_stop(it, orders)
         ride = it.get("runner") or {}
@@ -1985,7 +2054,7 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     # holds one position, and the first exit rule would close the other trade too
     # (by the broker's name too: BTCUSDT and BTC-USD are two data keys but one BTC/USD position at Alpaca)
     try:
-        bname = broker_symbol(sym, asset)
+        bname = broker.book_symbol(sym, asset) if hasattr(broker, "book_symbol") else broker_symbol(sym, asset)
     except (BrokerError, symbols.SymbolError, ValueError):
         bname = None
     held = [it for it in book["items"].values() if it["status"] in LIVE_ITEM
@@ -2084,7 +2153,8 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     base.update(order_id=order["id"], qty=order["qty"])
     if res["result"] != "PASS":
         return _decision(reasons=["risk BLOCK: %s" % r for r in res["reasons"]], desk=desk_info, gates=gates, **base)
-    bsym = broker_symbol(plan["symbol"], asset)
+    bsym = broker.book_symbol(plan["symbol"], asset) if hasattr(broker, "book_symbol") else \
+        broker_symbol(plan["symbol"], asset)
     text = "BUY %s %s, limit %s, stop %s, target %s — %s" % (
         fmt.qty(order["qty"]), bsym, fmt.price(order["limit_price"]), fmt.price(order["stop_price"]),
         fmt.price(order["target_price"]), broker.mode.upper())
@@ -2487,7 +2557,8 @@ def _cycle(approved=None) -> dict:
         acct, positions, orders = sync()
         actions += reconcile(broker, book, positions, orders, cfg, limits)
 
-    status = "paused" if control["paused"] and not control["run_once"] else "running"
+    # paused means no new entries — a forced cycle ("run once") while paused books fills and manages exits only
+    status = "paused" if control["paused"] else "running"
     if prev.get("status") == "killed" and control["paused"]:
         status = "killed"
     while state.recovered:  # a broken file was read from its last good copy — say so (it stops new entries)
