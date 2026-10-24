@@ -766,9 +766,9 @@ playbooks — scalping −0.66R, intraday −0.63R and swing −0.30R a trade on
 So the sniper stays on paper until its **own paper record pays** — at least 30 paper trades in the last 30
 days, ahead in total — before live trading can start (`sniper.live_needs_paper_proof`, on by default).
 
-### 24 more strategies, judged on data they never saw — one passed
+### 46 more strategies, judged on data they never saw — one passed
 
-Two batches, every rule written down with a timestamp and a sha256 before any result was computed, one
+Three batches, every rule written down with a timestamp and a sha256 before any result was computed, one
 version each, no tuning. Same account as the replays (2 % risk, 5 positions, the 10 biggest coins chosen point
 in time, delisted coins included). Rules were picked on 2020 → mid-2024 only; the pick was then run **once** on
 July 2024 → Oct 2026. To pass, it had to end more than 5 % higher than the bot's long book and lose at most 3
@@ -802,6 +802,27 @@ it next to `trend_ema` and `trend_breakout`, but **the lab decides as with every
 walk-forward (started where funding data starts) had −0.05R / +0.29R / +0.28R in the three test periods —
 period 1 lost money, so it is *not* in the playbook yet. The lab re-checks every week; if the rule earns its
 place, the bot starts trading it without a new release.
+
+**Batch 3 (22 rules, 24 Oct 2026)** used data the bot did not read before: Binance's open interest and long/short
+ratios (from Dec 2021), Coinbase vs Binance prices (US demand), market breadth, the season and the hour of day.
+None passed — still one pass in 46:
+
+| Rule | 2020 → mid-2024 | Out of sample (bot alone: €1,928, worst −23 %) |
+|---|---|---|
+| **Bot only while Bitcoin costs more on Coinbase than on Binance** (7-day mean, US buying) | best variant: €9,443 vs €6,701, worst −22 % vs −31 % | **€1,760**, worst −20 % — fewer losses, less profit: failed |
+| Bot only when open interest rose 10 % in a week / when big traders are not crowded long | small gain | €1,280 / €1,307 |
+| Bot only October → April ("sell in May") | €5,088 | €1,367 |
+| Trailing exit 3×ATR under the highest close instead of the 10-day low | €10,089, but worst −35 % | €1,637 |
+| Breakout only after a quiet base (low volume) | €2,171 | €1,437 |
+| **RSI(14) back above 50 after a dip below 40** (best addition) | L + it: Calmar 1.97 vs 1.72 | **€1,569**, worst −30 %: failed |
+| Open interest flushed −15 % in 3 days, crowd short (accounts long/short < 1), taker buying, big traders long | +1 to +7 %/yr alone | €1,017 to €2,108 (the "crowd short" rule did well out of sample, but was among the worst in sample — picking it now would be hindsight) |
+| Coinbase premium on BTC/ETH, breadth thrust (≤ 25 % → ≥ 60 % of coins above their 50-day average), strong against BTC, weekly breakout, momentum and low-volatility rotation, Keltner breakout | +1 to +38 %/yr alone; few extra trades next to the bot | €1,835 to €1,903 — no better than the bot alone |
+| **Hours of the day** (US session, Asia session, the best hour, weekdays only — BTC, 0.10 % per side) | −28 to −42 %/yr; weekdays only +27 % vs +50 % for simply holding | all lose: a 0.2 % round trip every day costs ~50 %/yr, more than any hour earns |
+
+What it shows: the data the bot already uses — Bitcoin's trend, the coin's own breakout, the 10 biggest coins —
+carries the edge; extra signals mostly cut trades (and with them the big winners). The Coinbase filter is the
+closest call: it lowered the worst drop in every window, so it is a candidate to re-test in a year, not a rule
+today.
 
 ### Bear markets — what was tested, what the bot does
 
