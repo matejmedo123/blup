@@ -603,6 +603,13 @@ def runner_verdict(setup: str, without: dict, ride_rs: list, folds: list, pairs:
             "folds": [{"without_r": round(a, 3), "with_r": round(b, 3)} for a, b in folds]}
 
 
+def coin_context(context: dict, sym) -> dict:
+    """The shared context plus this coin's own funding (funding_squeeze reads it as ``funding``)."""
+    if not context or "funding_all" not in context:
+        return context
+    return dict(context, funding=context["funding_all"].get(str(sym.base).split("~", 1)[0].upper()) or {})
+
+
 def together(rule_setups: list, coins: list, interval: str, cost: float, context: dict = None,
              riding: set = ()) -> dict:
     """The rule-exit setups the bot runs side by side, traded the way it trades them: one position per coin — a
@@ -615,7 +622,7 @@ def together(rule_setups: list, coins: list, interval: str, cost: float, context
         rows = []
         for rank, st in enumerate(rule_setups):
             ends = {}
-            for ts, res in rule_trades(candles, st, interval, cost, context, ends):
+            for ts, res in rule_trades(candles, st, interval, cost, coin_context(context, sym), ends):
                 end, ride_end = ends.get(ts, (ts, ts))
                 rows.append((ts, rank, st, ride_end if st in riding and RUNNER_KEY in res else end))
         busy_until = 0
@@ -641,7 +648,11 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     taken: {coin key: entry times} from ``together`` — only the trades this setup gets beside the others.
     """
     k = max(1, int(args.folds))
-    start_ts, bounds = fold_bounds(now_ts, tf_days(interval, args), k)
+    days = tf_days(interval, args)
+    first = (context or {}).get("funding_first_ts") if setups.SETUPS[setup].get("needs_funding") else None
+    if first:  # the walk-forward starts where the rule's own input begins — a period without it judges nothing
+        days = min(days, (now_ts - first) / 86400.0)
+    start_ts, bounds = fold_bounds(now_ts, days, k)
     starts = [start_ts] + bounds[:-1]
 
     def counts(key, ts):
@@ -658,7 +669,8 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
         if rule:
             ends[sym.key] = {}
             mine = None if taken is None else taken.get(sym.key, set())
-            per_coin.append((sym, [x for x in rule_trades(candles, setup, interval, cost, context, ends[sym.key])
+            per_coin.append((sym, [x for x in rule_trades(candles, setup, interval, cost, coin_context(context, sym),
+                                                          ends[sym.key])
                                    if entry_ok(x[0]) and (mine is None or x[0] in mine)]))
         else:
             per_coin.append((sym, [(t["entry_ts"], grid_outcomes(candles, t, interval, exit_mod, tick, cost))
@@ -949,6 +961,15 @@ def run(args, ctx) -> dict:
                 except (data.DataUnavailable, ValueError) as exc:
                     notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
             context = dict(context or {}, btc_up=setups.regime_map(btc) if btc else {})
+        if any(setups.SETUPS[st].get("needs_funding") for st in fam_setups):
+            from shared import funding
+            fund = funding.daily_many([sym.base for sym, _, _ in coins], days=int(tf_days(interval, args)) + 30,
+                                      now_ts=now_ts)
+            firsts = [min(d) * 86400 for d in fund.values() if d]
+            # the funding_squeeze history starts with the first perpetual's (Binance BTC: Sep 2019), plus the
+            # 50 days its average needs
+            context = dict(context or {}, funding_all=fund,
+                           funding_first_ts=(min(firsts) + 50 * 86400) if firsts else None)
         tradable = {s.key for s in syms} if pit else None
         alone = {st: study_family(st, interval, coins, now_ts, args, exit_mod, cost, context, members, tradable)
                  for st in fam_setups}

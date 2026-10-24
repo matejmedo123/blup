@@ -66,7 +66,7 @@ class Grid(TraderTestCase):
             setups.evaluate("trend_pullback", w)
         self.assertEqual(set(setups.for_asset("crypto", "series")),
                          {"trend_pullback", "oversold_bounce", "band_bounce", "breakout_24", "dip_in_uptrend",
-                          "trend_breakout", "trend_breakout_vol", "trend_ema", "breakout_volume"})
+                          "trend_breakout", "trend_breakout_vol", "trend_ema", "breakout_volume", "funding_squeeze"})
 
 
 class Validation(TraderTestCase):
@@ -122,7 +122,7 @@ class OfflineRun(TraderTestCase):
         doc = state.read_json("backtests/lab-crypto.json")
         self.assertEqual(doc["timeframes"], ["5m", "1h", "4h", "1d"])
         self.assertEqual(doc["costs"]["round_trip_pct"], 0.26)
-        self.assertEqual(len(doc["families"]), 6 + 4 + 4 + 5)
+        self.assertEqual(len(doc["families"]), 6 + 4 + 4 + 6)
         pb = state.read_json("backtests/playbook.json")
         self.assertEqual(pb["entries"], {})  # 30 days of fixtures prove nothing
         self.assertTrue(all(not f["validated"] for f in doc["families"]))

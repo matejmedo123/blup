@@ -55,7 +55,10 @@ python3 "${CLAUDE_SKILL_DIR}/lab.py" --fee-bps 25                     # e.g. Alp
   200-day averages; out at the first close above the 5-day average, ≤ 10 days, 3×ATR stop), plus the
   user's cheat-sheet strategies **trend_ema** (20 EMA > 50 EMA, higher highs and lows; out below the
   50-day EMA; stop below the 10-day swing low) and **breakout_volume** (20-day high on 1.5× volume; out
-  below the 10-day low; stop 1 ATR under the broken high).
+  below the 10-day low; stop 1 ATR under the broken high), and **funding_squeeze** (close above the
+  50-day average while the coin's 3-day perpetual funding is below −10 %/yr, no Bitcoin regime; out at the
+  first close below the 20-day average, ≤ 20 days, 3×ATR stop — its walk-forward starts where the funding
+  data starts, late 2019).
   Rule-exit setups skip the exit grid — the rule is the exit.
 * Exits: targets 0.5–5R × structure stop or 1/1.5/2/3×ATR × four time stops (5m: 1–24 h; 1h: 12–72 h;
   4h: 1–7 days) = 160 per setup and timeframe, fees and slippage on every trade.

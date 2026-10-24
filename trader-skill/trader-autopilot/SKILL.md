@@ -224,7 +224,7 @@ the plan, not a failure.
 ## Leverage and the trend profile
 
 `profile` writes the setup the €1,000 portfolio backtest ran: 2 % risk per trade (1 % when the lab is less
-sure, never more than 2 %), only `trend_ema` + `trend_breakout` on daily bars on the 10 biggest coins, 5
+sure, never more than 2 %), only `trend_ema` + `trend_breakout` (+ `funding_squeeze` once the lab validates it) on daily bars on the 10 biggest coins, 5
 positions, 25 % per coin and 100 % in crypto (× leverage), the loosened learning rules above, and %-of-equity
 limits that grow with the account. Run it without `--write` first and show the user the before → after list.
 Leverage only lets more positions be open at once; the stop still sets the risk. When a user asks for

@@ -650,14 +650,24 @@ lab's test-period result (`"source": "backtest lab"`). Swing-setup ids use the b
 ### `cache/lab/<symbol>-<interval>.json` — the lab's candle store (only the new tail is downloaded on re-runs)
 `{"symbol", "interval", "source", "from" (how far back it was asked for), "updated_at", "candles": [[t,o,h,l,c,v]]}`
 
+### `cache/funding/<BASE>.json` — perpetual funding by day (`shared/funding.py`)
+`{"months": {"2024-07": {"<UTC day index>": <mean funding that day, fraction a year>}}, "updated_at"}` — complete
+months from Binance's public archive (data.binance.vision), kept for good; the current month is fetched each hour
+from Binance's futures API, or from Kraken's perpetuals (`PF_<BASE>USD`, hourly rate × 8760) where Binance refuses
+the address. A month Binance has no file for is stored as `{}` (the coin had no perpetual then).
+`funding.daily(base, days)` → `{day: rate}`; `funding.source_of(base)` → `binance | kraken | archive | None`.
+The lab starts a funding rule's walk-forward where the data starts (earliest day + 50 days of warm-up).
+
 ### Rule-exit plans (daily setups)
-Plans from `trend_ema` / `trend_breakout` / `trend_breakout_vol` / `breakout_volume` / `dip_in_uptrend` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
+Plans from `trend_ema` / `trend_breakout` / `trend_breakout_vol` / `breakout_volume` / `dip_in_uptrend` / `funding_squeeze` carry `"exit_rule": {"type", "n", "max_bars", "text", "interval": "1d"}`,
 the setup's protective stop (`stop_rule`: 3×ATR, below the 10-day swing low, or 1 ATR under the broken
 high), a target out of reach (1000R — the lab's rule trades have no target either) and a time stop of `max_bars` days. The autopilot checks the rule after
 every daily close that happened after the fill and closes with `"reason": "rule"` (journal exit reason `rule`). The
 Time Machine is skipped for them (it models stop / target / time only); the desk shows its gate as "not applicable"
-and relies on the lab's walk-forward record. Both setups need Bitcoin above its 200-day average
-(`setups.regime_map(btc_daily)`), and their ids use the bar date: `ETHUSDT-20261019T0000-trend_breakout`.
+and relies on the lab's walk-forward record. They need Bitcoin above its 200-day average
+(`setups.regime_map(btc_daily)`) — except `funding_squeeze`, which has no regime and reads the coin's perpetual
+funding instead (`levels.funding3`, the 3-day mean, annualised) — and their ids use the bar date:
+`ETHUSDT-20261019T0000-trend_breakout`.
 
 ## v3.2 — 2 % risk, small leverage (opt-in, at most 2×), the trend profile
 
@@ -700,7 +710,7 @@ items and the decision's `gates` (`"leverage"`) record the multiple used.
 ### `autopilot.py profile --risk 2 --leverage 1.5 [--stock-leverage 1] [--capital 1000] [--write]`
 Dry run unless `--write`; then merges into your own `config.json` / `limits.json`:
 config — `risk_per_trade_pct`, `account_size`, `leverage`, `autopilot.sim_starting_cash`,
-`autopilot.playbook.{top: 10, setups: ["trend_ema", "trend_breakout"], timeframes: ["1d"], max_risk_pct}`,
+`autopilot.playbook.{top: 10, setups: ["trend_ema", "trend_breakout", "funding_squeeze"], timeframes: ["1d"], max_risk_pct}`,
 `autopilot.universe.crypto.top_n: 10`, `autopilot.adapt.{loss_streak: 7, symbol_loss_streak: 5, min_trades: 20,
 max_drawdown_pct: 35}`; limits — crypto `max_open_positions 5`, `max_position_pct 25`, `max_total_exposure_pct 100`,
 `allow_leverage`/`max_leverage`, stock `allow_margin`/`max_leverage`, `max_risk_per_trade_pct = risk`,

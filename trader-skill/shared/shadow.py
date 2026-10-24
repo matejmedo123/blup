@@ -161,6 +161,9 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
                 notes.append("%s: no daily prices (%s)" % (sym.display, exc))
                 continue
             context = {"btc_up": btc} if setups.SETUPS[setup].get("needs_btc") else None
+            if setups.SETUPS[setup].get("needs_funding"):
+                from . import funding
+                context = dict(context or {}, funding=funding.daily(sym.base, days + 30, now_ts=now_ts))
             for r in setups.series_signals(setup, bars, "1d", start_ts=start, context=context):
                 trig = r["trigger"]
                 if trig["t"] + BAR < since:

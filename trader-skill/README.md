@@ -766,6 +766,43 @@ playbooks — scalping −0.66R, intraday −0.63R and swing −0.30R a trade on
 So the sniper stays on paper until its **own paper record pays** — at least 30 paper trades in the last 30
 days, ahead in total — before live trading can start (`sniper.live_needs_paper_proof`, on by default).
 
+### 24 more strategies, judged on data they never saw — one passed
+
+Two batches, every rule written down with a timestamp and a sha256 before any result was computed, one
+version each, no tuning. Same account as the replays (2 % risk, 5 positions, the 10 biggest coins chosen point
+in time, delisted coins included). Rules were picked on 2020 → mid-2024 only; the pick was then run **once** on
+July 2024 → Oct 2026. To pass, it had to end more than 5 % higher than the bot's long book and lose at most 3
+points more at its worst.
+
+| Rule | Alone, 2020 → mid-2024 | Verdict |
+|---|---|---|
+| Turtle 55/20, one-year high, golden cross, supertrend, Bollinger squeeze, NR7 | +38 to +71 %/yr alone (squeeze, NR7: losses), but next to the bot they rarely get a slot | nothing new over the 20-day breakout |
+| Thrust day (20-day high on a wide, strong day) | +42 %/yr, worst −18 % — best Calmar of batch 1 | picked as a *replacement*, failed out of sample (€1,963 vs €1,928, inside the 5 % margin) |
+| Leaders only, not overheated (funding < 30 %/yr), calm market (Fear & Greed < 75) | filters on the breakout: fewer trades, same edge | nothing gained |
+| **Short squeeze: close above the 50-day average while the 3-day funding is below −10 %/yr** | +19 %/yr, worst −12 %, **119 extra trades next to the bot** | **picked as an addition, PASSED** |
+| Extreme fear BTC, turn of the month, weekend, ETH catch-up | +5 %/yr at best, few trades | too small |
+| Risk-on (Nasdaq above its 200-day), newcomers, volume surge, alt season, 7-day burst, pullback in a strong market, three strong closes | +1 to +51 %/yr alone | Risk-on picked as a replacement, failed (€1,734) |
+| Funding flip (negative → positive), relative funding (20 %/yr below BTC's) | +14 / +22 %/yr | funding flip picked as an addition, failed (€1,691 vs €1,928) |
+
+**The short squeeze out of sample (July 2024 → Oct 2026):** €1,928 → **€2,133 (+11 %)**, worst −23 % → −24 %.
+At Bybit's costs (0.18 %/side, 20 %/yr margin, BTC/ETH at 3 %, 1.5×): €2,078 → **€2,426 (+17 %)**. Since 2020:
+€12,922 → €16,013. Real entries beat 96 % of random entries on the same "above the 50-day" days. Per year:
++10.7R (2020), +28R (2021), −2.2R (2022), +8.3R (2023), +2.3R (2024), +3.1R (2025), −0.3R (2026) — it lives on
+2020–21. Neighbours: a −5 %/yr threshold did better in sample but was flat out of sample, −15 % to −30 % were
+flat or worse — the −10 % edge is real but not wide. Before 2020 it never fired (Binance funding starts late
+2019).
+
+Why it can work: negative funding means the futures crowd is short and pays to stay short; a coin that still
+holds above its 50-day average squeezes them. The bot buys spot, never shorts.
+
+**In the bot:** `funding_squeeze` (daily, crypto, no Bitcoin regime, 3×ATR stop, out at the first close below
+the 20-day average, at most 20 days). Funding comes from Binance's public archive (cached for good) plus its
+futures API for the last days, or Kraken's perpetuals where Binance refuses the address (US). `profile` lists
+it next to `trend_ema` and `trend_breakout`, but **the lab decides as with every rule**: on 24 Oct 2026 its
+walk-forward (started where funding data starts) had −0.05R / +0.29R / +0.28R in the three test periods —
+period 1 lost money, so it is *not* in the playbook yet. The lab re-checks every week; if the rule earns its
+place, the bot starts trading it without a new release.
+
 ### Bear markets — what was tested, what the bot does
 
 The crypto strategies only buy while Bitcoin is above its 200-day average, so in a bear market they sit in

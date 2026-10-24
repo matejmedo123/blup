@@ -85,6 +85,18 @@ SETUPS = {
 # decides each week whether it trades
 SETUPS["trend_breakout_vol"] = dict(SETUPS["trend_breakout"], label="Trend breakout on volume (daily close above the "
                                     "20-day high on 1.5× volume, BTC above its 200-day average)")
+# shorts crowded into a coin that is still in an uptrend: its perpetual's funding has turned clearly negative while
+# the price holds above its 50-day average — the squeeze that follows is the trade. Pre-registered among 15 new
+# rules (research-zoo, 24 Oct 2026), the only one that added money to the trend book on the hold-out (+11 %);
+# reads Binance funding (shared/funding.py), no Bitcoin regime
+SETUPS["funding_squeeze"] = {
+    "label": "Short squeeze (close above the 50-day average while the 3-day funding is below −10 %/yr)",
+    "assets": ("crypto",), "kind": "series", "intervals": ("1d",), "needs_funding": True, "cooldown": 1,
+    "stop_atr": 3.0,
+    "exit_rule": {"type": "close_below_sma", "n": 20, "max_bars": 20,
+                  "text": "first daily close below the 20-day average, at most 20 days",
+                  "short": "close < 20-day average (≤ 20 d)"}}
+FUNDING_SQUEEZE_BELOW = -0.10  # 3-day mean funding, a fraction a year
 SERIES_INTERVALS = ("1h", "4h", "1d")
 SERIES_WARMUP = 210          # bars before the first signal (the 200-bar EMA needs them)
 SERIES_COOLDOWN = 12         # bars after a signal before the same rule may fire again
@@ -503,6 +515,8 @@ def rule_says_exit(rule: dict, closes: list, j: int, cache: dict = None) -> bool
         return closes[j] > sum(closes[j - n + 1:j + 1]) / float(n)
     if rule.get("type") == "close_below_low":
         return closes[j] < min(closes[j - n:j])
+    if rule.get("type") == "close_below_sma":
+        return closes[j] < sum(closes[j - n + 1:j + 1]) / float(n)
     if rule.get("type") == "close_below_ema":
         ema = (cache or {}).get(("ema", n))
         value = ema[j] if ema is not None else indicators.ema(closes[:j + 1], n)[-1]
@@ -545,6 +559,20 @@ def _series_context(candles) -> dict:
 def _series_hit(setup: str, candles, i: int, x: dict, context: dict = None):
     """(rule text, levels) when ``setup`` fires on the close of bar i, else None."""
     c, cl = candles[i], x["close"]
+    if setup == "funding_squeeze":
+        f = (context or {}).get("funding")
+        if not f or x["sma50"][i] is None:
+            return None  # no perpetual, or no funding history for it: never fires
+        day = int(c.t // 86400)
+        vals = [f.get(day - k) for k in range(3)]
+        if any(v is None for v in vals):
+            return None
+        m = sum(vals) / 3.0
+        if not (cl[i] > x["sma50"][i] and m < FUNDING_SQUEEZE_BELOW):
+            return None
+        return ("close above the 50-day average %s while funding averaged %+.0f %%/yr over 3 days — shorts crowded "
+                "into an uptrend" % (fmt.price(x["sma50"][i]), 100 * m),
+                {"trigger_level": cl[i], "stop_ref": None, "funding3": m, "sma50": x["sma50"][i]})
     if setup == "dip_in_uptrend":
         btc_up = (context or {}).get("btc_up")
         if not btc_up or not btc_up.get(c.t):

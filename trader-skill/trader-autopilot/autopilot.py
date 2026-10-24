@@ -1552,6 +1552,9 @@ def _series_candidates(sym, e: dict, memo: dict, handled: dict, holding: set, no
         context = None
         if (setups.SETUPS.get(e["setup"]) or {}).get("needs_btc"):  # Bitcoin's 200-day trend switches it on and off
             context = {"btc_up": setups.regime_map(candles(data.as_symbol("BTCUSDT", "crypto"), "crypto").candles)}
+        if (setups.SETUPS.get(e["setup"]) or {}).get("needs_funding"):  # the coin's perpetual funding, by day
+            from shared import funding
+            context = dict(context or {}, funding=funding.daily(sym.base, 30, now_ts=now_ts))
     except (data.DataUnavailable, ValueError) as exc:
         notes.append("%s %s: %s" % (sym.display, interval, exc))
         return []
@@ -3273,7 +3276,7 @@ def build_parser():
 
 # --- profile: the daily-trend setup the €1,000 backtest ran -----------------------------------------------
 
-TREND_SETUPS = ["trend_ema", "trend_breakout"]
+TREND_SETUPS = ["trend_ema", "trend_breakout", "funding_squeeze"]  # the order is the priority on the same day
 MAX_PROFILE_RISK = 5.0
 # what the simulator charges for each venue the bot can trade at (profile --venue)
 VENUES = {"alpaca": {"fee_bps": 10.0, "slippage_bps": 3.0, "borrow_rate_pct": 10.0, "crypto_only": False},

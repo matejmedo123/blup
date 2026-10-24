@@ -220,7 +220,7 @@ class TrendProfile(TraderTestCase):
         cfg, limits = config.load_config(), config.load_limits()
         self.assertEqual(cfg["risk_per_trade_pct"], 2.0)
         self.assertEqual(cfg["leverage"], {"crypto": 1.5, "stock": 1.0})
-        self.assertEqual(cfg["autopilot"]["playbook"]["setups"], ["trend_ema", "trend_breakout"])
+        self.assertEqual(cfg["autopilot"]["playbook"]["setups"], ["trend_ema", "trend_breakout", "funding_squeeze"])
         self.assertEqual(cfg["autopilot"]["playbook"]["max_risk_pct"], 2.0)
         self.assertEqual(cfg["autopilot"]["adapt"]["max_drawdown_pct"], 35)
         self.assertEqual((cfg["autopilot"]["broker"], cfg["autopilot"]["mode"], cfg["paper"]),
