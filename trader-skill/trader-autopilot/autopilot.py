@@ -918,7 +918,7 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
 def rule_exit_due(it: dict) -> str:
     """'' or why a rule-exit position should close now: a bar that closed after the fill met the rule."""
     rule = it.get("exit_rule") or {}
-    if rule.get("type") not in ("close_above_sma", "close_below_low", "close_below_ema"):
+    if rule.get("type") not in setups.RULE_EXIT_TYPES:
         return ""
     interval, n = rule.get("interval") or "1d", int(rule.get("n") or 5)
     step = market_clock.interval_seconds(interval)
@@ -949,6 +949,9 @@ def rule_exit_due(it: dict) -> str:
             rule.get("text") or rule["type"])
     if rule["type"] == "close_above_sma":
         return "the %s close %s is above the %d-bar average %s" % (
+            setups.bar_label(interval), fmt.price(closes[-1]), n, fmt.price(sum(closes[-n:]) / float(n)))
+    if rule["type"] == "close_below_sma":
+        return "the %s close %s is below the %d-bar average %s" % (
             setups.bar_label(interval), fmt.price(closes[-1]), n, fmt.price(sum(closes[-n:]) / float(n)))
     if rule["type"] == "close_below_ema":
         return "the %s close %s is below the %d-bar EMA %s — the trend is broken" % (

@@ -603,6 +603,18 @@ def runner_verdict(setup: str, without: dict, ride_rs: list, folds: list, pairs:
             "folds": [{"without_r": round(a, 3), "with_r": round(b, 3)} for a, b in folds]}
 
 
+# a funding rule is judged only on the years its funding exists, and only once there are this many of them
+MIN_FUNDING_DAYS = 730
+
+
+def setup_days(setup: str, interval: str, args, now_ts: int, context: dict = None) -> float:
+    """The days a setup's walk-forward covers: the timeframe's, or — for a rule that reads perpetual funding — only
+    from where that funding begins (a period without its input would judge nothing)."""
+    days = tf_days(interval, args)
+    first = (context or {}).get("funding_first_ts") if setups.SETUPS[setup].get("needs_funding") else None
+    return min(days, max(0.0, (now_ts - first) / 86400.0)) if first else days
+
+
 def coin_context(context: dict, sym) -> dict:
     """The shared context plus this coin's own funding (funding_squeeze reads it as ``funding``)."""
     if not context or "funding_all" not in context:
@@ -648,10 +660,15 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
     taken: {coin key: entry times} from ``together`` — only the trades this setup gets beside the others.
     """
     k = max(1, int(args.folds))
-    days = tf_days(interval, args)
-    first = (context or {}).get("funding_first_ts") if setups.SETUPS[setup].get("needs_funding") else None
-    if first:  # the walk-forward starts where the rule's own input begins — a period without it judges nothing
-        days = min(days, (now_ts - first) / 86400.0)
+    days = setup_days(setup, interval, args, now_ts, context)
+    short_input = None
+    if setups.SETUPS[setup].get("needs_funding"):
+        if (context or {}).get("funding_members") is not None:
+            members = context["funding_members"]  # the biggest coins at the starts of its own, shorter periods
+        if not (context or {}).get("funding_first_ts") or days < MIN_FUNDING_DAYS:
+            short_input = "only %d days of perpetual funding history — it needs %d before it is judged" % (
+                days if (context or {}).get("funding_first_ts") else 0, MIN_FUNDING_DAYS)
+            days = max(days, 1.0)
     start_ts, bounds = fold_bounds(now_ts, days, k)
     starts = [start_ts] + bounds[:-1]
 
@@ -754,6 +771,8 @@ def study_family(setup: str, interval: str, coins: list, now_ts: int, args, exit
         verdict = "only %d out-of-sample trades" % oos_s["n"]
     elif oos_s["expectancy_r"] < args.min_edge:
         verdict = "out-of-sample edge %s is below %s" % (fmt.r(oos_s["expectancy_r"]), fmt.r(args.min_edge))
+    if short_input:
+        verdict = short_input
     ok = verdict is None
     if best is None:
         fam.update(exit=None, train=None, test=oos_s if oos else None, validated=False, verdict=verdict)
@@ -918,14 +937,26 @@ def run(args, ctx) -> dict:
         if not fam_setups:
             continue
         days = tf_days(interval, args)
-        members = None
+        members = fmembers = None
         coins = []
+        fund_first = None
+        if any(setups.SETUPS[st].get("needs_funding") for st in fam_setups):
+            from shared import funding
+            # Binance's first perpetual was BTC's (Sep 2019): a funding rule's history starts there, plus the 50
+            # days its average needs
+            btc_f = funding.daily("BTC", days=int(days) + 30, now_ts=now_ts)
+            fund_first = (min(btc_f) + 50) * 86400 if btc_f else None
         if pit:
             start_ts, bounds = fold_bounds(now_ts, days, args.folds)
             pol = symbols.memes_policy(cfg)
             young = {k: pol["min_listed_days"] for k in daily if pol and symbols.is_meme_base(base_of[k][0].base)}
             members = pit_members(daily, [start_ts] + bounds[:-1], args.top, young)
-            keys = sorted(set().union(*members) | {s.key for s in syms})  # same order every run (hash seeds vary)
+            if fund_first:  # the same shorter periods study_family judges a funding rule on
+                st = next(st for st in fam_setups if setups.SETUPS[st].get("needs_funding"))
+                f_days = max(1.0, setup_days(st, interval, args, now_ts, {"funding_first_ts": fund_first}))
+                f_start, f_bounds = fold_bounds(now_ts, f_days, args.folds)
+                fmembers = pit_members(daily, [f_start] + f_bounds[:-1], args.top, young)
+            keys = sorted(set().union(*members, *(fmembers or [])) | {s.key for s in syms})  # same order every run
             if interval == "1d":  # already loaded, split into listings
                 loaded = [(base_of[k][1], [c for c in daily[k] if c.t >= now_ts - days * 86400])
                           for k in keys if k in daily]
@@ -962,14 +993,8 @@ def run(args, ctx) -> dict:
                     notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
             context = dict(context or {}, btc_up=setups.regime_map(btc) if btc else {})
         if any(setups.SETUPS[st].get("needs_funding") for st in fam_setups):
-            from shared import funding
-            fund = funding.daily_many([sym.base for sym, _, _ in coins], days=int(tf_days(interval, args)) + 30,
-                                      now_ts=now_ts)
-            firsts = [min(d) * 86400 for d in fund.values() if d]
-            # the funding_squeeze history starts with the first perpetual's (Binance BTC: Sep 2019), plus the
-            # 50 days its average needs
-            context = dict(context or {}, funding_all=fund,
-                           funding_first_ts=(min(firsts) + 50 * 86400) if firsts else None)
+            fund = funding.daily_many([sym.base for sym, _, _ in coins], days=int(days) + 30, now_ts=now_ts)
+            context = dict(context or {}, funding_all=fund, funding_first_ts=fund_first, funding_members=fmembers)
         tradable = {s.key for s in syms} if pit else None
         alone = {st: study_family(st, interval, coins, now_ts, args, exit_mod, cost, context, members, tradable)
                  for st in fam_setups}

@@ -7,7 +7,7 @@ import os
 import zipfile
 from unittest import mock
 
-from shared import funding, setups
+from shared import funding, setups, state
 from shared.indicators import Candle
 from tests.helpers import TraderTestCase, load
 
@@ -154,3 +154,148 @@ class TheWalkForwardStartsWithTheFunding(TraderTestCase):
             except Exception:
                 pass
         self.assertAlmostEqual(seen["days"], 3000, msg="other rules keep the whole history")
+
+
+class TheLiveExit(TraderTestCase):
+    def test_the_bot_sells_at_the_first_close_below_the_twenty_day_average(self):
+        from shared import data, market_clock as mc
+        ap = load("trader-autopilot", "autopilot")
+        bars = [Candle(T0 + k * DAY, 100.0, 101.0, 99.0, 100.0, 1.0) for k in range(29)]
+        bars.append(Candle(T0 + 29 * DAY, 100.0, 100.0, 79.0, 80.0, 1.0))
+        it = {"exit_rule": dict(setups.exit_rule("funding_squeeze"), interval="1d"), "data_key": "SOLUSDT",
+              "asset": "crypto", "filled_at": mc.iso(T0 + 20 * DAY), "placed_at": mc.iso(T0 + 20 * DAY)}
+        series_ = data.Series(data.as_symbol("SOLUSDT", "crypto"), "1d", bars, "test", [], {})
+        with mock.patch.object(data, "get_candles", return_value=series_):
+            why = ap.rule_exit_due(it)
+        self.assertIn("below the 20-bar average", why)
+        with mock.patch.object(data, "get_candles", return_value=data.Series(
+                series_.symbol, "1d", bars[:-1], "test", [], {})):
+            self.assertEqual(ap.rule_exit_due(it), "")
+        self.assertEqual(set(setups.RULE_EXIT_TYPES),
+                         {r["exit_rule"]["type"] for r in setups.SETUPS.values() if r.get("exit_rule")})
+
+
+class TheArchiveCache(TraderTestCase):
+    def setUp(self):
+        super().setUp()
+        os.environ.pop("TRADER_OFFLINE", None)
+        funding._memo.clear()
+        self.jan = [(int((T0 + d * DAY) * 1000), 8, "-0.0003") for d in range(31)]
+
+    def run_daily(self, now, published, base="BTC", days=45):
+        calls = []
+
+        def fake(url):
+            calls.append(url)
+            if published and "2026-01" in url and "/%sUSDT/" % base in url:
+                return _archive(self.jan)
+            return None
+        funding._memo.clear()
+        with mock.patch.object(funding, "_download", side_effect=fake), \
+                mock.patch.object(funding, "_recent_binance", return_value={}), \
+                mock.patch.object(funding, "_recent_kraken", return_value={}):
+            return funding.daily(base, days=days, now_ts=now), calls
+
+    def test_a_month_binance_has_not_published_yet_is_fetched_again_later(self):
+        d, _ = self.run_daily(T0 + 31 * DAY + 300, published=False)  # 1 Feb 00:05: January's file is not out
+        self.assertNotIn(T0 // DAY, d)
+        d, calls = self.run_daily(T0 + 41 * DAY, published=True)   # 11 Feb
+        self.assertIn(T0 // DAY, d, "January arrives once Binance publishes it")
+        self.assertAlmostEqual(d[T0 // DAY], -0.0003 * 3 * 365)
+
+    def test_a_month_without_a_perpetual_is_settled_once_past_the_publishing_delay(self):
+        self.run_daily(T0 + 60 * DAY, published=False)
+        _, calls = self.run_daily(T0 + 61 * DAY, published=False)
+        self.assertFalse([u for u in calls if "2026-01" in u], "checked well after it ended: settled")
+
+    def test_an_empty_month_from_an_older_cache_is_looked_up_again(self):
+        state.write_json("cache/funding/BTC.json", {"months": {"2026-01": {}}, "updated_at": T0})
+        d, _ = self.run_daily(T0 + 50 * DAY, published=True)
+        self.assertIn(T0 + 5 * DAY, [k * DAY for k in d])
+
+    def test_offline_reads_the_cache_and_never_writes_it(self):
+        self.run_daily(T0 + 50 * DAY, published=True)
+        before = state.read_json("cache/funding/BTC.json", {})
+        os.environ["TRADER_OFFLINE"] = "1"
+        funding._memo.clear()
+        with mock.patch.object(funding, "_download", side_effect=AssertionError("offline")):
+            d = funding.daily("BTC", days=45, now_ts=T0 + 50 * DAY)
+            funding.daily("ETH", days=45, now_ts=T0 + 50 * DAY)
+        self.assertIn(T0 // DAY + 10, d)
+        self.assertEqual(state.read_json("cache/funding/BTC.json", {}), before)
+        self.assertFalse(state.path("cache", "funding", "ETH.json").exists())
+
+    def test_one_memo_entry_per_coin_and_window(self):
+        for h in range(5):
+            self.run_daily(T0 + 50 * DAY + h * 3600, published=True)
+        self.assertEqual([k for k in funding._memo if k[0] == "BTC"], [("BTC", 45)])
+
+
+class TheRecentPrints(TraderTestCase):
+    def setUp(self):
+        super().setUp()
+        os.environ.pop("TRADER_OFFLINE", None)
+
+    def test_binance_prints_are_annualised_by_their_own_interval(self):
+        start = T0
+        four_h = [{"fundingTime": int((start + k * 4 * 3600) * 1000), "fundingRate": "-0.0001"} for k in range(12)]
+        with mock.patch.object(funding.http, "get_json", return_value=four_h):
+            d = funding._recent_binance("WIF", start)
+        self.assertAlmostEqual(d[str(T0 // DAY)], -0.0001 * 8760 / 4)
+        self.assertAlmostEqual(funding._annualise([(T0, 0.0001)])[str(T0 // DAY)], 0.0001 * 3 * 365)
+
+    def test_more_than_a_thousand_prints_are_paged(self):
+        hourly = [{"fundingTime": int((T0 + k * 3600) * 1000), "fundingRate": "0.00001"} for k in range(1300)]
+        pages = []
+
+        def fake(url, **kw):
+            ms = int(url.split("startTime=")[1].split("&")[0])
+            rows = [r for r in hourly if r["fundingTime"] >= ms][:1000]
+            pages.append(len(rows))
+            return rows
+        with mock.patch.object(funding.http, "get_json", side_effect=fake):
+            d = funding._recent_binance("SOL", T0)
+        self.assertEqual(pages[:2], [1000, 300])
+        self.assertIn(str((T0 + 1299 * 3600) // DAY), d)
+
+    def test_kraken_times_are_utc_whatever_the_local_zone(self):
+        import time
+        old = os.environ.get("TZ")
+        os.environ["TZ"] = "Europe/Bratislava"
+        time.tzset()
+        try:
+            rows = {"rates": [{"timestamp": "2026-07-01T00:00:00.000Z", "relativeFundingRate": 0.00001}]}
+            with mock.patch.object(funding.http, "get_json", return_value=rows):
+                d = funding._recent_kraken("SOL", 0)
+        finally:
+            if old is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old
+            time.tzset()
+        self.assertEqual(list(d), [str(1782864000 // DAY)])  # 2026-07-01 UTC
+
+
+class TheLabWindow(TraderTestCase):
+    def args(self):
+        lab = load("trader-backtest", "lab")
+        return lab, lab.build_parser().parse_args(["--min-pooled", "40", "--folds", "3"])
+
+    def test_a_funding_rule_uses_the_biggest_coins_of_its_own_periods(self):
+        lab, args = self.args()
+        now = T0 + 3000 * DAY
+        ctx = {"funding_first_ts": now - 2000 * DAY, "funding_members": [{"NEW"}] * 4}
+        fam, _, _ = lab.study_family("funding_squeeze", "1d", [], now, args, None, 0.26, ctx, [{"OLD"}] * 4)
+        self.assertEqual(fam["members"], [["NEW"]] * 4)
+        fam, _, _ = lab.study_family("trend_breakout", "1d", [], now, args, None, 0.26, ctx, [{"OLD"}] * 4)
+        self.assertEqual(fam["members"], [["OLD"]] * 4)
+
+    def test_too_little_funding_history_is_never_validated(self):
+        lab, args = self.args()
+        now = T0 + 3000 * DAY
+        for ctx in ({"funding_first_ts": now - 300 * DAY}, {}, None):
+            fam, _, _ = lab.study_family("funding_squeeze", "1d", [], now, args, None, 0.26, ctx)
+            self.assertFalse(fam["validated"])
+            self.assertIn("days of perpetual funding history", fam["verdict"])
+        self.assertEqual(lab.setup_days("funding_squeeze", "1d", args, now, {"funding_first_ts": now - 900 * DAY}),
+                         900)

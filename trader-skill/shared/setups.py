@@ -503,6 +503,10 @@ def keep_text(keep: float) -> str:
     return "%d %%" % round(100 * keep)
 
 
+# every exit-rule type rule_says_exit knows — the bot's live check accepts exactly these
+RULE_EXIT_TYPES = ("close_above_sma", "close_below_low", "close_below_sma", "close_below_ema")
+
+
 def rule_says_exit(rule: dict, closes: list, j: int, cache: dict = None) -> bool:
     """Does the close at index j meet the exit rule? closes = all closes up to and including j.
 
