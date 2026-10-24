@@ -215,43 +215,52 @@ sudo traderctl learned    # čo sa naučil z vlastných obchodov
 
 ---
 
-## 10. Otvor nástenku
+## 10. Nástenka ako normálna webstránka
 
-Nástenka nie je nikdy priamo na internete. Máš tri možnosti:
+Robot má vlastnú webovú stránku — **nástenku** (kapitál, obchody, rozhodnutia, tlačidlá Pause a KILL). Terminál
+potrebuješ len pri inštalácii; potom všetko vidíš v prehliadači, v počítači aj v mobile. Nástenka beží na serveri
+a z bezpečnosti je najprv zamknutá len pre server samotný. Tu jej dáš **vlastnú adresu s HTTPS a heslom**.
 
-**A) SSH tunel z počítača (najjednoduchšie).** V novom okne terminálu na svojom počítači:
+**A) Vlastná adresa, napr. `https://bot.tvojadomena.sk` (odporúčam).** Stačí subdoména domény, ktorú už máš
+(napr. tej pre web ENZO), alebo lacná nová doména (~10 € ročne). Zvoľ nenápadný názov, napr. `panel-7k`.
 
-```bash
-ssh -L 8765:127.0.0.1:8765 ubuntu@203.0.113.10
-```
-
-Kým je okno otvorené, v prehliadači otvor **http://127.0.0.1:8765**.
-
-**B) Z mobilu cez Termius.** V hoste pridaj *Port Forwarding → Local*: port `8765`, cieľ `127.0.0.1:8765`.
-Pripoj sa a v mobilnom prehliadači otvor **http://127.0.0.1:8765**.
-
-**C) Vlastná doména s HTTPS (najpohodlnejšie v mobile).**
-
-1. U registrátora domény nastav DNS záznam typu **A**, napr. `trader.tvojadomena.sk` → IP servera.
-2. Na serveri:
+1. Tam, kde máš doménu (napr. admin.websupport.sk → *Domény* → doména → *DNS*), klikni *Pridať záznam*:
+   typ **A**, názov = prvá časť adresy (napr. `bot`), hodnota = IP servera. Ulož a počkaj 5–60 minút.
+2. Heslo `TRADER_DASHBOARD_PASSWORD` musí byť nastavené (krok 6). Na serveri (adresu prepíš na svoju):
 
    ```bash
    sudo apt install -y caddy
    sudo cp /opt/trader/deploy/Caddyfile.example /etc/caddy/Caddyfile
-   sudo nano /etc/caddy/Caddyfile        # trader.example.com prepíš na svoju doménu
-   sudo systemctl restart trader-dashboard caddy
+   sudo sed -i 's/trader\.example\.com/bot.tvojadomena.sk/' /etc/caddy/Caddyfile
    sudo ufw allow 80,443/tcp
+   sudo systemctl restart trader-dashboard caddy
    ```
 
-3. Otvor **https://trader.tvojadomena.sk** a prihlás sa heslom z kroku 6. Bez hesla nástenka cez doménu nič
-   neukáže. Na mobile ju môžeš *Pridať na plochu* — správa sa ako aplikácia.
+3. Otvor **https://bot.tvojadomena.sk** a prihlás sa heslom. V mobile *Pridať na plochu* (iPhone: Safari →
+   Zdieľať; Android: Chrome → ⋮) — otvára sa potom ako aplikácia.
+
+Prihlasovaciu stránku môže vidieť ktokoľvek, kto adresu pozná, ale bez hesla neuvidí nič a pokusy o heslo sú
+brzdené — preto dlhé heslo. Ostré peniaze sa z nástenky zapnúť nedajú.
+
+**B) Bez domény: Tailscale** (bezplatná súkromná sieť len pre tvoje zariadenia, nástenka nie je na internete):
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up              # otvor vypísaný odkaz a prihlás sa (napr. účtom Google)
+sudo tailscale serve --bg 8765 # vypíše adresu https://….ts.net (ak najprv odkaz na zapnutie HTTPS, potvrď ho)
+```
+
+Do mobilu nainštaluj aplikáciu Tailscale, prihlás sa tým istým účtom a otvor adresu `https://….ts.net`.
+
+**C) Rýchly pohľad bez nastavovania: SSH tunel z počítača.** `ssh -L 8765:127.0.0.1:8765 ubuntu@203.0.113.10`,
+a kým je okno otvorené, v prehliadači **http://127.0.0.1:8765**.
 
 Čo na nástenke nájdeš:
 
-* **Overview** — „Je všetko OK?“, kapitál, zisky a straty, otvorené pozície, posledné rozhodnutia.
+* **Overview** — „Is everything OK?“, kapitál, zisky a straty, otvorené pozície, posledné rozhodnutia.
+* **Trades** — každý obchod s grafom.
 * **Bot** — či žije, každé rozhodnutie s dôvodom, tlačidlá **Pause**, **Run once** a **KILL**.
 * **Checks** — či výsledky zodpovedajú backtestu a či dodržal pravidlá.
-* **Brain**, **Trades**, **News**, **Help**.
 
 ---
 
@@ -444,7 +453,7 @@ Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 
 * `/etc/trader/trader.env` a zálohy nikomu neposielaj, nedávaj do gitu ani nikam nevkladaj.
 * API kľúče **vždy bez práva výberu** a naviazané na IP servera — aj ukradnutým kľúčom sa peniaze nedajú vybrať.
-* Port 8765 na firewalle nikdy neotváraj — nástenka ide len cez SSH tunel alebo HTTPS s heslom.
+* Port 8765 na firewalle nikdy neotváraj — nástenka ide len cez HTTPS s heslom (časť 10), Tailscale alebo SSH tunel.
 * Robot beží ako obyčajný používateľ `trader` a zapisovať môže len do `/var/lib/trader`.
 * Nástenka nikdy neukáže hodnotu kľúča, len „set / not set“. Ostré peniaze sa z nástenky zapnúť nedajú.
 
