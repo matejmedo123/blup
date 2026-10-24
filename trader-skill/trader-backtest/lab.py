@@ -615,6 +615,16 @@ def setup_days(setup: str, interval: str, args, now_ts: int, context: dict = Non
     return min(days, max(0.0, (now_ts - first) / 86400.0)) if first else days
 
 
+def funding_start(btc_funding: dict, now_ts: int, days: float):
+    """When a funding rule's walk-forward may begin: where BTC's funding begins plus the 50 days its average needs,
+    or the window's own start when the funding is older than the window (the series was only fetched that far)."""
+    if not btc_funding:
+        return None
+    if min(btc_funding) <= now_ts // 86400 - int(days) - 30 + 1:
+        return now_ts - days * 86400
+    return (min(btc_funding) + 50) * 86400
+
+
 def coin_context(context: dict, sym) -> dict:
     """The shared context plus this coin's own funding (funding_squeeze reads it as ``funding``)."""
     if not context or "funding_all" not in context:
@@ -944,8 +954,7 @@ def run(args, ctx) -> dict:
             from shared import funding
             # Binance's first perpetual was BTC's (Sep 2019): a funding rule's history starts there, plus the 50
             # days its average needs
-            btc_f = funding.daily("BTC", days=int(days) + 30, now_ts=now_ts)
-            fund_first = (min(btc_f) + 50) * 86400 if btc_f else None
+            fund_first = funding_start(funding.daily("BTC", days=int(days) + 30, now_ts=now_ts), now_ts, days)
         if pit:
             start_ts, bounds = fold_bounds(now_ts, days, args.folds)
             pol = symbols.memes_policy(cfg)

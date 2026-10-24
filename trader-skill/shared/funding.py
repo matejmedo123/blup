@@ -27,7 +27,7 @@ KRAKEN = "https://futures.kraken.com/derivatives/api/v4/historicalfundingrates?s
 RECENT_TTL = 3600
 # Binance publishes a month's archive a few days after it ends: until this long after, a missing file is "not yet"
 PUBLISH_DAYS = 10
-API_PAGES = 5  # 1000 prints a page — enough for 55 days of hourly funding
+API_PAGES = 5  # 1000 prints a page: ~200 days of hourly funding, the recent window needs ~62
 ALIAS = {"BCC": "BCH", "BCHABC": "BCH"}
 KRAKEN_BASE = {"BTC": "XBT"}
 _memo = {}    # {(base, days): (hour, series)} — one entry per coin and window, replaced every hour

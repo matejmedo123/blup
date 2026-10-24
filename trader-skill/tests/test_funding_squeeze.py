@@ -299,3 +299,16 @@ class TheLabWindow(TraderTestCase):
             self.assertIn("days of perpetual funding history", fam["verdict"])
         self.assertEqual(lab.setup_days("funding_squeeze", "1d", args, now, {"funding_first_ts": now - 900 * DAY}),
                          900)
+
+    def test_a_short_window_inside_the_funding_history_is_not_cut_further(self):
+        lab, args = self.args()
+        now = T0 + 3000 * DAY
+        days = 740
+        whole = {d: -0.1 for d in range(now // DAY - days - 30, now // DAY + 1)}  # fetched days + 30: all there
+        self.assertEqual(lab.funding_start(whole, now, days), now - days * DAY)
+        self.assertEqual(lab.setup_days("funding_squeeze", "1d", args, now,
+                                        {"funding_first_ts": lab.funding_start(whole, now, days)}),
+                         min(days, lab.tf_days("1d", args)))
+        young = {d: -0.1 for d in range(now // DAY - 400, now // DAY + 1)}  # began inside the window
+        self.assertEqual(lab.funding_start(young, now, days), (now // DAY - 350) * DAY)
+        self.assertIsNone(lab.funding_start({}, now, days))
