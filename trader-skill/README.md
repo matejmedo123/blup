@@ -360,6 +360,42 @@ hold-out, 9 points deeper than the deployed setup, so it fails the pre-registere
 5 % / 8 positions made €56,731 in the selection window and lost money on the hold-out. Eight positions instead
 of five lost on the hold-out at every risk level.
 
+**Quick leverage, up to 10×, and perps — on every strategy** (pre-registered 24 Oct 2026, research-lev; same
+engine, the six daily strategies alone and the bot mix, Bybit costs, Binance daily funding on perps; account
+equity checked at each day's lows):
+
+| Bot mix, €1,000 | Selection | Hold-out 2024-07 → | Since 2020 | Worst drop | Interest / funding paid |
+|---|---|---|---|---|---|
+| Spot 1× (reference) | €8,783 | €1,934 | €15,753 | −27 % | — |
+| Spot margin 1.5× (deployed) | €8,831 | €2,182 | €18,084 | −28 % | €76 |
+| Spot margin 2× / 3× / 5× / 10× | €8,831 | €2,206–2,221 | €18,270–18,393 | −28 % | €94–116 |
+| Quick 1.5×: the borrowed part sold after 3 days | €8,896 | €1,971 | €16,894 | −28 % | €22 |
+| Quick 1.5×: sold after 7 days | €9,114 | €2,030 | €17,225 | −28 % | €33 |
+| Perps 1× (cross) | €6,284 | €1,932 | €11,564 | −29 % | €1,794 |
+| Perps 10× (cross) | €6,285 | €2,228 | €12,973 | −29 % | €1,872 |
+| Perps 10× (isolated) | €8,035 | €2,220 | €16,997 | −33 % | 115 positions liquidated |
+| Every position 2× the size (spot margin) | €28,330 | €2,623 | €61,715 | −45 % | €4,787 |
+| Every position 3× the size | €55,216 | €2,580 | €113,197 | −61 % | €22,076 |
+| Every position 5× the size | wiped out in 9 of 10 runs | | | | |
+| Every position 10× the size (spot or perps) | wiped out in every run | | | | |
+
+Interest is not what holds the bot back: 1.5× cost €76 in almost seven years, because the bot only borrows while
+five positions do not fit in its cash. Paying the loan back early cuts that to €22–33 but sells the borrowed part
+just as the trend runs, so quick leverage ends €770–1,220 below the same leverage held normally for the bot mix (−5
+to −8 % for `breakout_volume`, within ±2 % for the other strategies alone). As *room*, leverage stops paying at
+1.5×: above it the risk per trade and the five-position cap set the size, so 2× to 10× is the same account (ten
+positions instead of five: €28,191 since 2020, but −44 % and a lower hold-out). Perps lose for every trend strategy
+— funding is paid on the whole position, most of it in the bull runs a trend follower holds — and isolated 10× is
+liquidated about 9.5 % below the entry, nearer than most stops. The one exception is `funding_squeeze`, which buys
+when funding is negative and so *receives* it: on perps it made €2,789 against €2,528 on spot and passed the rule,
+a small amount from a rule the lab has not admitted yet. As *size*, leverage multiplies the result and the drop: 2×
+survived on every strategy, 3× ended the bot mix higher since 2020 but lower than 2× on the hold-out, and the bot
+mix at 5× and 10× went to zero on 11 May 2020, 20 May 2021 or 11 Oct 2025 (10× started on 1 Jul 2024 still lasted
+only to 11 Oct 2025). The trend strategies alone survived 5× with drops of −77 to −80 % (`breakout_volume` did
+not); 10× wiped every one of them. Isolated 10× perps at full size: −99.9 %. No variant of the bot mix or of any
+trend strategy passes the pre-registered rule; `LEVERAGE_HARD_CAP` stays at 2× and the deployed 1.5× on Bybit spot
+margin stays as it is.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
