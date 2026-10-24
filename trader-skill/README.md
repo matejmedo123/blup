@@ -816,7 +816,7 @@ None passed — still one pass in 46:
 | Breakout only after a quiet base (low volume) | €2,171 | €1,437 |
 | **RSI(14) back above 50 after a dip below 40** (best addition) | L + it: Calmar 1.97 vs 1.72 | **€1,569**, worst −30 %: failed |
 | Open interest flushed −15 % in 3 days, crowd short (accounts long/short < 1), taker buying, big traders long | +1 to +7 %/yr alone | €1,017 to €2,108 (the "crowd short" rule did well out of sample, but was among the worst in sample — picking it now would be hindsight) |
-| Coinbase premium on BTC/ETH, breadth thrust (≤ 25 % → ≥ 60 % of coins above their 50-day average), strong against BTC, weekly breakout, momentum and low-volatility rotation, Keltner breakout | +1 to +38 %/yr alone; few extra trades next to the bot | €1,835 to €1,903 — no better than the bot alone |
+| Coinbase premium on BTC/ETH, breadth thrust (≤ 25 % → ≥ 60 % of coins above their 50-day average), strong against BTC, weekly breakout, momentum and low-volatility rotation, Keltner breakout | +1 to +38 %/yr alone; few extra trades next to the bot | €1,835 to €1,928 — no better than the bot alone |
 | **Hours of the day** (US session, Asia session, the best hour, weekdays only — BTC, 0.10 % per side) | −28 to −42 %/yr; weekdays only +27 % vs +50 % for simply holding | all lose: a 0.2 % round trip every day costs ~50 %/yr, more than any hour earns |
 
 What it shows: the data the bot already uses — Bitcoin's trend, the coin's own breakout, the 10 biggest coins —
