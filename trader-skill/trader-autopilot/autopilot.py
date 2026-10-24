@@ -3322,8 +3322,9 @@ def build_parser():
 
 TREND_SETUPS = ["trend_ema", "trend_breakout", "funding_squeeze"]  # the order is the priority on the same day
 MAX_PROFILE_RISK = 5.0
-# what the simulator charges for each venue the bot can trade at (profile --venue)
-VENUES = {"alpaca": {"fee_bps": 10.0, "slippage_bps": 3.0, "borrow_rate_pct": 10.0, "crypto_only": False},
+# what the simulator charges for each venue the bot can trade at (profile --venue); Alpaca's crypto fee is 0.25 % a
+# side at its first volume tier (the bot's marketable limits pay the taker rate), Bybit's 0.1–0.15 %
+VENUES = {"alpaca": {"fee_bps": 25.0, "slippage_bps": 3.0, "borrow_rate_pct": 10.0, "crypto_only": False},
           "bybit": {"fee_bps": 15.0, "slippage_bps": 3.0, "borrow_rate_pct": 20.0, "crypto_only": True}}
 # the profile owns the per-coin risk: a re-run replaces these mappings whole, so an old split cannot linger
 PROFILE_REPLACES = {"config.json": ("risk_by_symbol",), "limits.json": ("crypto.symbols",)}
