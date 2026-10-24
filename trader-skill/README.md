@@ -340,6 +340,26 @@ The setup as it would run at Bybit (point in time, BTC + ETH 3 %, the rest 2 %, 
 ETF leg and 4 % on cash €9,529 / €1,498 / €15,452 / −30 %. Moving to Bybit gives up the T-bill yield and the
 ETF leg; the margin more than wins it back.
 
+**A bear-market sleeve and more risk** (two pre-registered studies, 24 Oct 2026, research-bear; deployed long book
+point in time, 2 % risk unless stated):
+
+| €1,000 | Hold-out 2024-07 → | 2018–2019 bear | Since 2020 | Worst drop (since 2020) |
+|---|---|---|---|---|
+| Long book alone | €1,928 | €1,226 | €12,922 | −31 % |
+| + shorts on 20-day breakdowns while BTC < SMA200 (the pick) | €1,801 | €1,638 | €13,807 | −39 % |
+| + bounce trades in the bear (RSI(2) < 5) | €1,717 | €791 | €7,170 | −57 % |
+
+The breakdown short has a real edge (+32R over 359 trades, beats 100 % of 200 random-entry draws) but a small one,
+and the bear-market rallies of 2024–2026 cost more than it made: it fails the test (hold-out −7 %, worst drop 6
+points deeper). Bounce trades lose in every window. The long book stays long-only.
+
+With margin solving the cash problem (Bybit costs, BTC/ETH +1 point over the rest): the deployed 2 % / 3 % at
+1.5× made €2,078 on the hold-out and €20,998 since 2020 (−32 %); 2× changes nothing (€2,091). More risk earns
+more and drops deeper — **3 % / 4 % at 2×: €2,458 hold-out, €42,823 since 2020, worst drop −43 %** (−31 % on the
+hold-out, 9 points deeper than the deployed setup, so it fails the pre-registered rule and is not the default);
+5 % / 8 positions made €56,731 in the selection window and lost money on the hold-out. Eight positions instead
+of five lost on the hold-out at every risk level.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
