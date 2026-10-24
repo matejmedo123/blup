@@ -13,7 +13,7 @@ upozornenia na mobil a jasný postup: simulátor → Bybit testnet → malý ost
 
 | Čo | Načo | Cena |
 |---|---|---|
-| VPS v EÚ (Ubuntu 24.04, 2 GB RAM) | tu robot beží nonstop | ~5 € / mesiac |
+| VPS v EÚ, napr. OVHcloud VPS-1 (Ubuntu 24.04, 4 GB RAM) | tu robot beží nonstop | ~5–6 € / mesiac s DPH |
 | Prístup ku kódu na GitHube (`matejmedo123/blup`) | stiahnutie robota na server | zadarmo |
 | Mobilná aplikácia **ntfy** | upozornenia na mobil | zadarmo |
 | Účet na **testnet.bybit.com** | papierové obchodovanie cez skutočné API | zadarmo |
@@ -44,30 +44,51 @@ upozornenia na mobil a jasný postup: simulátor → Bybit testnet → malý ost
 
 ## 2. Prenajmi si server (VPS)
 
-* **Server musí byť v EÚ** (Nemecko, Fínsko, Slovensko…) — Bybit blokuje servery z USA.
-* Stačí malý VPS: 1–2 vCPU, **2 GB RAM** (backtest laboratórium raz týždenne potrebuje pár stoviek MB),
-  aspoň 10 GB disk, systém **Ubuntu 24.04**.
-* Napríklad Hetzner Cloud (CX22, Nemecko/Fínsko) alebo VPS od Websupportu. Aktuálne ceny over u poskytovateľa.
+* **Server musí byť v EÚ** (Nemecko, Poľsko, Francúzsko, Rakúsko…) — Bybit blokuje servery z USA. Nie Londýn:
+  Bybit Spojené kráľovstvo obmedzuje.
+* Aspoň **2 GB RAM**, ideálne 4 GB (backtest laboratórium raz týždenne potrebuje pár stoviek MB), systém **Ubuntu 24.04**.
 * **Bežný webhosting (ako má web ENZO) nestačí** — nedovolí, aby program bežal nepretržite.
-* Pri objednávke si zvoľ prihlásenie cez SSH kľúč (bezpečnejšie) alebo heslo. Dostaneš **IP adresu**
-  servera, napr. `203.0.113.10` — v návode ju všade nahraď svojou.
 
----
+| Poskytovateľ | Plán | Cena (bez DPH, október 2026) | Poznámka |
+|---|---|---|---|
+| **OVHcloud** (odporúčam) | VPS-1: 2 vCore, 4 GB RAM, 40 GB | od ~4,5 € / mes. | bez viazanosti, Frankfurt / Varšava / Francúzsko |
+| netcup | VPS 500: 2 vCore, 4 GB RAM, 64 GB | ~8,3 € / mes. (12 mes.) | dátové centrum aj vo Viedni |
+| Hetzner Cloud | CX23 | od 5,99 € / mes. | lacné servery sú teraz vypredané, noví zákazníci ich často nevytvoria |
+
+Ceny sa v roku 2026 viackrát menili — presnú cenu uvidíš pri objednávke.
+
+### Objednávka na OVHcloud krok za krokom
+
+1. Na **www.ovhcloud.com** choď na *Bare Metal Cloud → Virtual Private Servers* (alebo vyhľadaj „VPS“).
+2. Pri pláne **VPS-1** klikni *Configure* / *Objednať*.
+3. Obdobie: *No commitment* (mesačne, bez viazanosti).
+4. Lokalita: **Frankfurt** alebo **Varšava** (prípadne Francúzsko).
+5. Obraz: *Distribution only → Ubuntu → 24.04*.
+6. SSH kľúč môžeš preskočiť, doplnkové služby nechaj vypnuté → *Continue*.
+7. *Create an account*: e-mail, heslo, fyzická osoba, adresa, krajina Slovensko, telefón.
+8. Platba kartou alebo PayPalom, odsúhlas podmienky.
+9. Počkaj na e-mail „Your VPS is ready“ (zvyčajne do hodiny). Nájdeš v ňom **IP adresu**, používateľa
+   **`ubuntu`** a odkaz na **dočasné heslo**.
 
 ## 3. Pripoj sa na server
 
-**Z počítača:** na Macu/Linuxe Terminál, na Windows PowerShell:
+**Z počítača:** na Windows stlač Win, napíš *PowerShell* a otvor ho; na Macu Cmd+Medzerník → *Terminal*. Potom
+(IP nahraď svojou):
 
 ```bash
-ssh root@203.0.113.10
+ssh ubuntu@203.0.113.10
 ```
 
-**Len z mobilu:** nainštaluj aplikáciu **Termius** (iPhone aj Android), pridaj „Host“ s IP adresou,
-používateľom `root` a heslom alebo kľúčom.
+* Na otázku „Are you sure you want to continue connecting?“ napíš `yes`.
+* Vlož dočasné heslo z e-mailu (pri písaní ho nevidno). Server ťa vyzve na zmenu: znova dočasné heslo, potom
+  dvakrát nové. Spojenie sa zavrie — pripoj sa znova, už novým heslom.
+* Pri netcupe alebo Hetzneri býva používateľ `root` — vtedy píš `ssh root@…`.
 
-Ak ti poskytovateľ dal iného používateľa než `root`, prihlás sa ním — príkazy nižšie už `sudo` majú.
+**Len z mobilu:** aplikácia **Termius** (iPhone aj Android) → *+* → *New Host* → Address = IP, Username = `ubuntu`,
+Password = dočasné heslo → uložiť → ťuknúť a zmeniť heslo ako vyššie.
 
-Hneď aktualizuj systém, nainštaluj git a zapni firewall (otvorené zostane len SSH):
+Hneď aktualizuj systém, nainštaluj git a zapni firewall (otvorené zostane len SSH). Ak sa `sudo` spýta heslo,
+zadaj svoje nové:
 
 ```bash
 sudo apt update && sudo apt -y upgrade
@@ -76,13 +97,12 @@ sudo ufw allow OpenSSH
 sudo ufw enable
 ```
 
----
-
 ## 4. Stiahni robota na server
 
 Repozitár je na GitHube. Ak je súkromný, GitHub chce namiesto hesla **token**:
 
-1. Na GitHube: *Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token*.
+1. Na GitHube: ikona vpravo hore → *Settings* → úplne dole *Developer settings → Personal access tokens →
+   Fine-grained tokens → Generate new token*.
 2. *Repository access:* len `matejmedo123/blup`, *Permissions → Contents:* **Read-only**. Platnosť napr. 90 dní.
 3. Token si skopíruj (začína `github_pat_…`).
 
@@ -96,7 +116,7 @@ git clone --depth 1 --branch claude/enzo-burger-website-lc5i0e https://github.co
 Keď sa spýta: *Username* = tvoje meno na GitHube, *Password* = token (pri vkladaní ho nevidno, to je v poriadku).
 
 > **Bez gitu:** na GitHube prepni na vetvu `claude/enzo-burger-website-lc5i0e`, *Code → Download ZIP*, rozbaľ
-> v počítači a nahraj priečinok na server: `scp -r blup-…/trader-skill root@203.0.113.10:~/` — potom v kroku 5
+> v počítači a nahraj priečinok na server: `scp -r blup-…/trader-skill ubuntu@203.0.113.10:~/` — potom v kroku 5
 > použi cestu `~/trader-skill/deploy/install-vps.sh`.
 
 ---
@@ -201,7 +221,7 @@ Nástenka nie je nikdy priamo na internete. Máš tri možnosti:
 **A) SSH tunel z počítača (najjednoduchšie).** V novom okne terminálu na svojom počítači:
 
 ```bash
-ssh -L 8765:127.0.0.1:8765 root@203.0.113.10
+ssh -L 8765:127.0.0.1:8765 ubuntu@203.0.113.10
 ```
 
 Kým je okno otvorené, v prehliadači otvor **http://127.0.0.1:8765**.
@@ -238,8 +258,8 @@ Pripoj sa a v mobilnom prehliadači otvor **http://127.0.0.1:8765**.
 
 **ntfy (zadarmo, bez registrácie):**
 
-1. Nainštaluj aplikáciu **ntfy** a prihlás sa na odber témy s dlhým náhodným názvom, napr.
-   `trader-7f3k9q2m8x4v-matej`. Kto názov pozná, môže tvoje upozornenia čítať.
+1. Nainštaluj aplikáciu **ntfy**, klikni *+* (Subscribe to topic) a prihlás sa na odber témy s dlhým náhodným
+   názvom, napr. `trader-7f3k9q2m8x4v-matej`. Kto názov pozná, môže tvoje upozornenia čítať.
 2. Na serveri (názov témy prepíš na svoj):
 
    ```bash
@@ -395,9 +415,10 @@ Raz za čas (a vždy pred väčšou zmenou):
 
 ```bash
 sudo tar czf ~/trader-zaloha-$(date +%F).tgz /var/lib/trader /etc/trader
+sudo chown $USER ~/trader-zaloha-*.tgz
 ```
 
-Na počítač si ju stiahneš: `scp root@203.0.113.10:~/trader-zaloha-*.tgz .`
+Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 **Záloha obsahuje kľúče** — nikomu ju neposielaj a nedávaj na verejné miesta.
 
 ---
