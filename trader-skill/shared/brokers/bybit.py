@@ -279,6 +279,7 @@ class BybitBroker(Broker):
             info[str(r.get("symbol")).upper()] = {
                 "base": str(r.get("baseCoin") or "").upper(), "quote": str(r.get("quoteCoin") or "").upper(),
                 "step": _f(lot.get("basePrecision")), "min_amt": _f(lot.get("minOrderAmt")),
+                "min_qty": _f(lot.get("minOrderQty")),
                 "tick": _f(pf.get("tickSize")), "margin": str(r.get("marginTrading") or "none")}
         if info:
             self._info, self._info_at = info, now
@@ -305,12 +306,23 @@ class BybitBroker(Broker):
         except BrokerError:
             return 0.0
 
+    def min_order(self, symbol: str) -> dict:
+        """Bybit's smallest order on the pair: {"qty": coins, "value": in the quote coin} (0 when unknown)."""
+        try:
+            lot = self._lot(symbol)
+        except BrokerError:
+            return {"qty": 0.0, "value": 0.0}
+        return {"qty": float(lot.get("min_qty") or 0), "value": float(lot.get("min_amt") or 0)}
+
     def _qty(self, symbol: str, qty: float, price: float = None) -> str:
         lot = self._lot(symbol)
         step = lot.get("step")
         q = math.floor(float(qty) / step + 1e-9) * step if step else float(qty)
         if q <= 0:
             raise BrokerError("%s %s rounds to 0 at Bybit's step %s" % (qty, symbol, step))
+        if lot.get("min_qty") and q < lot["min_qty"] - 1e-12:
+            raise BrokerError("%s %s is below Bybit's minimum order of %s %s" % (
+                _fmt(q), symbol, _fmt(lot["min_qty"]), symbol))
         if price and lot.get("min_amt") and q * float(price) < lot["min_amt"] - 1e-9:
             raise BrokerError("%s %s (%.2f %s) is below Bybit's minimum order of %s %s" % (
                 _fmt(q), symbol, q * float(price), self.quote, lot["min_amt"], self.quote))
@@ -360,11 +372,9 @@ class BybitBroker(Broker):
         rows = self._get("/v5/market/tickers", {"category": "spot"}, signed=False).get("list") or []
         last = {str(r.get("symbol") or "").upper(): _f(r.get("lastPrice")) for r in rows if isinstance(r, dict)}
         out = {"USDC": 1.0, "USDT": 1.0, "USD": 1.0}
-        for pair, px in last.items():
-            if not px:
-                continue
-            for q in ("USDC", "USDT", "USD"):
-                if pair.endswith(q) and len(pair) > len(q):
+        for q in [self.quote] + [x for x in ("USDC", "USDT", "USD") if x != self.quote]:  # the traded pair first
+            for pair, px in last.items():
+                if px and pair.endswith(q) and len(pair) > len(q):
                     out.setdefault(pair[: -len(q)], px)
         if "EUR" not in out and last.get("USDCEUR"):
             out["EUR"] = 1.0 / last["USDCEUR"]
@@ -389,6 +399,12 @@ class BybitBroker(Broker):
                 cash += net * rate
             elif net > 0:
                 coins[name] = net
+            elif net < 0:  # a loan in the coin itself (a margin short you made): owed, so it counts against equity
+                if prices.get(name):
+                    cash += net * prices[name]
+                else:
+                    self.notes.append("no %s price on Bybit — a %s %s debt is left out of the equity" % (
+                        name, _fmt(-net), name))
         return cash, coins, prices
 
     def account(self) -> dict:
@@ -548,10 +564,13 @@ class BybitBroker(Broker):
         """A stop at the exchange: Bybit sets the coins aside and sells at market the moment the price trades at
         the stop (with limit_price: a limit sell at that price instead)."""
         lot = self._lot(symbol)
-        last = self._prices().get(self._pair(symbol)[: -len(self.quote)])
+        pair = self._pair(symbol)
+        rows = self._get("/v5/market/tickers", {"category": "spot", "symbol": pair}, signed=False).get("list") or []
+        last = next((_f(r.get("lastPrice")) for r in rows if isinstance(r, dict)
+                     and str(r.get("symbol") or "").upper() == pair), None)
         if not last:
-            raise BrokerError("no %s price from Bybit — a stop is not placed blind" % self._pair(symbol))
-        if float(stop_price) >= last:
+            raise BrokerError("no %s price from Bybit — a stop is not placed blind" % pair)
+        if float(_fmt_price(stop_price, lot.get("tick"))) >= last:
             # a spot TP/SL has no direction: at or above the price it would act as a take-profit, or at once —
             # the bot's own stop check sells instead
             raise BrokerError("stop %s is not below the price %s — not placed at Bybit; the bot sells itself" % (

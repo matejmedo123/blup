@@ -501,3 +501,117 @@ class ReviewFixes(BybitBase):
         with self.assertRaises(BrokerError) as cm:
             self.entry(b, "ord-r7")
         self.assertIn("--leverage 1", str(cm.exception))
+
+
+PLAN_ID = "BTCUSD-20261020-trend_breakout"
+CID = "ord-" + PLAN_ID
+
+
+class SecondReview(BybitBase):
+    """Findings of the second review of the live path, each as the scenario that showed it."""
+    NOW = "2026-10-20T14:45:00Z"
+
+    def wallet(self, btc, usdc="1000", btc_borrow="0"):
+        real = self.ex.default
+
+        def d(path, q, body):
+            if path == "/v5/account/wallet-balance":
+                return ok({"list": [{"coin": [{"coin": "USDC", "walletBalance": usdc, "spotBorrow": "0"},
+                                              {"coin": "BTC", "walletBalance": btc, "spotBorrow": btc_borrow}]}]})
+            return real(path, q, body)
+        self.ex.default = d
+
+    def trade(self, b, status="Filled", filled="0.006"):
+        plan = {"id": PLAN_ID, "symbol": "BTC/USD", "symbol_display": "BTC/USD", "asset": "crypto",
+                "setup": "trend_breakout", "entry": {"price": 69000.0, "time": "2026-10-20T00:00:05Z"},
+                "stop": {"price": 64000.0}, "target": {"price": 200000.0}, "risk_per_unit": 5000.0,
+                "time_stop": {"at": "2026-12-19T00:00:00Z"}}
+        self.write_state("plan.json", {"plans": {plan["id"]: plan}})
+        self.write_state("orders.json", {"orders": [{"id": CID, "plan_id": plan["id"], "qty": 0.006}]})
+        entry = b.place_entry({"symbol": "BTC/USD", "asset": "crypto", "qty": 0.006, "limit_price": 69000.0,
+                               "client_order_id": CID})
+        self.ex.orders[entry["id"]].update(orderStatus=status, cumExecQty=filled, avgPrice="68990",
+                                           cumFeeDetail={"BTC": "0.000006"} if status == "Filled" else {},
+                                           updatedTime="1792800300000")
+        return {"items": {PLAN_ID: {"plan_id": PLAN_ID, "order_id": CID, "broker_order_id": entry["id"],
+                                    "broker": "bybit", "mode": "paper", "symbol": "BTC/USD", "data_key": "BTCUSDT",
+                                    "asset": "crypto", "qty": 0.006, "qty_unit": "coins", "stop": 64000.0,
+                                    "target": 200000.0, "time_stop": "2026-12-19T00:00:00Z", "status": "pending",
+                                    "placed_at": "2026-10-20T00:00:05Z"}}, "handled": {}}
+
+    def bot_stops(self):
+        return [o for o in self.ex.orders.values() if o["side"] == "Sell" and o["orderStatus"] == "Untriggered"]
+
+    def test_a_maybe_stop_is_never_followed_by_a_second_one_in_the_same_cycle(self):
+        import socket
+        a = load("trader-autopilot", "autopilot")
+        b = self.broker()
+        self.wallet("1.005994")  # 1 BTC is yours, 0.005994 the bot's: a second stop would sell yours
+        book = self.trade(b)
+        cfg, limits = config.load_config(), config.load_limits()
+        orders, positions = b.orders(), b.positions()
+        real, seen = self.ex.default, {"stops": 0, "hidden": 4}
+
+        def d(path, q, body):
+            if path == "/v5/order/create" and body.get("orderFilter") == "tpslOrder":
+                seen["stops"] += 1
+                r = real(path, q, body)
+                if seen["stops"] == 1:
+                    raise socket.timeout("timed out")  # it landed, the reply was lost
+                return r
+            if path in ("/v5/order/realtime", "/v5/order/history") and q.get("orderLinkId") and seen["hidden"] > 0:
+                seen["hidden"] -= 1  # not listed yet
+                return ok({"list": [], "nextPageCursor": ""})
+            return real(path, q, body)
+        self.ex.default = d
+        with mock.patch.object(bybit_mod.time, "sleep"), mock.patch.object(a.notify, "send") as sent:
+            a.reconcile(b, book, positions, orders, cfg, limits)
+            a.manage_exits(b, book, positions, orders, cfg)
+        self.assertEqual(len(self.bot_stops()), 1)
+        it = book["items"][PLAN_ID]
+        self.assertTrue(it.get("stop_unsure"))
+        self.assertTrue(any("no protective stop" in str(c) for c in sent.call_args_list), "the failure is an alert")
+        # the next cycle's order list shows the stop: adopted, flags cleared, still one stop
+        self.ex.default = real
+        with mock.patch.object(a.notify, "send"):
+            a.manage_exits(b, book, b.positions(), b.orders(), cfg)
+        self.assertEqual(len(self.bot_stops()), 1)
+        self.assertFalse(it.get("stop_unsure"))
+        self.assertTrue(it.get("stop_order_id"))
+
+    def test_the_stop_guard_reads_the_traded_pair_and_the_rounded_trigger(self):
+        b = self.broker()
+        self.ex.prices = {"BTCUSDT": "70010", "BTCUSDC": "69990"}  # another quote listed first, higher
+        with self.assertRaises(BrokerError):
+            b.place_stop("BTC/USD", 0.001, 70000, client_order_id="ord-g-stop")
+        with self.assertRaises(BrokerError):
+            b.place_stop("BTC/USD", 0.001, 69989.97, client_order_id="ord-g2-stop")  # rounds to 69990.0
+        self.assertFalse(self.ex.posts("/v5/order/create"))
+        b.place_stop("BTC/USD", 0.001, 69000, client_order_id="ord-g3-stop")
+        self.assertEqual(self.ex.posts("/v5/order/create")[-1]["body"]["symbol"], "BTCUSDC")
+
+    def test_closing_a_trade_never_sells_more_than_its_quantity_at_bybit(self):
+        a = load("trader-autopilot", "autopilot")
+        b = self.broker()
+        self.wallet("0.501")  # the bot's 0.5, your 0.001
+        a._sell_own(b, {"order_id": "ord-r", "symbol": "BTC/USD", "asset": "crypto", "qty": 0.5}, 0.501)
+        self.assertEqual(float(self.ex.posts("/v5/order/create")[-1]["body"]["qty"]), 0.5)
+
+    def test_a_loan_in_a_coin_counts_against_equity(self):
+        b = self.broker()
+        self.wallet("0", usdc="7000", btc_borrow="0.1")  # a 0.1 BTC margin short you made: 7,000 USDC owed in BTC
+        acct = b.account()
+        self.assertAlmostEqual(acct["equity"], 0.0, places=6)
+        self.assertEqual(b.positions(), [])
+
+    def test_a_sliver_of_a_fill_below_the_minimum_order_is_not_opened_as_a_trade(self):
+        a = load("trader-autopilot", "autopilot")
+        b = self.broker()
+        self.wallet("0.00004")
+        book = self.trade(b, status="Cancelled", filled="0.00004")  # $2.56 at the stop: under Bybit's $5
+        acts = a.reconcile(b, book, b.positions(), b.orders(), config.load_config(), config.load_limits())
+        it = book["items"][PLAN_ID]
+        self.assertEqual(it["status"], "canceled")
+        self.assertIn("dust", " ".join(acts))
+        self.assertFalse([p for p in self.ex.posts("/v5/order/create") if p["body"].get("orderFilter")])
+        self.assertEqual(b.min_order("BTC/USD")["value"], 5.0)

@@ -221,7 +221,7 @@ class SimBroker(Broker):
                         continue
                     if (o.get("time_in_force") == "day" and o.get("expires_at")
                             and bar.t >= market_clock.ts(o["expires_at"])):
-                        o["status"] = "expired"
+                        self._expire(o)
                         continue
                     if o["side"] == "buy" and o["type"] == "limit":
                         if bar.l <= o["limit_price"]:
@@ -245,16 +245,20 @@ class SimBroker(Broker):
             for o in mine:
                 if (o["status"] in ("new", "held") and o.get("expires_at")
                         and now_ts >= market_clock.ts(o["expires_at"])):
-                    o["status"] = "expired" if o.get("leg") == "entry" else "canceled"
-                    # its stop and target never become live — held forever they would be synced every cycle
-                    for child in self.book["orders"]:
-                        if child.get("parent_id") == o["id"] and child["status"] in ("new", "held"):
-                            child["status"] = "canceled"
+                    self._expire(o)
         self._mark()
         self._charge_interest(now_ts)
         self._archive(now_ts)
         self.book["last_sync"] = market_clock.iso(now_ts)
         self._save(strict=False)
+
+    def _expire(self, o: dict) -> None:
+        """A day order past its session close: gone, and with it its stop and target, which never become live —
+        held forever they would be synced every cycle."""
+        o["status"] = "expired" if (o.get("leg") or "entry") == "entry" else "canceled"
+        for child in self.book["orders"]:
+            if child.get("parent_id") == o["id"] and child["status"] in ("new", "held"):
+                child["status"] = "canceled"
 
     def _archive(self, now_ts: int) -> None:
         """Finished orders and fills older than KEEP_DAYS go to broker/sim-archive.jsonl — a bracket stays whole

@@ -85,6 +85,18 @@ class Simulator(TraderTestCase):
                          {"entry": "expired", "stop": "canceled", "target": "canceled"})
         self.assertEqual(b.open_orders(), [])
 
+    def test_an_entry_that_expired_while_the_bot_was_down_takes_its_legs_with_it(self):
+        b = self.sim([bar(0, 101.0, 101.5, 100.5, 101.2)])
+        self.entry(b)
+        b._candles.clear()
+        b._candles[("NVDA", "stock")] = [bar(0, 101.0, 101.5, 100.5, 101.2),
+                                         Candle(mc.ts("2026-10-21T13:30:00Z"), 102.0, 102.5, 101.5, 102.2, 1000)]
+        self.set_now("2026-10-21T13:40:00Z")  # the first sync after the close is the next morning
+        b.sync()
+        self.assertEqual({o["leg"]: o["status"] for o in b.orders()},
+                         {"entry": "expired", "stop": "canceled", "target": "canceled"})
+        self.assertEqual(b.open_orders(), [])
+
     def test_market_exit_and_close_position(self):
         b = self.sim([bar(0, 100.0, 100.2, 99.9, 100.1), bar(1, 100.1, 100.6, 100.0, 100.5)])
         self.entry(b)

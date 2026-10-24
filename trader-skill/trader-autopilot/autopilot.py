@@ -297,6 +297,7 @@ UNSURE_ORDER = "may or may not have been placed"  # the broker adapters' words f
 OPEN_ORDER = tuple(s for s in OPEN_STATUSES if s != "pending_cancel")  # still working (a cancel on its way isn't)
 PDT_EQUITY = 25000.0         # FINRA pattern-day-trader threshold (margin accounts, Alpaca paper included)
 CRYPTO_FEE_IN_COIN = 0.0025  # Alpaca takes its crypto fee (≤ 0.25 %) out of the coins bought
+STOP_UNSURE_RETRY_SEC = 300  # a stop that may or may not have gone in: the order list decides, then it is put back
 STOP_LIMIT_ROOM = 0.005  # Alpaca crypto stops are stop-limits 0.5 % under the stop: below that they can't fill
 
 
@@ -397,7 +398,9 @@ def _sell_own(broker, it: dict, held: float = None, limit_price: float = None) -
     """Sell this trade's quantity at market (or, with limit_price, with a marketable limit). The whole position is
     closed only when all of it is this trade's — shares or coins you hold yourself on the same symbol are never
     sold."""
-    room = CRYPTO_FEE_IN_COIN + 1e-4 if it["asset"] == "crypto" else 1e-6  # the fee left out of its quantity
+    # Alpaca takes its fee out of the coins later, so a little more than the trade's quantity is still its own;
+    # elsewhere the quantity is already net of the fee and anything above it (by a step or more) is yours
+    room = CRYPTO_FEE_IN_COIN + 1e-4 if it["asset"] == "crypto" and broker.name == "alpaca" else 1e-6
     step = broker.qty_step(it["symbol"], it["asset"]) if hasattr(broker, "qty_step") else 0.0
     if limit_price is not None:
         qty = float(it["qty"]) if held is None else min(float(it["qty"]), float(held))
@@ -492,7 +495,25 @@ def _cancel_own_sells(broker, it: dict, orders: list, live=None) -> str:
     return ""
 
 
-def _restore_stop(broker, it: dict, held, now) -> list:
+def _stop_failed(it: dict, exc, now, cfg: dict = None) -> None:
+    """A protective stop did not go in: an unsure answer waits for the order list (a second stop could sell your own
+    coins), and the first failure of a trade is an alert — the bot's own price check guards it only while it runs."""
+    it["stop_error"] = str(exc)
+    if UNSURE_ORDER in str(exc):
+        it["stop_retry_at"], it["stop_unsure"] = market_clock.iso(now), True
+    if not it.get("stop_alerted"):
+        it["stop_alerted"] = market_clock.iso(now)
+        notify.send("error", "%s has no protective stop at the broker" % it["symbol"],
+                    "%s. The bot watches the stop price %s itself while it runs and puts the order back on its next "
+                    "tries." % (exc, fmt.price(it["stop"])), cfg, priority="high")
+
+
+def _stop_in_place(it: dict) -> None:
+    for k in ("stop_error", "stop_unsure", "stop_alerted"):
+        it.pop(k, None)
+
+
+def _restore_stop(broker, it: dict, held, now, cfg: dict = None) -> list:
     """Put the protective stop back (after a refused sale, or when the broker lost it)."""
     it["stop_retry_at"] = market_clock.iso(now)
     qty = min(float(it["qty"]), float(held or it["qty"]))
@@ -507,8 +528,10 @@ def _restore_stop(broker, it: dict, held, now) -> list:
             so = broker.place_stop(it["symbol"], qty, it["stop"], client_order_id=cid + "l", asset=it["asset"],
                                    limit_price=float(it["stop"]) * WASH_STOP_LIMIT)
         it["stop_order_id"] = so.get("id")
+        _stop_in_place(it)
         return ["protective stop %s for %s put back" % (fmt.price(it["stop"]), it["symbol"])]
     except BrokerError as exc:  # the old id stays: its own fill must still close the trade as a stop
+        _stop_failed(it, exc, now, cfg)
         return ["no stop order for %s (%s) — the bot watches the stop" % (it["symbol"], exc)]
 
 
@@ -521,7 +544,7 @@ def _sale_refused(broker, it: dict, p: dict, exc, now, cfg: dict = None) -> list
     it["exit_refused_at"], it["exit_refused"] = market_clock.iso(now), str(exc)
     out = ["the broker refused the sale of %s: %s — the stop goes back, the sale is tried again in %d min" % (
         it["symbol"], exc, EXIT_RETRY_SEC // 60)]
-    out += _restore_stop(broker, it, p.get("qty") if p else None, now)
+    out += _restore_stop(broker, it, p.get("qty") if p else None, now, cfg)
     if first:
         hint = (" Cancel your own open buy order on %s — Alpaca refuses the bot's sale while it could trade with "
                 "yours." % it["symbol"]) if _wash(exc) else (" The day-trade rule refuses same-day sales under "
@@ -789,6 +812,16 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
             step = broker.qty_step(it["symbol"], it["asset"]) if hasattr(broker, "qty_step") else 0.0
             if step and qty > step:  # the stop, the journal and the sales all count what the broker can sell
                 qty = round(math.floor(qty / step + 1e-9) * step, 12)
+            least = broker.min_order(it["symbol"]) if part and hasattr(broker, "min_order") else {}
+            if least and ((least.get("qty") and qty < least["qty"]) or
+                          (least.get("value") and qty * float(it["stop"]) < least["value"])):
+                # a sliver no stop and no sale could ever take: not a trade (no slot, no stop retried forever)
+                it.update(status="canceled", dust_qty=qty)
+                _update_order(it["order_id"], status="canceled")
+                actions.append("entry for %s filled only %s before it was cancelled — below the broker's smallest "
+                               "order, so it can't be protected or sold: left in the account as dust" % (
+                                   it["symbol"], fmt.qty(qty)))
+                return actions
             o = dict(o, filled_qty=qty)
             trade = _open_trade(it, o, cfg, limits)
             it.update(status="open", filled_at=o.get("filled_at"), entry_fill=o.get("filled_avg_price"),
@@ -806,7 +839,7 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
                     it["stop_retry_at"] = market_clock.iso(now)
                     actions.append("protective stop %s for %s" % (fmt.price(it["stop"]), it["symbol"]))
                 except BrokerError as exc:
-                    it["stop_error"] = str(exc)
+                    _stop_failed(it, exc, now, cfg)
                     actions.append("could not place the protective stop for %s: %s" % (it["symbol"], exc))
         elif o and o.get("status") in ("canceled", "expired", "rejected"):
             it["status"] = "canceled"
@@ -1106,6 +1139,7 @@ def start_ride(broker, it: dict, sold: dict, cfg: dict = None) -> list:
             it["stop_retry_at"] = market_clock.iso(market_clock.now_utc())
         except BrokerError as exc:
             it["stop_order_id"] = None  # the bot itself watches the stop until a new order goes in
+            _stop_failed(it, exc, market_clock.now_utc(), cfg)
             acts.append("could not place the new stop for %s: %s — the bot watches it" % (it["symbol"], exc))
     notify.send("trade_closed", "%s: sold %s %s, %s ride on" % (
         it["symbol"], setups.keep_text(1 - ride["keep"]), fmt.r(ride["sold_r"]), setups.keep_text(ride["keep"])),
@@ -1185,6 +1219,10 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
     if last is not None and not last > 0:  # 0, negative or NaN is a broken quote, not a price to sell at
         last = None
     live = _live_stop(it, orders)
+    if live is not None:
+        if live.get("id") and not it.get("stop_order_id"):
+            it["stop_order_id"] = live["id"]  # an unsure placement that did go in
+        _stop_in_place(it)
     if closed:
         pass
     elif now_ts >= market_clock.ts(it["time_stop"]):
@@ -1212,8 +1250,8 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
         # put it back — an intraday stock's bracket legs are the stop, unless a refused sale cancelled them
         if live is None and (it["asset"] == "crypto" or it.get("swing") or closed or refused) and \
                 now_ts - market_clock.ts(it.get("stop_retry_at") or "1970-01-01T00:00:00Z") > \
-                (60 if refused else 3600):
-            actions += _restore_stop(broker, it, p.get("qty"), now)
+                (60 if refused else STOP_UNSURE_RETRY_SEC if it.get("stop_unsure") else 3600):
+            actions += _restore_stop(broker, it, p.get("qty"), now, cfg)
         return actions
     # the lab lets two thirds ride after its time stop as after its exit rule — so does the bot
     if reason in ("rule", "time") and (it.get("runner") or {}).get("status") == "planned":
@@ -2455,7 +2493,9 @@ def _cycle(approved=None) -> dict:
     while state.recovered:  # a broken file was read from its last good copy — say so (it stops new entries)
         errors.append(state.recovered.pop(0))
     blocked = list(errors)  # bookkeeping that failed: the cycle can't vouch for its limits, so no new entries
-    errors += [a for a in actions if a.startswith(("could not reconcile", "could not check the exits"))]
+    errors += [a for a in actions if a.startswith(("could not reconcile", "could not check the exits",
+                                                   "could not place the protective stop", "could not place the new stop",
+                                                   "no stop order for"))]
     decisions, notes = [], []
     uni, uni_notes = watched(cfg, broker, now) if status == "running" else (_universe_counts_only(cfg), [])
     if blocked and status == "running":
@@ -3131,8 +3171,9 @@ DAILY_CLOSE_DELAY_SEC = 5  # the exchange's daily bar is final a moment after 00
 
 
 def next_daily_close(now: float) -> float:
-    """When the next daily crypto bar is complete (00:00 UTC plus a few seconds)."""
-    return (int(now // 86400) + 1) * 86400 + DAILY_CLOSE_DELAY_SEC
+    """When the next daily crypto bar is complete (00:00 UTC plus a few seconds) — still today's in the few seconds
+    between midnight and that moment."""
+    return (int((now - DAILY_CLOSE_DELAY_SEC) // 86400) + 1) * 86400 + DAILY_CLOSE_DELAY_SEC
 
 
 def daemon(args, cfg) -> int:

@@ -270,3 +270,52 @@ class MemeCoinsAreNeverLeveraged(TraderTestCase):
         forced["leverage"] = 1.5  # an order written by hand
         res = risk.evaluate(forced, cfg, lim)
         self.assertIn("no_leverage", {c["name"] for c in res["checks"] if not c["ok"]})
+
+
+class SecondSizingReview(TraderTestCase):
+    def test_per_coin_keys_written_as_pairs_mean_the_coin(self):
+        from shared import config as cfgmod
+        cfgmod.ensure_home()
+        cfgmod.update_file("config.json", {"risk_by_symbol": {"BTCUSDT": 1, "eth/usd": 2.5}})
+        cfgmod.update_file("limits.json", {"crypto": {"symbols": {"SOL/USD": {"max_position_pct": 5}}}})
+        cfg, lim = cfgmod.load_config(), cfgmod.load_limits()
+        self.assertEqual(cfg["risk_by_symbol"], {"BTC": 1, "ETH": 2.5})
+        self.assertEqual(cfgmod.risk_pct_for(cfg, "BTC"), 1.0)
+        self.assertEqual(cfgmod.limits_for(lim, "crypto", "SOL")["max_position_pct"], 5)
+
+    def test_two_spellings_of_one_coin_with_different_values_are_refused(self):
+        from shared import config as cfgmod
+        cfgmod.ensure_home()
+        with self.assertRaises(cfgmod.ConfigError):
+            cfgmod.update_file("config.json", {"risk_by_symbol": {"BTC": 3, "BTCUSDT": 1}})
+            cfgmod.load_config()
+
+    def test_the_daily_close_wake_up_is_still_today_just_after_midnight(self):
+        ap = load("trader-autopilot", "autopilot")
+        day = 1792800000 - 1792800000 % 86400
+        self.assertEqual(ap.next_daily_close(day + 2), day + ap.DAILY_CLOSE_DELAY_SEC)
+        self.assertEqual(ap.next_daily_close(day + ap.DAILY_CLOSE_DELAY_SEC), day + 86400 + ap.DAILY_CLOSE_DELAY_SEC)
+        self.assertEqual(ap.next_daily_close(day - 10), day + ap.DAILY_CLOSE_DELAY_SEC)
+
+    def test_an_order_capped_by_the_position_limit_is_never_refused_for_a_rounded_cent(self):
+        import random
+        from unittest import mock
+        from shared import data
+        config.ensure_home()
+        ap, sizer, risk = load("trader-autopilot", "autopilot"), load("trader-sizer", "size"), load("trader-risk", "risk")
+        c, l = ap.trend_profile(2.0, 1.0, 1.0, 1000.0, True, True, 4.0, False, 3.0, ("BTC", "ETH"), True, "bybit")
+        cfg = config.validate("config.json", config.deep_merge(config.DEFAULT_CONFIG, c), config.DEFAULT_CONFIG)
+        lim = config.validate("limits.json", config.deep_merge(config.DEFAULT_LIMITS, l), config.DEFAULT_LIMITS)
+        stub = {"step": 0.000001, "tick": 0.01, "min_qty": None, "min_notional": None, "source": "stub"}
+        rng, refused = random.Random(3), []
+        with mock.patch.object(data, "lot_info", return_value=stub):
+            for _ in range(300):
+                eq, px = rng.uniform(900, 1100), 67000 * rng.uniform(0.95, 1.05)
+                plan = {"id": "BTCUSDT-1", "symbol": "BTCUSDT", "asset": "crypto", "setup": "trend_breakout",
+                        "direction": "long", "entry": {"price": px, "time": "2026-10-20T00:00:00Z"},
+                        "stop": {"price": px * 0.96, "method": "atr"}, "target": None, "interval": "1d",
+                        "entry_slack_pct": 1.0}
+                o = sizer.size_order(plan, cfg, lim, account=eq, leverage=1.0)
+                o["origin"] = "autopilot"
+                refused += [ch["detail"] for ch in risk.evaluate(o, cfg, lim)["checks"] if not ch["ok"]]
+        self.assertEqual(refused, [])

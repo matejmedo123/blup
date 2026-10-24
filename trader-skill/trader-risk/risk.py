@@ -69,6 +69,7 @@ def symbol_of(obj: dict) -> symbols.Symbol:
 # the global limits count one day for everything — the UTC day the autopilot's own daily-loss kill uses: a stock
 # loss after the US close must not block the next UTC day's crypto signals until 4 a.m. (they are judged once)
 GLOBAL_DAY = "global"
+HALF_CENT = 0.005  # the sizer rounds dollars to the cent: a cap met before rounding is met
 
 
 def day_of(ts_value, asset: str) -> str:
@@ -257,19 +258,20 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
 
     max_risk = lim.get("max_risk_per_trade_usd")
     if risk_usd is not None and max_risk is not None:
-        add("max_risk_per_trade", risk_usd <= float(max_risk) + 1e-9,
-            "%s %s %s" % (fmt.money(risk_usd), "≤" if risk_usd <= float(max_risk) + 1e-9 else ">", fmt.money(max_risk)))
+        add("max_risk_per_trade", risk_usd <= float(max_risk) + HALF_CENT,
+            "%s %s %s" % (fmt.money(risk_usd), "≤" if risk_usd <= float(max_risk) + HALF_CENT else ">",
+                          fmt.money(max_risk)))
 
     max_risk_pct = lim.get("max_risk_per_trade_pct")
     if risk_usd is not None and max_risk_pct is not None and account > 0:
         cap_usd = account * float(max_risk_pct) / 100.0
-        add("max_risk_per_trade_pct", risk_usd <= cap_usd + 1e-6, "%s = %s of account (max %s)" % (
+        add("max_risk_per_trade_pct", risk_usd <= cap_usd + HALF_CENT, "%s = %s of account (max %s)" % (
             fmt.money(risk_usd), fmt.pct(100.0 * risk_usd / account, 2), fmt.pct(float(max_risk_pct), 2)))
 
     if account > 0 and lim.get("max_position_pct") is not None:
         pos_pct = 100.0 * notional / account
         cap = float(lim["max_position_pct"]) * lev_ok
-        add("max_position_pct", pos_pct <= cap + 1e-6,
+        add("max_position_pct", pos_pct <= cap + 100.0 * HALF_CENT / account + 1e-6,
             "%s = %s of account (max %s%s)" % (fmt.money(notional), fmt.pct(pos_pct, 2), fmt.pct(cap, 0),
                                                " with %g× leverage" % lev_ok if lev_ok > 1 else ""))
 
@@ -313,7 +315,7 @@ def evaluate(order: dict, cfg: dict, limits: dict) -> dict:
         exposure = sum(b["notional"] for b in book if b["asset"] == asset) + notional
         cap = float(lim["max_total_exposure_pct"]) * lev_ok
         pct = 100.0 * exposure / account
-        add("max_total_exposure", pct <= cap + 1e-6, "%s exposure %s = %s of account (max %s)" % (
+        add("max_total_exposure", pct <= cap + 100.0 * HALF_CENT / account + 1e-6, "%s exposure %s = %s of account (max %s)" % (
             asset, fmt.money(exposure), fmt.pct(pct, 2), fmt.pct(cap, 0)))
 
     if asset == "meme":

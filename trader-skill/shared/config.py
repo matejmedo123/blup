@@ -365,6 +365,18 @@ def _check_symbols(here: str, value, defaults: dict, where: str, problems: list)
             problems.append("%s.max_risk_per_trade_pct must be at most %g" % (at, SYMBOL_RISK_HARD_CAP))
 
 
+def _key_base(key, crypto: bool) -> str:
+    """A per-symbol key as the lookups ask for it: a coin's base ("BTCUSDT" → "BTC"), a stock's ticker."""
+    text = str(key).strip().upper()
+    if not crypto:
+        return text
+    try:
+        from .symbols import parse
+        return str(parse(text, asset="crypto").base or text).upper()
+    except Exception:  # noqa: BLE001 — an odd key stays as written (and so still reaches the user's eye)
+        return text
+
+
 def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = "") -> None:
     for key, value in list(doc.items()):
         here = path + key
@@ -374,8 +386,16 @@ def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = ""
                 doc[key] = {}
             else:
                 _check_symbols(here, value, defaults, where, problems)
-                if isinstance(value, dict):  # "btc" means BTC: the lookups use the base in upper case
-                    doc[key] = {str(k).strip().upper(): v for k, v in value.items()}
+                if isinstance(value, dict):  # "btc", "BTCUSDT", "BTC/USD" all mean BTC: the lookups use the base
+                    crypto = here == "risk_by_symbol" or path == "crypto."
+                    norm = {}
+                    for k, v in value.items():
+                        b = _key_base(k, crypto)
+                        if b in norm and norm[b] != v:
+                            problems.append("%s has two different entries for %s (one of them is %s) — keep one" % (
+                                here, b, k))
+                        norm[b] = v
+                    doc[key] = norm
             continue
         kind = _kind(key, default)
         if here == "leverage" and isinstance(value, (int, float)) and not isinstance(value, bool):
