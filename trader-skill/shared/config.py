@@ -365,6 +365,11 @@ def _check_symbols(here: str, value, defaults: dict, where: str, problems: list)
             problems.append("%s.max_risk_per_trade_pct must be at most %g" % (at, SYMBOL_RISK_HARD_CAP))
 
 
+# numbers that only make sense inside a range: past it a swap gives a sandwich everything (100 % slippage) or a
+# sale can never be built at all
+_RANGES = {"sniper.slippage_bps": (1, 1500), "sniper.priority_lamports": (0, 10_000_000)}
+
+
 def _key_base(key, crypto: bool) -> str:
     """A per-symbol key as the lookups ask for it: a coin's base ("BTCUSDT" → "BTC"), a stock's ticker."""
     text = str(key).strip().upper()
@@ -420,6 +425,8 @@ def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = ""
                                 % (here, value))
             elif key == "interval_sec" and value < MIN_INTERVAL_SEC:
                 problems.append("interval_sec must be at least %d seconds" % MIN_INTERVAL_SEC)
+            elif here in _RANGES and not (_RANGES[here][0] <= value <= _RANGES[here][1]):
+                problems.append("%s must be between %g and %g, not %s" % (here, _RANGES[here][0], _RANGES[here][1], value))
         elif kind == "object":
             if not isinstance(value, dict):
                 problems.append("%s must be an object { … }, not %s" % (here, json.dumps(value)))

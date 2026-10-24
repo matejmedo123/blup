@@ -33,6 +33,12 @@ def _file_values() -> dict:
     return out
 
 
+def file_value(name: str) -> str:
+    """The value in trader/secrets.env only — never the environment (the sniper's bot wallet: a key exported in your
+    shell is not the wallet the bot made)."""
+    return _file_values().get(name, "")
+
+
 def get(name: str) -> str:
     value = os.environ.get(name)
     if value:

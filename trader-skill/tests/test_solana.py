@@ -952,6 +952,78 @@ class JupiterTests(unittest.TestCase):
                         solana.jupiter_swap_tx(self.quote, PUB_B58)
 
 
+def swap_message(payer=PUB, extra=(), wsol_to=None, lamports=10_000_000, close_to=None):
+    """A buy shaped like the real Jupiter v6 transaction (fetched 2026-10-24): compute budget, the wrapped-SOL
+    account created and funded, the route, the wrapped SOL closed back to the payer. ``extra``: more instructions
+    (program key, account keys, data) appended — what a hostile swap API might slip in."""
+    wsol = solana.b58decode(wsol_to or solana.associated_token_address(payer, solana.SOL_MINT))
+    tok, ata, sysp = (solana.b58decode(x) for x in (solana.TOKEN_PROGRAM_ID, solana.ATA_PROGRAM_ID,
+                                                    solana.SYSTEM_PROGRAM_ID))
+    keys = [payer, wsol, key("out-ata"), COMPUTE_BUDGET, ata, sysp, tok, JUPITER_PROGRAM]
+    if close_to is not None:
+        keys.append(close_to)
+    ix = [(3, [], b"\x02" + struct.pack("<I", 200000)), (3, [], b"\x03" + struct.pack("<Q", 500_000)),
+          (4, [0, 1, 0, 8, 5, 6], b"\x01"), (5, [0, 1], struct.pack("<IQ", 2, lamports)), (6, [1], b"\x11"),
+          (7, [6, 0, 1, 2, 7], b"\xe5\x17\xcb\x97" + bytes(32)),
+          (6, [1, 0 if close_to is None else keys.index(close_to), 0], b"\x09")]
+    for prog, accs, data in extra:
+        for k in [prog] + list(accs):
+            if k not in keys:
+                keys.append(k)
+        ix.append((keys.index(prog), [keys.index(a) for a in accs], data))
+    return build_message(0, (1, 0, len(keys) - 3), keys, key("blockhash"), ix, [(key("lookup-table"), [], [0])])
+
+
+class SwapSafety(unittest.TestCase):
+    """The swap API builds the transaction the bot wallet signs: nothing it adds may move the wallet's money."""
+    USER = PUB_B58
+
+    def check(self, msg, lamports=10_000_000, priority=100_000):
+        solana.check_swap_tx(unsigned_tx(msg), self.USER, solana.SOL_MINT, lamports, priority)
+
+    def test_the_real_shape_passes(self):
+        self.check(swap_message())
+
+    def test_anything_that_moves_the_wallets_money_elsewhere_is_refused(self):
+        thief = key("thief")
+        tok, sysp = solana.b58decode(solana.TOKEN_PROGRAM_ID), solana.b58decode(solana.SYSTEM_PROGRAM_ID)
+        cases = {
+            "SOL to a stranger": swap_message(extra=[(sysp, [PUB, thief], struct.pack("<IQ", 2, 999 * 10 ** 9))]),
+            "wrap into a stranger's account": swap_message(wsol_to=solana.b58encode(thief)),
+            "wrap more than the amount": swap_message(lamports=10_000_001),
+            "token transfer": swap_message(extra=[(tok, [key("out-ata"), thief, PUB], b"\x03" + bytes(8))]),
+            "approve a delegate": swap_message(extra=[(tok, [key("out-ata"), thief, PUB], b"\x04" + bytes(8))]),
+            "hand over the account": swap_message(extra=[(tok, [key("out-ata"), PUB], b"\x06\x02\x01" + thief)]),
+            "close the account to a stranger": swap_message(close_to=thief),
+            "an unknown program": swap_message(extra=[(key("drainer-program"), [PUB], b"\x00")]),
+        }
+        for name, msg in cases.items():
+            with self.subTest(name):
+                with self.assertRaises(solana.JupiterError):
+                    self.check(msg)
+
+    def test_a_priority_fee_far_above_the_one_asked_is_refused(self):
+        cb = COMPUTE_BUDGET
+        greedy = swap_message(extra=[(cb, [], b"\x03" + struct.pack("<Q", 10 ** 9))])  # the last price set counts
+        with self.assertRaises(solana.JupiterError):
+            self.check(greedy)
+
+    def test_the_quote_must_be_the_trade_asked_for(self):
+        q = load_fixture("jupiter_quote_sol_usdc.json")
+        self.assertEqual(solana.check_quote(q, solana.SOL_MINT, solana.USDC_MINT, 10_000_000, 50), 1032203)
+        for name, change in {"slippage": {"slippageBps": 10_000}, "min out 0": {"otherAmountThreshold": "0"},
+                             "min out far below": {"otherAmountThreshold": "1"}, "exact out": {"swapMode": "ExactOut"},
+                             "fee": {"platformFee": {"amount": "5000", "feeBps": 50}}}.items():
+            with self.subTest(name):
+                with self.assertRaises(solana.JupiterError):
+                    solana.check_quote(dict(q, **change), solana.SOL_MINT, solana.USDC_MINT, 10_000_000, 50)
+
+    def test_program_addresses_match_solana(self):
+        # from a real Jupiter transaction (24 Oct 2026) for a throwaway owner: its wrapped-SOL account
+        self.assertEqual(solana.associated_token_address("7R89SWcDUChxSFfqNMZxiV4uMXHh1G3GCruENBXSiQEr", solana.SOL_MINT),
+                         "4jyc3NWm9qow9FvGMWh7z3N3vXMC3Ed5qDfroghWpVQu")
+
+
 class SwapTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -977,14 +1049,54 @@ class SwapTests(unittest.TestCase):
                 return rpc_ok(solana.tx_signature(raw))
             if method == "getSignatureStatuses":
                 return status_reply({"slot": 1, "confirmations": 1, "err": None, "confirmationStatus": "confirmed"})
+            if method in ("getMultipleAccounts", "simulateTransaction"):
+                return rpc_ok({"context": {"slot": 1}, "value": self.balances(method)})
             raise AssertionError("unexpected request %r" % method)
 
         return FakeHTTP(handle)
+
+    def balances(self, method, got=None, spent=None):
+        """The wallet before (getMultipleAccounts) and after (simulateTransaction) a SOL→USDC swap that does what
+        the fixture quote says: the user's lamports and its two possible USDC accounts."""
+        got = int(self.quote["outAmount"]) if got is None else got
+        spent = 10_000_000 + 2_044_280 if spent is None else spent  # the amount, the fee and a token account's rent
+        if method == "getMultipleAccounts":
+            return [{"lamports": 1_000_000_000, "owner": solana.SYSTEM_PROGRAM_ID, "data": ["", "base64"]}, None, None]
+        usdc = bytes(64) + got.to_bytes(8, "little") + bytes(93)
+        return {"err": None, "accounts": [
+            {"lamports": 1_000_000_000 - spent, "owner": solana.SYSTEM_PROGRAM_ID, "data": ["", "base64"]},
+            {"lamports": 2_039_280, "owner": solana.TOKEN_PROGRAM_ID, "data": [base64.b64encode(usdc).decode(), "base64"]},
+            None]}
 
     def run_swap(self, fake, secret=SECRET64, priority=None):
         rpc = solana.Rpc("https://rpc.example.com")
         with mock.patch.object(solana, "_urlopen", fake), mock.patch.object(solana, "_sleep", lambda s: None):
             return solana.swap(rpc, secret, solana.SOL_MINT, solana.USDC_MINT, 10_000_000, 50, priority)
+
+    def test_a_swap_whose_simulation_brings_less_than_the_quote_is_never_sent(self):
+        fake = self.router()
+        real = self.balances
+        self.balances = lambda method: real(method, got=5)  # the route sends the USDC elsewhere
+        with self.assertRaises(solana.JupiterError):
+            self.run_swap(fake, priority=10_000)
+        self.balances = lambda method: real(method, spent=999 * 10 ** 9)  # far more SOL leaves than the amount
+        with self.assertRaises(solana.JupiterError):
+            self.run_swap(self.router(), priority=10_000)
+        self.assertEqual(self.sent, [])
+
+    def test_a_buy_the_node_cannot_simulate_is_not_sent(self):
+        fake = self.router()
+
+        real = self.balances
+
+        def down(method):
+            if method == "simulateTransaction":
+                raise urllib.error.URLError("node down")
+            return real(method)
+        self.balances = down
+        with self.assertRaises(solana.SolanaError):
+            self.run_swap(fake, priority=10_000)
+        self.assertEqual(self.sent, [])
 
     def test_end_to_end(self):
         fake = self.router()
@@ -1004,7 +1116,9 @@ class SwapTests(unittest.TestCase):
         order = []
         for req in fake.requests:
             order.append(req["json"]["method"] if req["url"] == "https://rpc.example.com" else req["url"].split("?")[0])
-        self.assertEqual(order, [solana.JUPITER_QUOTE_URL, solana.JUPITER_SWAP_URL, "sendTransaction", "getSignatureStatuses"])
+        # the swap is run on the node (balances before, then simulated) before it is signed and sent
+        self.assertEqual(order, [solana.JUPITER_QUOTE_URL, solana.JUPITER_SWAP_URL, "getMultipleAccounts",
+                                 "simulateTransaction", "sendTransaction", "getSignatureStatuses"])
         self.assertEqual(fake.requests[1]["json"]["prioritizationFeeLamports"], 10_000)
 
         # The key must never leave the process: only the signed tx does.

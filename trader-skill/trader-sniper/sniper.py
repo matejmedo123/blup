@@ -52,6 +52,9 @@ LIVE_PHRASE = "I ACCEPT MEME COIN RISK"
 BOOK = "sniper/book.json"
 CANDIDATES = "sniper/candidates.jsonl"
 TRADES = "sniper/trades.jsonl"
+WALLET = "sniper/wallet.json"  # the address `wallet new` made: the only key the sniper signs with
+SALE_SLIPPAGE_CAP_BPS = 3000   # a sale gets twice the entry's room, never more than this
+WALLET_MARK = "# the meme sniper's own wallet"  # the line `wallet new` writes above its key
 SEASON = "sniper/season.json"
 SAFETY = "sniper/safety.json"
 LIVE_CHAINS = ("solana",)       # signing is implemented for Solana only; elsewhere paper and alerts
@@ -90,8 +93,9 @@ def live_readiness(cfg: dict) -> tuple:
         missing.append('config sniper.mode must be "live"')
     if (s.get("live_confirmation") or "") != LIVE_PHRASE:
         missing.append('config sniper.live_confirmation must be exactly "%s"' % LIVE_PHRASE)
-    if not secrets.has("SNIPER_SOL_SECRET"):
-        missing.append("a bot wallet (sniper.py wallet new — then fund it with a small amount of SOL)")
+    why = wallet_problem()
+    if why:
+        missing.append(why)
     warn = secrets.file_warning()
     if warn:
         missing.append("a private key file — " + warn)
@@ -109,8 +113,11 @@ def paper_proof(s: dict, now_ts: float = None) -> dict:
     money with these rules — so the default is: prove it here first, with nothing at stake."""
     now_ts = now_ts or market_clock.now_utc().timestamp()
     since = now_ts - float(s.get("paper_proof_days", 30)) * 86400
+    # only trades the live bot could make the same way: Solana, bought and sold at Jupiter's own quotes (EVM paper
+    # fills know nothing of a token's tax, and a pool that vanished has no price to sell at)
     trades = [t for t in state.tail_jsonl(TRADES, 2000)
-              if t.get("mode") == "paper" and t.get("closed_at") and market_clock.ts(t["closed_at"]) >= since]
+              if t.get("mode") == "paper" and t.get("closed_at") and market_clock.ts(t["closed_at"]) >= since
+              and t.get("chain") in LIVE_CHAINS and t.get("price_unit") == "raw"]
     n, pnl = len(trades), round(sum(float(t.get("pnl_usd") or 0) for t in trades), 2)
     need = int(s.get("paper_proof_min_trades", 30))
     ok = n >= need and pnl > 0
@@ -492,10 +499,52 @@ def budget_refusal(book: dict, s: dict, now_ts: float, key: str) -> str:
 
 # --- execution ----------------------------------------------------------------------------------------------
 
-def _wallet():
-    """(the signing module, the bot's Keypair) — its repr shows only the public key."""
+def _recorded_wallet() -> str:
+    """The address `wallet new` recorded — or, for a wallet made before it recorded one, the key under the line
+    `wallet new` writes (recorded now). Any other key in secrets.env is not the bot's and is never used."""
+    rec = (state.read_json(WALLET, {}) or {}).get("pubkey")
+    if rec:
+        return rec
+    try:
+        lines = (config.trader_home() / "secrets.env").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ""
+    for k, line in enumerate(lines):
+        if line.strip().startswith("SNIPER_SOL_SECRET=") and k and lines[k - 1].strip().startswith(WALLET_MARK):
+            from shared import solana
+            pub = solana.Keypair(line.split("=", 1)[1].strip().strip('"').strip("'")).pubkey_b58
+            state.write_json(WALLET, {"pubkey": pub, "recorded_at": market_clock.iso(market_clock.now_utc()),
+                                      "how": "made by an earlier wallet new"})
+            return pub
+    return ""
+
+
+def wallet_problem() -> str:
+    """'' when the bot wallet is usable: its key in trader/secrets.env, and the address `wallet new` made."""
+    secret = secrets.file_value("SNIPER_SOL_SECRET")
+    if not secret:
+        extra = " (a SNIPER_SOL_SECRET in the environment is never used)" if os.environ.get("SNIPER_SOL_SECRET") else ""
+        return "a bot wallet (sniper.py wallet new — then fund it with a small amount of SOL)%s" % extra
     from shared import solana
-    return solana, solana.Keypair(secrets.get("SNIPER_SOL_SECRET"))
+    try:
+        pub = solana.Keypair(secret).pubkey_b58
+    except Exception:  # noqa: BLE001 — never echo anything about the key
+        return "the SNIPER_SOL_SECRET in trader/secrets.env is not a readable key"
+    rec = _recorded_wallet()
+    if pub != rec:
+        return ("the key in trader/secrets.env (%s) is not the wallet sniper.py made%s — the sniper trades only its "
+                "own wallet; remove that key and run sniper.py wallet new" % (pub, " (%s)" % rec if rec else ""))
+    return ""
+
+
+def _wallet():
+    """(the signing module, the bot's Keypair) — its repr shows only the public key. Only the wallet `wallet new`
+    made, read from trader/secrets.env."""
+    why = wallet_problem()
+    if why:
+        raise RuntimeError(why)
+    from shared import solana
+    return solana, solana.Keypair(secrets.file_value("SNIPER_SOL_SECRET"))
 
 
 def _rpc():
@@ -565,8 +614,10 @@ def buy(c: dict, pair: dict, sig: dict, rt: dict, s: dict, cfg: dict, now_ts: fl
     # what the wallet held of this token before: only what arrives on top is ours from this buy
     pos.update(status="sending", pre_raw=int(_rpc().get_token_balance(kp.pubkey_b58, c["address"])[1]), tokens_raw=0)
 
-    def before_send(signature, _quote):
-        pos.update(buy_tx=signature, sent_at=market_clock.iso(now_ts))
+    def before_send(signature, quote):
+        # the moment it leaves (not the cycle's start) and the blockhash that decides when it can no longer land
+        pos.update(buy_tx=signature, sent_at=market_clock.iso(market_clock.now_utc().timestamp()),
+                   blockhash=(quote or {}).get("recentBlockhash"))
         record(pos)
     try:
         _swap(jupiter.SOL_MINT, c["address"], int(usd / rt["sol_usd"] * 1e9), int(s["slippage_bps"]),
@@ -604,6 +655,14 @@ def _settle(book, key, pos: dict, now_ts: float, actions: list) -> None:
     if st and not st.startswith("failed"):
         pos.update(status="unconfirmed", note="landed (%s), tokens not in the wallet yet" % st)
         return
+    if book is not None and not st and waited >= SETTLE_AFTER_SEC and pos.get("blockhash"):
+        try:
+            if rpc.blockhash_valid(pos["blockhash"]):
+                pos.update(status="unconfirmed", note="sent, not seen yet — it can still land")
+                return
+        except Exception:  # noqa: BLE001 — no answer is not "expired": wait
+            pos["status"] = "unconfirmed"
+            return
     if book is not None and (st or waited >= SETTLE_AFTER_SEC):
         del book["positions"][key]
         actions.append("%s: the buy never went through (%s) — nothing bought" % (pos["symbol"], st or "not found"))
@@ -648,7 +707,8 @@ def sell(pos: dict, part: float, reason: str, s: dict, cfg: dict, now_ts: float,
         except http.SourceError:
             px_sol = None
         # a falling meme coin moves fast: the sale gets twice the entry's slippage room
-        res = _swap(pos["address"], jupiter.SOL_MINT, amount, int(s["slippage_bps"]) * 2, int(s["priority_lamports"]))
+        res = _swap(pos["address"], jupiter.SOL_MINT, amount, min(int(s["slippage_bps"]) * 2, SALE_SLIPPAGE_CAP_BPS),
+                    int(s["priority_lamports"]))
         out = int((res.get("quote") or {}).get("outAmount") or 0)
         got = out / 1e9 * px_sol if out and px_sol else usd_now * part
         pos.setdefault("sell_txs", []).append(res.get("signature"))
@@ -917,7 +977,7 @@ def report() -> dict:
 def wallet_new() -> str:
     """A fresh keypair for the bot alone, saved to trader/secrets.env (0600). Prints only the address. Refuses when
     one exists — a funded wallet's key is never overwritten."""
-    if secrets.has("SNIPER_SOL_SECRET"):
+    if secrets.file_value("SNIPER_SOL_SECRET"):
         raise ValueError("a bot wallet already exists (SNIPER_SOL_SECRET) — remove it yourself if you really mean to")
     from shared import solana
     secret, pub = solana.new_keypair()
@@ -929,6 +989,8 @@ def wallet_new() -> str:
     finally:
         os.close(fd)
     os.chmod(str(path), 0o600)
+    state.write_json(WALLET, {"pubkey": solana.b58encode(pub), "recorded_at": market_clock.iso(market_clock.now_utc()),
+                              "how": "wallet new"})
     return solana.b58encode(pub)
 
 
@@ -991,8 +1053,8 @@ def sell_out(args, cfg: dict, s: dict) -> int:
                             continue
                     try:
                         usd, _ = value_now(pos, md.get((pos["chain"], pos["address"])) or {}, s)
-                    except http.SourceError:
-                        usd = float(pos.get("value_usd") or 0)  # the last known value; the sale itself asks again
+                    except http.SourceError:  # live: the sale itself asks again; paper: no price, nothing back
+                        usd = float(pos.get("value_usd") or 0) if pos.get("mode") == "live" else 0.0
                     _close(book, key, pos, sell(pos, 1.0, reason, s, cfg, now_ts, usd), now_ts, actions, cfg)
                 except Exception as exc:  # noqa: BLE001
                     failed.append("%s: sale failed (%s) — run this again" % (pos["symbol"], exc))
@@ -1081,8 +1143,9 @@ def main(argv=None) -> int:
             cli.emit(args, "New bot wallet: %s\nSend it only what the sniper may trade (e.g. 0.5–1 SOL). The key is in "
                      "trader/secrets.env (0600) — never shown, never sent anywhere." % addr, {"address": addr})
             return 0
-        if not secrets.has("SNIPER_SOL_SECRET"):
-            cli.fail("no bot wallet yet — sniper.py wallet new")
+        why = wallet_problem()
+        if why:
+            cli.fail(why)
         _solana, kp = _wallet()
         addr = kp.pubkey_b58
         bal = None

@@ -57,6 +57,17 @@ _monotonic = time.monotonic
 SOL_MINT = "So11111111111111111111111111111111111111112"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 SYSTEM_PROGRAM_ID = "11111111111111111111111111111111"
+COMPUTE_BUDGET_PROGRAM_ID = "ComputeBudget111111111111111111111111111111"
+TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+ATA_PROGRAM_ID = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+JUPITER_V6_PROGRAM_ID = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+# a swap from the bot wallet may only call these: anything else in a transaction from the (untrusted) swap API is
+# refused before it is signed
+SWAP_PROGRAMS = (COMPUTE_BUDGET_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ATA_PROGRAM_ID,
+                 JUPITER_V6_PROGRAM_ID)
+MAX_PRIORITY_LAMPORTS = 10_000_000  # 0.01 SOL: the most a swap's priority fee may cost when none was asked for
+FEE_ROOM_LAMPORTS = 10_000_000      # base fees and token-account rent a swap may cost on top of what it trades
 LAMPORTS_PER_SOL = 1_000_000_000
 
 MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com"
@@ -840,6 +851,14 @@ class Rpc:
             )
         return sig
 
+    def blockhash_valid(self, blockhash: str) -> bool:
+        """Can a transaction with this blockhash still land (isBlockhashValid)? Raises when the node doesn't say."""
+        res = self.call("isBlockhashValid", [blockhash, {"commitment": "processed"}])
+        value = res.get("value") if isinstance(res, dict) else None
+        if not isinstance(value, bool):
+            raise SolanaError("RPC isBlockhashValid: unexpected response shape")
+        return value
+
     def signature_status(self, signature: str) -> Optional[str]:
         """One look, through the ledger history: "confirmed", "finalized",
         "processed", "failed: <err json>", or None when the cluster has never
@@ -979,6 +998,156 @@ def jupiter_swap_tx(
     return raw
 
 
+def _on_curve(b: bytes) -> bool:
+    """Is this 32-byte string a point on ed25519 (curve25519-dalek's decompress: y taken mod p)? A program address
+    must not be."""
+    y = (int.from_bytes(b, "little") & ((1 << 255) - 1)) % _P
+    x2 = (y * y - 1) * _inv(_D * y * y + 1) % _P
+    if x2 == 0:
+        return True
+    x = pow(x2, (_P + 3) // 8, _P)
+    return (x * x - x2) % _P == 0 or (x * x * _SQRT_M1 * _SQRT_M1 - x2) % _P == 0
+
+
+def find_program_address(seeds: Sequence[bytes], program_id: Union[str, bytes]) -> Tuple[str, int]:
+    """(address, bump): Solana's findProgramAddress."""
+    prog = b58decode(program_id) if isinstance(program_id, str) else bytes(program_id)
+    for bump in range(255, -1, -1):
+        h = hashlib.sha256(b"".join(bytes(x) for x in seeds) + bytes([bump]) + prog + b"ProgramDerivedAddress").digest()
+        if not _on_curve(h):
+            return b58encode(h), bump
+    raise ValueError("no program address for these seeds")
+
+
+def associated_token_address(owner: Union[str, bytes], mint: Union[str, bytes],
+                             token_program: str = TOKEN_PROGRAM_ID) -> str:
+    """The owner's associated token account for ``mint`` (under the classic token program unless named)."""
+    o = b58decode(owner) if isinstance(owner, str) else bytes(owner)
+    m = b58decode(mint) if isinstance(mint, str) else bytes(mint)
+    return find_program_address([o, b58decode(token_program), m], ATA_PROGRAM_ID)[0]
+
+
+def check_quote(quote: Dict[str, Any], input_mint: str, output_mint: str, amount_raw: int, slippage_bps: int) -> int:
+    """The quote is the trade asked for, with the slippage asked for and no fee to anyone: its minimum out."""
+    try:
+        out, least = int(quote["outAmount"]), int(quote["otherAmountThreshold"])
+        bps = int(quote.get("slippageBps"))
+    except (KeyError, TypeError, ValueError):
+        raise JupiterError("Jupiter quote: no outAmount / otherAmountThreshold / slippageBps") from None
+    if (quote.get("inputMint") != input_mint or quote.get("outputMint") != output_mint
+            or str(quote.get("inAmount")) != str(amount_raw) or (quote.get("swapMode") or "ExactIn") != "ExactIn"):
+        raise JupiterError("Jupiter quote does not match the request (mints, amount or mode differ)")
+    if bps != int(slippage_bps):
+        raise JupiterError("Jupiter quote slippage %d bps is not the %d asked for" % (bps, slippage_bps))
+    if least <= 0 or least < out * (10_000 - int(slippage_bps)) // 10_000 - 1:
+        raise JupiterError("Jupiter quote minimum out %d is below %s at %d bps slippage" % (least, out, slippage_bps))
+    fee = quote.get("platformFee")
+    if isinstance(fee, dict) and int(fee.get("amount") or 0) > 0:
+        raise JupiterError("Jupiter quote carries a platform fee the bot never asked for")
+    return least
+
+
+def check_swap_tx(raw: bytes, user: str, input_mint: str, amount_raw: int,
+                  priority_lamports: Union[int, str, Dict[str, Any], None] = None) -> None:
+    """Refuse a swap transaction that does anything but swap from the user's own accounts: only the swap programs,
+    the compute budget within bounds, SOL moved only into the user's own wrapped-SOL account (at most the amount),
+    token instructions only to sync or close the user's own accounts back to the user — no transfer, approval or
+    authority change anywhere at the top level."""
+    d = _decode_tx(raw)
+    keys = [b58encode(k) for k in d["keys"]]
+    if keys[0] != user:
+        raise JupiterError("Jupiter swap: transaction fee payer is not %s" % user)
+    wsol = associated_token_address(user, SOL_MINT)
+
+    def acct(ix, n):
+        i = ix["accounts"][n] if n < len(ix["accounts"]) else None
+        return keys[i] if i is not None and i < len(keys) else None  # None: missing, or from a lookup table
+
+    price, limit = 0, 1_400_000
+    for ix in d["instructions"]:
+        if ix["program_id_index"] >= len(keys):
+            raise JupiterError("Jupiter swap: a program loaded from a lookup table")
+        prog, data = keys[ix["program_id_index"]], bytes(ix["data"])
+        if prog not in SWAP_PROGRAMS:
+            raise JupiterError("Jupiter swap: calls program %s, which a swap never needs" % prog)
+        if prog == COMPUTE_BUDGET_PROGRAM_ID:
+            if data[:1] == b"\x02" and len(data) >= 5:
+                limit = int.from_bytes(data[1:5], "little")
+            elif data[:1] == b"\x03" and len(data) >= 9:
+                price = int.from_bytes(data[1:9], "little")
+            elif data[:1] not in (b"\x01", b"\x04"):
+                raise JupiterError("Jupiter swap: unexpected compute-budget instruction")
+        elif prog == SYSTEM_PROGRAM_ID:
+            kind = int.from_bytes(data[:4], "little") if len(data) >= 4 else -1
+            if kind != 2 or len(data) < 12 or input_mint != SOL_MINT:
+                raise JupiterError("Jupiter swap: a system instruction other than wrapping the SOL being swapped")
+            if acct(ix, 0) != user or acct(ix, 1) != wsol:
+                raise JupiterError("Jupiter swap: moves SOL to %s, not into your own wrapped-SOL account" % acct(ix, 1))
+            if int.from_bytes(data[4:12], "little") > int(amount_raw):
+                raise JupiterError("Jupiter swap: wraps more SOL than the amount being swapped")
+        elif prog in (TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID):
+            if data[:1] == b"\x11":  # SyncNative
+                continue
+            if data[:1] != b"\x09" or acct(ix, 1) != user or acct(ix, 2) != user:  # CloseAccount back to the user
+                raise JupiterError("Jupiter swap: a token instruction other than closing your own account to you")
+        elif prog == ATA_PROGRAM_ID:
+            if data[:1] not in (b"", b"\x00", b"\x01") or acct(ix, 0) != user or acct(ix, 2) != user:
+                raise JupiterError("Jupiter swap: creates a token account for someone other than you")
+    fee = price * limit // 1_000_000
+    cap = (2 * int(priority_lamports) + 10_000) if isinstance(priority_lamports, int) else MAX_PRIORITY_LAMPORTS
+    if fee > cap:
+        raise JupiterError("Jupiter swap: priority fee %d lamports is over the %d allowed" % (fee, cap))
+
+
+def _token_amount(acc: Any) -> int:
+    if not isinstance(acc, dict) or acc.get("owner") not in (TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID):
+        return 0
+    try:
+        data = base64.b64decode((acc.get("data") or [""])[0])
+    except (binascii.Error, ValueError, TypeError):
+        return 0
+    return int.from_bytes(data[64:72], "little") if len(data) >= 72 else 0
+
+
+def simulate_swap(rpc: "Rpc", raw: bytes, user: str, input_mint: str, output_mint: str, amount_raw: int,
+                  min_out: int, fee_cap: int = MAX_PRIORITY_LAMPORTS) -> None:
+    """Run the unsigned swap on the node (simulateTransaction) and compare the user's balances before and after:
+    no more than the amount (plus fees) leaves, at least the quote's minimum arrives. Raises JupiterError when the
+    transaction would do anything else; TransportError when the node can't tell."""
+    def atas(mint):
+        return [associated_token_address(user, mint, tp) for tp in (TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID)]
+    addrs = [user] + (atas(input_mint) if input_mint != SOL_MINT else []) + \
+        (atas(output_mint) if output_mint != SOL_MINT else [])
+    pre = (rpc.call("getMultipleAccounts", [addrs, {"encoding": "base64", "commitment": rpc.commitment}]) or {})
+    res = rpc.call("simulateTransaction", [base64.b64encode(bytes(raw)).decode("ascii"), {
+        "encoding": "base64", "sigVerify": False, "replaceRecentBlockhash": True, "commitment": "processed",
+        "accounts": {"encoding": "base64", "addresses": addrs}}]) or {}
+    value = res.get("value") if isinstance(res, dict) else None
+    before = (pre.get("value") if isinstance(pre, dict) else None)
+    if not isinstance(value, dict) or not isinstance(before, list) or not isinstance(value.get("accounts"), list):
+        raise TransportError("simulateTransaction: unexpected response shape")
+    if value.get("err") is not None:
+        raise JupiterError("swap simulation failed: %s" % json.dumps(value["err"])[:200])
+    after = value["accounts"]
+    if len(after) != len(addrs) or len(before) != len(addrs):
+        raise TransportError("simulateTransaction: account list does not match the request")
+    lam = lambda acc: int((acc or {}).get("lamports") or 0) if isinstance(acc, dict) else 0  # noqa: E731
+    sol = lam(after[0]) - lam(before[0])
+    n_in = 0 if input_mint == SOL_MINT else 2
+    spent = (-sol) if input_mint == SOL_MINT else \
+        sum(_token_amount(before[1 + k]) - _token_amount(after[1 + k]) for k in range(2))
+    got = sol if output_mint == SOL_MINT else \
+        sum(_token_amount(after[1 + n_in + k]) - _token_amount(before[1 + n_in + k]) for k in range(2))
+    room = fee_cap + FEE_ROOM_LAMPORTS
+    if spent > int(amount_raw) + (room if input_mint == SOL_MINT else 0):
+        raise JupiterError("swap simulation: %d leaves your wallet for a swap of %d" % (spent, amount_raw))
+    if got < int(min_out) - (room if output_mint == SOL_MINT else 0):
+        raise JupiterError("swap simulation: only %d arrives in your wallet, the quote promised at least %d" % (
+            got, min_out))
+    if input_mint != SOL_MINT and output_mint != SOL_MINT and -sol > room:
+        raise JupiterError("swap simulation: %d lamports leave your wallet in fees" % -sol)
+
+
 def swap(
     rpc: Rpc,
     secret: SecretLike,
@@ -1004,7 +1173,18 @@ def swap(
     """
     kp = secret if isinstance(secret, Keypair) else Keypair(secret)
     quote = jupiter_quote(input_mint, output_mint, amount_raw, slippage_bps)
+    min_out = check_quote(quote, input_mint, output_mint, amount_raw, slippage_bps)
     raw = jupiter_swap_tx(quote, kp.pubkey_b58, priority_lamports)
+    # the swap API is not trusted with the wallet: what it built is checked, then run on the node, before signing
+    check_swap_tx(raw, kp.pubkey_b58, input_mint, amount_raw, priority_lamports)
+    fee_cap = (2 * priority_lamports + 10_000) if isinstance(priority_lamports, int) else MAX_PRIORITY_LAMPORTS
+    try:
+        simulate_swap(rpc, raw, kp.pubkey_b58, input_mint, output_mint, amount_raw, min_out, fee_cap)
+    except TransportError as e:
+        if input_mint == SOL_MINT:  # buying: no proof of what it does, no buy
+            raise JupiterError("swap not simulated (%s) — not sent" % e) from None
+        # selling: the static check stands; a node that can't simulate must not keep a stop-loss sale from going out
+        log.warning("swap %s -> %s not simulated (%s); sending on the static check", input_mint, output_mint, e)
     signed = sign_tx(raw, kp)
     if not verify_tx(signed):
         # Catches a transaction that needs another signer, or a signing bug,
@@ -1016,7 +1196,8 @@ def swap(
         input_mint, output_mint, quote.get("inAmount"), quote.get("outAmount"), signature,
     )
     if before_send is not None:
-        before_send(signature, quote)
+        # with the transaction's blockhash: once the cluster calls it expired, an unseen signature can never land
+        before_send(signature, dict(quote, recentBlockhash=b58encode(_decode_tx(raw)["recent_blockhash"])))
     rpc.send_raw(signed)
     status = rpc.confirm(signature, timeout_s=confirm_timeout_s)
     log.info("swap %s status %s", signature, status)

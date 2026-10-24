@@ -16,6 +16,19 @@ def sn():
     return load("trader-sniper", "sniper")
 
 
+def bot_wallet():
+    """A bot wallet as `wallet new` leaves it: its key in trader/secrets.env (0600) under the sniper's mark, its
+    address recorded. Returns the address."""
+    from shared import solana
+    config.ensure_home()
+    secret, pub = solana.new_keypair()
+    path = config.trader_home() / "secrets.env"
+    path.write_text("%s - test\nSNIPER_SOL_SECRET=%s\n" % (sn().WALLET_MARK, solana.b58encode(secret)), encoding="ascii")
+    os.chmod(str(path), 0o600)
+    state.write_json("sniper/wallet.json", {"pubkey": solana.b58encode(pub)})
+    return solana.b58encode(pub)
+
+
 def pair(**kw):
     p = {"chain": "solana", "dex": "pumpswap", "pair_address": "POOL", "url": "https://dexscreener.com/x",
          "base": {"address": "MINT", "symbol": "FROG", "name": "Frog"}, "price_usd": 0.001,
@@ -317,8 +330,11 @@ class Live(Settings):
         self.assertFalse(sn().live_readiness(cfg)[0])
         cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE, live_needs_paper_proof=False)
         self.assertFalse(sn().live_readiness(cfg)[0])  # no wallet
-        os.environ["SNIPER_SOL_SECRET"] = "x"
+        from shared import solana
+        os.environ["SNIPER_SOL_SECRET"] = solana.b58encode(solana.new_keypair()[0])  # your own key, exported
         try:
+            self.assertFalse(sn().live_readiness(cfg)[0], "a key in the environment is never the bot's wallet")
+            bot_wallet()
             self.assertTrue(sn().live_readiness(cfg)[0])
             cfg["sniper"]["live_confirmation"] = "i accept meme coin risk"  # not the exact words
             self.assertFalse(sn().live_readiness(cfg)[0])
@@ -331,16 +347,17 @@ class Live(Settings):
         config.ensure_home()
         cfg = config.load_config()
         cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE)
-        os.environ["SNIPER_SOL_SECRET"] = "x"
-        self.addCleanup(os.environ.pop, "SNIPER_SOL_SECRET", None)
+        bot_wallet()
         ok, missing = sn().live_readiness(cfg)
         self.assertFalse(ok)
         self.assertIn("0 paper trades", " ".join(missing))
         now = mc.now_utc()
 
-        def trade(pnl, days_ago=1, mode="paper"):
-            state.append_jsonl("sniper/trades.jsonl", {"mode": mode, "pnl_usd": pnl,
+        def trade(pnl, days_ago=1, mode="paper", chain="solana", unit="raw"):
+            state.append_jsonl("sniper/trades.jsonl", {"mode": mode, "pnl_usd": pnl, "chain": chain, "price_unit": unit,
                                                        "closed_at": mc.iso(now.timestamp() - days_ago * 86400)})
+        for _ in range(40):  # EVM paper fills (no token tax) and USD-priced ones never count for live
+            trade(5.0, chain="base", unit="usd")
         for _ in range(29):
             trade(1.0)
         trade(50.0, mode="live")  # live trades are not paper proof
@@ -417,9 +434,7 @@ class LiveOrders(Settings):
 
     def live_cfg(self):
         from shared import solana
-        config.ensure_home()
-        os.environ["SNIPER_SOL_SECRET"] = solana.b58encode(solana.new_keypair()[0])
-        self.addCleanup(os.environ.pop, "SNIPER_SOL_SECRET", None)
+        bot_wallet()
         cfg = config.load_config()
         cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE, live_needs_paper_proof=False)
         return cfg
@@ -507,9 +522,7 @@ class LiveBuyIsBookedBeforeItIsSent(Settings):
     def setUp(self):
         super().setUp()
         from shared import solana
-        config.ensure_home()
-        os.environ["SNIPER_SOL_SECRET"] = solana.b58encode(solana.new_keypair()[0])
-        self.addCleanup(os.environ.pop, "SNIPER_SOL_SECRET", None)
+        bot_wallet()
         self.cfg = config.load_config()
         self.cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE, live_needs_paper_proof=False)
         self.rpc = mock.Mock()
@@ -584,6 +597,21 @@ class LiveBuyIsBookedBeforeItIsSent(Settings):
         self.assertEqual(res["decisions"][0]["reasons"], ["traded in the last 24 h"])
         self.assertEqual(len(self.sent), 1)
 
+    def test_a_sent_buy_stays_in_the_book_until_its_blockhash_has_expired(self):
+        def sent(i, o, amt, slip, prio, before_send=None):
+            before_send("SIG1", {"recentBlockhash": "BH"})
+            self.sent.append(amt)
+            raise RuntimeError("swap not confirmed: timeout")
+        self.fake_swap = sent
+        self.rpc.blockhash_valid.return_value = True  # a slow cluster: it can still land
+        self.cycle(0)
+        self.cycle(200)
+        self.assertIn("solana:MINT", self.book()["positions"])
+        self.assertEqual(self.book()["positions"]["solana:MINT"]["blockhash"], "BH")
+        self.rpc.blockhash_valid.return_value = False
+        self.cycle(260)
+        self.assertNotIn("solana:MINT", self.book()["positions"])
+
     def test_a_failed_transaction_is_settled_at_once(self):
         self.cycle(0)
         self.rpc.signature_status.return_value = 'failed: {"InstructionError":[2,{"Custom":6001}]}'
@@ -597,6 +625,59 @@ class LiveBuyIsBookedBeforeItIsSent(Settings):
         res = self.cycle(0)
         self.assertEqual(res["decisions"][0]["action"], "error")
         self.assertEqual((self.book() or {}).get("positions", {}), {})
+
+
+class SecondFatalReview(Settings):
+    NOW = NOW
+
+    def test_a_paper_position_closed_without_a_price_books_nothing_back(self):
+        config.ensure_home()
+        config.update_file("config.json", {"sniper": {"enabled": True}})
+        pos = {"chain": "base", "dex": "uniswap", "strategy": "momentum", "opened_at": NOW, "entry_price": 1e-6,
+               "cost_usd": 10.0, "stop_pct": 27.0, "peak_price": 1e-6, "mode": "paper", "price_unit": "usd",
+               "tokens": 10_000_000, "url": "", "address": "0xA", "symbol": "A", "value_usd": 12.0}
+        state.write_json("sniper/book.json", {"positions": {"base:0xA": pos}, "days": {}, "traded": {}})
+        mod = sn()
+        with mock.patch.object(mod, "market_data", return_value={}):  # the pool is gone: no pair, no price
+            self.run_tool("trader-sniper", "sniper", ["kill"])
+        t = state.read_jsonl("sniper/trades.jsonl")[-1]
+        self.assertEqual(t["proceeds_usd"], 0.0)  # not the 12.00 it showed before the pool vanished
+
+    def test_slippage_and_priority_fees_are_bounded(self):
+        config.ensure_home()
+        for change in ({"slippage_bps": 6000}, {"slippage_bps": 0}, {"priority_lamports": 10 ** 9}):
+            with self.subTest(change):
+                with self.assertRaises(config.ConfigError):
+                    config.update_file("config.json", {"sniper": change})
+                    config.load_config()
+
+    def test_a_sale_never_gets_more_slippage_than_the_cap(self):
+        mod = sn()
+        seen = []
+        rpc = mock.Mock()
+        rpc.get_token_balance.return_value = (0.0, 1000, 6)
+        kp = mock.Mock(pubkey_b58="BOT")
+        with mock.patch.object(mod, "_wallet", return_value=(None, kp)), mock.patch.object(mod, "_rpc", return_value=rpc), \
+                mock.patch.object(mod, "sol_usd", return_value=150.0), \
+                mock.patch.object(mod, "_swap", side_effect=lambda *a, **k: seen.append(a) or {"quote": {}}):
+            mod.sell({"mode": "live", "address": "MINT", "tokens_raw": 1000}, 1.0, "stop",
+                     {"slippage_bps": 1500, "priority_lamports": 1000}, {}, mc.ts(NOW), 5.0)
+        self.assertEqual(seen[0][3], mod.SALE_SLIPPAGE_CAP_BPS)
+
+    def test_only_the_wallet_the_bot_made_is_ever_used(self):
+        from shared import solana
+        mod = sn()
+        addr = bot_wallet()
+        self.assertEqual(mod.wallet_problem(), "")
+        state.write_json("sniper/wallet.json", {})  # a wallet made before addresses were recorded: adopted by its mark
+        self.assertEqual(mod.wallet_problem(), "")
+        self.assertEqual(state.read_json("sniper/wallet.json")["pubkey"], addr)
+        path = config.trader_home() / "secrets.env"
+        path.write_text("SNIPER_SOL_SECRET=%s\n" % solana.b58encode(solana.new_keypair()[0]), encoding="ascii")
+        os.chmod(str(path), 0o600)  # someone else's key put in its place
+        self.assertIn("not the wallet", mod.wallet_problem())
+        with self.assertRaises(RuntimeError):
+            mod._wallet()
 
 
 class KillSwitch(Settings):
@@ -773,8 +854,8 @@ class ReviewedBudget(Settings):
 
     def test_the_key_file_must_be_private(self):
         config.ensure_home()
+        bot_wallet()
         path = config.trader_home() / "secrets.env"
-        path.write_text("SNIPER_SOL_SECRET=x\n", encoding="ascii")
         os.chmod(str(path), 0o644)
         cfg = config.load_config()
         cfg["sniper"].update(mode="live", live_confirmation=sn().LIVE_PHRASE, live_needs_paper_proof=False)
