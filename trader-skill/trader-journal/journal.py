@@ -283,7 +283,8 @@ def by_setup(trades: list) -> list:
 
 
 def compute_stats(trades: list, asset: str = None) -> dict:
-    pool = [t for t in trades if not asset or t.get("asset") == asset]
+    from shared import trades as tradesmod  # a split position (part stop fill, runner) counts as one trade
+    pool = [t for t in tradesmod.merge(trades) if not asset or t.get("asset") == asset]
     setups = by_setup(pool)
     out = {"overall": summarize(pool), "by_asset": {}, "by_setup": setups,
            "best_setup": setups[0] if setups else None, "worst_setup": setups[-1] if len(setups) > 1 else None}

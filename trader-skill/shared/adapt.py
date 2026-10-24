@@ -20,7 +20,7 @@ import json
 import os
 from datetime import timedelta
 
-from . import config, market_clock, state
+from . import config, market_clock, state, trades as tradesmod
 
 FILE = "autopilot/adapt.json"
 EQUITY = "broker/equity.jsonl"
@@ -46,10 +46,11 @@ def _r(t: dict):
 
 def _closed_trades(now_ts: float) -> list:
     out = []
-    for t in (state.read_json("journal.json", {}) or {}).get("trades") or []:
-        if t.get("source") != "autopilot" or t.get("status") != "closed":
-            continue
-        if (t.get("runner") or {}).get("part") == "ride":  # judged with the trade it rode on from, like the backtest
+    mine = [t for t in (state.read_json("journal.json", {}) or {}).get("trades") or [] if t.get("source") == "autopilot"]
+    # a split position (a part stop fill, a runner) is one trade: one loss is never a streak of two, and a runner's
+    # sold third is not a win on its own — like the backtest, which judges the whole position
+    for t in tradesmod.merge(mine):
+        if t.get("status") != "closed":
             continue
         at = (t.get("exit") or {}).get("time")
         r = _r(t)

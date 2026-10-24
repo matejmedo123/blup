@@ -44,6 +44,11 @@ def _r(x, nd=6):
     return round(float(x), nd) if x is not None else None
 
 
+def _px(x):
+    """A price to 8 significant digits — 6 decimals would turn PEPE's 0.00001234 into 0.000012 (−2.8 %)."""
+    return float("%.8g" % float(x)) if x is not None else None
+
+
 class SimBroker(Broker):
     name = "simulator"
     mode = "simulator"
@@ -146,14 +151,14 @@ class SimBroker(Broker):
     def _fill(self, o: dict, price: float, at_ts: int) -> None:
         fee_rate, _ = self._costs(o["asset"])
         qty = float(o["qty"])
-        price = round(float(price), 2) if (o["asset"] == "stock" and price >= 1) else _r(price)
+        price = round(float(price), 2) if (o["asset"] == "stock" and price >= 1) else _px(price)
         fee = qty * price * fee_rate
         pos = self.book["positions"].get(o["symbol"])
         if o["side"] == "buy":
             self.book["cash"] -= qty * price + fee
             if pos:
                 total = pos["qty"] + qty
-                pos["avg_entry"] = _r((pos["avg_entry"] * pos["qty"] + price * qty) / total)
+                pos["avg_entry"] = _px((pos["avg_entry"] * pos["qty"] + price * qty) / total)
                 pos["qty"] = _r(total, 8)
             else:
                 self.book["positions"][o["symbol"]] = {"symbol": o["symbol"], "asset": o["asset"], "qty": _r(qty, 8),
@@ -316,7 +321,7 @@ class SimBroker(Broker):
     def _mark(self) -> None:
         for p in self.book["positions"].values():
             try:
-                p["last"] = _r(self._last_close(p["symbol"], p["asset"]))
+                p["last"] = _px(self._last_close(p["symbol"], p["asset"]))
             except BrokerError:
                 p.setdefault("last", p["avg_entry"])
 

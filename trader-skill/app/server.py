@@ -168,6 +168,8 @@ def _r_of(t):
 
 
 def trade_stats(trades: list) -> dict:
+    from shared import trades as tradesmod  # a split position (part stop fill, runner) counts as one trade
+    trades = tradesmod.merge(trades)
     closed = [t for t in trades if t.get("status") == "closed" and _num(t.get("pnl_usd")) is not None]
     pnls = [_num(t.get("pnl_usd"), 0.0) for t in closed]
     rs = [r for r in (_r_of(t) for t in closed) if r is not None]
@@ -228,15 +230,21 @@ def account_view(cfg: dict, stats: dict, positions: list) -> dict:
     unreal = sum(_num(p.get("unrealized_pl"), 0.0) for p in positions)
     if rows:
         last = rows[-1]
+        # only this account's rows: after a switch (simulator → Alpaca paper → live) the old account's equity is
+        # neither today's start nor the starting cash
+        if last.get("account"):
+            rows = [r for r in rows if r.get("account") == last["account"]]
         today = _today()
         today_rows = [r for r in rows if str(r["at"])[:10] == today]
         before = [r for r in rows if str(r["at"])[:10] < today]
         base = _num(before[-1]["equity"]) if before else (_num(today_rows[0]["equity"]) if today_rows else None)
         eq = _num(last.get("equity"))
+        sim = str(last.get("account") or "simulator").startswith("simulator")
+        start = _starting_cash(cfg) if sim else _num(rows[0].get("equity"))
         return {"source": "broker", "equity": eq, "cash": _num(last.get("cash")),
                 "unrealized": _num(last.get("unrealized"), unreal), "realized_today": _num(last.get("realized_today")),
                 "pnl_today": (eq - base) if (eq is not None and base is not None) else None,
-                "pnl_total": eq - _starting_cash(cfg) if eq is not None else None,
+                "pnl_total": eq - start if (eq is not None and start is not None) else None,
                 "as_of": last.get("at"), "starting_cash": _starting_cash(cfg),
                 "borrowed": _num(last.get("borrowed"), 0.0), "interest_paid": _num(last.get("interest_paid"), 0.0)}
     start = _starting_cash(cfg)

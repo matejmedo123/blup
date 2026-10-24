@@ -475,7 +475,9 @@ def _day(book: dict, now_ts: float) -> dict:
 
 def budget_refusal(book: dict, s: dict, now_ts: float, key: str) -> str:
     day = _day(book, now_ts)
-    open_usd = sum(float(p.get("cost_usd") or 0) for p in book["positions"].values())
+    # what is still in meme positions: their cost less what part sales already took back out
+    open_usd = sum(max(0.0, float(p.get("cost_usd") or 0) - float(p.get("realized_usd") or 0))
+                   for p in book["positions"].values())
     if key in book["positions"]:
         return "already holding it"
     if now_ts - float(book["traded"].get(key, 0)) < 86400:
@@ -488,8 +490,9 @@ def budget_refusal(book: dict, s: dict, now_ts: float, key: str) -> str:
         return "%d trades today (max %s)" % (day["trades"], s["max_trades_per_day"])
     # today's realized result, what the open positions are down now, and what the next trade can lose to its stop:
     # a new buy never takes the day past the limit (it can't stop open positions from falling — their stops do)
-    lost = -float(day["pnl_usd"]) + sum(max(0.0, float(p.get("cost_usd") or 0) - float(p["value_usd"]))
-                                        for p in book["positions"].values() if p.get("value_usd") is not None)
+    lost = -float(day["pnl_usd"]) + sum(
+        max(0.0, float(p.get("cost_usd") or 0) - float(p.get("realized_usd") or 0) - float(p["value_usd"]))
+        for p in book["positions"].values() if p.get("value_usd") is not None)
     at_risk = float(s["trade_usd"]) * min(100.0, float(s["exits"]["stop_pct"]) + float(s["max_roundtrip_loss_pct"])) / 100
     if lost + at_risk > float(s["daily_loss_usd"]) + 1e-9:
         return "lost %s today (open positions included) — one more trade could pass the daily limit of %s" % (

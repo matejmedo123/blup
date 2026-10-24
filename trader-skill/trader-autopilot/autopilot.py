@@ -265,7 +265,9 @@ def _day_loss(now, equity, yours: float = 0.0, account: str = None) -> tuple:
         state.write_json(DAY, doc)
     start = doc.get("start_equity") if doc.get("day") == day else None
     drop = float(start) - float(equity) + float(yours or 0) if start is not None and equity is not None else 0.0
-    return max(drop, -_realized_today(now, account, doc.get("account_since")), 0.0), start
+    # the floor: a trade bought and sold today lost all of it today, whatever else moved equity (your own coins,
+    # interest) — one held for days was already counted as equity fell on those days, so it isn't counted again
+    return max(drop, -_realized_today(now, account, doc.get("account_since"), opened_today=True), 0.0), start
 
 
 def _killed_today(now, mark: bool = False) -> bool:
@@ -277,9 +279,10 @@ def _killed_today(now, mark: bool = False) -> bool:
     return doc.get("killed") == _today(now)
 
 
-def _realized_today(now, account: str = None, since: str = None) -> float:
+def _realized_today(now, account: str = None, since: str = None, opened_today: bool = False) -> float:
     """P&L of the trades closed today — with ``account``, only those of that broker and mode; with ``since``
-    (the switch to this account, a fresh simulator), only those closed after it."""
+    (the switch to this account, a fresh simulator), only those closed after it; with ``opened_today``, only those
+    bought today too (a trade held for days lost most of what it lost on the days before, in equity then)."""
     day = _today(now)
     total = 0.0
     name, mode = (account.split("/")[:2] + [None])[:2] if account else (None, None)
@@ -289,6 +292,9 @@ def _realized_today(now, account: str = None, since: str = None) -> float:
                                                                       != (mode == "live"))):
                 continue
             if since and ((t.get("exit") or {}).get("time") or "") < since:
+                continue
+            bought = ((t.get("entry") or {}).get("time") or "")[:10]
+            if opened_today and bought and bought != day:  # no entry time recorded: counted, to be safe
                 continue
             total += float(t.get("pnl_usd") or 0)
     return total
@@ -617,7 +623,7 @@ def forget_foreign(cfg: dict) -> dict:
     (simulator → paper → live) they are never managed from here, and they would hold up new entries forever."""
     name = (cfg.get("autopilot") or {}).get("broker") or "simulator"
     mode = brokers.mode_of(cfg)
-    gone = []
+    gone, left_ids = [], []
     with state.locked("autopilot/cycle", timeout=CYCLE_LOCK_WAIT_SEC):
         book = _book()
         for key, it in book["items"].items():
@@ -626,11 +632,23 @@ def forget_foreign(cfg: dict) -> dict:
                           left_note="opened at %s/%s; the bot now trades at %s/%s" % (
                               it.get("broker"), it.get("mode"), name, mode))
                 gone.append("%s (%s/%s)" % (it.get("symbol"), it.get("broker"), it.get("mode")))
+                left_ids.append(it.get("trade_id"))
         if gone:
             state.write_json(BOOK, book)
+            _leave_journal([t for t in left_ids if t], name, mode)
     return {"forgotten": gone, "message": ("Forgot %d trade(s) of another broker or account: %s. Close them there "
                                            "if they are still open." % (len(gone), ", ".join(gone))) if gone else
             "Nothing to forget — every open trade in the book belongs to %s/%s." % (name, mode)}
+
+
+def _leave_journal(trade_ids: list, name: str, mode: str) -> None:
+    """Their journal trades stop counting as open positions here (the risk check's open book, exposure)."""
+    journal = _mod("trader-journal", "journal")
+    for tid in trade_ids:
+        t = journal.get_trade(tid)
+        if t and t.get("status") == "open":
+            t.update(status="left", notes=(t.get("notes") or "") + " · left: the bot now trades at %s/%s" % (name, mode))
+            journal.save_trade(t)
 
 
 def _bot_qty(book: dict, orders: list, broker=None) -> dict:
@@ -1123,6 +1141,9 @@ def _book_part_sale(it: dict, o: dict, cfg: dict = None) -> list:
     journal = _mod("trader-journal", "journal")
     first = journal.get_trade(it.get("trade_id"))
     if first:
+        # one position in two journal entries: judged as one (shared/trades.merge), its R over the whole risk
+        split = first.get("split") or {"root": first["id"], "of_qty": total}
+        first["split"] = split
         rest = copy.deepcopy(first)
         first["qty"] = sold
         journal.finalize(first, cfg or config.load_config(), price, at, reason)
@@ -1161,6 +1182,8 @@ def start_ride(broker, it: dict, sold: dict, cfg: dict = None) -> list:
     first = journal.get_trade(it.get("trade_id"))
     rest = None
     if first:
+        # the part sold and the part riding are one position: judged as one (shared/trades.merge)
+        first["split"] = first.get("split") or {"root": first["id"], "of_qty": float(it["qty"])}
         rest = copy.deepcopy(first)
         first["qty"] = sold_qty
         journal.finalize(first, cfg, price, at, "time" if (it.get("exit_note") or "").startswith("time stop")

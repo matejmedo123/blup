@@ -28,7 +28,7 @@ import hashlib
 import json
 import random
 
-from . import market_clock, state
+from . import market_clock, state, trades as tradesmod
 
 FILE = "autopilot/health.json"
 LAB_FILES = ("backtests/lab-crypto.json", "backtests/lab-etf.json")
@@ -74,23 +74,12 @@ def _r(t: dict):
 def live_trades(since: str = None) -> list:
     """The autopilot's closed trades, oldest first: [{"setup", "r", "at", "id"}] — a runner split counts once."""
     trades = [t for t in (state.read_json("journal.json", {}) or {}).get("trades") or [] if t.get("source") == "autopilot"]
-    by_id = {t["id"]: t for t in trades}
     out = []
-    for t in trades:
-        part = (t.get("runner") or {}).get("part")
-        if part == "ride" or t.get("status") != "closed":
+    for t in tradesmod.merge(trades):  # a split position counts once — judged once every piece is sold
+        if t.get("status") != "closed":
             continue
         at = (t.get("exit") or {}).get("time") or ""
         r = _r(t)
-        if part == "sold":
-            ride = by_id.get(t["id"] + "-ride")
-            if not ride or ride.get("status") != "closed":
-                continue  # judged once the part that rode on is sold too
-            risk = float(t["runner"].get("of_qty") or 0) * float(t.get("risk_per_unit") or 0)
-            if risk <= 0:
-                continue
-            r = (float(t.get("pnl_usd") or 0) + float(ride.get("pnl_usd") or 0)) / risk
-            at = (ride.get("exit") or {}).get("time") or at
         if r is None or (since and at < since):
             continue
         out.append({"id": t["id"], "setup": t.get("setup") or "manual", "r": float(r), "at": at})
