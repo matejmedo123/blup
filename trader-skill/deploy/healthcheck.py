@@ -42,7 +42,7 @@ def check(home: Path, now: datetime = None):
         return False, "the autopilot stopped at %s" % hb["at"]
     if age > limit:
         return False, "last heartbeat %d s ago (limit %d s) — status %s" % (age, limit, hb.get("status"))
-    if hb.get("status") in ("error", "hung") and hb.get("last_ok_at"):
+    if hb.get("status") in ("error", "hung", "degraded") and hb.get("last_ok_at"):
         try:
             ok_at = datetime.fromisoformat(str(hb["last_ok_at"]).replace("Z", "+00:00"))
             failing = (now - ok_at).total_seconds()

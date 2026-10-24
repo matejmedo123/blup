@@ -305,6 +305,7 @@ UNSURE_ORDER = "may or may not have been placed"  # the broker adapters' words f
 OPEN_ORDER = tuple(s for s in OPEN_STATUSES if s != "pending_cancel")  # still working (a cancel on its way isn't)
 PDT_EQUITY = 25000.0         # FINRA pattern-day-trader threshold (margin accounts, Alpaca paper included)
 CRYPTO_FEE_IN_COIN = 0.0025  # Alpaca takes its crypto fee (≤ 0.25 %) out of the coins bought
+LEFTOVER_DAYS = 3            # a closed trade's leftover orders are cancelled this long after it closed
 STOP_UNSURE_RETRY_SEC = 300  # a stop that may or may not have gone in: the order list decides, then it is put back
 STOP_LIMIT_ROOM = 0.005  # Alpaca crypto stops are stop-limits 0.5 % under the stop: below that they can't fill
 
@@ -328,6 +329,13 @@ def _live_stop(it: dict, orders: list):
         return {"id": sid, "status": "new", "symbol": it["symbol"], "side": "sell",
                 "type": "stop_limit" if it["asset"] == "crypto" else "stop"}
     return None
+
+
+def _already_sold(it: dict, orders: list) -> list:
+    """This trade's own sell orders that already filled and aren't booked yet (a book read back from an older copy
+    reopened it): the next sync books them — a sale or a new stop now would be on what you hold yourself."""
+    return [o for o in orders if o.get("side") == "sell" and o.get("status") == "filled" and _mine(o, it)
+            and o.get("id") not in (it.get("parts_booked") or ())]
 
 
 def _follow_replaced(it: dict, orders: list) -> None:
@@ -808,6 +816,13 @@ def reconcile(broker, book: dict, positions: list, orders: list, cfg: dict, limi
     for it in book["items"].values():
         if not _here(it, broker):  # another broker's or account's trade: its fills are not in these lists
             continue
+        if it.get("status") in LIVE_ITEM and it.get("asset") == "crypto" and hasattr(broker, "book_symbol"):
+            try:  # saved before the book used the broker's own name (BTC/USDC at Bybit, whose positions read BTC/USD)
+                name = broker.book_symbol(it["symbol"], "crypto")
+                if name and name != it["symbol"]:
+                    it["symbol"] = name
+            except (BrokerError, ValueError):
+                pass
         try:
             actions += _reconcile_one(broker, it, pos_by, orders, cfg, limits, now, step)
         except Exception as exc:  # noqa: BLE001 — logged on the item and in the cycle's actions
@@ -819,8 +834,14 @@ def reconcile(broker, book: dict, positions: list, orders: list, cfg: dict, limi
 def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limits: dict, now, step: int) -> list:
     actions = []
     if it["status"] == "closed":  # a stop of its own still working after the trade closed: cancelled until gone
+        if it.get("closed_at") and now.timestamp() - market_clock.ts(it["closed_at"]) > LEFTOVER_DAYS * 86400:
+            return actions
         for o in orders:
-            if o.get("side") == "sell" and o.get("status") in OPEN_ORDER and _mine(o, it):
+            # by its client id only: broker ids can come back (a simulator started afresh numbers from 1 again)
+            cid = str(o.get("client_order_id") or "")
+            own = bool(it.get("order_id")) and (cid == it["order_id"] or cid.startswith(it["order_id"] + "-")) \
+                and not cid.endswith("-part")
+            if o.get("side") == "sell" and o.get("status") in OPEN_ORDER and own:
                 try:
                     broker.cancel(o["id"])
                     actions.append("cancelled %s's leftover %s order" % (it["symbol"], o.get("type") or "sell"))
@@ -939,6 +960,14 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
                 except BrokerError as exc:
                     actions.append("partial sale of %s: can't tell yet whether it went through (%s)" % (
                         it["symbol"], exc))
+                    return actions
+                if o is None and now.timestamp() - market_clock.ts(ride.get("asked_at") or it["placed_at"]) >= step:
+                    # the broker has no such order: nothing sold — the exit goes on as before (and its stop with it)
+                    # rather than half an hour with neither a stop nor a sale
+                    ride["status"] = "planned"
+                    ride.pop("asked_at", None)
+                    actions.append("the partial sale of %s never reached the broker — it is tried again" %
+                                   it["symbol"])
                     return actions
             if o is not None and not ride.get("sell_order_id"):
                 ride["sell_order_id"] = o.get("id")
@@ -1299,8 +1328,7 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
     if last is not None and not last > 0:  # 0, negative or NaN is a broken quote, not a price to sell at
         last = None
     _follow_replaced(it, orders)
-    done = [o for o in orders if o.get("side") == "sell" and o.get("status") == "filled" and _mine(o, it)
-            and o.get("id") not in (it.get("parts_booked") or ())]
+    done = _already_sold(it, orders)
     if done:
         # its stop or exit already sold (a book read back from an older copy reopened it): the next sync books
         # that fill — a sale, or a stop put back, now would be on what you hold yourself
@@ -1429,6 +1457,8 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
         if p:
             _split_check(it, p)  # a split since the last cycle: the sale is of what the bot holds now
         _follow_replaced(it, orders)
+        if _already_sold(it, orders):
+            return problems  # its stop or exit already sold — the next sync books it, the KILL sells nothing twice
         queued = _queued_exit(broker, it, orders)
         if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(
                 queued, it, (p or {}).get("last"), market_clock.now_utc()):
@@ -2734,8 +2764,10 @@ def heartbeat(runner: str, status: str, wait_sec: int = None) -> dict:
     now = market_clock.now_utc()
     prev = state.read_json(HEARTBEAT, {}) or {}
     # a cycle that runs but can't check a position's exits for long is not a working bot (the health check says so)
-    ok = status in ("running", "paused", "killed", "dry_run") and \
-        int(st.get("exit_fail_streak") or 0) < EXIT_FAIL_ALERT_AFTER
+    degraded = int(st.get("exit_fail_streak") or 0) >= EXIT_FAIL_ALERT_AFTER
+    ok = status in ("running", "paused", "killed", "dry_run") and not degraded
+    if degraded and status == "running":
+        status = "degraded"  # beating, but not managing a position's exits: the health check says so
     hb = {"at": market_clock.iso(now), "pid": os.getpid(), "host": socket.gethostname(), "runner": runner,
           # the last cycle that worked: a bot that beats but fails every cycle is not "alive" for long
           "last_ok_at": market_clock.iso(now) if ok else prev.get("last_ok_at"),

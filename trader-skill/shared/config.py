@@ -370,6 +370,19 @@ def _check_symbols(here: str, value, defaults: dict, where: str, problems: list)
 _RANGES = {"sniper.slippage_bps": (1, 1500), "sniper.priority_lamports": (0, 10_000_000)}
 
 
+def _stricter(a, b):
+    """Of two settings for one coin, the lower risk or limit (per key for a limits entry)."""
+    num = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)  # noqa: E731
+    if num(a) and num(b):
+        return min(a, b)
+    if isinstance(a, dict) and isinstance(b, dict):
+        out = dict(a)
+        for k, v in b.items():
+            out[k] = min(out[k], v) if (k in out and num(out[k]) and num(v)) else (out[k] if k in out else v)
+        return out
+    return a
+
+
 def _key_base(key, crypto: bool) -> str:
     """A per-symbol key as the lookups ask for it: a coin's base ("BTCUSDT" → "BTC"), a stock's ticker."""
     text = str(key).strip().upper()
@@ -397,8 +410,10 @@ def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = ""
                     for k, v in value.items():
                         b = _key_base(k, crypto)
                         if b in norm and norm[b] != v:
-                            problems.append("%s has two different entries for %s (one of them is %s) — keep one" % (
-                                here, b, k))
+                            v = _stricter(norm[b], v)  # two spellings of one coin: the stricter of the two
+                            note = "%s %s has two entries for %s — using the stricter %s" % (where, here, b, v)
+                            if note not in warnings:
+                                warnings.append(note)
                         norm[b] = v
                     doc[key] = norm
             continue
@@ -426,7 +441,11 @@ def _check(doc: dict, defaults: dict, where: str, problems: list, path: str = ""
             elif key == "interval_sec" and value < MIN_INTERVAL_SEC:
                 problems.append("interval_sec must be at least %d seconds" % MIN_INTERVAL_SEC)
             elif here in _RANGES and not (_RANGES[here][0] <= value <= _RANGES[here][1]):
-                problems.append("%s must be between %g and %g, not %s" % (here, _RANGES[here][0], _RANGES[here][1], value))
+                lo, hi = _RANGES[here]
+                doc[key] = min(max(value, lo), hi)  # a value past the range is bounded, never a config that won't load
+                note = "%s %s is %s — using %g (it must be between %g and %g)" % (where, here, value, doc[key], lo, hi)
+                if note not in warnings:
+                    warnings.append(note)
         elif kind == "object":
             if not isinstance(value, dict):
                 problems.append("%s must be an object { … }, not %s" % (here, json.dumps(value)))

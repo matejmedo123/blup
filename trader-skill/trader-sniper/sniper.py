@@ -509,7 +509,7 @@ def _recorded_wallet() -> str:
     if rec:
         return rec
     try:
-        lines = (config.trader_home() / "secrets.env").read_text(encoding="utf-8").splitlines()
+        lines = (config.trader_home() / "secrets.env").read_bytes().decode("utf-8", errors="replace").splitlines()
     except OSError:
         return ""
     for k, line in enumerate(lines):

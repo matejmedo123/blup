@@ -645,11 +645,12 @@ class SecondFatalReview(Settings):
 
     def test_slippage_and_priority_fees_are_bounded(self):
         config.ensure_home()
-        for change in ({"slippage_bps": 6000}, {"slippage_bps": 0}, {"priority_lamports": 10 ** 9}):
+        for change, key, want in (({"slippage_bps": 6000}, "slippage_bps", 1500), ({"slippage_bps": 0}, "slippage_bps", 1),
+                                  ({"priority_lamports": 10 ** 9}, "priority_lamports", 10_000_000)):
             with self.subTest(change):
-                with self.assertRaises(config.ConfigError):
-                    config.update_file("config.json", {"sniper": change})
-                    config.load_config()
+                config.update_file("config.json", {"sniper": change})
+                self.assertEqual(config.load_config()["sniper"][key], want)  # bounded — the config still loads
+                self.assertTrue([w for w in config.warnings if "sniper.%s" % key in w])
 
     def test_a_sale_never_gets_more_slippage_than_the_cap(self):
         mod = sn()

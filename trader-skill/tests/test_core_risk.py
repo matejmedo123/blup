@@ -283,12 +283,15 @@ class SecondSizingReview(TraderTestCase):
         self.assertEqual(cfgmod.risk_pct_for(cfg, "BTC"), 1.0)
         self.assertEqual(cfgmod.limits_for(lim, "crypto", "SOL")["max_position_pct"], 5)
 
-    def test_two_spellings_of_one_coin_with_different_values_are_refused(self):
+    def test_two_spellings_of_one_coin_with_different_values_take_the_stricter(self):
         from shared import config as cfgmod
         cfgmod.ensure_home()
-        with self.assertRaises(cfgmod.ConfigError):
-            cfgmod.update_file("config.json", {"risk_by_symbol": {"BTC": 3, "BTCUSDT": 1}})
-            cfgmod.load_config()
+        cfgmod.update_file("config.json", {"risk_by_symbol": {"BTC": 3, "BTCUSDT": 1}})
+        cfgmod.update_file("limits.json", {"crypto": {"symbols": {"SOL": {"max_position_pct": 30},
+                                                                  "SOL/USD": {"max_position_pct": 10}}}})
+        self.assertEqual(cfgmod.load_config()["risk_by_symbol"], {"BTC": 1})  # a config that loaded before still does
+        self.assertEqual(cfgmod.load_limits()["crypto"]["symbols"]["SOL"]["max_position_pct"], 10)
+        self.assertTrue([w for w in cfgmod.warnings if "two entries for BTC" in w])
 
     def test_the_daily_close_wake_up_is_still_today_just_after_midnight(self):
         ap = load("trader-autopilot", "autopilot")

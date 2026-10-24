@@ -107,3 +107,86 @@ class Accounting(TraderTestCase):
         self.assertEqual(simulator._px(0.00001234), 0.00001234)
         self.assertEqual(simulator._px(0.000010997), 0.000010997)
         self.assertEqual(simulator._px(67012.345678), 67012.346)
+
+
+class Regressions(TraderTestCase):
+    NOW = "2026-10-20T15:00:00Z"
+
+    def setUp(self):
+        super().setUp()
+        config.ensure_home()
+        self.cfg, self.limits = config.load_config(), config.load_limits()
+
+    def test_a_part_sale_the_broker_never_got_is_tried_again_at_once(self):
+        from tests.test_fatal_round2 import Fake, item
+        b = Fake()
+        it = item(stop_order_id=None, runner={"keep": 0.67, "status": "selling", "sell_order_id": None,
+                                              "asked_at": "2026-10-20T14:54:00Z", "sell_qty": 0.33})
+        book = {"items": {"p1": it}, "handled": {}}
+        b.pos = [{"symbol": "BTC/USD", "asset": "crypto", "qty": 1.0, "last": 60.0}]
+        acts = ap().reconcile(b, book, b.positions(), b.orders(), self.cfg, self.limits)
+        self.assertEqual(it["runner"]["status"], "planned")  # not half an hour with neither a stop nor a sale
+        self.assertIn("tried again", " ".join(acts))
+        ap().manage_exits(b, book, b.positions(), b.orders(), self.cfg)
+        self.assertEqual(b.pos, [])  # price through the stop: sold this same cycle
+
+    def test_a_closed_trades_cleanup_never_touches_an_order_that_only_shares_its_id(self):
+        from tests.test_fatal_round2 import Fake, item
+        b = Fake()
+        old = item(status="closed", stop_order_id="sim-000002", closed_at="2026-10-20T10:00:00Z")
+        book = {"items": {"p1": old}, "handled": {}}
+        # sim.json deleted: the simulator numbers from 1 again — the new ETH trade's stop has the old stop's id
+        b.ords = [{"id": "sim-000002", "client_order_id": "ord-p9-stop", "symbol": "ETH/USD", "side": "sell",
+                   "type": "stop_limit", "status": "new", "qty": 1.0, "stop_price": 2000.0, "filled_qty": 0}]
+        ap().reconcile(b, book, b.positions(), b.orders(), self.cfg, self.limits)
+        self.assertEqual(b.ords[0]["status"], "new")
+
+    def test_the_kill_never_sells_a_trade_whose_stop_already_sold(self):
+        from tests.test_fatal_round2 import Fake, item
+        b = Fake()
+        it = item()
+        book = {"items": {"p1": it}, "handled": {}}
+        b.ords = [{"id": "S1", "client_order_id": "ord-p1-stop", "symbol": "BTC/USD", "side": "sell",
+                   "type": "stop_limit", "status": "filled", "qty": 1.0, "filled_qty": 1.0, "filled_avg_price": 99.8,
+                   "filled_at": "2026-10-20T13:00:00Z"}]
+        b.pos = [{"symbol": "BTC/USD", "asset": "crypto", "qty": 2.0, "last": 98.0}]  # yours
+        ap().kill(b, book, self.cfg, "test", b.orders(), b.positions())
+        self.assertEqual(b.pos[0]["qty"], 2.0)
+
+    def test_a_degraded_bot_fails_the_health_check(self):
+        import importlib.util
+        import os
+        a = ap()
+        a._state(exit_fail_streak=a.EXIT_FAIL_ALERT_AFTER)
+        hb = a.heartbeat("daemon", "running")
+        self.assertEqual(hb["status"], "degraded")
+        spec = importlib.util.spec_from_file_location("hc", os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "deploy", "healthcheck.py"))
+        hc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(hc)
+        from datetime import datetime
+        from pathlib import Path
+        state.write_json("autopilot/heartbeat.json", dict(hb, last_ok_at="2026-10-20T13:00:00Z"))
+        ok, why = hc.check(Path(str(self.home)), now=datetime.fromisoformat("2026-10-20T15:00:30+00:00"))
+        self.assertFalse(ok, why)
+        self.assertIn("no successful cycle", why)
+
+    def test_bybit_items_saved_under_another_quotes_name_find_their_position(self):
+        from tests.test_fatal_round2 import Fake, item
+        b = Fake()
+        b.name = "bybit"
+        b.book_symbol = lambda raw, asset=None: str(raw).split("/")[0].replace("USDC", "") + "/USD"
+        it = item(broker="bybit", symbol="BTC/USDC")
+        book = {"items": {"p1": it}, "handled": {}}
+        ap().reconcile(b, book, b.positions(), b.orders(), self.cfg, self.limits)
+        self.assertEqual(it["symbol"], "BTC/USD")
+
+    def test_the_sniper_reads_an_old_wallets_secrets_file_in_any_encoding(self):
+        from shared import solana
+        sn = load("trader-sniper", "sniper")
+        secret, pub = solana.new_keypair()
+        (self.home / "secrets.env").write_bytes(("# kľúče\n%s\nSNIPER_SOL_SECRET=%s\n" % (
+            sn.WALLET_MARK, solana.b58encode(secret))).encode("cp1250"))
+        import os
+        os.chmod(str(self.home / "secrets.env"), 0o600)
+        self.assertEqual(sn.wallet_problem(), "")
