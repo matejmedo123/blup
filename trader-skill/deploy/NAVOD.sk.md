@@ -53,6 +53,7 @@ upozornenia na mobil a jasný postup: simulátor → Bybit testnet → malý ost
 |---|---|---|---|
 | **OVHcloud** (odporúčam) | VPS-1: 2 vCore, 4 GB RAM, 40 GB | od ~4,5 € / mes. | bez viazanosti, Frankfurt / Varšava / Francúzsko |
 | netcup | VPS 500: 2 vCore, 4 GB RAM, 64 GB | ~8,3 € / mes. (12 mes.) | dátové centrum aj vo Viedni |
+| Websupport | Linux VPS, vlastná konfigurácia (zvoľ 2 vCPU, 2–4 GB RAM, ~30 GB) | od 9,90 € / mes. (pri ročnej platbe) | slovenské dátové centrum a podpora, 7 dní na skúšku; Starter s 1 GB RAM je na robota málo |
 | Hetzner Cloud | CX23 | od 5,99 € / mes. | lacné servery sú teraz vypredané, noví zákazníci ich často nevytvoria |
 
 Ceny sa v roku 2026 viackrát menili — presnú cenu uvidíš pri objednávke.
