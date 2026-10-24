@@ -1,0 +1,48 @@
+# /etc/systemd/system/trader-test-dashboard.service — the comparison bot's dashboard (installed by test-bot.sh)
+# Listens on 127.0.0.1:8766 only: an SSH tunnel, Tailscale or Caddy in front of it, as for the real one on 8765
+# (behind a proxy TRADER_DASHBOARD_PASSWORD is mandatory — test-bot.sh copies the real one's).
+[Unit]
+Description=Trader comparison dashboard (the simulator bot of test-bot.sh)
+Documentation=file:///opt/trader/deploy/README.md
+After=network-online.target trader-test-autopilot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trader
+Group=trader
+WorkingDirectory=/opt/trader
+Environment=TRADER_HOME=/var/lib/trader-test
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=-/etc/trader/trader-test.env
+# the trader-test-autopilot service trades and refreshes its news feed; this one only shows and controls it
+ExecStart=/usr/bin/python3 /opt/trader/app/server.py --host 127.0.0.1 --port 8766 --home /var/lib/trader-test --no-autopilot --news-every 0
+Restart=always
+RestartSec=5
+UMask=0077
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/trader-test
+InaccessiblePaths=-/var/lib/trader -/etc/trader/trader.env
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

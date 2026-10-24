@@ -18,3 +18,14 @@ trader.example.com {
 		-Server
 	}
 }
+
+# The comparison bot of test-bot.sh (dashboard on 127.0.0.1:8766): a second DNS A record (e.g. test.trader.example.com)
+# at the same IP, then remove the # in front of the lines below and: sudo systemctl reload caddy
+#test.trader.example.com {
+#	encode gzip
+#	reverse_proxy 127.0.0.1:8766
+#	header {
+#		Strict-Transport-Security "max-age=31536000"
+#		-Server
+#	}
+#}

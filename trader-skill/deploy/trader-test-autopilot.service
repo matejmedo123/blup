@@ -1,0 +1,53 @@
+# /etc/systemd/system/trader-test-autopilot.service — the comparison bot on the SIMULATOR (installed by test-bot.sh)
+# Its own state folder, no keys: it never reads /etc/trader/trader.env and cannot see the real bot's folder.
+[Unit]
+Description=Trader comparison bot (simulator only, another setup next to the real bot)
+Documentation=file:///opt/trader/deploy/README.md
+After=network-online.target trader-autopilot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trader
+Group=trader
+WorkingDirectory=/opt/trader
+Environment=TRADER_HOME=/var/lib/trader-test
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+# only the dashboard password, copied there by test-bot.sh — never the broker keys
+EnvironmentFile=-/etc/trader/trader-test.env
+# --approve = standing approval for orders that pass every gate; remove it for a dry run
+ExecStart=/usr/bin/python3 /opt/trader/trader-autopilot/autopilot.py daemon --approve --home /var/lib/trader-test
+Restart=always
+RestartSec=15
+# SIGTERM: the daemon judges no new ideas, finishes the order and the exits it is on, then exits; a cycle stuck
+# for 20 min makes it exit with code 70 on its own (Restart=always brings it back)
+KillSignal=SIGTERM
+TimeoutStopSec=120
+UMask=0077
+
+# hardening: the bot can write only its state folder and cannot read the real bot's folder or keys
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/trader-test
+InaccessiblePaths=-/var/lib/trader -/etc/trader/trader.env
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

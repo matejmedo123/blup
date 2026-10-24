@@ -217,6 +217,24 @@ def mode_info(cfg: dict, bot: dict) -> dict:
             "live_ready": all(r["ok"] for r in reqs), "live_requirements": reqs}
 
 
+def setup_info(cfg: dict) -> dict:
+    """The risk and leverage this bot runs at — two dashboards side by side (a paper comparison) told apart."""
+    def g(x):
+        return "%g" % round(x, 2)
+    risk = _num(cfg.get("risk_per_trade_pct"))
+    risk = 0.5 if risk is None else risk
+    by = cfg.get("risk_by_symbol") if isinstance(cfg.get("risk_by_symbol"), dict) else {}
+    groups = {}
+    for base, pct in sorted(by.items()):
+        pct = _num(pct)
+        if pct is not None:
+            groups.setdefault(min(pct, config.SYMBOL_RISK_HARD_CAP), []).append(str(base).upper())
+    lev = config.leverage(cfg, config.load_limits(), "crypto")[0]
+    parts = ["Risk %s %%" % g(risk)] + ["%s %s %%" % ("/".join(b), g(p)) for p, b in sorted(groups.items()) if p != risk]
+    return {"risk_pct": risk, "risk_by_symbol": {b: p for p, bs in groups.items() for b in bs},
+            "crypto_leverage": lev, "label": " · ".join(parts + ["%s×" % g(lev)])}
+
+
 def autopilot_installed() -> bool:
     return (Path(_ROOT) / "trader-autopilot" / "autopilot.py").exists()
 
@@ -317,6 +335,7 @@ def summary_view(app) -> dict:
         "home": str(home()),
         "offline": config.is_offline(),
         "mode": mode_info(cfg, bot),
+        "setup": setup_info(cfg),
         "bot": {"installed": autopilot_installed(), "status": bot.get("status") or ("not started" if autopilot_installed()
                                                                                      else "not installed"),
                 "last_cycle": bot.get("last_cycle"), "next_cycle": bot.get("next_cycle"), "cycles": bot.get("cycles"),

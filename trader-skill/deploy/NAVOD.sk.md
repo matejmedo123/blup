@@ -179,6 +179,7 @@ sudo traderctl restart
 * `--capital 1000` = s koľkými peniazmi počítať (v USD/USDC). Pri ostrom účte sem dáš skutočný vklad.
 * **Bez páky** (opatrnejšie, alebo ak ti Bybit maržu neponúkne): namiesto `--leverage 1.5` daj `--leverage 1`.
 * Profil sa **nikdy** nedotkne brokera, režimu, kľúčov ani prepínača na ostré peniaze.
+* Chceš popri tom na simulátore skúšať aj vyššie riziko? Na to je porovnávací robot — krok 18.
 
 Reštart alebo zastavenie môže trvať **až 2 minúty** — robot najprv dokončí rozbehnutý cyklus. Nič nevypínaj natvrdo.
 
@@ -456,6 +457,70 @@ Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 * Port 8765 na firewalle nikdy neotváraj — nástenka ide len cez HTTPS s heslom (časť 10), Tailscale alebo SSH tunel.
 * Robot beží ako obyčajný používateľ `trader` a zapisovať môže len do `/var/lib/trader`.
 * Nástenka nikdy neukáže hodnotu kľúča, len „set / not set“. Ostré peniaze sa z nástenky zapnúť nedajú.
+
+---
+
+## 18. Porovnávací robot: iné nastavenie vedľa ostrého
+
+Chceš vidieť, ako by si viedlo vyššie riziko (napr. 3 %, BTC a ETH 4 %, páka 2×), a pritom nemeniť ostrého
+robota? Spusti vedľa neho druhého robota, ktorý obchoduje **len na simulátore** — na tom istom trhu, s tou istou
+sumou a s vlastnou nástenkou.
+
+```bash
+sudo bash /opt/trader/deploy/test-bot.sh
+```
+
+* Predvolené nastavenie: riziko 3 %, BTC a ETH 4 %, páka 2×, náklady Bybitu, rovnaký kapitál a rovnaký
+  zoznam overených mincí (playbook) ako hlavný robot. Iné nastavenie, napr.:
+  `sudo bash /opt/trader/deploy/test-bot.sh --risk 2 --core-risk 3 --leverage 1`
+* **So skutočnými peniazmi nikdy neobchoduje:** má vlastný priečinok `/var/lib/trader-test`, nečíta súbor
+  s kľúčmi `/etc/trader/trader.env` a nevidí priečinok ostrého robota. Zo súboru s kľúčmi si skopíruje iba heslo
+  k nástenke. Keby jeho nastavenie niekedy ukazovalo na skutočnú burzu, skript ho odmietne spustiť.
+* Neposiela upozornenia na mobil, nemá AI desk ani správy z X. Inak má rovnaké pravidlá.
+
+**Porovnanie v termináli:**
+
+```bash
+sudo traderctl compare
+```
+
+Ukáže oba roboty vedľa seba: nastavenie, výnos od dňa, odkedy bežia oba, celkový výnos, najhorší prepad,
+kapitál a obchody. **Hodnoť ich až po 20 a viac uzavretých obchodoch každého** — dovtedy je rozdiel hlavne
+náhoda. Pri dennej stratégii to trvá mesiace.
+
+**Jeho nástenka** beží na porte **8766** (hlavná na 8765). Na každej nástenke je pri nadpise štítok, napr.
+„Risk 3 % · BTC/ETH 4 % · 2×“, a ten istý text je aj v názve karty prehliadača, takže si ich nepomýliš.
+
+* **Vlastná adresa (ak máš krok 10 A):** pridaj druhý DNS záznam typu **A**, napr. názov `test.bot`, hodnota =
+  tá istá IP servera. Po 5–60 minútach (adresu prepíš na svoju):
+
+  ```bash
+  printf '\ntest.bot.tvojadomena.sk {\n    encode gzip\n    reverse_proxy 127.0.0.1:8766\n}\n' | sudo tee -a /etc/caddy/Caddyfile
+  sudo systemctl reload caddy
+  ```
+
+  Otvor **https://test.bot.tvojadomena.sk** — heslo je to isté ako pri hlavnej nástenke.
+* **Tailscale (ak máš krok 10 B):** `sudo tailscale serve --bg --https=8443 8766` → adresa `https://….ts.net:8443`.
+* **SSH tunel:** `ssh -L 8766:127.0.0.1:8766 ubuntu@203.0.113.10` a v prehliadači **http://127.0.0.1:8766**.
+
+Ostatné príkazy sú rovnaké ako pri hlavnom robotovi, len so slovom `test`:
+
+```bash
+sudo traderctl test status
+sudo traderctl test health
+sudo traderctl test logs
+sudo traderctl test pause      # a resume
+```
+
+**Iné nastavenie neskôr:** spusti `test-bot.sh` znova s inými číslami. Jeho história však zostane, takže
+porovnanie by miešalo dve nastavenia. Pre čisté porovnanie ho najprv odstráň aj so záznamom:
+
+```bash
+sudo bash /opt/trader/deploy/test-bot.sh --remove    # zastaví ho, záznam ostane
+sudo rm -rf /var/lib/trader-test                     # zmaže aj záznam
+```
+
+Pri aktualizácii (krok 14) sa porovnávací robot aktualizuje a reštartuje spolu s hlavným.
 
 ---
 

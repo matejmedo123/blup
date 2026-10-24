@@ -979,7 +979,9 @@ The bot only trades while it runs, so for 24/7 it belongs on a small always-on s
 that sleeps. `deploy/` has everything for a ~5 €/month Linux VPS: `install-vps.sh` (two systemd
 services, a dedicated user, secrets in `/etc/trader/trader.env`), a `docker-compose.yml` alternative,
 a Caddy config for HTTPS, and a step-by-step guide in Slovak (`deploy/NAVOD.sk.md`). The dashboard
-stays on 127.0.0.1 — open it through an SSH tunnel, or behind Caddy with a password.
+stays on 127.0.0.1 — open it through an SSH tunnel, or behind Caddy with a password. `deploy/test-bot.sh` adds
+a comparison bot next to it — another profile (3 % / 4 % at 2× by default) on the simulator, its own folder and
+dashboard, no keys — and `traderctl compare` shows both side by side.
 
 **What "24/7" does:** every minute the daemon syncs the broker, manages exits and the kill switch; every
 closed 5-minute bar it scans its universe (crypto always, stocks 9:30–15:30 ET); between cycles it

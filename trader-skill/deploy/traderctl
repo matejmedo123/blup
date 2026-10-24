@@ -9,27 +9,50 @@
 #   sudo traderctl health                  is the daemon alive? (exit code 0 = yes)
 #   sudo traderctl logs                    follow the daemon's log (Ctrl+C to leave)
 #   sudo traderctl start | stop | restart  the services (a stop can take up to 2 min: it finishes its cycle)
+#
+#   sudo traderctl compare                 the real bot and the comparison bot (deploy/test-bot.sh) side by side
+#   sudo traderctl test <command>          any command above for the comparison bot, e.g. sudo traderctl test status
 set -eu
 ENV_FILE=/etc/trader/trader.env
 PREFIX=/opt/trader
 DATA=/var/lib/trader
+AP=trader-autopilot
+DASH=trader-dashboard
+NAME=traderctl
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "run it with sudo: sudo traderctl ${*:-status}" >&2
   exit 1
 fi
+if [ "${1:-}" = "compare" ]; then
+  cd "$PREFIX"
+  exec runuser -u trader -- python3 "$PREFIX/deploy/compare.py" --home "$DATA" --home /var/lib/trader-test
+fi
+if [ "${1:-}" = "test" ]; then
+  # the comparison bot: its own folder and services, and never the real bot's keys
+  shift
+  ENV_FILE=/etc/trader/trader-test.env
+  DATA=/var/lib/trader-test
+  AP=trader-test-autopilot
+  DASH=trader-test-dashboard
+  NAME="traderctl test"
+  if [ ! -f "$DATA/config.json" ]; then
+    echo "no comparison bot yet — set it up with: sudo bash $PREFIX/deploy/test-bot.sh" >&2
+    exit 1
+  fi
+fi
 cmd="${1:-status}"
 case "$cmd" in
-  logs) exec journalctl -u trader-autopilot -f -n 100 ;;
-  dashboard-logs) exec journalctl -u trader-dashboard -f -n 100 ;;
-  start) exec systemctl start trader-autopilot trader-dashboard ;;
+  logs) exec journalctl -u "$AP" -f -n 100 ;;
+  dashboard-logs) exec journalctl -u "$DASH" -f -n 100 ;;
+  start) exec systemctl start "$AP" "$DASH" ;;
   restart)
     echo "restarting — the autopilot finishes its current cycle first (up to 2 minutes)"
-    exec systemctl restart trader-autopilot trader-dashboard ;;
+    exec systemctl restart "$AP" "$DASH" ;;
   stop)
     echo "stopping the autopilot (up to 2 minutes while it finishes its cycle)."
-    echo "Open positions stay open — use 'sudo traderctl kill --confirm KILL' first to close them."
-    exec systemctl stop trader-autopilot ;;
+    echo "Open positions stay open — use 'sudo $NAME kill --confirm KILL' first to close them."
+    exec systemctl stop "$AP" ;;
 esac
 
 set -a

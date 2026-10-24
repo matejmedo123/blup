@@ -89,11 +89,19 @@ for u in "${UNITS[@]}"; do
   install -o root -g root -m 644 "$PREFIX/deploy/$u.service" "/etc/systemd/system/$u.service"
 done
 install -o root -g root -m 755 "$PREFIX/deploy/traderctl" /usr/local/bin/traderctl
+# the comparison bot of test-bot.sh, if there is one: its units follow the update too
+TEST_UNITS=()
+for u in trader-test-autopilot trader-test-dashboard; do
+  if [ -f "/etc/systemd/system/$u.service" ]; then
+    install -o root -g root -m 644 "$PREFIX/deploy/$u.service" "/etc/systemd/system/$u.service"
+    TEST_UNITS+=("$u")
+  fi
+done
 systemctl daemon-reload
 systemctl enable "${UNITS[@]}" >/dev/null
 if [ "$START" -eq 1 ]; then
   echo "    (re)starting — the autopilot finishes its current cycle first, which can take up to 2 minutes"
-  systemctl restart "${UNITS[@]}"
+  systemctl restart "${UNITS[@]}" ${TEST_UNITS[@]+"${TEST_UNITS[@]}"}
   sleep 3
   systemctl --no-pager --lines=0 status "${UNITS[@]}" || true
 fi
@@ -114,6 +122,7 @@ Next steps:
        ssh -L 8765:127.0.0.1:8765 <you>@<this server>     then open http://127.0.0.1:8765
      (or HTTPS with your own domain: deploy/Caddyfile.example — needs TRADER_DASHBOARD_PASSWORD)
   5. Emergency stop: the KILL button on the dashboard, or  sudo traderctl kill --confirm KILL
+  6. Optional, another setup on the simulator next to it:  sudo bash $PREFIX/deploy/test-bot.sh
 
 Trading can lose money. Real money needs every live opt-in step in the README — never just a key.
 NEXT

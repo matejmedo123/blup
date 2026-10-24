@@ -421,11 +421,14 @@
       title: m.mode === 'live' ? 'Real-money orders are enabled in your config files'
         : (m.mode === 'paper' ? 'Paper account at ' + (m.broker || 'the broker') + ' — no real money' : 'Local simulator — no account, no real money') };
   }
+  function setupLabel() { return ((S.summary || {}).setup || {}).label || ''; }
   function renderTop() {
     var s = S.summary || {};
     var m = s.mode || {};
     var mi = modeInfo();
     each('.js-mode', function (b) { b.textContent = mi.text; b.className = 'badge js-mode' + (mi.live ? ' live' : ''); b.title = mi.title; });
+    each('.js-setup', function (c) { c.textContent = setupLabel(); });
+    markTitle();
     $('live-stripe').hidden = m.mode !== 'live';
     document.body.classList.toggle('live', m.mode === 'live');
     var bot = s.bot || {};
@@ -494,7 +497,8 @@
       h('div', { class: 'kv' }, h('span', { class: 'k', text: 'Today' }), h('span', { class: 'v ' + tone(a.pnl_today), text: money(a.pnl_today, true) })));
     var mi = modeInfo();
     return h('div', { class: 'view-head' }, h('div', null,
-      h('div', { class: 'title-row' }, h('h1', { text: title }), h('span', { class: 'badge js-mode' + (mi.live ? ' live' : ''), title: mi.title, text: mi.text })),
+      h('div', { class: 'title-row' }, h('h1', { text: title }), h('span', { class: 'badge js-mode' + (mi.live ? ' live' : ''), title: mi.title, text: mi.text }),
+        setupLabel() ? h('span', { class: 'setup-chip js-setup', title: 'Risk per trade and crypto leverage of this bot', text: setupLabel() }) : null),
       sub ? h('div', { class: 'sub', text: sub }) : null),
       h('div', { class: 'right' }, right || null, acct));
   }
@@ -1345,8 +1349,12 @@
     if (o) { try { S.expanded[decodeURIComponent(o[1])] = true; } catch (e) { /* bad hash */ } }
     return m && TABS.indexOf(m[1]) >= 0 ? m[1] : 'overview';
   }
+  // the setup in the tab title: a second dashboard (a paper comparison) is told apart in the browser's tab bar
+  function markTitle() {
+    document.title = (TAB_TITLES[S.tab] || 'Overview') + ' · Trader' + (setupLabel() ? ' · ' + setupLabel() : '');
+  }
   function markTabs() {
-    document.title = (TAB_TITLES[S.tab] || 'Overview') + ' · Trader';
+    markTitle();
     each('.tab[data-tab]', function (b) {
       if (b.getAttribute('data-tab') === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });

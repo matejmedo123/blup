@@ -10,6 +10,8 @@ Linux server (VPS) it means around the clock. This folder has everything for tha
 | `trader-dashboard.service` | the web dashboard on `127.0.0.1:8765` (shows and controls the bot) |
 | `traderctl` | `sudo traderctl status / pause / resume / kill --confirm KILL / logs / health / restart` |
 | `healthcheck.py` | exit 0 when the bot's heartbeat is fresh — for Docker, monitoring or cron |
+| `test-bot.sh`, `trader-test-*.service` | optional: a comparison bot on the simulator next to the real one |
+| `compare.py` | the real bot and the comparison bot side by side (`sudo traderctl compare`) |
 | `trader.env.example` | the keys and passwords file (copy it, never commit the copy) |
 | `Dockerfile`, `docker-compose.yml` | the same two services as containers |
 | `Caddyfile.example` | HTTPS in front of the dashboard if you own a domain |
@@ -104,6 +106,27 @@ The dashboard never listens on a public address. Two ways in:
 The **Bot** tab shows whether the bot is alive (heartbeat), the trading hours in your time zone, every
 decision with its reasons, and the Pause / Run once / KILL buttons. The **Brain** tab shows the symbols it
 picked and why, what it learned from its own trades, the optional AI desk and the notifications.
+
+## A comparison bot next to it
+
+To try another setup on the same market without touching the real bot — e.g. more risk:
+
+```bash
+sudo bash /opt/trader/deploy/test-bot.sh                  # 3 % risk, BTC/ETH 4 %, 2× (the default)
+sudo bash /opt/trader/deploy/test-bot.sh --risk 2 --core-risk 3 --leverage 1   # any other profile
+sudo traderctl compare                                   # both side by side, from the same start
+sudo traderctl test status                               # any traderctl command for the comparison bot
+sudo bash /opt/trader/deploy/test-bot.sh --remove         # stop it (its record stays in /var/lib/trader-test)
+```
+
+It always trades the **simulator**, in its own folder `/var/lib/trader-test`, with the real bot's capital and
+playbook as a start. Its services never read `/etc/trader/trader.env` and cannot see `/var/lib/trader`, so it
+has no broker keys at all; the script copies only the dashboard password (into `/etc/trader/trader-test.env`)
+and refuses to start if its config names a real broker. No phone notifications, no AI desk, no X news — the
+same rules otherwise. Its dashboard listens on `127.0.0.1:8766`: an SSH tunnel with 8766, `tailscale serve
+--bg --https=8443 8766`, or the second block in `Caddyfile.example`. The browser tab and the page header show
+each bot's risk and leverage, so the two dashboards are not mixed up. Judge them on the same period and after
+20+ closed trades each — before that the difference is mostly chance.
 
 ## Phone notifications
 
