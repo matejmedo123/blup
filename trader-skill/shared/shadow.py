@@ -171,13 +171,14 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
                 sid = setups.setup_id(sym.key, r["window"], setup)
                 seen.add(sid)
                 expected, why_not = True, None
+                look = _look_ts(asset, trig["t"])
                 if asset == "stock":
-                    up = (btc or {}).get(max((t for t in (btc or {}) if t <= trig["t"]), default=None))
+                    # Bitcoin as the bot reads it when it buys: the newest daily bar closed by then
+                    up = (btc or {}).get(max((t for t in (btc or {}) if t + BAR <= look), default=None))
                     if not etf_on:
                         expected, why_not = False, "the ETF trend is off"
                     elif (ap.get("etf_trend") or {}).get("when", "crypto_bear") == "crypto_bear" and up:
                         expected, why_not = False, "crypto was in a bull market — the ETF trend waits"
-                look = _look_ts(asset, trig["t"])
                 held = _held(versions, pkey, look)
                 if expected and held is not True:
                     expected, why_not = False, ("not in the playbook that day" if held is False else

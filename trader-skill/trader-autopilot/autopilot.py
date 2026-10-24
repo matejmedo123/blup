@@ -28,6 +28,7 @@ Examples:
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 import math
 import os
@@ -365,7 +366,14 @@ def _mine(o: dict, it: dict) -> bool:
                 or (o.get("replaces") and o.get("replaces") in (it.get("stop_order_id"), it.get("exit_order_id"))))
 
 
-SPLITS = (2, 3, 4, 5, 8, 10, 15, 20, 25, 30, 40, 50)
+def _split_ratio(k: float):
+    """The split ratio a/b nearest k (3-for-2 is 3/2, 1-for-6 is 1/6) — None when no simple ratio is within 2 %."""
+    best = None
+    for b in range(1, 21):
+        a = max(1, int(round(k * b)))
+        if a <= 100 and abs(a / float(b) / k - 1) < 0.02 and (best is None or b < best[1]):
+            best = (a, b)
+    return best
 
 
 def _split_check(it: dict, p: dict, cfg: dict = None) -> str:
@@ -380,48 +388,86 @@ def _split_check(it: dict, p: dict, cfg: dict = None) -> str:
     if avg <= 0 or held <= 0:
         return ""
     # judged on what the broker reported LAST cycle, not on the bot's fill price: shares you hold yourself blend
-    # into the broker's average price, and a blend is no split. A split moves both the quantity and the average
-    # by the same ratio from one cycle to the next; the bot's own sales change only the quantity
+    # into the broker's average price, and a blend is no split. A split moves the quantity and the average by the
+    # same ratio from one cycle to the next and keeps what the shares cost (less the fraction paid out in cash);
+    # the bot's own sales change only the quantity, a purchase raises what they cost
     prev_q, prev_a = it.get("broker_qty"), it.get("broker_avg")
     it["broker_qty"], it["broker_avg"] = held, avg
     if not prev_q or not prev_a:
         return ""
-    for n in SPLITS:
-        for k, word in ((n, "%d-for-1 split" % n), (1.0 / n, "1-for-%d reverse split" % n)):
-            if abs(held / float(prev_q) / k - 1) < 0.02 and abs(float(prev_a) / avg / k - 1) < 0.02:
-                break
-        else:
-            continue
-        it["qty"] = round(float(it["qty"]) * k, 6)
-        for f in ("stop", "target", "entry_fill", "entry_plan"):
-            if it.get(f) is not None:
-                it[f] = float(it[f]) / k
-        try:
-            journal = _mod("trader-journal", "journal")
-            t = journal.get_trade(it.get("trade_id"))
-            if t:
-                t["qty"] = it["qty"]
-                t["entry"]["price"] = float(t["entry"]["price"]) / k
-                t["stop"] = float(t["stop"]) / k if t.get("stop") is not None else None
-                t["risk_per_unit"] = float(t["risk_per_unit"]) / k
-                t["notes"] = (t.get("notes") or "") + " · adjusted for a %s" % word
-                journal.save_trade(t)
-        except Exception:  # noqa: BLE001 — the book is right; the journal note is a nicety
-            pass
-        notify.send("error", "%s: %s" % (it["symbol"], word),
-                    "The broker shows a %s on %s; the bot rescaled its quantity, stop and target to match." % (
-                        word, it["symbol"]), cfg)
-        return "%s: %s — quantity, stop and target rescaled to match the broker" % (it["symbol"], word)
-    return ""
+    k = float(prev_a) / avg
+    expect = float(prev_q) * k
+    if abs(k - 1) <= 0.2 or abs(held - expect) > 1 + 0.02 * expect:
+        return ""
+    ratio = _split_ratio(k)
+    if ratio:
+        k = ratio[0] / float(ratio[1])
+        word = "%d-for-%d %s" % (ratio[0], ratio[1], "split" if k > 1 else "reverse split")
+    else:
+        word = "split of %.4g for 1" % k
+    whole = abs(held - round(held)) < 1e-9 and abs(float(it["qty"]) - round(float(it["qty"]))) < 1e-9
+    new_qty = min(float(it["qty"]) * k, held)
+    # whole shares stay whole: the fraction a split leaves is paid out in cash
+    it["qty"] = float(math.floor(new_qty + 1e-9)) if whole else round(new_qty, 6)
+    if it["qty"] <= 0:
+        it["qty"] = round(new_qty, 6)
+    for f in ("stop", "target", "entry_fill", "entry_plan"):
+        if it.get(f) is not None:
+            it[f] = float(it[f]) / k
+    try:
+        journal = _mod("trader-journal", "journal")
+        t = journal.get_trade(it.get("trade_id"))
+        if t:
+            t["qty"] = it["qty"]
+            t["entry"]["price"] = float(t["entry"]["price"]) / k
+            t["stop"] = float(t["stop"]) / k if t.get("stop") is not None else None
+            t["risk_per_unit"] = float(t["risk_per_unit"]) / k
+            t["notes"] = (t.get("notes") or "") + " · adjusted for a %s" % word
+            journal.save_trade(t)
+    except Exception:  # noqa: BLE001 — the book is right; the journal note is a nicety
+        pass
+    notify.send("error", "%s: %s" % (it["symbol"], word),
+                "The broker shows a %s on %s; the bot rescaled its quantity, stop and target to match." % (
+                    word, it["symbol"]), cfg)
+    return "%s: %s — quantity, stop and target rescaled to match the broker" % (it["symbol"], word)
 
 
 WASH_LIMIT = 0.99  # after a wash-trade refusal: sell with a limit 1 % under the last price, a stop-limit 3 % under
 WASH_STOP_LIMIT = 0.97
+WASH_OVER = 1.002  # ...or just above your own open buy order, when that sits higher: a sell above it can't meet it
 
 
 def _wash(exc) -> bool:
     """Alpaca's wash-trade guard: your own open buy order on the symbol could trade with the bot's market sell."""
     return "wash" in str(exc).lower()
+
+
+def _open_buy_top(broker, symbol: str):
+    """The most an open buy order on the symbol could pay — inf for a market or plain stop buy, None when no buy
+    is open (or the broker can't tell)."""
+    try:
+        orders = broker.open_orders()
+    except BrokerError:
+        return None
+    top = None
+    for o in orders or []:
+        if o.get("side") != "buy" or o.get("symbol") != symbol or o.get("status") not in OPEN_STATUSES:
+            continue
+        px = o.get("limit_price") if str(o.get("type") or "") in ("limit", "stop_limit") else None
+        px = float(px) if px else math.inf
+        top = px if top is None else max(top, px)
+    return top
+
+
+def _wash_limit(broker, symbol: str, want: float, ceiling: float):
+    """A sell limit at `want` — raised just above your highest open buy order on the symbol when `want` would trade
+    with it (Alpaca refuses a sell at or under an open buy). None when it would have to reach `ceiling` (the price
+    for a sale, the stop for a stop-limit): then no sale of the bot's can stay clear of your buy."""
+    top = _open_buy_top(broker, symbol)
+    if top is None or top < want:
+        return want
+    lim = top * WASH_OVER
+    return lim if lim < ceiling else None
 
 
 def _sell_own(broker, it: dict, held: float = None, limit_price: float = None) -> dict:
@@ -460,10 +506,19 @@ def _queued_exit(broker, it: dict, orders: list):
     o = _find(orders, oid)
     if o is None:
         try:
-            o = next((x for x in broker.lookup(oid) if x.get("id") == oid), None)
-        except BrokerError:
-            o = None
+            o = next((x for x in _strict_lookup(broker, oid) if x.get("id") == oid), None)
+        except BrokerError as exc:  # no answer is not "no sale": a second one could sell your own coins
+            o = {"id": oid, "status": "unknown", "error": str(exc)}
     return o
+
+
+def _strict_lookup(broker, oid: str) -> list:
+    """The broker's answer for one order id — raising when it can't tell, where the broker supports that."""
+    try:
+        strict = "strict" in inspect.signature(broker.lookup).parameters
+    except (TypeError, ValueError):
+        strict = False
+    return broker.lookup(oid, strict=True) if strict else broker.lookup(oid)
 
 
 def _stale_exit(queued: dict, it: dict, last, now) -> bool:
@@ -556,9 +611,13 @@ def _restore_stop(broker, it: dict, held, now, cfg: dict = None) -> list:
         except BrokerError as exc:
             if not _wash(exc):
                 raise
-            # your own buy order on the symbol: a stop-limit under it can't trade with it — Alpaca takes that
+            # your own buy order on the symbol: a stop-limit whose limit sits above it can't trade with it
+            lim = _wash_limit(broker, it["symbol"], float(it["stop"]) * WASH_STOP_LIMIT, float(it["stop"]))
+            if lim is None:
+                raise BrokerError("%s — your own buy order on %s sits at or above the stop, so no stop of the bot's "
+                                  "can stay clear of it" % (exc, it["symbol"]))
             so = broker.place_stop(it["symbol"], qty, it["stop"], client_order_id=cid + "l", asset=it["asset"],
-                                   limit_price=float(it["stop"]) * WASH_STOP_LIMIT)
+                                   limit_price=lim)
         it["stop_order_id"] = so.get("id")
         _stop_in_place(it)
         return ["protective stop %s for %s put back" % (fmt.price(it["stop"]), it["symbol"])]
@@ -816,9 +875,12 @@ def reconcile(broker, book: dict, positions: list, orders: list, cfg: dict, limi
     for it in book["items"].values():
         if not _here(it, broker):  # another broker's or account's trade: its fills are not in these lists
             continue
-        if it.get("status") in LIVE_ITEM and it.get("asset") == "crypto" and hasattr(broker, "book_symbol"):
-            try:  # saved before the book used the broker's own name (BTC/USDC at Bybit, whose positions read BTC/USD)
-                name = broker.book_symbol(it["symbol"], "crypto")
+        if it.get("status") in LIVE_ITEM and it.get("asset") in ("crypto", "stock") and hasattr(broker, "book_symbol"):
+            # saved before the book used the broker's own name (BTC/USDC at Bybit, whose positions read BTC/USD;
+            # BRK-B at Alpaca, which names it BRK.B)
+            try:
+                name = broker.book_symbol(it.get("data_key") if it["asset"] == "stock" and it.get("data_key")
+                                          else it["symbol"], it["asset"])
                 if name and name != it["symbol"]:
                     it["symbol"] = name
             except (BrokerError, ValueError):
@@ -1047,6 +1109,9 @@ def _reconcile_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, limi
     return actions
 
 
+RULE_RECHECK_BARS = 1500  # the bars since the fill a rule exit tests again (a position held for years: its last 1500)
+
+
 def rule_exit_due(it: dict) -> str:
     """'' or why a rule-exit position should close now: a bar that closed after the fill met the rule."""
     rule = it.get("exit_rule") or {}
@@ -1054,7 +1119,14 @@ def rule_exit_due(it: dict) -> str:
         return ""
     interval, n = rule.get("interval") or "1d", int(rule.get("n") or 5)
     step = market_clock.interval_seconds(interval)
-    need = 4 * n if rule["type"] == "close_below_ema" else n + 3  # an EMA needs a run-in to settle
+    ema = rule["type"] == "close_below_ema"
+    since = (it.get("runner") or {}).get("since") or it.get("filled_at") or it["placed_at"]
+    # every bar since the fill is tested again, each with a full run-in before it: an EMA started inside the
+    # window still leans on its first close for ~3n bars, and a bar that passed when it was the newest must not
+    # "fail" weeks later on a worse average
+    held_bars = min(int(max(0.0, market_clock.now_utc().timestamp() - market_clock.ts(since)) / step) + 2,
+                    RULE_RECHECK_BARS)
+    need = (4 * n if ema else n + 3) + held_bars
     try:
         days = need * step / 86400.0 if it.get("asset", "crypto") != "stock" else need + 5  # stocks: sessions
         bars = data.get_candles(it["data_key"], interval, days=days, asset=it.get("asset") or "crypto").candles
@@ -1062,8 +1134,7 @@ def rule_exit_due(it: dict) -> str:
         it["rule_check"] = "no %s prices this cycle (%s) — the exit rule waits; the stop still protects it" % (
             interval, type(exc).__name__)
         return ""
-    since = (it.get("runner") or {}).get("since") or it.get("filled_at") or it["placed_at"]
-    least = 2 * n if rule["type"] == "close_below_ema" else n + 1
+    least = 2 * n if ema else n + 1
     if len(bars) < least:  # e.g. a fallback source with 30 days for a 50-day EMA: say so instead of never exiting
         it["rule_check"] = "only %d %s bars available — the exit rule needs %d; the stop still protects it" % (
             len(bars), interval, least)
@@ -1071,8 +1142,11 @@ def rule_exit_due(it: dict) -> str:
     it.pop("rule_check", None)
     closes = [b.c for b in bars]
     # every bar that closed after the fill, not just the newest — a bot that was down a day still exits
-    fired = [j for j in range(n, len(bars)) if bars[j].t + step > market_clock.ts(since)
-             and setups.rule_says_exit(rule, closes, j)]
+    # an EMA is judged only where it has settled (the newest bar always is, given 4n bars before it)
+    first = min(3 * n, len(bars) - 1) if ema else n
+    cache = {("ema", n): indicators.ema(closes, n)} if ema else None  # one pass, not one per bar
+    fired = [j for j in range(first, len(bars)) if bars[j].t + step > market_clock.ts(since)
+             and setups.rule_says_exit(rule, closes, j, cache)]
     if not fired:
         return ""
     if fired[0] != len(bars) - 1:
@@ -1382,6 +1456,10 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
             it["runner"]["status"] = "skipped"
             it["exit_note"] = it.get("exit_note", "") + " · sold everything: " + why_not
     queued = _queued_exit(broker, it, orders)
+    if queued and queued.get("status") == "unknown":
+        actions.append("%s exit for %s waits: could not read its earlier sale (%s)" % (reason, it["symbol"],
+                                                                                       queued.get("error")))
+        return actions
     if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(queued, it, last, now):
         return actions  # its sale is on its way (sent earlier, or a stock's waiting for the open)
     if queued and (queued.get("status") == "filled" or (
@@ -1404,8 +1482,12 @@ def _exit_one(broker, it: dict, pos_by: dict, orders: list, cfg: dict, now, now_
         except BrokerError as exc:
             if not (_wash(exc) and last):
                 raise
-            # a market sale could trade with your own buy order: a limit 1 % under the price can't — it still fills
-            _sell_own(broker, it, p.get("qty"), limit_price=last * WASH_LIMIT)
+            # a market sale could trade with your own buy order: a limit above your buy can't — and under the
+            # price it still fills
+            lim = _wash_limit(broker, it["symbol"], last * WASH_LIMIT, last)
+            if lim is None:
+                raise
+            _sell_own(broker, it, p.get("qty"), limit_price=lim)
         actions.append("%s exit for %s" % (reason, it["symbol"]))
         it.pop("exit_refused_at", None)
     except BrokerError as exc:
@@ -1460,6 +1542,9 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
         if _already_sold(it, orders):
             return problems  # its stop or exit already sold — the next sync books it, the KILL sells nothing twice
         queued = _queued_exit(broker, it, orders)
+        if queued and queued.get("status") == "unknown":  # the KILL stays on and the next cycle sells
+            problems.append("%s: could not read its earlier sale (%s)" % (it["symbol"], queued.get("error")))
+            return problems
         if queued and queued.get("status") in OPEN_ORDER and not _stale_exit(
                 queued, it, (p or {}).get("last"), market_clock.now_utc()):
             problems.append("%s: its sale is queued at the broker" % it["symbol"])  # a stock after hours: the open
@@ -1486,9 +1571,11 @@ def _kill_one(broker, it: dict, reason: str, orders: list, pos_by: dict, flatten
                     _sell_own(broker, it, p.get("qty"))
                 except BrokerError as exc:
                     last = float(p.get("last") or 0)
-                    if not (_wash(exc) and last > 0):
+                    lim = _wash_limit(broker, it["symbol"], last * WASH_LIMIT, last) if _wash(exc) and last > 0 \
+                        else None
+                    if lim is None:
                         raise
-                    _sell_own(broker, it, p.get("qty"), limit_price=last * WASH_LIMIT)  # can't trade with yours
+                    _sell_own(broker, it, p.get("qty"), limit_price=lim)  # can't trade with yours
             except BrokerError as exc:  # refused: the stop goes back and the next cycle tries again
                 now = market_clock.now_utc()
                 problems.append("%s: %s" % (it["symbol"], exc))
@@ -1952,6 +2039,15 @@ def _count_today(book: dict, now) -> int:
     return sum(1 for it in book["items"].values() if (it.get("placed_at") or "")[:10] == day)
 
 
+def _day_trades_coming(book: dict, broker_name: str, now) -> int:
+    """The bot's same-day stock trades placed today that are still open or pending: the time stop sells each one
+    the same day, so each is a day trade Alpaca hasn't counted yet."""
+    day = _today(now)
+    return sum(1 for it in book["items"].values()
+               if it.get("asset") == "stock" and not it.get("swing") and it.get("broker") == broker_name and
+               it.get("status") in LIVE_ITEM and (it.get("placed_at") or "")[:10] == day)
+
+
 def _news_scope(plan: dict) -> str:
     sym = data.as_symbol(plan["symbol"], plan["asset"])
     return "%s:%s" % (plan["asset"], sym.key if plan["asset"] == "stock" else sym.base)
@@ -2147,12 +2243,15 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     if asset == "crypto" and acct.get("crypto_ok") is False:
         return _decision(reasons=["the broker account is not enabled for crypto"], desk=desk_info, gates=gates, **base)
     pdt_eq = acct.get("last_equity") if acct.get("last_equity") is not None else acct.get("equity")
-    if asset == "stock" and not plan.get("swing") and broker.name == "alpaca" and \
-            float(pdt_eq or 0) < PDT_EQUITY and int(acct.get("daytrade_count") or 0) >= 3:
-        # under $25,000 a 4th day trade in 5 days is refused — and then the 3:55 p.m. sale would be too
-        return _decision(reasons=["pattern day trader rule: %d day trades in the last 5 days and equity under $25,000 "
-                                  "— a same-day stock trade would be refused" % int(acct.get("daytrade_count") or 0)],
-                         desk=desk_info, gates=gates, **base)
+    if asset == "stock" and not plan.get("swing") and broker.name == "alpaca" and float(pdt_eq or 0) < PDT_EQUITY:
+        # under $25,000 a 4th day trade in 5 days is refused — and then the 3:55 p.m. sale would be too. Alpaca's
+        # count holds the day trades already made; each same-day trade still open becomes one at 3:55
+        done = int(acct.get("daytrade_count") or 0)
+        coming = _day_trades_coming(book, broker.name, now)
+        if done + coming >= 3:
+            return _decision(reasons=["pattern day trader rule: %d day trade(s) in the last 5 days and %d more coming "
+                                      "today, equity under $25,000 — a 4th same-day stock trade would be refused"
+                                      % (done, coming)], desk=desk_info, gates=gates, **base)
     if _count_today(book, now) >= max_new:
         return _decision(reasons=["daily cap reached: %d new trades today (autopilot.max_new_trades_per_day)" % max_new],
                          desk=desk_info, gates=gates, **base)

@@ -87,7 +87,9 @@ EXPLORER_TOKEN_URL = {
     "base": "https://basescan.org/token/{a}",
     "bsc": "https://bscscan.com/token/{a}",
 }
-KRAKEN_BASE = {"BTC": "XBT", "DOGE": "XDG"}
+# Kraken's own names. Its LUNA is Terra Classic (Binance's LUNC); Terra 2.0 — Binance's LUNA — it doesn't list, so
+# that asks for a pair Kraken refuses instead of a coin worth a thousandth as much
+KRAKEN_BASE = {"BTC": "XBT", "DOGE": "XDG", "LUNC": "LUNA", "LUNA": "LUNA2"}
 
 _SOL_ADDR = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 _EVM_ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")

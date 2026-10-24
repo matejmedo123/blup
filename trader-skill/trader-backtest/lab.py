@@ -864,10 +864,16 @@ def etf_context(args, cfg, now_ts: int, notes: list) -> dict:
     up = {t // 86400: regime[t] for t in sorted(regime)[199:]}
 
     def entry_ok(ts: int) -> bool:
-        # the newest Bitcoin daily bar closed before the entry is the previous UTC day's; bear = below its average
-        # (a day without a Bitcoin bar counts as not tradable)
-        return up.get(int(ts) // 86400 - 1) is False
+        # ts: the close of the signal's daily bar. The bot buys at 9:45 ET on the next trading day and reads the
+        # newest Bitcoin daily bar closed by then — the previous UTC day's (Sunday's for a Friday signal, the
+        # holiday's after a holiday); bear = below its average (a day without a Bitcoin bar is not tradable)
+        day = market_clock.next_trading_day(market_clock.et_date(market_clock.from_ts(int(ts) - 86400)))
+        look = market_clock.ts(market_clock.et_to_utc(day, *ETF_ENTRY))
+        return up.get(int(look) // 86400 - 1) is False
     return {"when": "crypto_bear", "entry_ok": entry_ok, "fill": "next_open"}
+
+
+ETF_ENTRY = (9, 45)  # ET — when the autopilot buys yesterday's ETF signal (autopilot.ETF_FIRST_ENTRY)
 
 
 def universe(args, cfg) -> tuple:
@@ -994,12 +1000,16 @@ def run(args, ctx) -> dict:
         if asset == "stock":
             context = etf_context(args, cfg, now_ts, notes)
         if any(setups.SETUPS[st].get("needs_btc") for st in fam_setups):
-            btc = next((c for sym, c, _ in coins if sym.base == "BTC"), None)
-            if btc is None:
-                try:
-                    btc = history(data.as_symbol("BTCUSDT", "crypto"), interval, days, now_ts)[0]
-                except (data.DataUnavailable, ValueError) as exc:
-                    notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
+            # always BTCUSDT, as the bot reads it: BTC against your quote (BTCUSDC, BTCEUR) has gaps and other
+            # closes — BTCUSDC's 2022–23 gap alone would leave no regime, so no signal, before late 2023
+            # as far back as any coin's bars reach, plus the 200 bars its average needs
+            first = min([c[0].t for _, c, _ in coins if c] or [now_ts - int(days * 86400)])
+            btc_days = (now_ts - first) / 86400.0 + 210 * market_clock.interval_seconds(interval) / 86400.0
+            btc = None
+            try:
+                btc = history(data.as_symbol("BTCUSDT", "crypto"), interval, btc_days, now_ts)[0]
+            except (data.DataUnavailable, ValueError) as exc:
+                notes.append("BTC %s unavailable for the market regime: %s" % (interval, exc))
             context = dict(context or {}, btc_up=setups.regime_map(btc) if btc else {})
         if any(setups.SETUPS[st].get("needs_funding") for st in fam_setups):
             fund = funding.daily_many([sym.base for sym, _, _ in coins], days=int(days) + 30, now_ts=now_ts)

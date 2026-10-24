@@ -78,7 +78,7 @@ python3 trader-autopilot/autopilot.py daemon --approve     # or the 24/7 daemon 
 
   It also stops opening trades after `max_new_trades_per_day`, takes no new stock entries in the last
   30 minutes of the session (15:30 ET, 12:30 on early-close days) or a 4th day trade under $25,000 at
-  Alpaca, kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a
+  Alpaca (Alpaca's count plus its own same-day trades still open, each a day trade at 3:55 p.m.), kills itself (cancels orders, flattens) if the day's loss hits `max_daily_loss_usd`, and has a
   KILL button in the dashboard — a KILL is retried every cycle until nothing is left. Its exits and the kill switch sell only what the bot bought and cancel only its
   own orders — shares or coins you hold yourself at the same broker are never touched. A broken file, a
   typo in `config.json`, a full disk or one failing position never stops the stops and time stops of the

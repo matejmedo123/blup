@@ -29,7 +29,7 @@ RECENT_TTL = 3600
 PUBLISH_DAYS = 10
 API_PAGES = 5  # 1000 prints a page: ~200 days of hourly funding, the recent window needs ~62
 ALIAS = {"BCC": "BCH", "BCHABC": "BCH"}
-KRAKEN_BASE = {"BTC": "XBT"}
+KRAKEN_BASE = {"BTC": "XBT", "LUNA": "LUNA2"}  # Kraken futures name Terra 2.0 (Binance's LUNA) LUNA2
 _memo = {}    # {(base, days): (hour, series)} — one entry per coin and window, replaced every hour
 _source = {}  # {base: where its latest days came from}
 

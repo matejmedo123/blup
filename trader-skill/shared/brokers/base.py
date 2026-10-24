@@ -69,8 +69,9 @@ class Broker:
         """The order sent under this client id, or None — for an entry whose answer never reached the book."""
         return next((o for o in self.orders() if o.get("client_order_id") == client_order_id), None)
 
-    def lookup(self, order_id: str) -> list:
-        """One order by its broker id, with its bracket legs — for orders older than what orders() returns."""
+    def lookup(self, order_id: str, strict: bool = False) -> list:
+        """One order by its broker id, with its bracket legs — for orders older than what orders() returns.
+        strict: a failed lookup raises instead of answering "none"."""
         return [o for o in self.orders() if o.get("id") == order_id or o.get("parent_id") == order_id]
 
     def tradable(self, asset: str):

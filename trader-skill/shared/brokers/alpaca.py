@@ -11,6 +11,7 @@ import http.client
 import json
 import math
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -18,7 +19,7 @@ import urllib.request
 
 from .. import config, data, market_clock, secrets, symbols
 from ..http import read_body
-from .base import Broker, BrokerError, order_dict
+from .base import Broker, BrokerError, broker_symbol, order_dict
 
 BASE = {"paper": "https://paper-api.alpaca.markets", "live": "https://api.alpaca.markets"}
 KEYS = {"paper": ("ALPACA_PAPER_KEY_ID", "ALPACA_PAPER_SECRET_KEY"),
@@ -104,7 +105,8 @@ class AlpacaBroker(Broker):
             with _OPENER.open(req, timeout=TIMEOUT) as resp:
                 raw = read_body(resp, TIMEOUT * 2)  # the whole reply in bounded time, not just each read
             return json.loads(raw.decode("utf-8")) if raw.strip() else {}
-        except (http.client.HTTPException, ValueError, EOFError) as exc:  # cut off or garbled: like a lost reply
+        except (http.client.HTTPException, ValueError, EOFError, ssl.SSLError) as exc:
+            # cut off, garbled or a TLS failure mid-reply: like a lost reply (a POST is looked up by its client id)
             raise ConnectionError("unreadable reply from Alpaca (%s)" % type(exc).__name__)
 
     @staticmethod
@@ -281,10 +283,13 @@ class AlpacaBroker(Broker):
         found = self._lookup(client_order_id)
         return self._order(found, leg="entry") if found else None
 
-    def lookup(self, order_id: str) -> list:
+    def lookup(self, order_id: str, strict: bool = False) -> list:
+        """strict: a failed lookup raises — "not found" must mean Alpaca said so (a 404), not that it didn't answer."""
         try:
             return self._flatten([self._get("/v2/orders/%s?nested=true" % urllib.parse.quote(order_id), retries=1)])
-        except BrokerError:
+        except BrokerError as exc:
+            if strict and "(HTTP 404)" not in str(exc):
+                raise
             return []
 
     def clock(self) -> dict:
@@ -368,6 +373,21 @@ class AlpacaBroker(Broker):
         except Exception:  # noqa: BLE001 — no lot info: no flooring, as before
             return 0.0
 
+    def min_order(self, symbol: str) -> dict:
+        """Alpaca's smallest crypto order on the pair: {"qty": coins, "value": 0} (0 when unknown; none for stocks)."""
+        if "/" not in str(symbol):
+            return {"qty": 0.0, "value": 0.0}
+        try:
+            return {"qty": float(self._crypto_lot(symbol).get("min_order_size") or 0), "value": 0.0}
+        except Exception:  # noqa: BLE001 — no lot info: no minimum known
+            return {"qty": 0.0, "value": 0.0}
+
+    def book_symbol(self, raw, asset: str = None) -> str:
+        """Alpaca names class shares with a dot — BRK.B, where the data layer (Yahoo) writes BRK-B."""
+        name = broker_symbol(raw, asset)
+        sym = raw if isinstance(raw, symbols.Symbol) else symbols.parse(raw, asset=asset)
+        return name.replace("-", ".") if sym.asset == "stock" else name
+
     def place_entry(self, order: dict) -> dict:
         asset = order["asset"]
         if asset == "meme":
@@ -395,7 +415,8 @@ class AlpacaBroker(Broker):
 
     def place_stop(self, symbol, qty, stop_price, client_order_id=None, asset="crypto", limit_price=None) -> dict:
         """limit_price: make it a stop-limit at that limit (a plain stop is refused by Alpaca's wash-trade guard
-        while you have your own buy order open on the symbol; a stop-limit below your buy can't trade with it)."""
+        while you have your own buy order open on the symbol; a stop-limit whose limit is above your buy can't trade
+        with it)."""
         tick = self._tick(symbol, asset)
         body = {"symbol": symbol, "qty": _fmt_qty(self._qty(symbol, qty, asset)), "side": "sell", "time_in_force": "gtc",
                 "client_order_id": client_order_id}
