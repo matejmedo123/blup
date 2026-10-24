@@ -799,9 +799,13 @@ holds above its 50-day average squeezes them. The bot buys spot, never shorts.
 the 20-day average, at most 20 days). Funding comes from Binance's public archive (cached for good) plus its
 futures API for the last days, or Kraken's perpetuals where Binance refuses the address (US). `profile` lists
 it next to `trend_ema` and `trend_breakout`, but **the lab decides as with every rule**: on 24 Oct 2026 its
-walk-forward (started where funding data starts) had −0.05R / +0.29R / +0.28R in the three test periods —
-period 1 lost money, so it is *not* in the playbook yet. The lab re-checks every week; if the rule earns its
-place, the bot starts trading it without a new release.
+walk-forward (started where funding data starts, on the 10 biggest coins of each period's own time) made
++0.06R / +0.28R / +0.14R in the three test periods — profitable in all three, but period 2 had fewer trades than
+the lab's minimum, so it is *not* in the playbook yet. The lab re-checks every week; if the rule earns its place,
+the bot starts trading it without a new release. Where the bot reads Kraken's funding instead of Binance's (US),
+the two markets can sit on opposite sides of −10 %/yr (on SOL in Sep 2026 their daily means differed by up to
+15 %/yr), so a US bot can take or skip a signal the lab, which uses Binance, would not — the backtest-vs-reality
+check then reports it.
 
 **Batch 3 (22 rules, 24 Oct 2026)** used data the bot did not read before: Binance's open interest and long/short
 ratios (from Dec 2021), Coinbase vs Binance prices (US demand), market breadth, the season and the hour of day.
