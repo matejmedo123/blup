@@ -1645,7 +1645,16 @@ def main(argv=None) -> int:
         if pinned:
             os.environ["TRADER_NOW"] = pinned
     config.ensure_home()
-    cfg = config.load_config()
+    try:
+        cfg = config.load_config()
+    except config.ConfigError as exc:
+        # a typo in config.json must not keep the dashboard (and the loop it may run) from coming back after a
+        # restart: the autopilot's last good copy is used — its cycles say what is wrong and open nothing new
+        good = (state.read_json("autopilot/last_good_settings.json", {}) or {}).get("config")
+        if not isinstance(good, dict):
+            raise
+        sys.stderr.write("trader: %s — starting on the last good settings\n" % exc)
+        cfg = good
     run_ap = False if args.no_autopilot else bool(args.autopilot or (cfg.get("autopilot") or {}).get("enabled") is True)
     news_every = args.news_every
     if news_every is None:

@@ -39,7 +39,10 @@ def _scrub(text: str) -> str:
     """Remove anything that could be a credential from an error message."""
     text = str(text or "")
     for name in ("TELEGRAM_BOT_TOKEN", "NTFY_TOKEN"):
-        v = secrets.get(name)
+        try:
+            v = secrets.get(name)
+        except Exception:  # noqa: BLE001 — the scrub runs inside send()'s own error handler: it must not raise
+            v = ""
         if v:
             text = text.replace(v, "***")
     text = re.sub(r"bot\d+:[A-Za-z0-9_-]+", "bot***", text)

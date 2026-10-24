@@ -75,6 +75,8 @@ TM_SEED = 7
 APPROVAL_TEXT = "autopilot standing approval (config autopilot.enabled)"
 STALE_LOCK_SEC = 600
 ERROR_ALERT_AFTER = 5         # consecutive failed cycles before an "error" notification
+EXIT_FAIL_ALERT_AFTER = 5     # consecutive cycles whose exit check failed for a position before an alert
+LAST_GOOD_FILE = "autopilot/last_good_settings.json"  # config + limits the bot last read cleanly, for a restart
 MAX_BACKOFF_SEC = 900
 HOLDING_BACKOFF_SEC = 120     # the longest wait between failing cycles while positions or entries are open
 NEWS_REFRESH_BUDGET_SEC = 45  # the most a cycle waits for headlines right before a trade
@@ -2402,17 +2404,41 @@ def compact_equity(keep_days: int = 7) -> int:
 _LAST_GOOD = {}   # this process's last readable config.json + limits.json
 
 
+def _saved_good():
+    doc = state.read_json(LAST_GOOD_FILE, {}) or {}
+    if isinstance(doc.get("config"), dict) and isinstance(doc.get("limits"), dict):
+        return doc["config"], doc["limits"]
+    return None
+
+
 def _settings() -> tuple:
     """(cfg, limits, problem). A config.json you are halfway through editing must not stop the exits: the last
-    good one is used and the problem stops new entries until it is fixed."""
+    good one is used — also after a restart, from its copy on disk — the problem stops new entries until it is fixed,
+    and you are told once."""
+    home = str(config.trader_home())
     try:
         cfg, limits = config.load_config(), config.load_limits()
     except ValueError as exc:
-        good = _LAST_GOOD.get(str(config.trader_home()))
+        good = _LAST_GOOD.get(home) or _saved_good()
         if not good:
             raise
-        return good[0], good[1], "%s — using the last good settings" % exc
-    _LAST_GOOD[str(config.trader_home())] = (cfg, limits)
+        problem = "%s — using the last good settings" % exc
+        st = state.read_json(STATE, {}) or {}
+        if st.get("settings_problem_told") != str(exc):
+            notify.send("error", "Your settings have a problem — the bot runs on the last good ones",
+                        "%s. Open trades are still managed (stops, exits); nothing new opens until it is fixed." % exc,
+                        good[0], priority="high")
+            _state(settings_problem_told=str(exc))
+        return good[0], good[1], problem
+    if _LAST_GOOD.get(home) != (cfg, limits):
+        _LAST_GOOD[home] = (cfg, limits)
+        try:
+            state.write_json(LAST_GOOD_FILE, {"config": cfg, "limits": limits,
+                                              "at": market_clock.iso(market_clock.now_utc())})
+        except OSError:
+            pass
+    if (state.read_json(STATE, {}) or {}).get("settings_problem_told"):
+        _state(settings_problem_told=None)  # fixed: the next problem is news again
     return cfg, limits, None
 
 
@@ -2567,6 +2593,12 @@ def _cycle(approved=None) -> dict:
     errors += [a for a in actions if a.startswith(("could not reconcile", "could not check the exits",
                                                    "could not place the protective stop", "could not place the new stop",
                                                    "no stop order for"))]
+    failing = [a for a in actions if a.startswith(("could not reconcile", "could not check the exits"))]
+    exit_fail_streak = int(prev.get("exit_fail_streak") or 0) + 1 if failing else 0
+    if exit_fail_streak == EXIT_FAIL_ALERT_AFTER:
+        notify.send("error", "Exits not checked for %d cycles" % exit_fail_streak,
+                    "%s. Open positions are protected only by their stop orders at the broker until this is fixed."
+                    % failing[0], cfg, priority="high")
     decisions, notes = [], []
     uni, uni_notes = watched(cfg, broker, now) if status == "running" else (_universe_counts_only(cfg), [])
     if blocked and status == "running":
@@ -2656,6 +2688,7 @@ def _cycle(approved=None) -> dict:
         notify.send("learned", "A dollar limit now holds the bot back", "; ".join(binding), cfg)
     common["usd_limits_told"] = told or prev.get("usd_limits_told") or ""  # doesn't send it again and again
     st = _state(status=status, message=msg, today=today, equity=line, last_errors=last_errors,
+                exit_fail_streak=exit_fail_streak,
                 universe={"stock": n_st, "crypto": n_cr}, notes=(uni_notes + (notes if status == "running" else []))[-20:],
                 playbook=playbook, **common)
     best_effort("daily summary", lambda: daily_summary(cfg, st, learned, now))
@@ -2677,7 +2710,9 @@ def heartbeat(runner: str, status: str, wait_sec: int = None) -> dict:
     scan = state.read_json(SCAN, {}) or {}
     now = market_clock.now_utc()
     prev = state.read_json(HEARTBEAT, {}) or {}
-    ok = status in ("running", "paused", "killed", "dry_run")
+    # a cycle that runs but can't check a position's exits for long is not a working bot (the health check says so)
+    ok = status in ("running", "paused", "killed", "dry_run") and \
+        int(st.get("exit_fail_streak") or 0) < EXIT_FAIL_ALERT_AFTER
     hb = {"at": market_clock.iso(now), "pid": os.getpid(), "host": socket.gethostname(), "runner": runner,
           # the last cycle that worked: a bot that beats but fails every cycle is not "alive" for long
           "last_ok_at": market_clock.iso(now) if ok else prev.get("last_ok_at"),
@@ -3203,6 +3238,17 @@ def _watchdog() -> None:
         t.start()
         t.join(20)
         _say("    watchdog: " + why)
+        _restart()
+
+
+def _restart() -> None:
+    """End the stuck process. Under systemd or Docker the supervisor starts it again; run by hand, nothing would —
+    so it starts itself again in place (its files close on exec, the OS lock with them)."""
+    if os.environ.get("INVOCATION_ID") or os.path.exists("/.dockerenv") or os.environ.get("TRADER_SUPERVISED"):
+        os._exit(70)
+    try:
+        os.execv(sys.executable, [sys.executable] + (["-I"] if sys.flags.isolated else []) + sys.argv)
+    except OSError:
         os._exit(70)
 
 
@@ -3334,7 +3380,7 @@ def daemon(args, cfg) -> int:
             _state(status="stopped", message="daemon stopped (%s)" % why)
             heartbeat("daemon", "stopped")
             notify.send("stopped", "Autopilot stopped", "%s. Last status: %s" % (why, st.get("message") or "?"),
-                        config.load_config())
+                        cfg)
         finally:
             release_lock()
             for sig, handler in previous.items():
@@ -3731,7 +3777,16 @@ def replay_text(rep: dict) -> str:
 @cli.entrypoint
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    ctx = cli.init(args)
+    try:
+        ctx = cli.init(args)
+    except config.ConfigError as exc:
+        # a typo in config.json or limits.json, then a restart (reboot, crash, watchdog): the daemon must come back
+        # and keep managing open trades on the last good settings — each cycle says so, and nothing new opens
+        good = _saved_good() if args.action in ("daemon", "run") else None
+        if not good:
+            raise
+        _say("config: %s — starting on the last good settings; nothing new opens until it is fixed" % exc)
+        ctx = cli.Context(args=args, cfg=good[0], limits=good[1], home=config.trader_home())
     cfg = ctx.cfg
     if args.action == "check-live":
         ok, missing = brokers.live_readiness(cfg)

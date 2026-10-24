@@ -21,7 +21,9 @@ def _file_values() -> dict:
     path = config.trader_home() / "secrets.env"
     out = {}
     try:
-        text = path.read_text(encoding="utf-8")
+        # a comment saved in another encoding (cp1250 "kľúče") must not make every secret unreadable — or stop the
+        # bot from starting: undecodable bytes become U+FFFD and only that line is garbled
+        text = path.read_bytes().decode("utf-8", errors="replace")
     except OSError:
         return out
     for line in text.splitlines():

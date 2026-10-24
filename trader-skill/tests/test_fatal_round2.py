@@ -308,3 +308,50 @@ class Entries(TraderTestCase):
         for key in ("BTCUSDT", "BTCUSDC", "BTC/USD", "BTCEUR"):
             self.assertEqual(bb.book_symbol(key, "crypto"), "BTC/USD")
         self.assertEqual(Fake().book_symbol("BTCUSDT", "crypto"), "BTC/USD")
+
+
+class Daemon(TraderTestCase):
+    NOW = "2026-10-20T13:50:00Z"
+
+    def notes(self):
+        from shared import state
+        return state.read_jsonl("notifications.jsonl") if (self.home / "notifications.jsonl").exists() else []
+
+    def test_a_secrets_file_in_another_encoding_never_stops_the_bot(self):
+        from shared import notify, secrets
+        config.ensure_home()
+        (self.home / "secrets.env").write_bytes("# kľúče\nNTFY_TOKEN=abc123\n".encode("cp1250"))
+        os.chmod(str(self.home / "secrets.env"), 0o600)
+        self.assertEqual(secrets.get("NTFY_TOKEN"), "abc123")
+        notify.send("started", "Autopilot started", "x", config.load_config())  # must not raise
+
+    def test_a_typo_in_config_json_is_survived_across_a_restart(self):
+        from shared import state
+        a = ap()
+        config.ensure_home()
+        a._settings()  # a clean read: its copy is kept on disk
+        self.assertTrue(state.read_json(a.LAST_GOOD_FILE, {}).get("config"))
+        (self.home / "config.json").write_text('{"autopilot": {"interval_sec": "60s"}}', encoding="utf-8")
+        a._LAST_GOOD.clear()  # a restarted process: nothing in memory
+        cfg, limits, problem = a._settings()
+        self.assertIn("last good", problem)
+        a._settings()
+        told = [n for n in self.notes() if "settings have a problem" in n.get("title", "")]
+        self.assertEqual(len(told), 1, "told once, not every cycle")
+        self.assertEqual(a.main(["check-live"]), 2)  # only the daemon and run fall back; the rest say what's wrong
+        res = a.run_cycle("2026-10-20T13:50:00Z", approved=True)
+        self.assertIn("last good", " ".join(res["errors"]))
+        self.assertNotIn("placed", res["message"])
+
+    def test_exits_that_fail_cycle_after_cycle_are_an_alert_and_not_alive(self):
+        a = ap()
+        config.ensure_home()
+        with mock.patch.object(a, "manage_exits", return_value=["could not check the exits for BTC/USD: boom"]):
+            for _ in range(a.EXIT_FAIL_ALERT_AFTER):
+                a.run_cycle("2026-10-20T13:50:00Z", approved=None)
+            hb = a.heartbeat("daemon", "running")
+        self.assertTrue([n for n in self.notes() if "Exits not checked" in n.get("title", "")])
+        before = hb.get("last_ok_at")
+        self.set_now("2026-10-20T14:50:00Z")
+        hb = a.heartbeat("daemon", "running")
+        self.assertEqual(hb.get("last_ok_at"), before)  # the health check sees it go stale

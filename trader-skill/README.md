@@ -948,9 +948,9 @@ stays on 127.0.0.1 — open it through an SSH tunnel, or behind Caddy with a pas
 **What "24/7" does:** every minute the daemon syncs the broker, manages exits and the kill switch; every
 closed 5-minute bar it scans its universe (crypto always, stocks 9:30–15:30 ET); between cycles it
 refreshes the news feed in the background. It writes a heartbeat (the dashboard shows *alive* /
-*stale*), holds a lock so two copies can't trade one account, backs off and notifies you when cycles
+*stale*), holds a lock so two copies can't run on one trader/ folder (two folders with the same keys — a laptop and a server — would both trade: run it in one place), backs off and notifies you when cycles
 keep failing, and stops cleanly on SIGTERM. A cycle stuck for 20 minutes restarts the process (systemd /
-Docker bring it back); an order sent just before a crash is found again by its client id, never sent twice.
+Docker bring it back; started by hand, it starts itself again); an order sent just before a crash is found again by its client id, never sent twice.
 It also keeps its folder small for years: old downloads are deleted, finished records move to
 `trader/archive/` after 45 days, big logs are gzipped, and under 1 GB of free disk it tells you (under 200 MB
 it opens nothing new, but keeps managing exits).
