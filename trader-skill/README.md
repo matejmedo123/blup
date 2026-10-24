@@ -976,8 +976,9 @@ and icons). Every tab has its own title, text meets WCAG AA contrast (checked wi
 and desktop), unknown addresses get a real 404 page, and search engines are told to stay out
 (`robots.txt`, `noindex`). No analytics, no trackers, nothing loaded from other sites; the only cookie is
 the sign-in session, so there is no cookie banner. The app's files are gzipped and cached until they change.
-The design lives in Figma ("Trader — dashboard redesign": tokens, components, desktop and phone
-screens); `app/static/app.css` uses the same tokens.
+The look comes from a Canva concept ("Trader — dashboard redesign", Oct 2026): ink-navy surfaces, one mint
+accent, coral for losses, a "T" mark with "Paper money. Real discipline."; `app/static/app.css` holds its
+tokens for both themes.
 
 Security: binds to 127.0.0.1 unless you give a password; without one it answers only to `localhost` /
 `127.0.0.1` (a web page can't reach it through DNS rebinding — add other names with

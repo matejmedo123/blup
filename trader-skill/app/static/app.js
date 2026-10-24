@@ -415,13 +415,17 @@
   });
 
   // ---------------------------------------------------------------- top bar, banner, footer
+  function modeInfo() {
+    var m = (S.summary || {}).mode || {};
+    return { live: m.mode === 'live', text: m.mode === 'live' ? 'LIVE · real money' : (m.mode === 'paper' ? 'Paper' : 'Simulator'),
+      title: m.mode === 'live' ? 'Real-money orders are enabled in your config files'
+        : (m.mode === 'paper' ? 'Paper account at ' + (m.broker || 'the broker') + ' — no real money' : 'Local simulator — no account, no real money') };
+  }
   function renderTop() {
     var s = S.summary || {};
     var m = s.mode || {};
-    var modeText = m.mode === 'live' ? 'LIVE · real money' : (m.mode === 'paper' ? 'Paper' : 'Simulator');
-    var modeTitle = m.mode === 'live' ? 'Real-money orders are enabled in your config files'
-      : (m.mode === 'paper' ? 'Paper account at ' + (m.broker || 'the broker') + ' — no real money' : 'Local simulator — no account, no real money');
-    each('.js-mode', function (b) { b.textContent = modeText; b.className = 'badge js-mode' + (m.mode === 'live' ? ' live' : ''); b.title = modeTitle; });
+    var mi = modeInfo();
+    each('.js-mode', function (b) { b.textContent = mi.text; b.className = 'badge js-mode' + (mi.live ? ' live' : ''); b.title = mi.title; });
     $('live-stripe').hidden = m.mode !== 'live';
     document.body.classList.toggle('live', m.mode === 'live');
     var bot = s.bot || {};
@@ -486,9 +490,12 @@
   function head(title, sub, right) {
     var a = (S.summary || {}).account || {};
     var acct = h('div', { class: 'acct' },
-      h('div', { class: 'kv' }, h('span', { class: 'k', text: 'Equity' }), h('span', { class: 'v', text: money(a.equity) })),
+      h('div', { class: 'kv' }, h('span', { class: 'k', text: 'Equity' }), h('span', { class: 'v eq', text: money(a.equity) })),
       h('div', { class: 'kv' }, h('span', { class: 'k', text: 'Today' }), h('span', { class: 'v ' + tone(a.pnl_today), text: money(a.pnl_today, true) })));
-    return h('div', { class: 'view-head' }, h('div', null, h('h1', { text: title }), sub ? h('div', { class: 'sub', text: sub }) : null),
+    var mi = modeInfo();
+    return h('div', { class: 'view-head' }, h('div', null,
+      h('div', { class: 'title-row' }, h('h1', { text: title }), h('span', { class: 'badge js-mode' + (mi.live ? ' live' : ''), title: mi.title, text: mi.text })),
+      sub ? h('div', { class: 'sub', text: sub }) : null),
       h('div', { class: 'right' }, right || null, acct));
   }
 
@@ -507,18 +514,20 @@
       setWidth(h('span', { class: 'risk' }), at(entry)), setWidth(h('span', { class: 'reward' }), 100 - at(entry)),
       setLeft(h('span', { class: 'entry' }), at(entry)),
       last !== null ? setLeft(h('span', { class: 'now ' + (last >= entry ? 'up' : 'down') }), at(last)) : null);
-    return [bar, h('div', { class: 'levels' }, h('span', { class: 'stop', text: 'stop ' + price(stop) }),
-      h('span', { class: 'entry', text: 'entry ' + price(entry) }),
-      open ? h('span', { class: 'target open', text: p.riding ? 'riding — the trend decides' : 'no target — the exit rule decides' })
-        : h('span', { class: 'target', text: 'target ' + price(tgt) }))];
+    function level(cls, label, value) { return h('span', { class: cls }, h('i', { text: label }), value); }
+    return [bar, h('div', { class: 'levels' }, level('stop', 'Stop', price(stop)), level('entry', 'Entry', price(entry)),
+      open ? level('target open', 'Target', p.riding ? 'riding — the trend decides' : 'none — the exit rule decides')
+        : level('target', 'Target', price(tgt)))];
   }
   function positionCards(list) {
     if (!list.length) return empty('No open positions.');
     return h('div', null, h('div', { class: 'positions' }, list.map(function (p) {
       var unit = p.qty_unit || (p.asset === 'stock' ? 'sh' : '');
+      var base = String(p.symbol || '?').split(/[\/\-]/)[0].replace(/USDT?$|USDC$/, '') || '?';
       return h('div', { class: 'pos' },
-        h('div', { class: 'ph' }, st(ASSET_LABEL[p.asset] ? p.asset : 'position', p.asset === 'meme' ? 'purple' : (p.asset === 'crypto' ? 'accent' : 'blue')),
-          h('span', { class: 'sym', text: p.symbol || '?' }), p.riding ? st('riding the trend', 'green') : null,
+        h('div', { class: 'ph' }, h('span', { class: 'avatar ' + (p.asset || ''), 'aria-hidden': 'true', text: base.slice(0, 3).toUpperCase() }),
+          h('span', null, h('span', { class: 'sym', text: p.symbol || '?' }), h('span', { class: 'kind', text: ASSET_LABEL[p.asset] ? p.asset : 'position' })),
+          p.riding ? st('riding the trend', 'green') : null,
           h('span', { class: 'pnl ' + tone(p.unrealized_pl), text: money(p.unrealized_pl, true) })),
         h('div', { class: 'ps' }, h('span', { text: qty(p.qty, unit === 'usd' ? 'usd' : unit) + ' @ ' + price(p.avg_entry) + (p.opened_at ? ' · since ' + hm(p.opened_at) : '') }),
           h('span', { class: 'last', text: 'last ' + price(p.last) })),
@@ -671,7 +680,7 @@
         var decBody = dec.length ? h('div', { class: 'rows' }, dec.map(function (d) { return decisionRow(d, true); }))
           : empty(s.bot && s.bot.installed ? 'The autopilot has not looked at any setup yet.' : 'The autopilot is not installed yet.');
         var posMeta = pos.length ? h('span', { class: 'meta ' + tone(unreal), text: pos.length + ' open · ' + money(unreal, true) }) : null;
-        frag.push(h('div', { class: 'grid-even' },
+        frag.push(h('div', { class: 'grid-wide' },
           card('Open positions', posMeta, positionCards(pos)),
           card('Latest bot decisions', h('a', { class: 'meta', href: '#tab=bot', text: 'all decisions →' }), decBody)));
         var top = news.slice().sort(function (x, y) {
