@@ -144,6 +144,12 @@ class Units(TraderTestCase):
         inst = self.text("install-vps.sh")
         self.assertIn('if [ -f "/etc/systemd/system/$u.service" ]; then', inst)  # refreshed only when installed
 
+    def test_bybit_probe_prints_no_secret(self):
+        text = (DEPLOY / "bybit-probe.py").read_text(encoding="utf-8")
+        compile(text, "bybit-probe.py", "exec")
+        self.assertNotIn("print(secret", text.replace(" ", ""))
+        self.assertIn('key[:4], key[-4:]', text)
+
     def test_scripts_parse(self):
         bash = shutil.which("bash")
         if not bash:
