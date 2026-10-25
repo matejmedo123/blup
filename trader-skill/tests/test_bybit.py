@@ -457,6 +457,20 @@ class BrokerTest(BybitBase):
         self.assertIn("equity $1,000.00", "\n".join(res["lines"]))
         self.assertFalse([c for c in self.ex.calls if c["method"] == "POST"])
 
+    def test_an_unknown_key_on_demo_says_where_demo_keys_come_from(self):
+        a = load("trader-autopilot", "autopilot")
+        cfg = config.load_config()
+        cfg["autopilot"]["broker"] = "bybit"
+        refused = {"retCode": 10003, "retMsg": "API key is invalid.", "result": {}}
+        self.ex.on("/v5/account/wallet-balance", refused, refused, refused, refused, refused, refused, refused, refused)
+        self.ex.on("/v5/order/realtime", refused, refused, refused, refused)
+        res = a.broker_test(cfg)
+        self.assertFalse(res["ok"])
+        text = "\n".join(res["lines"])
+        self.assertIn("(demo, https://api-demo.bybit.eu)", res["lines"][0])
+        self.assertIn("hint: Bybit does not know this key here", text)
+        self.assertIn("switched to Demo Trading", text)
+
 
 class ReviewFixes(BybitBase):
     """What a read of the real API docs found: replies that mean "maybe", stops above the price, and the rest."""
