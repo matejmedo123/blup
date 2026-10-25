@@ -28,17 +28,22 @@ Bybit EU GmbH (Viedeň) má licenciu MiCA pre celý EHP vrátane Slovenska, pon�
 
 ## Krok za krokom
 
-### 1. Najprv testnet (papierové obchodovanie s reálnym API)
+### 1. Najprv Demo Trading (papierové obchodovanie s reálnym API)
 
-1. Zaregistruj sa na **testnet.bybit.com** (samostatný účet, bez KYC) a v ňom si vyžiadaj testovacie USDC.
-2. *API Management → Create New Key → System-generated*, práva: **Read-Write**, *Unified Trading → Spot*
-   (Trade). **Withdraw nezaškrtávaj.** Ideálne naviaž kľúč na IP adresu servera, kde bot beží.
+1. Prihlás sa na **bybit.eu**, klikni na profil (vpravo hore) a prepni na **Demo Trading**. Je to samostatný
+   demo účet s testovacími peniazmi; ak v ňom nemáš USDC, vyžiadaj si demo peniaze.
+2. Stále v Demo Trading: profil → **API** → *Create New Key → System-generated*, práva **Read-Write**,
+   *Unified Trading → Spot* (Trade). **Withdraw nezaškrtávaj.** Ideálne naviaž kľúč na IP adresu servera.
+   Kľúč z Demo Trading platí len pre demo (`api-demo.bybit.eu`), nie pre ostrý účet.
 3. Do `trader/secrets.env` (práva 0600):
 
    ```
-   BYBIT_TESTNET_KEY=...
-   BYBIT_TESTNET_SECRET=...
+   BYBIT_DEMO_KEY=...
+   BYBIT_DEMO_SECRET=...
    ```
+
+   Mimo EHP sa dá namiesto toho použiť globálny testnet (testnet.bybit.com): kľúče `BYBIT_TESTNET_KEY` /
+   `BYBIT_TESTNET_SECRET` a v configu `"autopilot": {"bybit": {"paper_venue": "testnet"}}`.
 
 4. V `trader/config.json` nastav `"autopilot": {"broker": "bybit", "mode": "paper"}` a profil:
 
@@ -50,7 +55,7 @@ Bybit EU GmbH (Viedeň) má licenciu MiCA pre celý EHP vrátane Slovenska, pon�
 
 5. Spusti bota (`autopilot.py daemon --approve`) a nechaj ho bežať aspoň pár týždňov.
 
-### 2. Ostrý účet (až keď testnet funguje)
+### 2. Ostrý účet (až keď Demo Trading funguje)
 
 1. Účet na **bybit.eu**, overenie totožnosti (KYC), vklad v EUR → zmena na USDC.
 2. *Spot margin* treba raz zapnúť na webe alebo v aplikácii (Bybit chce krátky kvíz).
@@ -76,15 +81,15 @@ Bybit EU GmbH (Viedeň) má licenciu MiCA pre celý EHP vrátane Slovenska, pon�
 
 * Či `isLeverage=1` požičia len chýbajúcu časť (dokumentácia to len naznačuje).
 * Či Bybit EU ponúka spot maržu tvojmu účtu (podľa správ od leta 2026 áno, do 10×).
-* Testnet je globálny Bybit, nie Bybit EU — overí API, nie špecifiká EÚ účtu. Preto po testnete začni na
-  ostrom účte s malou sumou.
+* Demo Trading nemá všetky funkcie ostrého účtu (Bybit to sám uvádza) — overí API, nie každý detail. Preto
+  po deme začni na ostrom účte s malou sumou.
 
 ## Dôležité upozornenia
 
 * **Z cloudového prostredia, kde bol bot vyvíjaný, sa na Bybit nedá pripojiť** (Bybit blokuje USA). Napojenie je
   postavené presne podľa dokumentácie API v5 a otestované na simulovaných odpovediach burzy (24 testov vrátane
-  celého cyklu nákup → stop na burze → uzavretie), ale **prvé reálne spojenie bude až u teba** — preto testnet
-  a `broker-test` ako prvé.
+  celého cyklu nákup → stop na burze → uzavretie), ale **prvé reálne spojenie bude až u teba** — preto Demo
+  Trading a `broker-test` ako prvé.
 * Bybit EU uvádza poplatky nejednotne (0,1 % aj 0,15 % pre taker) — simulátor počíta 0,15 % + 0,03 % sklz.
 * Úrok z marže sa mení každú hodinu; simulátor počíta opatrných 20 % ročne z požičanej časti.
 * Páka nezvyšuje riziko obchodu (to určuje stop), ale pri prudkom skoku ceny cez stop je strata väčšia.

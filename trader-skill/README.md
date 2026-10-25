@@ -327,12 +327,13 @@ more in bull runs — exactly when a trend follower holds), so Kraken perps at 1
 €15,452 for spot at 1×. Spot *margin* charges interest only on the borrowed part, only while cash is short:
 €24,270 at 10 %/yr, €23,367 at 30 %, still €21,771 at 75 % — the same worst drop. Hence the **Bybit EU** broker
 (`autopilot.broker "bybit"`): MiCA-licensed for the EEA, spot margin, 0.1–0.15 % a side, v5 API; paper is
-Bybit's testnet. Stops sit at the exchange (TP/SL orders that sell at market on the trigger), a sale never
+Bybit EU's Demo Trading (`api-demo.bybit.eu`, `BYBIT_DEMO_KEY`; the global testnet with `autopilot.bybit.paper_venue
+"testnet"`). Stops sit at the exchange (TP/SL orders that sell at market on the trigger), a sale never
 borrows, the account is set to 2× at most. `profile --venue bybit` makes the simulator charge its costs (0.15 %
 + 0.03 % slippage a side, 20 %/yr on margin loans, no interest on idle cash, crypto only);
 `autopilot.py broker-test` checks the keys read-only. Setup in Slovak: [docs/BYBIT.sk.md](docs/BYBIT.sk.md).
 The adapter is built to the documented API and tested on simulated replies — Bybit blocks the US cloud it was
-written in, so its first real connection is the testnet on your machine.
+written in, so its first real connection is the demo account on your server.
 
 The setup as it would run at Bybit (point in time, BTC + ETH 3 %, the rest 2 %, 0.18 % a side, margin at
 20 %/yr, nothing on idle cash, no ETF leg — selection / hold-out / since 2020 / worst drop): Bybit 1× €8,786 /

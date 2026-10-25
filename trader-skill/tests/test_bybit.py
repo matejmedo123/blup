@@ -146,9 +146,38 @@ class BybitAdapter(BybitBase):
         self.assertNotIn(KEY, log)
 
     def test_paper_is_the_testnet_and_live_is_bybit_eu(self):
-        self.assertEqual(self.broker().base, "https://api-testnet.bybit.com")
+        self.assertEqual(self.broker().base, "https://api-testnet.bybit.com")  # only testnet keys: a setup from before
         os.environ["BYBIT_LIVE_KEY"], os.environ["BYBIT_LIVE_SECRET"] = KEY, SECRET
         self.assertEqual(BybitBroker("live", config.load_config()).base, "https://api.bybit.eu")
+
+    def test_bybit_eu_demo_is_paper_with_its_own_keys(self):
+        demo_key, demo_secret = "BYDEMOKEY456", "bybit-demo-secret-91"
+        os.environ["BYBIT_DEMO_KEY"], os.environ["BYBIT_DEMO_SECRET"] = demo_key, demo_secret
+        b = self.broker()
+        self.assertEqual((b.venue, b.base), ("demo", "https://api-demo.bybit.eu"))
+        self.assertEqual(b.account()["account_id"], "bybit-demo")  # its own equity history, not the testnet's
+        signed = [c for c in self.ex.calls if "x-bapi-api-key" in c["headers"]]
+        self.assertTrue(signed)
+        for c in signed:
+            self.assertEqual(c["headers"]["x-bapi-api-key"], demo_key)
+            payload = c["raw_query"] if c["method"] == "GET" else c["raw_body"]
+            want = hmac.new(demo_secret.encode(), (c["headers"]["x-bapi-timestamp"] + demo_key + "10000" + payload)
+                            .encode(), hashlib.sha256).hexdigest()
+            self.assertEqual(c["headers"]["x-bapi-sign"], want)
+        config.update_file("config.json", {"autopilot": {"bybit": {"paper_venue": "testnet"}}})
+        self.assertEqual(self.broker().base, "https://api-testnet.bybit.com")  # chosen in the config
+
+    def test_no_setting_points_paper_at_a_live_host(self):
+        os.environ["BYBIT_DEMO_KEY"], os.environ["BYBIT_DEMO_SECRET"] = "BYDEMOKEY456", "bybit-demo-secret-91"
+        config.update_file("config.json", {"autopilot": {"bybit": {"host": "https://api.bybit.eu",
+                                                                   "paper_host": "https://api.bybit.eu"}}})
+        self.assertEqual(self.broker().base, "https://api-demo.bybit.eu")
+
+    def test_margin_leverage_also_read_where_demo_lists_it(self):
+        self.ex.on("/v5/spot-margin-trade/state", {"retCode": 10001, "retMsg": "not supported", "result": {}})
+        self.ex.on("/v5/spot-margin-uta/status", ok({"spotLeverage": "2", "spotMarginMode": "1"}))
+        b = self.broker(lev=1.5)
+        self.assertEqual(b._margin_leverage(), 2.0)
 
     def test_entry_without_leverage_never_borrows(self):
         b = self.broker()
@@ -305,10 +334,14 @@ class BybitOptIn(TraderTestCase):
         c["autopilot"].update(ap)
         return c
 
-    def test_paper_needs_testnet_keys_and_live_needs_every_step(self):
+    def test_paper_needs_demo_keys_and_live_needs_every_step(self):
         os.environ.pop("TRADER_OFFLINE", None)
         with self.assertRaises(BrokerError) as cm:
             brokers.get(self.cfg(broker="bybit"))
+        self.assertIn("BYBIT_DEMO_KEY", str(cm.exception))  # no keys at all: Bybit EU's demo is the default
+        self.assertIn("Demo Trading", str(cm.exception))
+        with self.assertRaises(BrokerError) as cm:
+            brokers.get(self.cfg(broker="bybit", bybit={"paper_venue": "testnet"}))
         self.assertIn("BYBIT_TESTNET_KEY", str(cm.exception))
         c = self.cfg(broker="bybit", mode="live", live_confirmation=brokers.LIVE_PHRASE)
         c["paper"] = False

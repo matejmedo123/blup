@@ -1,5 +1,5 @@
 """Brokers the autopilot can trade through: the local simulator (default), Alpaca (paper / live) or Bybit EU
-(crypto spot and spot margin; paper = Bybit's testnet).
+(crypto spot and spot margin; paper = Bybit EU's Demo Trading, or Bybit's global testnet).
 
     get(cfg)            → the configured broker, or BrokerError saying exactly what is missing
     live_readiness(cfg) → (ok, [missing items]) for the live opt-in in docs/SCHEMAS.md
@@ -15,10 +15,8 @@ from .base import Broker, BrokerError, broker_symbol, data_symbol  # noqa: F401
 LIVE_PHRASE = "I ACCEPT REAL MONEY RISK"
 REAL = ("alpaca", "bybit")  # the brokers that can hold real money
 LIVE_KEYS = {"alpaca": ("ALPACA_LIVE_KEY_ID", "ALPACA_LIVE_SECRET_KEY"), "bybit": ("BYBIT_LIVE_KEY", "BYBIT_LIVE_SECRET")}
-PAPER_KEYS = {"alpaca": ("ALPACA_PAPER_KEY_ID", "ALPACA_PAPER_SECRET_KEY"),
-              "bybit": ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET")}
-PAPER_HOW = {"alpaca": "free paper keys: alpaca.markets → Paper Trading → API Keys",
-             "bybit": "free testnet keys: testnet.bybit.com → API (test funds from the testnet faucet)"}
+PAPER_KEYS = {"alpaca": ("ALPACA_PAPER_KEY_ID", "ALPACA_PAPER_SECRET_KEY")}  # Bybit: bybit.PAPER_VENUES
+PAPER_HOW = {"alpaca": "free paper keys: alpaca.markets → Paper Trading → API Keys"}
 
 
 def _ap(cfg: dict) -> dict:
@@ -71,7 +69,12 @@ def paper_readiness(cfg: dict) -> tuple:
     kind = _ap(cfg).get("broker") or "simulator"
     if kind == "simulator":
         return True, []
-    missing = ["%s must be set — %s" % (n, PAPER_HOW[kind]) for n in PAPER_KEYS[kind] if not secrets.has(n)]
+    if kind == "bybit":
+        from .bybit import PAPER_VENUES, paper_venue
+        _, names, how = PAPER_VENUES[paper_venue(cfg)]
+    else:
+        names, how = PAPER_KEYS[kind], PAPER_HOW[kind]
+    missing = ["%s must be set — %s" % (n, how) for n in names if not secrets.has(n)]
     return (not missing), missing
 
 

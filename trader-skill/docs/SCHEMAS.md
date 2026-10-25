@@ -738,7 +738,10 @@ key out instead. `risk_by_symbol` applies to crypto only — a stock ticker BTC 
 gets `risk_per_trade_pct`. `config.leverage(..., symbol)` keeps exchange-listed meme coins (`symbols.is_meme_base`)
 at 1×; the sizer does too and the risk check blocks a leveraged one (`no_leverage`).
 ### Bybit EU broker (`shared/brokers/bybit.py`)
-`autopilot.broker: "bybit"` — paper = `https://api-testnet.bybit.com` (`BYBIT_TESTNET_KEY` / `_SECRET`), live =
+`autopilot.broker: "bybit"` — paper = Bybit EU's Demo Trading `https://api-demo.bybit.eu` (`BYBIT_DEMO_KEY` /
+`_SECRET`), or with `autopilot.bybit.paper_venue: "testnet"` Bybit's global testnet `https://api-testnet.bybit.com`
+(`BYBIT_TESTNET_KEY` / `_SECRET`; unset, the testnet is picked only when testnet keys and no demo keys are set) —
+both hosts are fixed, no setting points paper at a live API; live =
 `autopilot.bybit.host` or `https://api.bybit.eu` (`BYBIT_LIVE_KEY` / `_SECRET`, plus the same five-step opt-in as
 Alpaca). `autopilot.bybit.quote` (default `"USDC"`) is the quote coin of the pairs (`BTC/USD` → `BTCUSDC`).
 Spot only (category `spot`, Unified account): entries are GTC limit buys, `isLeverage` 1 only when

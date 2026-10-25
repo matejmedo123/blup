@@ -365,6 +365,7 @@ def summary_view(app) -> dict:
         "news_updated_at": feed.get("updated_at") if isinstance(feed, dict) else None,
         "secrets": {"alpaca_paper": secrets.has("ALPACA_PAPER_KEY_ID") and secrets.has("ALPACA_PAPER_SECRET_KEY"),
                     "alpaca_live": secrets.has("ALPACA_LIVE_KEY_ID") and secrets.has("ALPACA_LIVE_SECRET_KEY"),
+                    "bybit_demo": secrets.has("BYBIT_DEMO_KEY") and secrets.has("BYBIT_DEMO_SECRET"),
                     "bybit_testnet": secrets.has("BYBIT_TESTNET_KEY") and secrets.has("BYBIT_TESTNET_SECRET"),
                     "bybit_live": secrets.has("BYBIT_LIVE_KEY") and secrets.has("BYBIT_LIVE_SECRET"),
                     "x_token": secrets.has("X_BEARER_TOKEN"),

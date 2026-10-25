@@ -68,7 +68,7 @@ DEFAULT_CONFIG = {
         "mode": "paper",
         "venue": "alpaca",          # the costs `profile --venue` set the simulator to (alpaca | bybit)
         # Bybit EU spot: the quote coin of the pairs (USDC: USDT is not MiCA-authorised) and the API host
-        "bybit": {"quote": "USDC", "host": ""},
+        "bybit": {"quote": "USDC", "host": "", "paper_venue": ""},
         "interval_sec": 60,
         "assets": ["stock", "crypto"],
         "watchlist": None,

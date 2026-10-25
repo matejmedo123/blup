@@ -3440,7 +3440,8 @@ def broker_test(cfg: dict) -> dict:
         b = brokers.get(cfg)
     except BrokerError as exc:
         return {"ok": False, "lines": ["BROKER TEST · %s · %s" % ((cfg.get("autopilot") or {}).get("broker"), exc)]}
-    lines.append("BROKER TEST · %s · %s (read only — nothing is sent)" % (b.name, b.mode))
+    where = "%s, %s" % (getattr(b, "venue", ""), getattr(b, "base", "")) if getattr(b, "venue", None) else ""
+    lines.append("BROKER TEST · %s · %s%s (read only — nothing is sent)" % (b.name, b.mode, " (%s)" % where if where else ""))
     checks = (("account", lambda: b.account()), ("positions", lambda: b.positions()),
               ("open orders", lambda: b.open_orders()), ("coins", lambda: b.tradable("crypto")))
     for name, fn in checks:
@@ -3749,7 +3750,7 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
                          " and ".join(sorted(core)), r, pos or 25, c_cfg["risk_per_trade_pct"]))
     if c_cfg["autopilot"].get("venue") == "bybit":
         lines.append("Venue Bybit EU: the simulator charges %g %% a side, %g %% a year on margin loans, nothing on idle "
-                     "cash, crypto only (no ETF leg). Trading there: autopilot.broker \"bybit\" — testnet keys for paper, "
+                     "cash, crypto only (no ETF leg). Trading there: autopilot.broker \"bybit\" — Bybit EU Demo Trading keys for paper, "
                      "see docs/BYBIT.sk.md." % ((c_cfg["costs"]["crypto"]["fee_bps"] + c_cfg["costs"]["crypto"]
                                                  ["slippage_bps"]) / 100.0, c_cfg["borrow_rate_pct"]))
     if not c_cfg["autopilot"]["playbook"].get("confidence_sizing", True):

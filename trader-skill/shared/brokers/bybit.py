@@ -2,9 +2,10 @@
 
 Bybit EU GmbH (Vienna) is MiCA-licensed for the EEA; its spot margin lends what the cash in the account does
 not cover, at an hourly rate on the borrowed part only (the leverage study: that is the one kind of leverage
-that pays — perpetual futures charge funding on the whole position). Paper is Bybit's testnet, a separate
-account with test funds at testnet.bybit.com; live is api.bybit.eu (``autopilot.bybit.host`` for another
-Bybit entity).
+that pays — perpetual futures charge funding on the whole position). Paper is Bybit EU's Demo Trading
+(api-demo.bybit.eu: the demo account of a bybit.eu login, the paper an EEA resident can get) or Bybit's global
+testnet (testnet.bybit.com) — ``autopilot.bybit.paper_venue``; live is api.bybit.eu (``autopilot.bybit.host`` for
+another Bybit entity).
 
 Rules this adapter keeps whatever the autopilot asks:
 * a sell never borrows (``isLeverage`` 0): selling more than is held fails instead of opening a short;
@@ -34,8 +35,15 @@ from .. import config, market_clock, secrets, state
 from ..http import read_body
 from .base import broker_symbol, Broker, BrokerError, order_dict
 
-BASE = {"paper": "https://api-testnet.bybit.com", "live": "https://api.bybit.eu"}
-KEYS = {"paper": ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET"), "live": ("BYBIT_LIVE_KEY", "BYBIT_LIVE_SECRET")}
+BASE = {"paper": "https://api-demo.bybit.eu", "live": "https://api.bybit.eu"}
+KEYS = {"paper": ("BYBIT_DEMO_KEY", "BYBIT_DEMO_SECRET"), "live": ("BYBIT_LIVE_KEY", "BYBIT_LIVE_SECRET")}
+# where paper trades: (REST host, key names, where the keys come from) — a fixed host each, never a setting: a
+# paper host pointed at a live API would trade real money past the live opt-in
+PAPER_VENUES = {
+    "demo": (BASE["paper"], KEYS["paper"], "Bybit EU demo keys: bybit.eu → profile → Demo Trading → API"),
+    "testnet": ("https://api-testnet.bybit.com", ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET"),
+                "testnet keys: testnet.bybit.com → API"),
+}
 TIMEOUT = 15
 RECV_WINDOW = "10000"
 STABLES = ("USDC", "USDT", "USD", "EUR")
@@ -52,6 +60,18 @@ NO_COLLATERAL_SWITCH = ("USDT", "USDC")  # always collateral: Bybit refuses to s
 STATUS = {"New": "new", "Created": "new", "Untriggered": "new", "Active": "new", "PartiallyFilled": "partially_filled",
           "Triggered": "accepted", "Filled": "filled", "Cancelled": "canceled", "PartiallyFilledCanceled": "canceled",
           "Deactivated": "canceled", "Rejected": "rejected"}
+
+
+def paper_venue(cfg: dict) -> str:
+    """"demo" (Bybit EU) or "testnet": config autopilot.bybit.paper_venue, else demo — unless only testnet keys are set,
+    as in a setup from before the demo venue."""
+    want = str((((cfg or {}).get("autopilot") or {}).get("bybit") or {}).get("paper_venue") or "").strip().lower()
+    if want in PAPER_VENUES:
+        return want
+    demo, testnet = PAPER_VENUES["demo"][1], PAPER_VENUES["testnet"][1]
+    if not any(secrets.has(n) for n in demo) and any(secrets.has(n) for n in testnet):
+        return "testnet"
+    return "demo"
 
 
 def _f(x):
@@ -127,14 +147,18 @@ class BybitBroker(Broker):
         self.mode = mode
         self.cfg = cfg or config.load_config()
         bcfg = ((self.cfg.get("autopilot") or {}).get("bybit") or {})
-        key_name, secret_name = KEYS[mode]
+        if mode == "paper":
+            self.venue = paper_venue(self.cfg)
+            self.base, (key_name, secret_name), how = PAPER_VENUES[self.venue]
+        else:
+            self.venue = "live"
+            key_name, secret_name = KEYS["live"]
+            self.base, how = bcfg.get("host") or BASE["live"], "Bybit EU → Account → API, trading only, no withdrawals"
         missing = [n for n in (key_name, secret_name) if not secrets.has(n)]
         if missing:
             raise BrokerError("missing %s — set it in your environment or trader/secrets.env (%s)" % (
-                " and ".join(missing), "testnet keys: testnet.bybit.com → API" if mode == "paper"
-                else "Bybit EU → Account → API, trading only, no withdrawals"))
+                " and ".join(missing), how))
         self._key_name, self._secret_name = key_name, secret_name
-        self.base = BASE[mode] if mode == "paper" else (bcfg.get("host") or BASE["live"])
         self.quote = str(bcfg.get("quote") or "USDC").upper()
         self._info = {}       # "BTCUSDC" → lot and tick
         self._info_at = 0.0
@@ -421,12 +445,19 @@ class BybitBroker(Broker):
         return {"equity": equity, "cash": cash, "buying_power": cash + (lev - 1) * equity,
                 "last_equity": None, "currency": "USD", "mode": self.mode, "status": "ACTIVE", "blocked": None,
                 "crypto_ok": True, "daytrade_count": 0, "pattern_day_trader": False,
-                "account_id": "bybit-%s" % self.mode, "borrowed": max(0.0, -cash)}
+                "account_id": "bybit-demo" if self.venue == "demo" else "bybit-%s" % self.mode,
+                "borrowed": max(0.0, -cash)}
 
     def _margin_leverage(self) -> float:
-        try:
-            st = self._get("/v5/spot-margin-trade/state")
-        except BrokerError:
+        st = None
+        # Demo Trading lists the same "status and leverage" call under spot-margin-uta
+        for path in ("/v5/spot-margin-trade/state", "/v5/spot-margin-uta/status"):
+            try:
+                st = self._get(path)
+                break
+            except BrokerError:
+                continue
+        if st is None:
             return 1.0
         if str(st.get("spotMarginMode")) != "1":
             return 1.0
