@@ -803,6 +803,12 @@ def universe_view(cfg: dict = None) -> dict:
                       "crypto_top_n": (ucfg.get("crypto") or {}).get("top_n"),
                       "stock_refresh_minutes": (ucfg.get("stocks") or {}).get("refresh_minutes"),
                       "crypto_refresh_minutes": (ucfg.get("crypto") or {}).get("refresh_minutes")}}
+    ap = cfg.get("autopilot") or {}
+    assets = ap.get("assets") if isinstance(ap.get("assets"), list) else ["stock", "crypto"]
+    stock_setups = (ap.get("setups") or {}).get("stock") if isinstance(ap.get("setups"), dict) else None
+    # an asset class the bot never trades (the trend profile: crypto only, no ETF leg) — not "nothing found yet"
+    out["off"] = {"stock": "stock" not in assets or (stock_setups == [] and not (ap.get("etf_trend") or {}).get("enabled")),
+                  "crypto": "crypto" not in assets}
     for asset in ("stock", "crypto"):
         sec = (doc or {}).get(asset)
         if isinstance(sec, dict):

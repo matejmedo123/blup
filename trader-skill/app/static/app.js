@@ -1058,7 +1058,8 @@
       var ua = u.assets || {}, cfgU = u.config || {};
       var dd = num(a.drawdown_pct), ddMax = num(a.max_drawdown_pct);
       frag.push(h('div', { class: 'tiles' },
-        tile('Stocks watched', ua.stock ? String(ua.stock.count) : '—', u.mode === 'auto' ? 'picked itself · top ' + (cfgU.stock_top_n || '?') : 'watchlist'),
+        (u.off || {}).stock ? tile('Stocks watched', 'off', 'crypto only — no stock setup in this profile')
+          : tile('Stocks watched', ua.stock ? String(ua.stock.count) : '—', u.mode === 'auto' ? 'picked itself · top ' + (cfgU.stock_top_n || '?') : 'watchlist'),
         tile('Crypto watched', ua.crypto ? String(ua.crypto.count) : '—', u.mode === 'auto' ? 'by 24h volume · top ' + (cfgU.crypto_top_n || '?') : 'watchlist'),
         tile('Risk per trade', a.available ? '× ' + (num(a.risk_mult) === null ? '1' : String(+num(a.risk_mult).toFixed(2))) : '× 1', a.risk_reason || 'full size', num(a.risk_mult) !== null && num(a.risk_mult) < 1 ? 'down' : ''),
         tile('Drawdown', dd === null ? '—' : pct(dd, false, 1), ddMax !== null ? 'pauses itself at ' + pct(ddMax, false, 0) : null, a.drawdown_pause ? 'down' : ''),

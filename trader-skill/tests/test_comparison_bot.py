@@ -69,6 +69,20 @@ class SetupLabel(TraderTestCase):
         self.assertIn("' · Trader' + (setupLabel()", js)  # the browser tab tells the two dashboards apart
 
 
+class StocksOff(TraderTestCase):
+    def test_the_trend_profile_shows_stocks_as_off(self):
+        srv = load("app", "server")
+        self.home.mkdir(parents=True, exist_ok=True)
+        (self.home / "config.json").write_text(json.dumps({"autopilot": {"setups": {"stock": []},
+                                                                         "etf_trend": {"enabled": False}}}))
+        self.assertEqual(srv.universe_view()["off"], {"stock": True, "crypto": False})
+        (self.home / "config.json").write_text(json.dumps({"autopilot": {"setups": {"stock": []},
+                                                                         "etf_trend": {"enabled": True}}}))
+        self.assertFalse(srv.universe_view()["off"]["stock"])  # the ETF leg trades stocks in a crypto bear market
+        js = (Path(srv.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("crypto only — no stock setup in this profile", js)
+
+
 class Compare(TraderTestCase):
     def bot(self, name, cfg, rows):
         home = self.tmp / name
