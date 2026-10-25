@@ -71,7 +71,9 @@ def paper_readiness(cfg: dict) -> tuple:
         return True, []
     if kind == "bybit":
         from .bybit import PAPER_VENUES, paper_venue
-        _, names, how = PAPER_VENUES[paper_venue(cfg)]
+        venue = paper_venue(cfg)
+        _, names, how = PAPER_VENUES[venue]
+        how = "%s (paper venue %s)" % (how, venue)
     else:
         names, how = PAPER_KEYS[kind], PAPER_HOW[kind]
     missing = ["%s must be set — %s" % (n, how) for n in names if not secrets.has(n)]

@@ -63,15 +63,10 @@ STATUS = {"New": "new", "Created": "new", "Untriggered": "new", "Active": "new",
 
 
 def paper_venue(cfg: dict) -> str:
-    """"demo" (Bybit EU) or "testnet": config autopilot.bybit.paper_venue, else demo — unless only testnet keys are set,
-    as in a setup from before the demo venue."""
+    """"demo" (Bybit EU) or "testnet": config autopilot.bybit.paper_venue, else demo. Never guessed from the keys
+    that happen to be set — leftover testnet keys must not send a bybit.eu user to the global testnet."""
     want = str((((cfg or {}).get("autopilot") or {}).get("bybit") or {}).get("paper_venue") or "").strip().lower()
-    if want in PAPER_VENUES:
-        return want
-    demo, testnet = PAPER_VENUES["demo"][1], PAPER_VENUES["testnet"][1]
-    if not any(secrets.has(n) for n in demo) and any(secrets.has(n) for n in testnet):
-        return "testnet"
-    return "demo"
+    return want if want in PAPER_VENUES else "demo"
 
 
 def _f(x):
@@ -156,6 +151,8 @@ class BybitBroker(Broker):
             self.base, how = bcfg.get("host") or BASE["live"], "Bybit EU → Account → API, trading only, no withdrawals"
         missing = [n for n in (key_name, secret_name) if not secrets.has(n)]
         if missing:
+            if self.venue == "demo" and secrets.has(PAPER_VENUES["testnet"][1][0]):
+                how += '; BYBIT_TESTNET_KEY is set: for the global testnet set autopilot.bybit.paper_venue "testnet"'
             raise BrokerError("missing %s — set it in your environment or trader/secrets.env (%s)" % (
                 " and ".join(missing), how))
         self._key_name, self._secret_name = key_name, secret_name

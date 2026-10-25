@@ -101,7 +101,7 @@ class BybitBase(TraderTestCase):
     def setUp(self):
         super().setUp()
         os.environ.pop("TRADER_OFFLINE", None)  # the adapter refuses offline; its opener is faked instead
-        os.environ["BYBIT_TESTNET_KEY"], os.environ["BYBIT_TESTNET_SECRET"] = KEY, SECRET
+        os.environ["BYBIT_DEMO_KEY"], os.environ["BYBIT_DEMO_SECRET"] = KEY, SECRET
         self.ex = FakeBybit()
         self.patch = mock.patch.object(bybit_mod, "_OPENER", self.ex)
         self.patch.start()
@@ -120,11 +120,11 @@ class BybitAdapter(BybitBase):
         with self.assertRaises(BrokerError):
             BybitBroker("paper")
         os.environ.pop("TRADER_OFFLINE")
-        os.environ.pop("BYBIT_TESTNET_SECRET")
+        os.environ.pop("BYBIT_DEMO_SECRET")
         with self.assertRaises(BrokerError) as cm:
             BybitBroker("paper")
-        self.assertIn("BYBIT_TESTNET_SECRET", str(cm.exception))
-        self.assertIn("testnet.bybit.com", str(cm.exception))
+        self.assertIn("BYBIT_DEMO_SECRET", str(cm.exception))
+        self.assertIn("Demo Trading", str(cm.exception))
 
     def test_every_signed_request_signs_exactly_what_it_sends(self):
         b = self.broker()
@@ -145,14 +145,25 @@ class BybitAdapter(BybitBase):
         self.assertNotIn(SECRET, log)
         self.assertNotIn(KEY, log)
 
-    def test_paper_is_the_testnet_and_live_is_bybit_eu(self):
-        self.assertEqual(self.broker().base, "https://api-testnet.bybit.com")  # only testnet keys: a setup from before
+    def test_paper_is_bybit_eu_demo_and_live_is_bybit_eu(self):
+        self.assertEqual(self.broker().base, "https://api-demo.bybit.eu")
         os.environ["BYBIT_LIVE_KEY"], os.environ["BYBIT_LIVE_SECRET"] = KEY, SECRET
         self.assertEqual(BybitBroker("live", config.load_config()).base, "https://api.bybit.eu")
+
+    def test_leftover_testnet_keys_never_pick_the_testnet(self):
+        os.environ.pop("BYBIT_DEMO_KEY"), os.environ.pop("BYBIT_DEMO_SECRET")
+        os.environ["BYBIT_TESTNET_KEY"], os.environ["BYBIT_TESTNET_SECRET"] = KEY, SECRET
+        with self.assertRaises(BrokerError) as cm:
+            self.broker()
+        self.assertIn("BYBIT_DEMO_KEY", str(cm.exception))
+        self.assertIn('paper_venue "testnet"', str(cm.exception))  # says how to choose the testnet on purpose
+        config.update_file("config.json", {"autopilot": {"bybit": {"paper_venue": "testnet"}}})
+        self.assertEqual(self.broker().base, "https://api-testnet.bybit.com")
 
     def test_bybit_eu_demo_is_paper_with_its_own_keys(self):
         demo_key, demo_secret = "BYDEMOKEY456", "bybit-demo-secret-91"
         os.environ["BYBIT_DEMO_KEY"], os.environ["BYBIT_DEMO_SECRET"] = demo_key, demo_secret
+        os.environ["BYBIT_TESTNET_KEY"], os.environ["BYBIT_TESTNET_SECRET"] = KEY, SECRET  # ignored: demo is paper
         b = self.broker()
         self.assertEqual((b.venue, b.base), ("demo", "https://api-demo.bybit.eu"))
         self.assertEqual(b.account()["account_id"], "bybit-demo")  # its own equity history, not the testnet's
@@ -166,6 +177,7 @@ class BybitAdapter(BybitBase):
             self.assertEqual(c["headers"]["x-bapi-sign"], want)
         config.update_file("config.json", {"autopilot": {"bybit": {"paper_venue": "testnet"}}})
         self.assertEqual(self.broker().base, "https://api-testnet.bybit.com")  # chosen in the config
+        self.assertEqual(self.broker().account()["account_id"], "bybit-paper")
 
     def test_no_setting_points_paper_at_a_live_host(self):
         os.environ["BYBIT_DEMO_KEY"], os.environ["BYBIT_DEMO_SECRET"] = "BYDEMOKEY456", "bybit-demo-secret-91"
