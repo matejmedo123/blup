@@ -30,9 +30,7 @@ def one(srv, home: Path) -> dict:
     cfg = srv.config.load_config()
     stats = srv.trade_stats(srv.journal_trades())
     acct = srv.account_view(cfg, stats, srv.positions_view())
-    rows = srv.equity_rows()
-    if rows and rows[-1].get("account"):  # only the current account: an old simulator run is not this one's past
-        rows = [r for r in rows if r.get("account") == rows[-1]["account"]]
+    rows = srv.account_rows(srv.equity_rows())  # an old simulator run is not this one's past
     path = [(str(r["at"]), float(r["equity"])) for r in rows]
     peak, worst = None, 0.0
     for _, eq in path:

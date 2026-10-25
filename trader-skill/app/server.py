@@ -243,22 +243,31 @@ def equity_rows() -> list:
     return [r for r in read_jsonl("broker/equity.jsonl") if _num(r.get("equity")) is not None and r.get("at")]
 
 
+def account_rows(rows: list) -> list:
+    """Only the current account's rows: after a switch (simulator → Alpaca paper → live, a simulator started again
+    with other capital) the old account's equity is neither today's start, the starting cash nor a loss."""
+    if rows and rows[-1].get("account"):
+        return [r for r in rows if r.get("account") == rows[-1]["account"]]
+    return rows
+
+
+def _account_start(cfg: dict, rows: list):
+    """What the account started with: the simulator's starting cash, a broker account's first recorded equity."""
+    sim = str(rows[-1].get("account") or "simulator").startswith("simulator")
+    return _starting_cash(cfg) if sim else _num(rows[0].get("equity"))
+
+
 def account_view(cfg: dict, stats: dict, positions: list) -> dict:
-    rows = equity_rows()
+    rows = account_rows(equity_rows())
     unreal = sum(_num(p.get("unrealized_pl"), 0.0) for p in positions)
     if rows:
         last = rows[-1]
-        # only this account's rows: after a switch (simulator → Alpaca paper → live) the old account's equity is
-        # neither today's start nor the starting cash
-        if last.get("account"):
-            rows = [r for r in rows if r.get("account") == last["account"]]
         today = _today()
         today_rows = [r for r in rows if str(r["at"])[:10] == today]
         before = [r for r in rows if str(r["at"])[:10] < today]
         base = _num(before[-1]["equity"]) if before else (_num(today_rows[0]["equity"]) if today_rows else None)
         eq = _num(last.get("equity"))
-        sim = str(last.get("account") or "simulator").startswith("simulator")
-        start = _starting_cash(cfg) if sim else _num(rows[0].get("equity"))
+        start = _account_start(cfg, rows)
         return {"source": "broker", "equity": eq, "cash": _num(last.get("cash")),
                 "unrealized": _num(last.get("unrealized"), unreal), "realized_today": _num(last.get("realized_today")),
                 "pnl_today": (eq - base) if (eq is not None and base is not None) else None,
@@ -404,13 +413,14 @@ def _daily_from_equity(rows: list, start: float) -> list:
 def equity_view(rng: str = "all") -> dict:
     cfg = config.load_config()
     start = _starting_cash(cfg)
-    rows = equity_rows()
+    rows = account_rows(equity_rows())
     trades = journal_trades()
     days = RANGES.get(str(rng or "all").lower())
     cutoff = None
     if days:
         cutoff = market_clock.iso(market_clock.now_utc() - timedelta(days=days))
     if rows:
+        start = _account_start(cfg, rows)
         daily_rows = _daily_from_equity(rows, start)[-60:]
         shown = [r for r in rows if cutoff is None or str(r["at"]) >= cutoff]
         pts = [{"t": r["at"], "v": _num(r["equity"])} for r in _downsample(shown)]
