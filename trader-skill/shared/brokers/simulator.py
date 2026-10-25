@@ -61,11 +61,22 @@ class SimBroker(Broker):
         self.save_error = None
         self.sync_errors = {}  # symbol → why its orders could not be checked this sync
         self.book = state.read_json(BOOK) or self._new_book()
+        if self._untouched() and abs(float(self.book.get("starting_cash") or 0) - self._capital()) > 0.005:
+            # the capital was set (profile --capital) after the bot first started but before its first order: the
+            # book starts again from it — a new account, so the dashboard's equity starts there too
+            self.book = self._new_book()
         self._saved = copy.deepcopy(self.book)  # what is on disk — a refused order is rolled back to it
 
     # -- book -----------------------------------------------------------------------------------
+    def _capital(self) -> float:
+        return float((self.cfg.get("autopilot") or {}).get("sim_starting_cash") or self.cfg.get("account_size") or 25000)
+
+    def _untouched(self) -> bool:
+        b = self.book
+        return not (b.get("orders") or b.get("fills") or b.get("positions") or b.get("seq"))
+
     def _new_book(self) -> dict:
-        cash = float((self.cfg.get("autopilot") or {}).get("sim_starting_cash") or self.cfg.get("account_size") or 25000)
+        cash = self._capital()
         return {"cash": cash, "starting_cash": cash, "currency": "USD", "seq": 0, "orders": [], "positions": {},
                 "fills": [], "created_at": market_clock.iso(market_clock.now_utc()), "last_sync": None}
 
