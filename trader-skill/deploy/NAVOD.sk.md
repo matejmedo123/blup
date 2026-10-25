@@ -438,6 +438,9 @@ Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 
 | Príznak | Čo s tým |
 |---|---|
+| `ssh` píše „Could not resolve hostname“ | IP je napísaná zle: má presne 4 čísla oddelené bodkou, každé 0–255 (napr. `159.195.240.225`). Skopíruj ju z e-mailu alebo z ovládacieho panela poskytovateľa |
+| `ssh` píše „Permission denied“ | zlé heslo alebo používateľ: pri OVH `ubuntu`, pri netcupe `root`; heslo je v e-mailu |
+| `ssh` píše „Connection timed out“ | server ešte nebeží alebo je IP zlá — skontroluj ju v e-maile a v ovládacom paneli |
 | `health` píše FAIL / „no heartbeat“ | `sudo traderctl logs`, `sudo systemctl status trader-autopilot` |
 | „no backtest-lab playbook yet“ | laboratórium ešte beží (časť 8) — počkaj; chybu uvidíš v `housekeeping.jsonl` |
 | Robot nič nekupuje | normálne: denné signály prichádzajú raz za deň a nie každý deň. Dôvod každého rozhodnutia je na karte **Bot** |
