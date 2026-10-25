@@ -213,6 +213,13 @@ Pri prvom štarte robot ešte nemá „playbook“ — zoznam kombinácií mince
 Potom si laboratórium zopakuje každý týždeň samo, aby sledovalo trh. Výsledok ti príde aj ako upozornenie
 („Backtest lab: N validated“).
 
+Reštart robota (kroky 6 a 7) rozbehnuté laboratórium preruší — pri ďalšom štarte sa spustí znova samo. Ak ho
+chceš mať hneď, spusti ho ručne a nechaj okno otvorené, kým nenapíše *Done*:
+
+```bash
+sudo traderctl lab
+```
+
 Ako to sledovať:
 
 ```bash
@@ -467,6 +474,7 @@ Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 | `sudo: command not found` | Debian ako `root`: najprv `apt update && apt install -y sudo` (časť 3) |
 | `ssh` píše „Connection timed out“ | server ešte nebeží alebo je IP zlá — skontroluj ju v e-maile a v ovládacom paneli |
 | `health` píše FAIL / „no heartbeat“ | `sudo traderctl logs`, `sudo systemctl status trader-autopilot` |
+| v `housekeeping.jsonl` „the lab exited with -15“ alebo „interrupted“ | laboratórium prerušil reštart robota; `sudo traderctl lab` ho spustí hneď |
 | „no backtest-lab playbook yet“ | laboratórium ešte beží (časť 8) — počkaj; chybu uvidíš v `housekeeping.jsonl` |
 | Robot nič nekupuje | normálne: denné signály prichádzajú raz za deň a nie každý deň. Dôvod každého rozhodnutia je na karte **Bot** |
 | Bybit „Unmatched IP“ / 10010 | API kľúč je naviazaný na inú IP — v Bybite nastav IP servera |

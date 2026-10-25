@@ -7,6 +7,7 @@
 #   sudo traderctl universe | learned      what it watches / what it learned from its record
 #   sudo traderctl notify-test             send a test notification
 #   sudo traderctl health                  is the daemon alive? (exit code 0 = yes)
+#   sudo traderctl lab                     run the backtest lab now (5–30 min; the bot runs it weekly by itself)
 #   sudo traderctl logs                    follow the daemon's log (Ctrl+C to leave)
 #   sudo traderctl start | stop | restart  the services (a stop can take up to 2 min: it finishes its cycle)
 #

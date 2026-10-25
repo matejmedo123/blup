@@ -8,7 +8,7 @@ Linux server (VPS) it means around the clock. This folder has everything for tha
 | `install-vps.sh` | installs / updates Trader as two systemd services on Ubuntu or Debian |
 | `trader-autopilot.service` | the 24/7 bot: `autopilot.py daemon --approve` |
 | `trader-dashboard.service` | the web dashboard on `127.0.0.1:8765` (shows and controls the bot) |
-| `traderctl` | `sudo traderctl status / pause / resume / kill --confirm KILL / logs / health / restart` |
+| `traderctl` | `sudo traderctl status / pause / resume / kill --confirm KILL / logs / health / lab / restart` |
 | `healthcheck.py` | exit 0 when the bot's heartbeat is fresh — for Docker, monitoring or cron |
 | `test-bot.sh`, `trader-test-*.service` | optional: a comparison bot on the simulator next to the real one |
 | `compare.py` | the real bot and the comparison bot side by side (`sudo traderctl compare`) |

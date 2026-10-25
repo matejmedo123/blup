@@ -23,6 +23,7 @@ Examples:
   python3 autopilot.py pause | resume | kill --confirm KILL | check-live
   python3 autopilot.py profile --risk 2 --leverage 1.5 --capital 1000 [--write]   # the backtested daily-trend setup
   python3 autopilot.py check                       # is it normal? did it do what the rules say?
+  python3 autopilot.py lab                         # run the backtest lab now (the daemon runs it weekly)
   python3 autopilot.py replay --from 2026-10-20T13:35:00Z --to 2026-10-20T20:00:00Z --approve --offline
 """
 from __future__ import annotations
@@ -3076,6 +3077,21 @@ LAB_TIMEOUT_SEC = 4 * 3600
 HK_STATE = "autopilot/housekeeping_state.json"
 
 
+class LabInterrupted(RuntimeError):
+    """The lab was stopped from outside — a restart or stop of the bot — and did not fail by itself."""
+
+
+# systemd stops a unit with SIGTERM to every process in it, the lab child included; Ctrl+C and a closed terminal
+_STOP_SIGNALS = tuple(-getattr(signal, n) for n in ("SIGTERM", "SIGINT", "SIGHUP") if hasattr(signal, n))
+
+
+def _hk_forget(*keys) -> None:
+    def drop(doc):
+        for k in keys:
+            doc.pop(k, None)
+    state.update_json(HK_STATE, drop, {})
+
+
 def _run_lab(argv: list, out_file: str) -> dict:
     """The lab in a process of its own, at low priority: its hundreds of MB of candles are freed when it ends,
     and its CPU never competes with a cycle that has a stop to manage."""
@@ -3086,6 +3102,8 @@ def _run_lab(argv: list, out_file: str) -> dict:
     r = subprocess.run(nice + [sys.executable, os.path.join(_ROOT, "trader-backtest", "lab.py")] + argv,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
                        timeout=LAB_TIMEOUT_SEC, env=dict(os.environ))
+    if r.returncode in _STOP_SIGNALS:
+        raise LabInterrupted("stopped by signal %d before it finished (a restart or stop of the bot)" % -r.returncode)
     if r.returncode != 0:
         raise RuntimeError("the lab exited with %d: %s" % (r.returncode, (r.stderr or r.stdout or "")[-300:].strip()))
     doc = state.read_json(out_file)
@@ -3122,9 +3140,16 @@ def _refresh_lab(cfg: dict) -> None:
                             r["display"] for r in edoc["validated"]) or "none validated"), cfg)
         state.append_jsonl("autopilot/housekeeping.jsonl", {"at": started, "task": "lab", "validated": s["coins_validated"],
                                                             "seconds": s["seconds"]})
+    except LabInterrupted as exc:
+        # nothing wrong with the lab: the next start of the bot runs it again instead of waiting 6 hours — the
+        # guide's first steps restart the bot while its first lab runs
+        state.append_jsonl("autopilot/housekeeping.jsonl", {"at": started, "task": "lab", "interrupted": str(exc)})
+        _hk_forget("lab_tried", "lab_running")
+        return
     except Exception as exc:
         state.append_jsonl("autopilot/housekeeping.jsonl", {"at": started, "task": "lab",
                                                             "error": "%s: %s" % (type(exc).__name__, exc)})
+    _hk_forget("lab_running")
 
 
 def _note_housekeeping(task: str, exc: BaseException) -> None:
@@ -3311,11 +3336,13 @@ class Housekeeping:
             pb = state.read_json("backtests/playbook.json", {}) or {}
             age = now.timestamp() - market_clock.ts(pb["generated_at"]) if pb.get("generated_at") else None
             if self.lab_tried is None:  # remembered on disk: a restart (or a crash in the lab) is no reason to retry
-                self.lab_tried = float((state.read_json(HK_STATE, {}) or {}).get("lab_tried") or 0) or None
+                hk = state.read_json(HK_STATE, {}) or {}
+                # still marked running: the bot itself died or was stopped mid-lab, the lab never got to fail
+                self.lab_tried = None if hk.get("lab_running") else (float(hk.get("lab_tried") or 0) or None)
             retry_ok = self.lab_tried is None or now.timestamp() - self.lab_tried >= 6 * 3600
             if (age is None or age >= every * 86400) and retry_ok:
                 self.lab_tried = now.timestamp()
-                state.update_json(HK_STATE, lambda d: d.update(lab_tried=self.lab_tried), {})
+                state.update_json(HK_STATE, lambda d: d.update(lab_tried=self.lab_tried, lab_running=True), {})
                 self.lab_thread = threading.Thread(target=_guarded, args=("lab", _refresh_lab, cfg), daemon=True,
                                                    name="trader-backtest-lab")
                 self.lab_thread.start()
@@ -3548,7 +3575,7 @@ def build_parser():
     p = cli.parser("autopilot.py", __doc__)
     p.add_argument("action", choices=("status", "run", "loop", "daemon", "pause", "resume", "kill", "replay",
                                       "check-live", "broker-test", "universe", "learned", "notify-test", "profile", "check",
-                                      "forget"))
+                                      "forget", "lab"))
     p.add_argument("--once", action="store_true", help="run: a single cycle (default)")
     p.add_argument("--refresh", action="store_true", help="universe: rebuild it now instead of showing the cached one")
     p.add_argument("--approve", action="store_true",
@@ -3994,6 +4021,19 @@ def main(argv=None) -> int:
         doc = adapt.evaluate(cfg)
         cli.emit(args, learned_text(doc), doc)
         return 0
+    if args.action == "lab":
+        if not args.json:
+            print("Backtest lab: downloading price history and testing the playbook's strategies — usually 5–30 "
+                  "minutes. Keep this window open.", flush=True)
+        _refresh_lab(cfg)
+        last = ([r for r in state.tail_jsonl("autopilot/housekeeping.jsonl", 50) if r.get("task") == "lab"] or [{}])[-1]
+        if "validated" in last:
+            text = ("Done: %d validated combination(s) in %ss — crypto is traded only from these, from the next cycle on."
+                    % (last["validated"], last.get("seconds")))
+        else:
+            text = "The lab did not finish: %s" % (last.get("interrupted") or last.get("error") or "no result written")
+        cli.emit(args, text, last)
+        return 0 if "validated" in last else 1
     if args.action == "notify-test":
         res = notify.test(cfg)
         ch = res.get("channels") or {}
