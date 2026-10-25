@@ -419,6 +419,25 @@ The 200-day rule on BTC alone lost 65 % from April 2021 to January 2023 — it r
 whipsawed eight times around $44–48k — so the core sleeve only diluted the bot. The stablecoin filter cut a third of
 the trades and the big winners with them. The one gain is interest on the cash the bot holds most of the time.
 
+**The same strategies as shorts, and on stocks** (pre-registered 25 Oct 2026, research-mirror and research-stocks;
+€1,000, 2 % risk, 25 % cap, no leverage, 0.28 % a side on crypto and 0.10 % on stocks; worst drop since 2020):
+
+| | Selection | Hold-out | Since 2020 | Worst drop | |
+|---|---|---|---|---|---|
+| The bot's long book alone | €6,701 | €1,928 | €12,922 | −31 % | |
+| + the three rules mirrored into shorts while BTC is below its 200-day average (borrow 10 %/yr) | €6,397 | €1,630 | €10,427 | −39 % | fails |
+| + the same shorts in every market | €6,462 | €1,483 | €10,582 | −39 % | fails |
+| + the same long rules on 17 equity ETFs, one account | €4,824 | €839 | €4,167 | −29 % | fails |
+| + on the 30 Dow stocks of 1 Jan 2020, one account | €2,276 | €1,015 | €2,351 | −25 % | fails |
+
+The mirrored shorts earned in the crashes (+35 % in 2018, +25 % in 2022) and lost in the corrections of the bull
+years (−10 % in 2021, −8 % in 2023, −15 % in 2024), and they took cash and slots from the long trades. Selling
+exactly where the bot buys wiped the account out in the selection window: a short has no cap on its loss, and the
+long book's runners are the losses. On stocks the same rules made +1 to +6 %/yr on their own while SPY bought and
+held made +12 to +16 %/yr (price only), and in one account the stock positions held the cash the crypto winners
+needed — the XRP breakout of 8 Nov 2024 (+30R, the hold-out's biggest trade) was skipped. Shorts stay off
+(`isLeverage` 0) and stocks stay off in the trend profile.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
