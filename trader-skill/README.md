@@ -334,7 +334,8 @@ borrows, the account is set to 2× at most. `profile --venue bybit` makes the si
 + 0.03 % slippage a side, 20 %/yr on margin loans, no interest on idle cash, crypto only);
 `autopilot.py broker-test` checks the keys read-only. Setup in Slovak: [docs/BYBIT.sk.md](docs/BYBIT.sk.md).
 The adapter is built to the documented API and tested on simulated replies — Bybit blocks the US cloud it was
-written in, so its first real connection is the demo account on your server.
+written in; on 25 Oct 2026 it read a real Bybit EU account from a server in the EU (`broker-test --live-keys`:
+account, positions, open orders, coins, key rights) — orders are proven only by the first live trade.
 
 The setup as it would run at Bybit (point in time, BTC + ETH 3 %, the rest 2 %, 0.18 % a side, margin at
 20 %/yr, nothing on idle cash, no ETF leg — selection / hold-out / since 2020 / worst drop): Bybit 1× €8,786 /
