@@ -3839,6 +3839,7 @@ def status_text(cfg: dict) -> str:
                                             st.get("broker") or (cfg.get("autopilot") or {}).get("broker")),
              "Status: %s — %s" % (st.get("status") or "never run", st.get("message") or ""),
              "Standing approval: %s" % ("yes (autopilot.enabled)" if (cfg.get("autopilot") or {}).get("enabled")
+                                        else "yes — the daemon runs with --approve" if st.get("approved")
                                         else "no — dry run unless you pass --approve")]
     if st.get("last_cycle"):
         lines.append("Last cycle %s · %d cycles" % (st["last_cycle"], st.get("cycles") or 0))

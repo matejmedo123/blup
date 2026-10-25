@@ -98,3 +98,14 @@ class LabCommand(TraderTestCase):
         code, out = self.run_cli({"side_effect": ap().LabInterrupted("stopped by signal 2 before it finished")})
         self.assertEqual(code, 1)
         self.assertIn("The lab did not finish: stopped by signal 2", out)
+
+
+class StatusApproval(TraderTestCase):
+    """`traderctl status` runs without --approve itself: it must report the daemon's approval, not its own."""
+
+    def test_status_reports_the_daemons_approval(self):
+        a = ap()
+        state.write_json(a.STATE, {"status": "running", "approved": True})
+        self.assertIn("Standing approval: yes — the daemon runs with --approve", a.status_text(config.load_config()))
+        state.write_json(a.STATE, {"status": "running", "approved": False})
+        self.assertIn("Standing approval: no — dry run", a.status_text(config.load_config()))
