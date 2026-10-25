@@ -478,7 +478,8 @@ Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 | „no backtest-lab playbook yet“ | laboratórium ešte beží (časť 8) — počkaj; chybu uvidíš v `housekeeping.jsonl` |
 | Robot nič nekupuje | normálne: denné signály prichádzajú raz za deň a nie každý deň. Dôvod každého rozhodnutia je na karte **Bot** |
 | Bybit „Unmatched IP“ / 10010 | API kľúč je naviazaný na inú IP — v Bybite nastav IP servera |
-| Bybit 10003 / 10004 (neplatný kľúč, podpis) | kľúč alebo secret je zle skopírovaný, alebo máš testnet kľúč pri ostrom režime (či naopak) |
+| Bybit 10003 / HTTP 401 (neplatný kľúč) | v režime `paper` platia len kľúče z **testnet.bybit.com** — nie z bybit.eu ani z „Demo Trading“ na hlavnej stránke. Inak: kľúč a secret prehodené alebo neúplne skopírované. Dĺžky over: `sudo bash -c '. /etc/trader/trader.env; echo ${#BYBIT_TESTNET_KEY} ${#BYBIT_TESTNET_SECRET}'` (zvyčajne 18 a 36) |
+| Bybit 10004 (zlý podpis) | secret je zle skopírovaný |
 | Bybit 170359 („not support leveraged“) | tvoj účet nemá spot maržu — zapni ju alebo daj profil s `--leverage 1` |
 | Nástenka cez doménu vráti 403 | chýba `TRADER_DASHBOARD_PASSWORD` v `/etc/trader/trader.env`, potom `sudo traderctl restart` |
 | Upozornenie „settings file … broken“ | preklep v `config.json` — robot beží so starým platným nastavením; oprav súbor alebo spusti skript znova |
