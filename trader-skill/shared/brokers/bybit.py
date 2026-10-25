@@ -2,10 +2,10 @@
 
 Bybit EU GmbH (Vienna) is MiCA-licensed for the EEA; its spot margin lends what the cash in the account does
 not cover, at an hourly rate on the borrowed part only (the leverage study: that is the one kind of leverage
-that pays — perpetual futures charge funding on the whole position). Paper is Bybit EU's Demo Trading
-(api-demo.bybit.eu: the demo account of a bybit.eu login, the paper an EEA resident can get) or Bybit's global
-testnet (testnet.bybit.com) — ``autopilot.bybit.paper_venue``; live is api.bybit.eu (``autopilot.bybit.host`` for
-another Bybit entity).
+that pays — perpetual futures charge funding on the whole position). Paper is Bybit EU's testnet (keys from
+testnet.bybit.eu, at api-testnet.bybit.eu; the global testnet.bybit.com's keys work too) or Demo Trading of a
+www.bybit.eu login — ``autopilot.bybit.paper_venue``; live is api.bybit.eu (``autopilot.bybit.host`` for another
+Bybit entity).
 
 Rules this adapter keeps whatever the autopilot asks:
 * a sell never borrows (``isLeverage`` 0): selling more than is held fails instead of opening a short;
@@ -38,13 +38,14 @@ from .base import broker_symbol, Broker, BrokerError, order_dict
 BASE = {"paper": "https://api-demo.bybit.eu", "live": "https://api.bybit.eu"}
 KEYS = {"paper": ("BYBIT_DEMO_KEY", "BYBIT_DEMO_SECRET"), "live": ("BYBIT_LIVE_KEY", "BYBIT_LIVE_SECRET")}
 # where paper trades: (REST hosts, key names, where the keys come from) — fixed hosts, never a setting: a paper
-# host pointed at a live API would trade real money past the live opt-in. A bybit.eu Demo Trading key is asked
-# for at both of Bybit's demo hosts (the .eu one answers market data but has refused such keys); both are demo.
+# host pointed at a live API would trade real money past the live opt-in. A key is asked for at each host of its
+# venue (Bybit EU's first, then the global one) and the first that knows it is used; all of them are test money.
 PAPER_VENUES = {
+    "testnet": (("https://api-testnet.bybit.eu", "https://api-testnet.bybit.com"),
+                ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET"),
+                "testnet keys: testnet.bybit.eu → API, outside Demo Trading"),
     "demo": ((BASE["paper"], "https://api-demo.bybit.com"), KEYS["paper"],
-             "Bybit EU demo keys: bybit.eu → profile → Demo Trading → API"),
-    "testnet": (("https://api-testnet.bybit.com",), ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET"),
-                "testnet keys: testnet.bybit.com → API"),
+             "demo keys: www.bybit.eu (not the testnet site) → profile → Demo Trading → API"),
 }
 _HOST_CHOICE = {}  # (venue, key fingerprint) → the demo host that knew the key, for this process
 TIMEOUT = 15
@@ -66,10 +67,15 @@ STATUS = {"New": "new", "Created": "new", "Untriggered": "new", "Active": "new",
 
 
 def paper_venue(cfg: dict) -> str:
-    """"demo" (Bybit EU) or "testnet": config autopilot.bybit.paper_venue, else demo. Never guessed from the keys
-    that happen to be set — leftover testnet keys must not send a bybit.eu user to the global testnet."""
+    """"testnet" or "demo": config autopilot.bybit.paper_venue, else the testnet — Demo Trading only when demo keys
+    are the only paper keys set."""
     want = str((((cfg or {}).get("autopilot") or {}).get("bybit") or {}).get("paper_venue") or "").strip().lower()
-    return want if want in PAPER_VENUES else "demo"
+    if want in PAPER_VENUES:
+        return want
+    demo, testnet = PAPER_VENUES["demo"][1], PAPER_VENUES["testnet"][1]
+    if any(secrets.has(n) for n in demo) and not any(secrets.has(n) for n in testnet):
+        return "demo"
+    return "testnet"
 
 
 def _f(x):
@@ -156,8 +162,6 @@ class BybitBroker(Broker):
         self._host_known = len(self._hosts) == 1
         missing = [n for n in (key_name, secret_name) if not secrets.has(n)]
         if missing:
-            if self.venue == "demo" and secrets.has(PAPER_VENUES["testnet"][1][0]):
-                how += '; BYBIT_TESTNET_KEY is set: for the global testnet set autopilot.bybit.paper_venue "testnet"'
             raise BrokerError("missing %s — set it in your environment or trader/secrets.env (%s)" % (
                 " and ".join(missing), how))
         self._key_name, self._secret_name = key_name, secret_name
@@ -215,8 +219,8 @@ class BybitBroker(Broker):
             raise ConnectionError("unreadable reply from Bybit (%s)" % type(exc).__name__)
 
     def _choose_host(self) -> None:
-        """The first signed call: ask each demo host, read only, whether it knows the key, and stay with the first
-        that does (remembered for the process). None does: the first host, and a note of what each said."""
+        """The first signed call: ask each host of the paper venue, read only, whether it knows the key, and stay with
+        the first that does (remembered for the process). None does: the first host, and a note of what each said."""
         self._host_known = True
         cache = (self.venue, hashlib.sha256(secrets.get(self._key_name).encode("utf-8")).hexdigest()[:16])
         if cache in _HOST_CHOICE:
@@ -237,11 +241,11 @@ class BybitBroker(Broker):
             if code in ("0", "10002"):  # known (10002: only our clock is off, the next call fixes that)
                 _HOST_CHOICE[cache] = host
                 if said:
-                    self.notes.append("demo host %s (%s)" % (host, "; ".join(said)))
+                    self.notes.append("%s host %s (%s)" % (self.venue, host, "; ".join(said)))
                 return
             said.append("%s: %s (code %s)" % (host, rep.get("retMsg") or "refused", code))
         self.base = self._hosts[0]
-        self.notes.append("no Bybit demo host knows this key — " + "; ".join(said))
+        self.notes.append("no Bybit %s host knows this key — %s" % (self.venue, "; ".join(said)))
 
     def _call(self, method: str, path: str, params: dict = None, signed: bool = True, retries: int = 0,
               resync: bool = True):

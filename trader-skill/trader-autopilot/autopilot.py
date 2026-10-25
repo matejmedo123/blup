@@ -3492,9 +3492,11 @@ def broker_test(cfg: dict, live_keys: bool = False) -> dict:
         lines.append("  note: %s" % note)
     if any("code 10003" in ln or "(HTTP 401)" in ln for ln in lines):
         lines.append("  hint: Bybit does not know this key here — %s" % (
-            "on Demo Trading only a key made while bybit.eu is switched to Demo Trading works (profile → Demo "
-            "Trading, then profile → API); a key of the real account is refused" if getattr(b, "venue", "") == "demo"
-            else "key and secret swapped, cut short, or made on another Bybit site than this one"))
+            "on Demo Trading only a key made while www.bybit.eu is switched to Demo Trading works (profile → Demo "
+            "Trading, then profile → API)" if getattr(b, "venue", "") == "demo" else
+            "testnet keys come from testnet.bybit.eu (outside Demo Trading), live keys from www.bybit.eu — a key "
+            "works only on the site it was made on" if getattr(b, "venue", "") == "testnet" else
+            "live keys come from www.bybit.eu — not from testnet.bybit.eu, whose keys work only on the testnet"))
     return {"ok": ok, "lines": lines}
 
 

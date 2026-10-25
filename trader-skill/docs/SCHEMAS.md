@@ -738,10 +738,12 @@ key out instead. `risk_by_symbol` applies to crypto only — a stock ticker BTC 
 gets `risk_per_trade_pct`. `config.leverage(..., symbol)` keeps exchange-listed meme coins (`symbols.is_meme_base`)
 at 1×; the sizer does too and the risk check blocks a leveraged one (`no_leverage`).
 ### Bybit EU broker (`shared/brokers/bybit.py`)
-`autopilot.broker: "bybit"` — paper = Bybit EU's Demo Trading `https://api-demo.bybit.eu` (`BYBIT_DEMO_KEY` /
-`_SECRET`), or with `autopilot.bybit.paper_venue: "testnet"` Bybit's global testnet `https://api-testnet.bybit.com`
-(`BYBIT_TESTNET_KEY` / `_SECRET`; never picked from the keys alone) —
-both hosts are fixed, no setting points paper at a live API; live =
+`autopilot.broker: "bybit"` — paper = `autopilot.bybit.paper_venue`: `"testnet"` (default; `BYBIT_TESTNET_KEY` /
+`_SECRET` from testnet.bybit.eu, asked for at `https://api-testnet.bybit.eu`, then `https://api-testnet.bybit.com` for a
+global testnet key) or `"demo"` (`BYBIT_DEMO_KEY` / `_SECRET` from www.bybit.eu's Demo Trading, at
+`https://api-demo.bybit.eu`, then `https://api-demo.bybit.com`; also picked when demo keys are the only paper keys).
+The first signed call asks each host of the venue read only (`/v5/order/realtime`) and keeps the first that knows the
+key. The hosts are fixed in the code, no setting points paper at a live API; live =
 `autopilot.bybit.host` or `https://api.bybit.eu` (`BYBIT_LIVE_KEY` / `_SECRET`, plus the same five-step opt-in as
 Alpaca). `autopilot.bybit.quote` (default `"USDC"`) is the quote coin of the pairs (`BTC/USD` → `BTCUSDC`).
 Spot only (category `spot`, Unified account): entries are GTC limit buys, `isLeverage` 1 only when
