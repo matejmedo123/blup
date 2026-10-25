@@ -399,6 +399,20 @@ not); 10× wiped every one of them. Isolated 10× perps at full size: −99.9 %.
 trend strategy passes the pre-registered rule; `LEVERAGE_HARD_CAP` stays at 2× and the deployed 1.5× on Bybit spot
 margin stays as it is.
 
+**Three ideas the bot had never used** (pre-registered 25 Oct 2026, research-core; deployed setup at Bybit's costs,
+1.5×; selection / hold-out / since 2020 / worst drop): bot alone €8,831 / €2,181 / €18,076 / −28 %.
+
+| Next to the bot | Selection | Hold-out | Since 2020 | Worst drop | |
+|---|---|---|---|---|---|
+| 25 % of the account in BTC while it closes above its 200-day average | €8,641 | €1,885 | €15,595 | −30 % | fails |
+| 50 % in that BTC core | €8,074 | €1,617 | €12,707 | −40 % | fails |
+| New trades only while stablecoin supply grew in 30 days (DefiLlama) | €8,344 | €1,835 | €14,521 | −27 % | fails |
+| 3 %/yr on idle USDC (Bybit Earn) | €9,600 | €2,277 | €20,541 | −27 % | not a rule: +14 % since 2020 |
+
+The 200-day rule on BTC alone lost 65 % from April 2021 to January 2023 — it rode BTC from $63k down to $37k, then was
+whipsawed eight times around $44–48k — so the core sleeve only diluted the bot. The stablecoin filter cut a third of
+the trades and the big winners with them. The one gain is interest on the cash the bot holds most of the time.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
