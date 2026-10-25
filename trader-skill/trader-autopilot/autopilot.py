@@ -3442,6 +3442,12 @@ def broker_test(cfg: dict) -> dict:
         return {"ok": False, "lines": ["BROKER TEST · %s · %s" % ((cfg.get("autopilot") or {}).get("broker"), exc)]}
     where = "%s, %s" % (getattr(b, "venue", ""), getattr(b, "base", "")) if getattr(b, "venue", None) else ""
     lines.append("BROKER TEST · %s · %s%s (read only — nothing is sent)" % (b.name, b.mode, " (%s)" % where if where else ""))
+    from shared import secrets
+    kn, sn = getattr(b, "_key_name", None), getattr(b, "_secret_name", None)
+    if kn and sn:  # compare with the key id the exchange shows: a swapped or other key is seen at a glance
+        k = secrets.get(kn)
+        lines.append("  keys        %s %s…%s (%d characters) · %s %d characters" % (
+            kn, k[:4], k[-4:], len(k), sn, len(secrets.get(sn))))
     checks = (("account", lambda: b.account()), ("positions", lambda: b.positions()),
               ("open orders", lambda: b.open_orders()), ("coins", lambda: b.tradable("crypto")))
     for name, fn in checks:

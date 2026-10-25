@@ -507,6 +507,10 @@ class BrokerTest(BybitBase):
         self.assertIn("(demo, https://api-demo.bybit.eu)", res["lines"][0])
         self.assertIn("hint: Bybit does not know this key here", text)
         self.assertIn("switched to Demo Trading", text)
+        self.assertIn("keys        BYBIT_DEMO_KEY BYTE…Y123 (12 characters) · BYBIT_DEMO_SECRET %d characters"
+                      % len(SECRET), text)  # the ends of the key id to compare with the exchange, never the secret
+        self.assertNotIn(SECRET, text)
+        self.assertNotIn(KEY, text)
 
 
 class ReviewFixes(BybitBase):
