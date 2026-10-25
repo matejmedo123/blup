@@ -830,6 +830,8 @@ def _open_trade(item: dict, fill: dict, cfg: dict, limits: dict) -> dict:
                  risk_per_unit=round(price - float(plan["stop"]["price"]), 10), source="autopilot",
                  broker=item["broker"], broker_order_id=item.get("broker_order_id"),
                  paper=item["mode"] != "live")
+    if item.get("ai"):
+        trade["ai"] = item["ai"]  # the AI desk's verdict at entry, for ai-report
     if trade["risk_per_unit"] <= 0:  # filled at or below the stop: keep R meaningful against the planned risk
         trade["risk_per_unit"] = float(plan["risk_per_unit"])
     journal.save_trade(trade)
@@ -2332,6 +2334,11 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     if (cfg.get("ai_desk") or {}).get("enabled"):
         # last, because it is the only step that costs money — and it can only say no
         block, gate, ai_info = ai_review(plan, desk, cfg)
+        if str((cfg.get("ai_desk") or {}).get("mode") or "veto").lower() == "advise":
+            # advice only: the verdict goes into the book and the journal, the rules decide — `ai-report` later
+            # shows whether the trades it would have stopped did worse (an honest test: it cannot know the future)
+            gate = {"name": "AI desk", "ok": True, "detail": "advice only — %s" % gate["detail"]}
+            block = None
         gates.append(gate)
         if block:
             _update_order(order["id"], status="canceled", error="AI desk: no")
@@ -2345,7 +2352,7 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         "time_stop": plan["time_stop"]["at"], "status": "submitting", "placed_at": market_clock.iso(now),
         "exit_rule": plan.get("exit_rule"), "interval": plan.get("interval"), "leverage": lev,
         "runner": plan.get("runner"), "setup": c["setup"], "entry_plan": plan["entry"]["price"],
-        "swing": bool(plan.get("swing"))}
+        "swing": bool(plan.get("swing")), "ai": (ai_info or {}).get("status")}
     state.write_json(BOOK, book)
     try:
         bo = broker.place_entry({"client_order_id": order["id"], "symbol": bsym, "asset": asset, "qty": order["qty"],
@@ -3610,7 +3617,7 @@ def build_parser():
     p = cli.parser("autopilot.py", __doc__)
     p.add_argument("action", choices=("status", "run", "loop", "daemon", "pause", "resume", "kill", "replay",
                                       "check-live", "broker-test", "universe", "learned", "notify-test", "profile", "check",
-                                      "forget", "lab"))
+                                      "forget", "lab", "ai-report"))
     p.add_argument("--once", action="store_true", help="run: a single cycle (default)")
     p.add_argument("--refresh", action="store_true", help="universe: rebuild it now instead of showing the cached one")
     p.add_argument("--live-keys", action="store_true",
@@ -3829,6 +3836,45 @@ def profile_text(cfg: dict, limits: dict, changes: tuple, written: bool) -> str:
                      ",".join(TREND_SETUPS), "\n  python3 trader-backtest/lab.py --etf"
                      if c_cfg["autopilot"]["etf_trend"]["enabled"] else "")
                  if written else "Dry run — add --write to save.")
+    return "\n".join(lines)
+
+
+def ai_report() -> dict:
+    """The AI desk's verdicts next to what the trades then did: closed autopilot trades by the verdict at entry."""
+    from shared import trades as tradesmod
+    rows = [t for t in tradesmod.merge((state.read_json("journal.json", {}) or {}).get("trades") or [])
+            if t.get("source") == "autopilot" and t.get("status") == "closed" and t.get("ai")]
+    groups = {}
+    for t in rows:
+        r = t.get("r_net") if t.get("r_net") is not None else t.get("r_multiple")
+        if r is None:
+            continue
+        g = "GO" if t["ai"] == "GO" else ("NO-GO / WAIT" if t["ai"] in ("NO-GO", "WAIT") else "no verdict")
+        groups.setdefault(g, []).append(float(r))
+    out = {}
+    for g, rs in groups.items():
+        out[g] = {"trades": len(rs), "won": sum(1 for r in rs if r > 0), "avg_r": round(sum(rs) / len(rs), 3),
+                  "total_r": round(sum(rs), 2)}
+    return out
+
+
+def ai_report_text(rep: dict) -> str:
+    if not rep:
+        return ("AI DESK ADVICE · no closed trade with an AI verdict yet — set ai_desk.enabled true and ai_desk.mode "
+                "\"advise\", then wait for trades to close")
+    lines = ["AI DESK ADVICE · closed trades by the verdict at entry (R = result in units of the risk taken)"]
+    for g in ("GO", "NO-GO / WAIT", "no verdict"):
+        if g in rep:
+            x = rep[g]
+            lines.append("  %-13s %3d trades · %d won · average %+.2fR · total %+.1fR" % (
+                g, x["trades"], x["won"], x["avg_r"], x["total_r"]))
+    no = rep.get("NO-GO / WAIT")
+    if not no or no["trades"] < 20 or (rep.get("GO") or {}).get("trades", 0) < 20:
+        lines.append("Too early to judge: wait for 20+ trades on each side — before that the difference is chance.")
+    elif no["total_r"] < 0:
+        lines.append("The trades it would have stopped lost %.1fR in total — a veto would have helped." % -no["total_r"])
+    else:
+        lines.append("The trades it would have stopped made %+.1fR in total — a veto would have cost that." % no["total_r"])
     return "\n".join(lines)
 
 
@@ -4059,6 +4105,10 @@ def main(argv=None) -> int:
     if args.action == "learned":
         doc = adapt.evaluate(cfg)
         cli.emit(args, learned_text(doc), doc)
+        return 0
+    if args.action == "ai-report":
+        rep = ai_report()
+        cli.emit(args, ai_report_text(rep), {"groups": rep})
         return 0
     if args.action == "lab":
         if not args.json:

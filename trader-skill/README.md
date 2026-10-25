@@ -174,6 +174,12 @@ failing, `ai_desk.on_unavailable` decides: `rule_based` keeps the rule-based dec
 trade. Try it by hand: `python3 trader-desk/ai_desk.py --id <idea>`. The rest of the pack never needs
 the SDK.
 
+It cannot be backtested honestly: the model has read what happened next (it knows which coin crashed in 2022), so
+a review of a 2021 trade would look prophetic. **`ai_desk.mode "advise"`** tests it forward instead: every trade
+still follows the rules, the verdict is written next to it in the book and the journal, and
+`autopilot.py ai-report` (`sudo traderctl ai-report`) compares the closed trades it said GO to with those it would
+have stopped — judged from 20+ trades on each side.
+
 ## Backtest lab — what actually worked, with how much certainty
 
 ```bash

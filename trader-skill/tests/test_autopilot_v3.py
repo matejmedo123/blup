@@ -222,6 +222,34 @@ class V3(TraderTestCase):
         self.assertEqual(d["action"], "skipped")
         self.assertIn("daily AI budget reached", d["reasons"][0])
 
+    def test_ai_desk_advise_mode_writes_the_verdict_and_never_stops_a_trade(self):
+        calls = self._fake_ai("NO-GO")
+        self.cfg(top={"ai_desk": {"enabled": True, "mode": "advise", "on_unavailable": "skip"}})
+        self.cycle("2026-10-20T13:50:00Z")
+        d = decision(self.NVDA)
+        self.assertEqual(d["action"], "taken")  # the rules decide
+        self.assertEqual(d["ai"]["status"], "NO-GO")
+        self.assertTrue(any(g["name"] == "AI desk" and g["ok"] and g["detail"].startswith("advice only — NO-GO")
+                            for g in d["gates"]))
+        self.assertEqual(calls, [(self.NVDA, "GO")])
+        items = (state.read_json("autopilot/book.json") or {}).get("items") or {}
+        self.assertEqual([it.get("ai") for it in items.values()], ["NO-GO"])
+
+    def test_ai_report_groups_closed_trades_by_the_verdict(self):
+        a = ap()
+        self.assertIn("no closed trade with an AI verdict yet", a.ai_report_text(a.ai_report()))
+        trades = [{"id": "t%d" % i, "plan_id": "p%d" % i, "source": "autopilot", "status": "closed", "ai": ai,
+                   "r_net": r, "pnl_usd": r * 10} for i, (ai, r) in enumerate(
+                       [("GO", 2.0), ("GO", -1.0), ("NO-GO", -1.0), ("WAIT", -0.5), ("NO-GO", 3.0)])]
+        trades.append({"id": "open", "source": "autopilot", "status": "open", "ai": "NO-GO"})
+        state.write_json("journal.json", {"trades": trades})
+        rep = a.ai_report()
+        self.assertEqual(rep["GO"], {"trades": 2, "won": 1, "avg_r": 0.5, "total_r": 1.0})
+        self.assertEqual(rep["NO-GO / WAIT"], {"trades": 3, "won": 1, "avg_r": 0.5, "total_r": 1.5})
+        text = a.ai_report_text(rep)
+        self.assertIn("NO-GO / WAIT", text)
+        self.assertIn("Too early to judge", text)
+
     def test_ai_not_consulted_in_dry_run_or_for_no_go(self):
         calls = self._fake_ai("GO")
         self.cycle("2026-10-20T13:50:00Z", approved=None)

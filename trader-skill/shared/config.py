@@ -151,6 +151,7 @@ DEFAULT_CONFIG = {
         "max_usd_per_day": 3.0,
         "timeout_sec": 45,
         "on_unavailable": "rule_based",
+        "mode": "veto",  # "advise": the verdict is written next to the trade and never stops it (ai-report)
     },
     "news": {
         "x": {"enabled": True, "max_reads_per_day": 300, "poll_minutes": 15,
