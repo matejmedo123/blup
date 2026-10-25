@@ -481,6 +481,12 @@ class BybitBroker(Broker):
                 "account_id": "bybit-demo" if self.venue == "demo" else "bybit-%s" % self.mode,
                 "borrowed": max(0.0, -cash)}
 
+    def key_info(self) -> dict:
+        """What Bybit says about the key in use, read only: read-only or not, the IPs it is bound to."""
+        res = self._get("/v5/user/query-api")
+        return {"read_only": str(res.get("readOnly")) == "1", "ips": [str(i) for i in res.get("ips") or [] if i],
+                "note": res.get("note")}
+
     def _margin_leverage(self) -> float:
         st = None
         # Demo Trading lists the same "status and leverage" call under spot-margin-uta

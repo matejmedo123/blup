@@ -5,7 +5,7 @@ Robot obchoduje len vtedy, keď beží. Na notebooku to znamená „kým je zapn
 ostré peniaze na Bybit EU. Netreba byť programátor, stačí kopírovať príkazy do terminálu.
 
 **Na konci budeš mať:** robota, ktorý beží 24/7 na serveri, nástenku v prehliadači (aj v mobile),
-upozornenia na mobil a jasný postup: simulátor → Bybit EU Demo Trading → malý ostrý účet.
+upozornenia na mobil a jasný postup: simulátor → overenie spojenia s Bybit EU → malý ostrý účet.
 
 ---
 
@@ -16,7 +16,7 @@ upozornenia na mobil a jasný postup: simulátor → Bybit EU Demo Trading → m
 | VPS v EÚ, napr. OVHcloud VPS-1 (Ubuntu 24.04, 4 GB RAM) | tu robot beží nonstop | ~5–6 € / mesiac s DPH |
 | Prístup ku kódu na GitHube (`matejmedo123/blup`) | stiahnutie robota na server | zadarmo |
 | Mobilná aplikácia **ntfy** | upozornenia na mobil | zadarmo |
-| Účet na **bybit.eu** (jeho Demo Trading) | papierové obchodovanie cez skutočné API, neskôr ostrý účet | zadarmo |
+| Účet na **bybit.eu** | najprv overenie spojenia kľúčom len na čítanie, potom ostrý účet | zadarmo |
 | Neskôr účet na **bybit.eu** (overenie totožnosti) | ostré peniaze | vklad podľa teba |
 | Voliteľne doména (napr. z Websupportu) | nástenka cez HTTPS aj v mobile | ~10 € / rok |
 
@@ -338,43 +338,40 @@ Správa ti príde, keď robot:
 Robot obchoduje na lokálnej papierovej knihe so skutočnými cenami. Sleduj, či žije, či obchoduje podľa
 pravidiel (karta **Checks**) a či ti chodia upozornenia.
 
-### Fáza 2 · Bybit EU Demo Trading (papier, ale cez skutočné API burzy, aspoň 2–3 týždne)
+### Fáza 2 · Simulátor + overenie spojenia s Bybit EU (aspoň 2–3 týždne)
 
-1. Prihlás sa na **bybit.eu**, klikni na profil vpravo hore a prepni na **Demo Trading**. Je to samostatný demo
-   účet s testovacími peniazmi. Ak v ňom nemáš **USDC**, vyžiadaj si demo peniaze.
-2. Stále v Demo Trading: profil → **API** → *Create New Key → System-generated*, práva **Read-Write**,
-   *Unified Trading → Spot (Trade)*. **Withdraw (výber) nezaškrtávaj.** Kľúč naviaž na IP adresu servera.
-   Kľúč z Demo Trading funguje len pre demo, s ostrým účtom nič neurobí.
-3. Kľúče daj do `sudo nano /etc/trader/trader.env`:
+Bybit EU Demo Trading zatiaľ cez API nepustí k demo účtu: trhové dáta áno, zostatok a príkazy nie (overené
+25. 10. 2026 so správnym demo kľúčom na `api-demo.bybit.eu` aj `api-demo.bybit.com`). Preto robot papierovo
+obchoduje ďalej na **simulátore** (so skutočnými cenami a nákladmi Bybitu) a spojenie s Bybitom overíš kľúčom
+**ostrého** účtu, ktorý vie **len čítať** — nič nekúpi ani nepredá.
+
+1. Na **bybit.eu** v ostrom účte (nie v Demo Trading): profil → **API** → *Create New Key → System-generated*,
+   práva **Read-Only**, IP adresa servera. Withdraw ani Transfer nezaškrtávaj.
+2. Kľúče daj do `sudo nano /etc/trader/trader.env`:
 
    ```
-   BYBIT_DEMO_KEY=...
-   BYBIT_DEMO_SECRET=...
+   BYBIT_LIVE_KEY=...
+   BYBIT_LIVE_SECRET=...
    ```
 
-4. Prepni brokera na Bybit (režim ostáva `paper` = Demo Trading) a over spojenie:
+3. Over spojenie (robot ostáva na simulátore, tento príkaz ho na ostrý účet neprepne):
 
    ```bash
-   sudo -u trader python3 - <<'EOF'
-   import json
-   p = "/var/lib/trader/config.json"
-   c = json.load(open(p))
-   c["autopilot"]["broker"] = "bybit"
-   json.dump(c, open(p, "w"), indent=2)
-   EOF
-   sudo traderctl restart
-   sudo traderctl broker-test      # len čítanie: kľúče, IP, zostatok, mince — nič neposiela
+   sudo traderctl broker-test --live-keys
    ```
 
-`broker-test` musí skončiť bez chyby. Ak nie, pozri časť 16.
+   Majú byť štyri ✓ a riadok `✓ key  read only · IP …`. Tým je overené, že robot s Bybit EU správne komunikuje.
+
+Ak by Bybit EU demo cez API neskôr sprístupnil: kľúč z Demo Trading do `BYBIT_DEMO_KEY` / `BYBIT_DEMO_SECRET`,
+v `config.json` `"broker": "bybit"` a `sudo traderctl broker-test` (robot skúsi obe demo adresy sám).
 
 ### Fáza 3 · Ostrý účet na bybit.eu (začni malou sumou)
 
 1. Účet na **bybit.eu**, overenie totožnosti, vklad v EUR → zmeň na **USDC**.
 2. Ak chceš páku 1,5×, zapni na webe alebo v aplikácii **Spot margin** (Bybit chce krátky kvíz). Bez nej
    nastav profil s `--leverage 1` (krok 7).
-3. Nový API kľúč ako v Demo Trading, ale v **ostrom** účte (prepni späť z Demo Trading): **bez práva výberu**,
-   naviazaný na IP servera.
+3. Kľúču z fázy 2 daj na bybit.eu (*API → Edit*) práva **Read-Write** a *Unified Trading → Spot (Trade)*,
+   alebo vytvor nový. Vždy **bez práva výberu**, naviazaný na IP servera.
 4. Do `/etc/trader/trader.env`:
 
    ```
@@ -481,7 +478,7 @@ Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 | „no backtest-lab playbook yet“ | laboratórium ešte beží (časť 8) — počkaj; chybu uvidíš v `housekeeping.jsonl` |
 | Robot nič nekupuje | normálne: denné signály prichádzajú raz za deň a nie každý deň. Dôvod každého rozhodnutia je na karte **Bot** |
 | Bybit „Unmatched IP“ / 10010 | API kľúč je naviazaný na inú IP — v Bybite nastav IP servera |
-| Bybit 10003 / HTTP 401 (neplatný kľúč) | v režime `paper` platia len kľúče vytvorené v **Demo Trading** na bybit.eu (riadky `BYBIT_DEMO_KEY` / `BYBIT_DEMO_SECRET`), nie kľúče ostrého účtu. Prvý riadok `broker-test` ukáže adresu, kam sa robot pripája. Inak: kľúč a secret prehodené alebo neúplne skopírované. Dĺžky over: `sudo bash -c '. /etc/trader/trader.env; echo ${#BYBIT_DEMO_KEY} ${#BYBIT_DEMO_SECRET}'` (zvyčajne 18 a 36) |
+| Bybit 10003 / HTTP 401 (neplatný kľúč) | v režime `paper` platia len kľúče vytvorené v **Demo Trading** na bybit.eu (riadky `BYBIT_DEMO_KEY` / `BYBIT_DEMO_SECRET`), nie kľúče ostrého účtu (Bybit EU demo však cez API zatiaľ nefunguje — fáza 2 ide cez `broker-test --live-keys`). Prvý riadok `broker-test` ukáže adresu, kam sa robot pripája. Inak: kľúč a secret prehodené alebo neúplne skopírované. Dĺžky over: `sudo bash -c '. /etc/trader/trader.env; echo ${#BYBIT_DEMO_KEY} ${#BYBIT_DEMO_SECRET}'` (zvyčajne 18 a 36) |
 | Bybit 10004 (zlý podpis) | secret je zle skopírovaný |
 | Bybit 170359 („not support leveraged“) | tvoj účet nemá spot maržu — zapni ju alebo daj profil s `--leverage 1` |
 | Nástenka cez doménu vráti 403 | chýba `TRADER_DASHBOARD_PASSWORD` v `/etc/trader/trader.env`, potom `sudo traderctl restart` |

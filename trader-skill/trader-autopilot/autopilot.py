@@ -3433,16 +3433,28 @@ def _restart() -> None:
         os._exit(70)
 
 
-def broker_test(cfg: dict) -> dict:
-    """Read-only calls to the configured broker — keys, IP binding, account, coins — and nothing is ever sent."""
-    lines, ok = [], True
-    try:
-        b = brokers.get(cfg)
-    except BrokerError as exc:
-        return {"ok": False, "lines": ["BROKER TEST · %s · %s" % ((cfg.get("autopilot") or {}).get("broker"), exc)]}
-    where = "%s, %s" % (getattr(b, "venue", ""), getattr(b, "base", "")) if getattr(b, "venue", None) else ""
-    lines.append("BROKER TEST · %s · %s%s (read only — nothing is sent)" % (b.name, b.mode, " (%s)" % where if where else ""))
+def broker_test(cfg: dict, live_keys: bool = False) -> dict:
+    """Read-only calls to the configured broker — keys, IP binding, account, coins — and nothing is ever sent.
+
+    ``live_keys``: the LIVE keys, read only, while the bot itself stays where it is (simulator or paper) — the
+    connection to the real account is proven with a read-only key before any money is at stake. The live opt-in
+    is not touched: this builds a broker for the read-only calls below, never one the bot trades with."""
     from shared import secrets
+    lines, ok = [], True
+    kind = (cfg.get("autopilot") or {}).get("broker") or "simulator"
+    try:
+        if live_keys:
+            if kind not in brokers.REAL:
+                kind = "bybit" if secrets.has(brokers.LIVE_KEYS["bybit"][0]) else "alpaca"
+            b = brokers._real(kind)("live", cfg)
+        else:
+            b = brokers.get(cfg)
+    except BrokerError as exc:
+        return {"ok": False, "lines": ["BROKER TEST · %s · %s" % (kind, exc)]}
+    where = "%s, %s" % (getattr(b, "venue", ""), getattr(b, "base", "")) if getattr(b, "venue", None) else ""
+    lines.append("BROKER TEST · %s · %s%s (read only — nothing is sent%s)" % (
+        b.name, "live keys" if live_keys else b.mode, " (%s)" % where if where else "",
+        "; the bot is not switched to live" if live_keys else ""))
     kn, sn = getattr(b, "_key_name", None), getattr(b, "_secret_name", None)
     if kn and sn:  # compare with the key id the exchange shows: a swapped or other key is seen at a glance
         k = secrets.get(kn)
@@ -3467,6 +3479,15 @@ def broker_test(cfg: dict) -> dict:
         else:
             detail = "%d" % len(v)
         lines.append("  ✓ %-11s %s · %.0f ms" % (name, detail, ms))
+    if live_keys and ok and hasattr(b, "key_info"):
+        try:
+            info = b.key_info()
+            lines.append("  %s key         %s · IP %s" % (
+                "✓" if info["read_only"] else "!", "read only" if info["read_only"] else
+                "can trade — needed later for live trading; for this check read only is enough",
+                ", ".join(info["ips"]) or "any (bind it to this server's IP)"))
+        except Exception as exc:  # noqa: BLE001 — the checks above already answered; this is extra
+            lines.append("  · key         no details (%s)" % exc)
     for note in getattr(b, "notes", []) or []:
         lines.append("  note: %s" % note)
     if any("code 10003" in ln or "(HTTP 401)" in ln for ln in lines):
@@ -3590,6 +3611,9 @@ def build_parser():
                                       "forget", "lab"))
     p.add_argument("--once", action="store_true", help="run: a single cycle (default)")
     p.add_argument("--refresh", action="store_true", help="universe: rebuild it now instead of showing the cached one")
+    p.add_argument("--live-keys", action="store_true",
+                   help="broker-test: check the LIVE keys, read only, without switching the bot to live (nothing is "
+                        "sent; a read-only key is enough)")
     p.add_argument("--approve", action="store_true",
                    help="standing approval for this run (otherwise config autopilot.enabled decides; else dry run)")
     p.add_argument("--interval", type=int,
@@ -3988,7 +4012,7 @@ def main(argv=None) -> int:
         cli.emit(args, text, {"live_ready": ok, "missing": missing})
         return 0
     if args.action == "broker-test":
-        res = broker_test(cfg)
+        res = broker_test(cfg, live_keys=args.live_keys)
         cli.emit(args, "\n".join(res["lines"]), res)
         return 0 if res["ok"] else 1
     if args.action == "check":

@@ -494,6 +494,25 @@ class BrokerTest(BybitBase):
         self.assertIn("equity $1,000.00", "\n".join(res["lines"]))
         self.assertFalse([c for c in self.ex.calls if c["method"] == "POST"])
 
+    def test_live_keys_read_only_without_the_live_opt_in(self):
+        a = load("trader-autopilot", "autopilot")
+        os.environ["BYBIT_LIVE_KEY"], os.environ["BYBIT_LIVE_SECRET"] = "BYLIVEKEY789", "bybit-live-secret-33"
+        cfg = config.load_config()  # the bot stays on the simulator, paper — no live step is set
+        self.ex.on("/v5/account/wallet-balance", ok({"list": [{"totalEquity": "250", "coin": [
+            {"coin": "USDC", "walletBalance": "250", "spotBorrow": "0", "usdValue": "250"}]}]}),
+            ok({"list": [{"totalEquity": "250", "coin": []}]}))
+        self.ex.on("/v5/user/query-api", ok({"readOnly": 1, "ips": ["159.195.240.225"]}))
+        res = a.broker_test(cfg, live_keys=True)
+        text = "\n".join(res["lines"])
+        self.assertTrue(res["ok"], text)
+        self.assertIn("live keys", res["lines"][0])
+        self.assertIn("the bot is not switched to live", res["lines"][0])
+        self.assertIn("✓ key         read only · IP 159.195.240.225", text)
+        self.assertEqual({c["host"] for c in self.ex.calls}, {"api.bybit.eu"})
+        self.assertFalse([c for c in self.ex.calls if c["method"] == "POST"])  # nothing is ever sent
+        self.assertEqual(brokers.mode_of(config.load_config()), "simulator")  # and the bot was not switched
+        self.assertFalse(brokers.live_readiness(config.load_config(), book=False)[0])
+
     def test_an_unknown_key_on_demo_says_where_demo_keys_come_from(self):
         a = load("trader-autopilot", "autopilot")
         cfg = config.load_config()
