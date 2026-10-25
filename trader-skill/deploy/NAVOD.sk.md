@@ -246,7 +246,8 @@ a z bezpečnosti je najprv zamknutá len pre server samotný. Tu jej dáš **vla
 
 1. Tam, kde máš doménu (napr. admin.websupport.sk → *Domény* → doména → *DNS*), klikni *Pridať záznam*:
    typ **A**, názov = prvá časť adresy (napr. `bot`), hodnota = IP servera. Ulož a počkaj 5–60 minút.
-   **Existujúce záznamy nemaž ani neprepisuj** (`@`, `www`, `mail`, MX, TXT…) — na nich beží web a e-mail
+   Názov **nenechávaj prázdny** — prázdny názov je samotná doména (tam beží web) a polovica návštevníkov webu by
+   potom skončila na serveri robota. **Existujúce záznamy nemaž ani neprepisuj** (`@`, `www`, `mail`, MX, TXT…) — na nich beží web a e-mail
    domény. Len pridávaš nový. Upravuješ iba záznam s presne tým istým názvom (`bot`), ak už nejaký je.
 2. Heslo `TRADER_DASHBOARD_PASSWORD` musí byť nastavené (krok 6). Na serveri (adresu prepíš na svoju):
 
