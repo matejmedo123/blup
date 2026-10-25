@@ -93,10 +93,29 @@ zadaj svoje nové:
 
 ```bash
 sudo apt update && sudo apt -y upgrade
-sudo apt install -y git
+sudo apt install -y git ufw
 sudo ufw allow OpenSSH
 sudo ufw enable
 ```
+
+**netcup a iné servery s Debianom, kde si prihlásený ako `root`:** `sudo` ani firewall tam ešte nie sú. Ak ti
+po prihlásení vypíše *„WARNING! Your environment specifies an invalid locale“* a *„setlocale: LC_CTYPE: cannot
+change locale (UTF-8)“*, je to neškodné (Mac posiela svoje nastavenie jazyka, ktoré Linux nepozná). Namiesto
+príkazov vyššie vlož tieto — opravia aj to varovanie:
+
+```bash
+apt update && apt -y upgrade
+apt install -y sudo git ufw
+echo 'LANG=C.UTF-8' > /etc/default/locale
+sed -i 's/^AcceptEnv/#AcceptEnv/' /etc/ssh/sshd_config
+sshd -t && systemctl restart ssh
+[ -d /var/lib/cloud/instance ] && touch /var/lib/cloud/instance/locale-check.skip
+ufw allow 22/tcp
+ufw enable
+```
+
+Pri `ufw enable` potvrď `y`. Potom `exit` a pripoj sa znova — varovania zmiznú. Ďalšie kroky fungujú aj pod
+`root`, príkazy so `sudo` tiež.
 
 ## 4. Stiahni robota na server
 
@@ -440,6 +459,8 @@ Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 |---|---|
 | `ssh` píše „Could not resolve hostname“ | IP je napísaná zle: má presne 4 čísla oddelené bodkou, každé 0–255 (napr. `159.195.240.225`). Skopíruj ju z e-mailu alebo z ovládacieho panela poskytovateľa |
 | `ssh` píše „Permission denied“ | zlé heslo alebo používateľ: pri OVH `ubuntu`, pri netcupe `root`; heslo je v e-mailu |
+| Po prihlásení „invalid locale“ / „setlocale: LC_CTYPE“ | neškodné; oprava je v časti 3 (netcup / Debian) |
+| `sudo: command not found` | Debian ako `root`: najprv `apt update && apt install -y sudo` (časť 3) |
 | `ssh` píše „Connection timed out“ | server ešte nebeží alebo je IP zlá — skontroluj ju v e-maile a v ovládacom paneli |
 | `health` píše FAIL / „no heartbeat“ | `sudo traderctl logs`, `sudo systemctl status trader-autopilot` |
 | „no backtest-lab playbook yet“ | laboratórium ešte beží (časť 8) — počkaj; chybu uvidíš v `housekeeping.jsonl` |
