@@ -463,6 +463,7 @@ Na počítač si ju stiahneš: `scp ubuntu@203.0.113.10:~/trader-zaloha-*.tgz .`
 | `ssh` píše „Could not resolve hostname“ | IP je napísaná zle: má presne 4 čísla oddelené bodkou, každé 0–255 (napr. `159.195.240.225`). Skopíruj ju z e-mailu alebo z ovládacieho panela poskytovateľa |
 | `ssh` píše „Permission denied“ | zlé heslo alebo používateľ: pri OVH `ubuntu`, pri netcupe `root`; heslo je v e-mailu |
 | Po prihlásení „invalid locale“ / „setlocale: LC_CTYPE“ | neškodné; oprava je v časti 3 (netcup / Debian) |
+| Konzola v paneli poskytovateľa píše „systemd-ssh-generator … Failed to query local AF_VSOCK CID“ | neškodné hlásenie Debianu 13 (hľadá spojenie, ktoré tento server nemá). Konzolu zavri a pracuj cez `ssh` |
 | `sudo: command not found` | Debian ako `root`: najprv `apt update && apt install -y sudo` (časť 3) |
 | `ssh` píše „Connection timed out“ | server ešte nebeží alebo je IP zlá — skontroluj ju v e-maile a v ovládacom paneli |
 | `health` píše FAIL / „no heartbeat“ | `sudo traderctl logs`, `sudo systemctl status trader-autopilot` |
