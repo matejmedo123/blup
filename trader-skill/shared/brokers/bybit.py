@@ -37,13 +37,16 @@ from .base import broker_symbol, Broker, BrokerError, order_dict
 
 BASE = {"paper": "https://api-demo.bybit.eu", "live": "https://api.bybit.eu"}
 KEYS = {"paper": ("BYBIT_DEMO_KEY", "BYBIT_DEMO_SECRET"), "live": ("BYBIT_LIVE_KEY", "BYBIT_LIVE_SECRET")}
-# where paper trades: (REST host, key names, where the keys come from) — a fixed host each, never a setting: a
-# paper host pointed at a live API would trade real money past the live opt-in
+# where paper trades: (REST hosts, key names, where the keys come from) — fixed hosts, never a setting: a paper
+# host pointed at a live API would trade real money past the live opt-in. A bybit.eu Demo Trading key is asked
+# for at both of Bybit's demo hosts (the .eu one answers market data but has refused such keys); both are demo.
 PAPER_VENUES = {
-    "demo": (BASE["paper"], KEYS["paper"], "Bybit EU demo keys: bybit.eu → profile → Demo Trading → API"),
-    "testnet": ("https://api-testnet.bybit.com", ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET"),
+    "demo": ((BASE["paper"], "https://api-demo.bybit.com"), KEYS["paper"],
+             "Bybit EU demo keys: bybit.eu → profile → Demo Trading → API"),
+    "testnet": (("https://api-testnet.bybit.com",), ("BYBIT_TESTNET_KEY", "BYBIT_TESTNET_SECRET"),
                 "testnet keys: testnet.bybit.com → API"),
 }
+_HOST_CHOICE = {}  # (venue, key fingerprint) → the demo host that knew the key, for this process
 TIMEOUT = 15
 RECV_WINDOW = "10000"
 STABLES = ("USDC", "USDT", "USD", "EUR")
@@ -144,11 +147,13 @@ class BybitBroker(Broker):
         bcfg = ((self.cfg.get("autopilot") or {}).get("bybit") or {})
         if mode == "paper":
             self.venue = paper_venue(self.cfg)
-            self.base, (key_name, secret_name), how = PAPER_VENUES[self.venue]
+            self._hosts, (key_name, secret_name), how = PAPER_VENUES[self.venue]
         else:
             self.venue = "live"
             key_name, secret_name = KEYS["live"]
-            self.base, how = bcfg.get("host") or BASE["live"], "Bybit EU → Account → API, trading only, no withdrawals"
+            self._hosts, how = (bcfg.get("host") or BASE["live"],), "Bybit EU → Account → API, trading only, no withdrawals"
+        self.base = self._hosts[0]
+        self._host_known = len(self._hosts) == 1
         missing = [n for n in (key_name, secret_name) if not secrets.has(n)]
         if missing:
             if self.venue == "demo" and secrets.has(PAPER_VENUES["testnet"][1][0]):
@@ -209,9 +214,40 @@ class BybitBroker(Broker):
         except (http.client.HTTPException, ValueError, EOFError) as exc:
             raise ConnectionError("unreadable reply from Bybit (%s)" % type(exc).__name__)
 
+    def _choose_host(self) -> None:
+        """The first signed call: ask each demo host, read only, whether it knows the key, and stay with the first
+        that does (remembered for the process). None does: the first host, and a note of what each said."""
+        self._host_known = True
+        cache = (self.venue, hashlib.sha256(secrets.get(self._key_name).encode("utf-8")).hexdigest()[:16])
+        if cache in _HOST_CHOICE:
+            self.base = _HOST_CHOICE[cache]
+            return
+        said = []
+        for host in self._hosts:
+            self.base = host
+            try:
+                rep = self._send("GET", "/v5/order/realtime", {"category": "spot", "limit": 1})
+            except urllib.error.HTTPError as err:
+                said.append("%s: HTTP %s" % (host, err.code))
+                continue
+            except (urllib.error.URLError, socket.timeout, ConnectionError) as err:
+                said.append("%s: %s" % (host, getattr(err, "reason", err)))
+                continue
+            code = str(rep.get("retCode"))
+            if code in ("0", "10002"):  # known (10002: only our clock is off, the next call fixes that)
+                _HOST_CHOICE[cache] = host
+                if said:
+                    self.notes.append("demo host %s (%s)" % (host, "; ".join(said)))
+                return
+            said.append("%s: %s (code %s)" % (host, rep.get("retMsg") or "refused", code))
+        self.base = self._hosts[0]
+        self.notes.append("no Bybit demo host knows this key — " + "; ".join(said))
+
     def _call(self, method: str, path: str, params: dict = None, signed: bool = True, retries: int = 0,
               resync: bool = True):
         """The ``result`` of a call; retCode ≠ 0 → _Refused; transport trouble → BrokerError after retries."""
+        if signed and not self._host_known:
+            self._choose_host()
         delay = 1.0
         for attempt in range(retries + 1):
             try:

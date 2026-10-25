@@ -47,7 +47,7 @@ class FakeBybit:
         url = urllib.parse.urlsplit(req.full_url)
         q = dict(urllib.parse.parse_qsl(url.query))
         body = json.loads(req.data.decode()) if req.data else None
-        self.calls.append({"method": req.get_method(), "path": url.path, "query": q, "body": body,
+        self.calls.append({"method": req.get_method(), "host": url.netloc, "path": url.path, "query": q, "body": body,
                            "raw_query": url.query, "raw_body": req.data.decode() if req.data else None,
                            "headers": {k.lower(): v for k, v in req.header_items()}})
         if self.script.get(url.path):
@@ -103,6 +103,9 @@ class BybitBase(TraderTestCase):
         os.environ.pop("TRADER_OFFLINE", None)  # the adapter refuses offline; its opener is faked instead
         os.environ["BYBIT_DEMO_KEY"], os.environ["BYBIT_DEMO_SECRET"] = KEY, SECRET
         self.ex = FakeBybit()
+        bybit_mod._HOST_CHOICE.clear()
+        # the demo host is known already: the tests below script replies per path, the asking is tested apart
+        bybit_mod._HOST_CHOICE[("demo", hashlib.sha256(KEY.encode()).hexdigest()[:16])] = bybit_mod.BASE["paper"]
         self.patch = mock.patch.object(bybit_mod, "_OPENER", self.ex)
         self.patch.start()
         self.addCleanup(self.patch.stop)
@@ -184,6 +187,40 @@ class BybitAdapter(BybitBase):
         config.update_file("config.json", {"autopilot": {"bybit": {"host": "https://api.bybit.eu",
                                                                    "paper_host": "https://api.bybit.eu"}}})
         self.assertEqual(self.broker().base, "https://api-demo.bybit.eu")
+
+    def test_a_demo_key_is_asked_for_at_both_demo_hosts(self):
+        bybit_mod._HOST_CHOICE.clear()
+        unknown = {"retCode": 10003, "retMsg": "API key is invalid.", "result": {}}
+        self.ex.on("/v5/order/realtime", unknown)  # the .eu host does not know it, the .com one does
+        b = self.broker()
+        b.account()
+        self.assertEqual(b.base, "https://api-demo.bybit.com")
+        self.assertEqual([c["host"] for c in self.ex.calls if c["path"] == "/v5/order/realtime"],
+                         ["api-demo.bybit.eu", "api-demo.bybit.com"])
+        self.assertEqual({c["host"] for c in self.ex.calls if c["path"] == "/v5/account/wallet-balance"},
+                         {"api-demo.bybit.com"})
+        self.assertIn("api-demo.bybit.eu: API key is invalid. (code 10003)", b.notes[0])
+        self.assertFalse([c for c in self.ex.calls if c["method"] == "POST"])  # asking is read only
+        again = self.broker()  # the same process remembers: no second round of asking
+        again.account()
+        self.assertEqual(again.base, "https://api-demo.bybit.com")
+        self.assertEqual(sum(1 for c in self.ex.calls if c["path"] == "/v5/order/realtime"), 2)
+
+    def test_no_demo_host_knows_the_key(self):
+        bybit_mod._HOST_CHOICE.clear()
+        unknown = {"retCode": 10003, "retMsg": "API key is invalid.", "result": {}}
+        self.ex.on("/v5/order/realtime", unknown, unknown)
+        b = self.broker()
+        b._call("GET", "/v5/market/time", signed=True)
+        self.assertEqual(b.base, "https://api-demo.bybit.eu")
+        self.assertIn("no Bybit demo host knows this key", b.notes[-1])
+
+    def test_live_and_testnet_never_ask_another_host(self):
+        os.environ["BYBIT_LIVE_KEY"], os.environ["BYBIT_LIVE_SECRET"] = KEY, SECRET
+        live = BybitBroker("live", config.load_config())
+        live.account()
+        self.assertEqual({c["host"] for c in self.ex.calls}, {"api.bybit.eu"})
+        self.assertFalse([c for c in self.ex.calls if c["path"] == "/v5/order/realtime"])
 
     def test_margin_leverage_also_read_where_demo_lists_it(self):
         self.ex.on("/v5/spot-margin-trade/state", {"retCode": 10001, "retMsg": "not supported", "result": {}})
