@@ -17,8 +17,9 @@ the list, and ``backtests/playbook-history.jsonl`` remembers each version. An ET
 the next US session's first entry time (9:45 ET); a crypto one after its bar closed. A daily trade bought while the
 playbook did not hold it is a problem (OUTSIDE).
 
-The verdict is "ok" when nothing was missed or extra, no decision ended in an error, and the average entry
-slippage is within twice the costs the backtests assume. State lives in ``autopilot/shadow.json``.
+The verdict is "ok" when nothing was missed or extra, no decision ended in an error, the average entry slippage
+over at least ``MIN_FILLS`` fills is within twice the costs the backtests assume, and no single fill is more than
+``OUTLIER_BPS`` from its signal. State lives in ``autopilot/shadow.json``.
 """
 from __future__ import annotations
 
@@ -28,6 +29,10 @@ FILE = "autopilot/shadow.json"
 PLAYBOOKS = (("crypto", "backtests/playbook.json"), ("stock", "backtests/playbook-etf.json"))
 HISTORY = "backtests/playbook-history.jsonl"
 CONTROL_LOG = "autopilot/control_log.jsonl"
+# The order goes in seconds after the daily close and fills minutes later: an alt moves 0.2–0.4 % in that time, so
+# one fill says little about execution — the average of several does, and one fill this far off is worth a look.
+MIN_FILLS = 5
+OUTLIER_BPS = 50.0
 DECISIONS = "autopilot/decisions.jsonl"
 BOOK = "autopilot/book.json"
 BAR = 86400
@@ -229,9 +234,7 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
     for r in rows:
         if r["outcome"] in ("missed", "extra", "error"):
             problems.append("%s %s %s: %s" % (r["outcome"].upper(), r["symbol"], r["setup"], r.get("reason")))
-        if r.get("slippage_bps") is not None and r["slippage_bps"] > allowed[r["asset"]]:
-            problems.append("SLIPPAGE %s: filled %.0f bps above the signal (backtest assumes ≤ %.0f)" % (
-                r["symbol"], r["slippage_bps"], allowed[r["asset"]] / 2 - 2.5))
+    problems += slippage_problems(rows, allowed)
     verdict = "ok" if not problems else "check"
     span = "%d days" % days if since <= start else "%d days (since the bot started %s)" % (
         days, market_clock.iso(since + 3600)[:10])
@@ -244,6 +247,21 @@ def run(cfg: dict, now=None, days: int = 30, memo: dict = None) -> dict:
            "text": text + (" — %d problem(s)" % len(problems) if problems else " — the bot did what the rules say")}
     state.write_json(FILE, doc)
     return doc
+
+
+def slippage_problems(rows: list, allowed: dict) -> list:
+    """One fill far off its signal, or entries above it on average over enough fills. ``allowed``: bps per asset."""
+    out = []
+    for r in rows:
+        if r.get("slippage_bps") is not None and r["slippage_bps"] > max(OUTLIER_BPS, allowed[r["asset"]]):
+            out.append("SLIPPAGE %s: filled %.0f bps above the signal (backtest assumes ≤ %.0f)" % (
+                r["symbol"], r["slippage_bps"], allowed[r["asset"]] / 2 - 2.5))
+    for a in ("crypto", "stock"):
+        own = [r["slippage_bps"] for r in rows if r.get("asset") == a and r.get("slippage_bps") is not None]
+        if len(own) >= MIN_FILLS and sum(own) / len(own) > allowed[a]:
+            out.append("SLIPPAGE %s entries: %+.0f bps above the signal on average over %d fills (backtest assumes "
+                       "≤ %.0f)" % (a, sum(own) / len(own), len(own), allowed[a] / 2 - 2.5))
+    return out
 
 
 def text(doc: dict) -> str:

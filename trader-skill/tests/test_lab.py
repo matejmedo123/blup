@@ -398,6 +398,10 @@ class DailyAutopilot(TraderTestCase):
         self.assertIn("3×ATR", plan["stop"]["note"])
         self.assertEqual(mc.ts(plan["time_stop"]["at"]) - mc.ts(plan["entry"]["time"]), 10 * 86400)
         self.assertIn("exit rule decides", plan["target"]["note"])
+        self.assertEqual(d[0]["action"], "taken", d[0])
+        self.assertIn(", no target, sells by its exit rule — ", d[0]["reasons"][0])  # not the far cap's price
+        sent = [n for n in state.read_jsonl("notifications.jsonl") if n["event"] == "trade_opened"]
+        self.assertIn("no target", sent[-1]["text"])
         # like the lab's rule trades: no take-profit before the exit rule — only the stop and the rule close it
         risk = plan["entry"]["price"] - plan["stop"]["price"]
         self.assertGreaterEqual((plan["target"]["price"] - plan["entry"]["price"]) / risk, 999)

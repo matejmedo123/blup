@@ -229,7 +229,7 @@ class Pruning(TraderTestCase):
         state.write_json("orders.json", {"orders": [{"id": "ord-gone", "created_at": old},
                                                     {"id": "ord-held", "created_at": old}]})
         state.write_json("entries.json", {"entries": {"gone": {"id": "gone", "checked_at": old}}})
-        stamp = time.time() - 60 * 86400
+        stamp = mc.ts(self.NOW) - 60 * 86400  # the bot's clock: the real one runs on past the pinned NOW
         for rel in ("desk/gone/desk.json", "desk/held/desk.json", "timemachine/NVDA-20260801.json",
                     "backtests/NVDA-orb15.json", "backtests/lab-crypto.json"):
             state.write_json(rel, {})

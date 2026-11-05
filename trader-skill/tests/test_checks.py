@@ -161,6 +161,11 @@ class BacktestVsReality(TraderTestCase):
             "plan_id": self.sid, "symbol": "ETH/USD", "asset": "crypto", "interval": "1d", "status": "open",
             "entry_fill": self.price * 1.01, "placed_at": "2026-10-14T00:01:00Z", "setup": "trend_breakout"}}})
         self.assertIn("SLIPPAGE ETH/USDT: filled 100 bps", shadow.run(self.cfg)["problems"][0])
+        self.write_state("autopilot/book.json", {"items": {self.sid: {
+            "plan_id": self.sid, "symbol": "ETH/USD", "asset": "crypto", "interval": "1d", "status": "open",
+            "entry_fill": self.price * 1.0022, "placed_at": "2026-10-14T00:01:00Z", "setup": "trend_breakout"}}})
+        doc = shadow.run(self.cfg)  # UNI on 5 Nov 2026: +22 bps in the minutes after the close is one fill's noise
+        self.assertEqual((doc["rows"][0]["slippage_bps"], doc["verdict"]), (22.0, "ok"), doc["problems"])
         self.write_state("autopilot/book.json", {"items": {}})
         state.append_jsonl("autopilot/decisions.jsonl", {"id": self.sid, "action": "skipped",
                                                          "reasons": ["5 open/pending crypto position(s) — max 5"]})
@@ -171,6 +176,17 @@ class BacktestVsReality(TraderTestCase):
         self.assertIn("max 5", doc["rows"][0]["reason"])  # why it was not taken while fresh, not the next day's look
         state.append_jsonl("autopilot/decisions.jsonl", {"id": self.sid, "action": "taken", "reasons": []})
         self.assertEqual(shadow.run(self.cfg)["rows"][0]["outcome"], "ordered")
+
+    def test_slippage_is_judged_on_the_average_of_several_fills(self):
+        allowed = {"crypto": 11.0, "stock": 9.0}
+        rows = lambda *bps: [{"symbol": "X%d/USDT" % i, "asset": "crypto", "slippage_bps": b}  # noqa: E731
+                             for i, b in enumerate(bps)]
+        self.assertEqual(shadow.slippage_problems(rows(3.7, 22.3), allowed), [])  # two fills: too few to judge
+        self.assertEqual(shadow.slippage_problems(rows(3.7, 22.3, 15, 9, 4), allowed), [])  # +10.8 on average
+        out = shadow.slippage_problems(rows(14, 22, 15, 9, 12), allowed)
+        self.assertEqual(out, ["SLIPPAGE crypto entries: +14 bps above the signal on average over 5 fills "
+                               "(backtest assumes ≤ 3)"])
+        self.assertIn("SLIPPAGE X1/USDT: filled 60 bps", shadow.slippage_problems(rows(3, 60), allowed)[0])
 
     def test_the_playbook_of_the_day_decides(self):
         """The weekly lab run changes the list: a coin added later was not missed, one dropped later was no extra."""

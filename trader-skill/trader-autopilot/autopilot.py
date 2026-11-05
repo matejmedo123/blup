@@ -2312,9 +2312,11 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         return _decision(reasons=["risk BLOCK: %s" % r for r in res["reasons"]], desk=desk_info, gates=gates, **base)
     bsym = broker.book_symbol(plan["symbol"], asset) if hasattr(broker, "book_symbol") else \
         broker_symbol(plan["symbol"], asset)
-    text = "BUY %s %s, limit %s, stop %s, target %s — %s" % (
-        fmt.qty(order["qty"]), bsym, fmt.price(order["limit_price"]), fmt.price(order["stop_price"]),
-        fmt.price(order["target_price"]), broker.mode.upper())
+    # a rule-exit trade's take-profit is only a far cap (RULE_TARGET_CAP_R): its price would read like a forecast
+    target = "no target, sells by its exit rule" if plan.get("exit_rule") else "target " + fmt.price(order["target_price"])
+    text = "BUY %s %s, limit %s, stop %s, %s — %s" % (
+        fmt.qty(order["qty"]), bsym, fmt.price(order["limit_price"]), fmt.price(order["stop_price"]), target,
+        broker.mode.upper())
     bp = acct.get("buying_power")
     cash = float(bp if bp is not None else (acct.get("cash") or 0))
     if acct.get("cash") is not None and float(acct.get("equity") or 0) > 0:
