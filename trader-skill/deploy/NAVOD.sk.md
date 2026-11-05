@@ -449,6 +449,26 @@ sudo bash ~/blup/trader-skill/deploy/install-vps.sh
 
 Nastavenia, kľúče, denník obchodov aj pozície ostanú zachované. Reštart počká, kým robot dokončí cyklus.
 
+### Automaticky, bez terminálu (odporúčané)
+
+Raz spusti:
+
+```bash
+cd ~/blup && git pull && sudo bash ~/blup/trader-skill/deploy/auto-update.sh --install
+```
+
+Odvtedy si server každých 15 minút pozrie, či je nová verzia. Novú nainštaluje **až keď na nej prejdú všetky
+testy** (bežia pod používateľom robota na kópii, bez tvojich kľúčov). Keď testy neprejdú, ostane stará verzia a
+zapíše prečo. Tvoje vlastné zmeny v `~/blup` nikdy neprepíše.
+
+| Čo | Príkaz |
+|---|---|
+| Pozrieť hneď | `sudo traderctl update` |
+| Čo urobil | `sudo traderctl update-log` |
+| Vypnúť | `sudo systemctl disable --now trader-update.timer` |
+
+Pozor: kto môže pushnúť do tvojej vetvy na GitHube, mení kód na serveri. Používaj to len so svojím repozitárom.
+
 ---
 
 ## 15. Záloha

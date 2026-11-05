@@ -2960,6 +2960,8 @@ def _pid_alive(pid) -> bool:
         return True
     try:
         os.kill(int(pid), 0)
+    except PermissionError:  # it exists, it is only another user's (a daemon under systemd, a check run by root)
+        return True
     except (OSError, ValueError, TypeError):
         return False
     return True

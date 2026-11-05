@@ -6,6 +6,7 @@ import os
 import socket
 import time
 import types
+from unittest import mock
 
 from tests.helpers import TraderTestCase, load
 from shared import config, market_clock as mc, state
@@ -290,6 +291,13 @@ class V3(TraderTestCase):
         self.write_state("autopilot/daemon.lock", {"pid": 99999999, "host": socket.gethostname(), "started_at": now})
         code, out, err = self.run_tool("trader-autopilot", "autopilot", ["daemon", "--max-cycles", "1"])
         self.assertEqual(code, 0, out + err)
+
+    def test_another_users_process_is_alive(self):
+        a = ap()
+        with mock.patch.object(a.os, "kill", side_effect=PermissionError(1, "Operation not permitted")):
+            self.assertTrue(a._pid_alive(1))  # the daemon runs as the bot's user, a check may run as root or the other way
+        with mock.patch.object(a.os, "kill", side_effect=ProcessLookupError(3, "No such process")):
+            self.assertFalse(a._pid_alive(99999999))
 
     def test_cli_hands_run_and_kill_to_a_running_daemon(self):
         self.write_state("autopilot/daemon.lock", {"pid": os.getppid(), "host": socket.gethostname(),

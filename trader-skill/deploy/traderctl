@@ -10,6 +10,7 @@
 #   sudo traderctl lab                     run the backtest lab now (5–30 min; the bot runs it weekly by itself)
 #   sudo traderctl logs                    follow the daemon's log (Ctrl+C to leave)
 #   sudo traderctl start | stop | restart  the services (a stop can take up to 2 min: it finishes its cycle)
+#   sudo traderctl update | update-log     look for a new version now (tested, then installed) / what it did
 #
 #   sudo traderctl compare                 the real bot and the comparison bot (deploy/test-bot.sh) side by side
 #   sudo traderctl test <command>          any command above for the comparison bot, e.g. sudo traderctl test status
@@ -44,6 +45,15 @@ if [ "${1:-}" = "test" ]; then
 fi
 cmd="${1:-status}"
 case "$cmd" in
+  update)
+    if [ ! -f /etc/systemd/system/trader-update.service ]; then
+      echo "automatic updates are not set up — run: sudo bash <your checkout>/trader-skill/deploy/auto-update.sh --install" >&2
+      exit 1
+    fi
+    echo "looking for a new version — a new one is installed only after its tests pass (a few minutes)"
+    systemctl start trader-update.service || true
+    exec tail -n 12 /var/log/trader-update.log ;;
+  update-log) exec tail -n 40 /var/log/trader-update.log ;;
   logs) exec journalctl -u "$AP" -f -n 100 ;;
   dashboard-logs) exec journalctl -u "$DASH" -f -n 100 ;;
   start) exec systemctl start "$AP" "$DASH" ;;
