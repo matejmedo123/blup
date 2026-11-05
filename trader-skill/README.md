@@ -1077,6 +1077,15 @@ sudo traderctl license --install jana-example-sk-pro.json   # on the customer's 
 sudo traderctl license                                       # which plan it runs on
 ```
 
+Customers install with one command and a guide that asks instead of files to edit (password, licence, Bybit key,
+risk, Telegram; live trading only after they type the risk phrase themselves):
+
+```bash
+sudo bash /opt/trader/deploy/release.sh tvoja-domena.sk     # seller, after every update: the download + install.sh
+curl -fsSL https://tvoja-domena.sk/install.sh | sudo bash    # customer, on a fresh Debian/Ubuntu VPS
+sudo traderctl setup                                         # customer, any time later
+```
+
 `site/index.html` is the Slovak landing page (prices, FAQ, risk notice, no trackers); `site/server.py` keeps the
 sign-ups of its form (`deploy/trader-site.service`, `deploy/Caddyfile.example`). Before taking money: the seller's
 company details, terms and a privacy notice on the page, and a check with a lawyer that selling self-run trading

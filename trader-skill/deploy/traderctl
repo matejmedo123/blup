@@ -12,6 +12,7 @@
 #   sudo traderctl start | stop | restart  the services (a stop can take up to 2 min: it finishes its cycle)
 #   sudo traderctl update | update-log     look for a new version now (tested, then installed) / what it did
 #   sudo traderctl license [--install FILE] the plan this server runs on / install a licence file
+#   sudo traderctl setup                   the guided set-up: password, licence, Bybit key, risk, notifications
 #
 #   sudo traderctl compare                 the real bot and the comparison bot (deploy/test-bot.sh) side by side
 #   sudo traderctl test <command>          any command above for the comparison bot, e.g. sudo traderctl test status
@@ -73,6 +74,9 @@ set -a
 set +a
 export TRADER_HOME="$DATA"
 cd "$PREFIX"
+if [ "$cmd" = "setup" ]; then
+  exec python3 "$PREFIX/deploy/setup.py"
+fi
 if [ "$cmd" = "health" ]; then
   exec runuser -u trader -- python3 "$PREFIX/deploy/healthcheck.py" --home "$DATA"
 fi

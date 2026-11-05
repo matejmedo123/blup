@@ -39,6 +39,15 @@ trader.example.com {
 #	handle /api/waitlist {
 #		reverse_proxy 127.0.0.1:8770
 #	}
+#	# the one-command install for customers (sudo bash /opt/trader/deploy/release.sh tvoja-domena.sk)
+#	handle /install.sh {
+#		root * /var/lib/trader-release
+#		file_server
+#	}
+#	handle /download/* {
+#		root * /var/lib/trader-release
+#		file_server
+#	}
 #	handle {
 #		root * /opt/trader/site
 #		file_server
