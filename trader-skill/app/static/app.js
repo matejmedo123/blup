@@ -167,9 +167,37 @@
   }
 
   // ---------------------------------------------------------------- small UI pieces
+  // a small line icon per kind of number, in the circle at the top right of its tile
+  var TILE_ICONS = [
+    [/equity/i, 'M3 7a2 2 0 0 1 2-2h12v4M3 7v10a2 2 0 0 0 2 2h14V9H5a2 2 0 0 1-2-2zM16 14h.01'],
+    [/p&l today|realized today/i, 'M12 3v18M17 7H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H7'],
+    [/p&l/i, 'M5 20V10M12 20V4M19 20v-7'],
+    [/win rate/i, 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01'],
+    [/profit factor/i, 'M12 4v16M8 20h8M5 8h14M5 8l-3 6a3 3 0 0 0 6 0zM19 8l-3 6a3 3 0 0 0 6 0z'],
+    [/expectancy/i, 'M18 5H6l6 7-6 7h12'],
+    [/open positions/i, 'M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5'],
+    [/opened today/i, 'M12 5v14M5 12h14'],
+    [/skipped|sitting out/i, 'M5 5l10 7-10 7zM19 5v14'],
+    [/kill switch/i, 'M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0'],
+    [/licence/i, 'M14 10a4 4 0 1 0-4 4M10 14l-6 6M7 17l2 2'],
+    [/watched|backtest vs/i, 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
+    [/risk size/i, 'M13 2L4 14h7l-1 8 9-12h-7z'],
+    [/drawdown/i, 'M3 7l6 6 4-4 8 8M21 11v6h-6'],
+    [/ai desk/i, 'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6'],
+    [/normal|validated|held|survived|judged/i, 'M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6zM9 12l2 2 4-4']
+  ];
+  function tileIcon(label) {
+    var d = 'M3 17l6-6 4 4 8-8M15 7h6v6';
+    for (var i = 0; i < TILE_ICONS.length; i++) if (TILE_ICONS[i][0].test(label)) { d = TILE_ICONS[i][1]; break; }
+    return h('span', { class: 'ic', 'aria-hidden': 'true' }, sv('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+      'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, sv('path', { d: d })));
+  }
   function tile(label, value, sub, cls) {
-    return h('div', { class: 'tile' }, h('div', { class: 'k', text: label }),
-      h('div', { class: 'v ' + (cls || ''), text: value }), sub ? h('div', { class: 's', text: sub }) : null);
+    // a signed percentage under a rising or falling number reads as a coloured change pill
+    var change = sub && (cls === 'up' || cls === 'down') && /^[+\-\u2212]?[\d.,]+\s?%$/.test(String(sub).trim());
+    return h('div', { class: 'tile' }, tileIcon(label), h('div', { class: 'k', text: label }),
+      h('div', { class: 'v ' + (cls || ''), text: value }),
+      sub ? h(change ? 'span' : 'div', { class: change ? 'chg ' + cls : 's', text: sub }) : null);
   }
   function card(title, meta, body, extraCls) {
     return h('section', { class: 'card ' + (extraCls || '') },
@@ -425,6 +453,13 @@
   }
 
   // ---------------------------------------------------------------- views
+  // on the viewer's own clock: "Good evening · Thursday 5 November"
+  function greeting() {
+    var d = new Date(), hr = d.getHours(), day = '';
+    try { day = d.toLocaleDateString(String(navigator.language || 'en-GB').replace(/@.*$/, '') || 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); }
+    catch (e) { day = d.toDateString(); }
+    return (hr >= 5 && hr < 12 ? 'Good morning' : hr >= 12 && hr < 18 ? 'Good afternoon' : 'Good evening') + ' · ' + day;
+  }
   // every page header carries the account: equity and today's P&L, on the right
   function head(title, sub, right) {
     var a = (S.summary || {}).account || {};
@@ -433,6 +468,7 @@
       h('div', { class: 'kv' }, h('span', { class: 'k', text: 'Today' }), h('span', { class: 'v ' + tone(a.pnl_today), text: money(a.pnl_today, true) })));
     var mi = modeInfo();
     return h('div', { class: 'view-head' }, h('div', null,
+      title === 'Overview' ? h('div', { class: 'greet', text: greeting() }) : null,
       h('div', { class: 'title-row' }, h('h1', { text: title }), h('span', { class: 'badge js-mode' + (mi.live ? ' live' : ''), title: mi.title, text: mi.text }),
         setupLabel() ? h('span', { class: 'setup-chip js-setup', title: 'Risk per trade and crypto leverage of this bot', text: setupLabel() }) : null),
       sub ? h('div', { class: 'sub', text: sub }) : null),
