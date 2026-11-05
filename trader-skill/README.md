@@ -1059,7 +1059,9 @@ kill switch, drawdown pause, what it learned, repeated errors and a daily summar
 A local web app over the `trader/` folder (stdlib server, no CDN, dark/light, built for phones):
 Overview (**Is everything OK?** — is the bot running, is it normal, did it follow its rules, how much
 risk is in use — then equity curve, P&L today/total, win rate, expectancy, open positions with a
-stop → entry → target bar, latest decisions, top news, desk verdicts) · Trades (every trade with a candle chart, entry/exit, stop/target, R, fees) · Bot
+stop → entry → target bar, latest decisions, top news, desk verdicts) · Trades (every trade with an interactive chart —
+wheel or pinch to zoom, drag to move, 1m / 5m / 15m / 1h / 4h / 1D bars, entry, stop and exit drawn on it — plus R
+and fees; the chart is TradingView Lightweight Charts™, Apache 2.0, served from `app/static/` with its licence) · Bot
 (status, pause / resume / run once / KILL, mode and what live would need, gates, decision timeline,
 the universe with reasons, what it learned, notifications, AI desk spend) · Checks (where the bot's
 results sit among the backtest's histories, every daily signal matched with what the bot did, each

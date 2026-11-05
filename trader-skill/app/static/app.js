@@ -20,7 +20,7 @@
       decisions: '',
       range: 'all'
     },
-    expanded: {}, tradeCache: {}
+    expanded: {}, tradeCache: {}, widgets: {}, interacting: false
   };
 
   // ---------------------------------------------------------------- DOM helpers
@@ -341,70 +341,6 @@
     box.appendChild(svg);
   }
 
-  function candleChart(candles, lines, markers) {
-    var box = h('div', { class: 'chart' });
-    return mountChart(box, function (b) { drawCandles(b, candles, lines || [], markers || []); });
-  }
-  function drawCandles(box, cs, lines, markers) {
-    clear(box);
-    var W = Math.max(280, box.clientWidth || 600), H = W < 500 ? 230 : 300;
-    var longest = lines.reduce(function (m, l) { return Math.max(m, (l.label + ' ' + price(l.price)).length); }, 8);
-    var pad = { l: 6, r: Math.min(150, Math.round(longest * 6.9) + 12), t: 12, b: 24 }, volH = Math.round(H * 0.14);
-    var plotH = H - pad.t - pad.b - volH;
-    var lows = cs.map(function (c) { return c[3]; }), highs = cs.map(function (c) { return c[2]; });
-    lines.forEach(function (l) { if (num(l.price) !== null) { lows.push(l.price); highs.push(l.price); } });
-    var lo = Math.min.apply(null, lows), hi = Math.max.apply(null, highs), span = (hi - lo) || hi * 0.01 || 1;
-    lo -= span * 0.05; hi += span * 0.05;
-    var n = cs.length, bw = (W - pad.l - pad.r) / n;
-    function X(i) { return pad.l + (i + 0.5) * bw; }
-    function Y(p) { return pad.t + (hi - p) / (hi - lo) * plotH; }
-    var vmax = Math.max.apply(null, cs.map(function (c) { return c[5] || 0; })) || 1;
-    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', 'aria-label': 'price chart' });
-    niceTicks(lo, hi, 4).forEach(function (v) {
-      svg.appendChild(sv('line', { class: 'grid', x1: pad.l, x2: W - pad.r, y1: Y(v), y2: Y(v) }));
-    });
-    cs.forEach(function (c, i) {
-      var up = c[4] >= c[1], col = up ? 'var(--green)' : 'var(--red)', x = X(i);
-      svg.appendChild(sv('line', { x1: x, x2: x, y1: Y(c[2]), y2: Y(c[3]), stroke: col, 'stroke-width': 1 }));
-      var top = Y(Math.max(c[1], c[4])), bot = Y(Math.min(c[1], c[4]));
-      svg.appendChild(sv('rect', { x: x - Math.max(bw * 0.34, 0.6), y: top, width: Math.max(bw * 0.68, 1.2),
-        height: Math.max(bot - top, 0.9), fill: col }));
-      var vh = (c[5] || 0) / vmax * (volH - 4);
-      svg.appendChild(sv('rect', { x: x - Math.max(bw * 0.34, 0.6), y: H - pad.b - vh, width: Math.max(bw * 0.68, 1.2),
-        height: vh, fill: col, opacity: 0.25 }));
-    });
-    var labelYs = [];
-    lines.forEach(function (l) {
-      if (num(l.price) === null) return;
-      var y = Y(l.price);
-      svg.appendChild(sv('line', { x1: pad.l, x2: W - pad.r, y1: y, y2: y, stroke: l.color, 'stroke-width': 1.4,
-        'stroke-dasharray': l.dash ? '5 4' : null }));
-      labelYs.push({ y: y, l: l });
-    });
-    labelYs.sort(function (a, b) { return a.y - b.y; });
-    var last = -1e9;
-    labelYs.forEach(function (o) {
-      var y = Math.max(o.y, last + 13); last = y;
-      svg.appendChild(sv('text', { x: W - pad.r + 6, y: y + 4, fill: o.l.color }, o.l.label + ' ' + price(o.l.price)));
-    });
-    markers.forEach(function (m) {
-      var t = Date.parse(m.t) / 1000, idx = -1;
-      for (var i = 0; i < n; i++) { if (cs[i][0] <= t) idx = i; }
-      if (idx < 0) return;
-      var x = X(idx), y = Y(m.price), up = m.shape !== 'down';
-      var pts = up ? [x, y + 5, x - 6, y + 15, x + 6, y + 15] : [x, y - 5, x - 6, y - 15, x + 6, y - 15];
-      svg.appendChild(sv('polygon', { points: pts.join(' '), fill: m.color }));
-    });
-    var ticks = W < 500 ? 3 : 5;
-    for (var k = 0; k < ticks && n > 1; k++) {
-      var i2 = Math.round(k * (n - 1) / (ticks - 1));
-      var d = new Date(cs[i2][0] * 1000), daily = n > 1 && cs[1][0] - cs[0][0] >= 86400;
-      svg.appendChild(sv('text', { x: X(i2), y: H - 6, 'text-anchor': k === 0 ? 'start' : (k === ticks - 1 ? 'end' : 'middle') },
-        daily ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })));
-    }
-    box.appendChild(svg);
-  }
-
   var resizeTimer = null;
   window.addEventListener('resize', function () {
     clearTimeout(resizeTimer);
@@ -540,7 +476,8 @@
         h('div', { class: 'ps' }, h('span', { text: qty(p.qty, unit === 'usd' ? 'usd' : unit) + ' @ ' + price(p.avg_entry) + (p.opened_at ? ' · since ' + hm(p.opened_at) : '') }),
           h('span', { class: 'last', text: 'last ' + price(p.last) })),
         rangeBar(p),
-        p.story ? h('div', { class: 'story', text: p.story }) : null);
+        p.story ? h('div', { class: 'story', text: p.story }) : null,
+        p.plan_id ? h('a', { class: 'small', href: '#tab=trades&open=' + encodeURIComponent('trd-' + p.plan_id), text: 'Chart ↗' }) : null);
     })), h('div', { class: 'hint', text: 'The bar runs from the stop (left, where it sells if the price falls) to the right — the tick is where it bought, the dot is the price now.' }));
   }
 
@@ -730,6 +667,127 @@
     });
   }
 
+  // ---------------------------------------------------------------- interactive chart (TradingView Lightweight Charts)
+  var BAR_SIZES = [['1m', '1m'], ['5m', '5m'], ['15m', '15m'], ['1h', '1h'], ['4h', '4h'], ['1d', '1D']];
+  var BAR_SECONDS = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+  function cssVar(name, fallback) {
+    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+  function pricePrecision(v) { return v >= 1000 ? 2 : v >= 1 ? 4 : v >= 0.01 ? 6 : 8; }
+  // the chart counts time in UTC: shifted by the browser's offset its axis reads in the viewer's own clock
+  function localTs(t) { return t - new Date(t * 1000).getTimezoneOffset() * 60; }
+
+  // wheel or pinch zooms, dragging pans, the buttons change the bar size; one chart per key, kept across the page's
+  // refreshes so the zoom stays where the person left it. spec: symbol, asset, interval, end, lines, marks
+  function liveChart(key, spec) {
+    var w = S.widgets[key];
+    if (w) {  // a slot now; the kept chart moves in with the swap (taken out earlier, the page would shrink and jump)
+      w.spec = spec;
+      var slot = h('div', { class: 'lwc-slot', 'data-chart': key });
+      slot.style.height = (w.el.offsetHeight || 0) + 'px';
+      return slot;
+    }
+    var holder = h('div', { class: 'lwc', role: 'img', 'aria-label': (spec.symbol || '') + ' price chart' });
+    var note = h('div', { class: 'small faint lwc-note' });
+    var bar = h('div', { class: 'tf', role: 'group', 'aria-label': 'bar size' });
+    var el = h('div', { class: 'lwc-wrap' }, bar, holder, note);
+    w = S.widgets[key] = { el: el, spec: spec, interval: spec.interval, chart: null, series: null, vol: null, lines: [], at: 0, last: 0 };
+    BAR_SIZES.forEach(function (b) {
+      bar.appendChild(h('button', { type: 'button', class: 'btn btn-quiet', 'data-iv': b[0], 'aria-pressed': String(b[0] === w.interval),
+        onclick: function () { w.interval = b[0]; markBar(); load(true); } }, b[1]));
+    });
+    function markBar() {
+      Array.prototype.forEach.call(bar.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x.getAttribute('data-iv') === w.interval)); });
+    }
+    if (!window.LightweightCharts) { note.textContent = 'The chart library did not load — reload the page.'; return el; }
+    var LC = window.LightweightCharts;
+    var up = cssVar('--profit', '#3ddc97'), down = cssVar('--loss', '#ff6b5b');
+    w.chart = LC.createChart(holder, {
+      autoSize: true,
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: cssVar('--chart-text', '#8794a8'), attributionLogo: true },
+      grid: { vertLines: { color: cssVar('--chart-grid', '#13203a') }, horzLines: { color: cssVar('--chart-grid', '#13203a') } },
+      rightPriceScale: { borderColor: cssVar('--line', '#1e2e47') },
+      timeScale: { borderColor: cssVar('--line', '#1e2e47'), timeVisible: true, secondsVisible: false, rightOffset: 4 },
+      crosshair: { mode: 0 },
+      localization: { locale: String(navigator.language || 'en-GB').replace(/@.*$/, '') || 'en-GB' },
+      handleScroll: { vertTouchDrag: false }  // a vertical swipe on a phone still scrolls the page
+    });
+    w.series = w.chart.addCandlestickSeries({ upColor: up, downColor: down, wickUpColor: up, wickDownColor: down, borderVisible: false });
+    w.vol = w.chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: '', lastValueVisible: false, priceLineVisible: false });
+    w.vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    holder.addEventListener('pointerdown', function () { S.interacting = true; });
+    function bars(cs) {
+      return cs.map(function (c) { return { time: localTs(c[0]), open: c[1], high: c[2], low: c[3], close: c[4] }; });
+    }
+    function vols(cs) {
+      return cs.map(function (c) { return { time: localTs(c[0]), value: c[5] || 0, color: c[4] >= c[1] ? 'rgba(61,220,151,.28)' : 'rgba(255,107,91,.28)' }; });
+    }
+    function overlay(cs) {
+      w.lines.forEach(function (l) { w.series.removePriceLine(l); });
+      w.lines = (w.spec.lines || []).filter(function (l) { return num(l.price) !== null; }).map(function (l) {
+        return w.series.createPriceLine({ price: l.price, color: l.color, lineWidth: 1, lineStyle: l.dash ? 2 : 0, axisLabelVisible: true, title: l.title });
+      });
+      var marks = [];
+      (w.spec.marks || []).forEach(function (m) {
+        var ts = Date.parse(m.t) / 1000, at = null;
+        cs.forEach(function (c) { if (c[0] <= ts) at = c[0]; });
+        if (at !== null && ts - at < BAR_SECONDS[w.interval] * 2) {
+          marks.push({ time: localTs(at), position: m.up ? 'belowBar' : 'aboveBar', color: m.color, shape: m.up ? 'arrowUp' : 'arrowDown', text: m.text });
+        }
+      });
+      marks.sort(function (a, b) { return a.time - b.time; });
+      w.series.setMarkers(marks);
+    }
+    function load(reset) {
+      var iv = w.interval, sp = w.spec;
+      note.textContent = 'loading ' + iv + ' bars…';
+      var q = '/api/candles?symbol=' + encodeURIComponent(sp.symbol) + '&asset=' + encodeURIComponent(sp.asset || '') +
+        '&interval=' + iv + (sp.end && iv !== '1d' ? '&end=' + encodeURIComponent(sp.end) : '');
+      return api(q).then(function (d) {
+        if (iv !== w.interval || !w.chart) return;
+        var cs = d.candles || [];
+        if (!cs.length) { note.textContent = d.error ? 'No chart: ' + d.error : 'No bars for this symbol.'; return; }
+        var px = pricePrecision(cs[cs.length - 1][4]);
+        w.series.applyOptions({ priceFormat: { type: 'price', precision: px, minMove: Math.pow(10, -px) } });
+        if (reset || !w.at) {
+          w.series.setData(bars(cs));
+          w.vol.setData(vols(cs));
+          overlay(cs);
+          var n = cs.length, from = n - 150, t0 = Date.parse((w.spec.marks || [{}])[0].t || '') / 1000;
+          for (var i = 0; i < n && t0; i++) { if (cs[i][0] >= t0) { from = i - 40; break; } }
+          w.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, from), to: n + 3 });
+        } else {  // only the newest bars change: the zoom stays as it is
+          bars(cs).forEach(function (b) { if (b.time >= w.last) w.series.update(b); });
+          vols(cs).forEach(function (v) { if (v.time >= w.last) w.vol.update(v); });
+        }
+        w.last = localTs(cs[cs.length - 1][0]);
+        w.at = Date.now();
+        note.textContent = (d.source || '') + ' · ' + iv + ' bars · scroll or pinch to zoom, drag to move';
+      }).catch(function (e) { note.textContent = 'No chart: ' + e.message; });
+    }
+    w.load = load;
+    w.drop = function () { if (w.chart) { w.chart.remove(); w.chart = null; } delete S.widgets[key]; };
+    load(true);
+    return el;
+  }
+  function placeCharts(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('.lwc-slot'), function (slot) {
+      var w = S.widgets[slot.getAttribute('data-chart')];
+      if (w) slot.parentNode.replaceChild(w.el, slot); else slot.remove();
+    });
+  }
+  // after a refresh: an open chart takes in its newest bars; one whose row is gone is let go
+  function tendCharts() {
+    Object.keys(S.widgets).forEach(function (k) {
+      var w = S.widgets[k];
+      if (!w.el.isConnected) { w.drop(); return; }
+      if (w.chart && !w.spec.end && w.at && Date.now() - w.at > (w.interval === '1d' ? 60000 : 20000)) w.load(false);
+    });
+  }
+  document.addEventListener('pointerup', function () { S.interacting = false; });
+  document.addEventListener('pointercancel', function () { S.interacting = false; });
+
   function tradeRow(t) {
     var entry = t.entry || {}, exit = t.exit || {};
     var unit = t.qty_unit === 'shares' ? 'sh' : (t.qty_unit || '');
@@ -746,7 +804,12 @@
         (t.broker ? ' · ' + t.broker : '') + (t.paper === false ? ' · LIVE' : '') }));
     function toggle() {
       S.expanded[t.id] = !S.expanded[t.id];
-      if (S.expanded[t.id]) row.appendChild(tradeDetail(t)); else { var ex = row.querySelector('.expand'); if (ex) ex.remove(); }
+      if (S.expanded[t.id]) row.appendChild(tradeDetail(t));
+      else {
+        var ex = row.querySelector('.expand');
+        if (ex) ex.remove();
+        if (S.widgets['chart:' + t.id]) S.widgets['chart:' + t.id].drop();
+      }
       row.setAttribute('aria-expanded', String(!!S.expanded[t.id]));
     }
     row.addEventListener('click', function (ev) { if (ev.target.closest('.expand')) return; toggle(); });
@@ -769,16 +832,16 @@
       clear(box);
       var tr = d.trade || t, entry = tr.entry || {}, exit = tr.exit || {};
       var capped = noTarget(num(tr.target), num(entry.price), num(tr.stop));
-      if ((d.candles || []).length > 3) {
-        box.appendChild(candleChart(d.candles,
-          (capped ? [] : [{ price: tr.target, label: 'Target', color: 'var(--green)', dash: true }]).concat([{ price: entry.price, label: 'Entry', color: 'var(--blue)' },
-           { price: tr.stop, label: 'Stop', color: 'var(--red)', dash: true }]).concat(exit && exit.price ? [{ price: exit.price, label: 'Exit', color: 'var(--amber)' }] : []),
-          [{ t: entry.time, price: entry.price, color: 'var(--blue)', shape: 'up' }].concat(exit && exit.time ? [{ t: exit.time, price: exit.price, color: 'var(--amber)', shape: 'down' }] : [])));
-        box.appendChild(h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-b' }), 'entry'), h('span', null, h('i', { class: 'lg-a' }), 'exit'),
-          h('span', { class: 'faint', text: (d.candles_source || '') + (d.interval === '1d' ? ' · daily bars' : ' · 5-min bars') })));
-      } else {
-        box.appendChild(h('div', { class: 'small faint', text: d.candles_error ? 'Chart unavailable: ' + d.candles_error : 'No candles for this trade.' }));
-      }
+      var blue = cssVar('--info', '#5aa9ff'), red = cssVar('--loss', '#ff6b5b'), amber = cssVar('--warn', '#f5b94a');
+      var end = null;
+      if (exit && exit.time) end = new Date(Date.parse(exit.time) + 6 * 3600 * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+      box.appendChild(liveChart('chart:' + t.id, {
+        symbol: tr.symbol || tr.display || t.symbol, asset: tr.asset || t.asset, interval: d.interval === '1d' ? '1d' : '5m', end: end,
+        lines: (capped ? [] : [{ price: num(tr.target), title: 'Target', color: cssVar('--profit', '#3ddc97'), dash: true }]).concat([
+          { price: num(entry.price), title: 'Entry', color: blue }, { price: num(tr.stop), title: 'Stop', color: red, dash: true }]).concat(
+          exit && exit.price ? [{ price: num(exit.price), title: 'Exit', color: amber }] : []),
+        marks: [{ t: entry.time, color: blue, up: true, text: 'Buy' }].concat(exit && exit.time ? [{ t: exit.time, color: amber, up: false, text: 'Sell' }] : [])
+      }));
       var kv = h('div', { class: 'kvgrid' });
       [['Entry', price(entry.price) + ' · ' + hm(entry.time, true)], ['Exit', exit && exit.price ? price(exit.price) + ' · ' + (exit.reason || '') : 'open'],
        ['Stop', price(tr.stop)], ['Target', capped ? 'none — sells by its exit rule' : price(tr.target)], ['Qty', qty(tr.qty, tr.qty_unit === 'usd' ? 'usd' : tr.qty_unit)],
@@ -790,6 +853,7 @@
       box.appendChild(kv);
       var rl = reportLink(tr.chart, 'Open the trade report ↗');
       if (rl) box.appendChild(h('p', { class: 'small' }, rl));
+      if (box.isConnected) placeCharts(box);  // a fresh copy arrived on the page as it is
     }
   }
 
@@ -1357,7 +1421,7 @@
   function tabFromHash() {
     var m = /tab=([a-z]+)/.exec(location.hash || '');
     var o = /open=([A-Za-z0-9._:%-]+)/.exec(location.hash || '');
-    if (o) { try { S.expanded[decodeURIComponent(o[1])] = true; } catch (e) { /* bad hash */ } }
+    if (o) { try { S.expanded[decodeURIComponent(o[1])] = true; S.scrollTo = decodeURIComponent(o[1]); } catch (e) { /* bad hash */ } }
     return m && TABS.indexOf(m[1]) >= 0 ? m[1] : 'overview';
   }
   // the setup in the tab title: a second dashboard (a paper comparison) is told apart in the browser's tab bar
@@ -1391,6 +1455,7 @@
     return out;
   }
   function refresh() {
+    if (S.interacting) return Promise.resolve();  // mid-drag on a chart: the next tick refreshes
     if (S.busy) { S.again = true; return Promise.resolve(); }
     S.busy = true;
     var tab = S.tab;
@@ -1402,11 +1467,18 @@
       if (tab !== S.tab) return;
       var view = $('view');
       var y = window.scrollY, opened = openDetails(view);
+      // the old height holds until the new view has drawn: a page shorter for a moment scrolls the reader to the top
+      view.style.minHeight = view.offsetHeight + 'px';
       S.charts = [];
       clear(view);
       append(view, frag);
+      placeCharts(view);
       openDetails(view, opened);
-      window.scrollTo(0, y);
+      tendCharts();
+      var target = S.scrollTo ? view.querySelector('[data-key="' + S.scrollTo.replace(/["\\]/g, '') + '"]') : null;
+      S.scrollTo = null;
+      if (target) target.scrollIntoView({ block: 'start' }); else window.scrollTo(0, y);
+      setTimeout(function () { view.style.minHeight = ''; }, 1200);
       var b = backgroundBanner();
       setBanner(b[0], b[1]);
     }).catch(function (e) {

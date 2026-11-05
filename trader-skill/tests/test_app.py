@@ -1,9 +1,12 @@
 """Dashboard server: every endpoint, security rules (secrets, CSRF, path traversal, auth), controls."""
 from __future__ import annotations
 
+import base64
+import hashlib
 import http.client
 import json
 import os
+import re
 import threading
 import types
 from pathlib import Path
@@ -105,6 +108,24 @@ class EmptyHome(DashboardCase):
         self.assertEqual(d["health"]["state"], "never")
         self.assertFalse(d["universe"]["available"])
         self.assertEqual([r["title"] for r in d["notify"]["recent"]], ["ok"])
+
+    def test_interactive_chart_library_and_candles(self):
+        self.start()
+        code, hdrs, text = self.req("GET", "/")
+        self.assertIn('<script src="/static/lightweight-charts.js?v=', text)
+        js = (Path(self.server_mod.__file__).parent / "static" / "lightweight-charts.js").read_text(encoding="utf-8")
+        logo = re.search(r'innerText="(a#tv-attr-logo[^"]*)"', js).group(1)
+        digest = "sha256-" + base64.b64encode(hashlib.sha256(logo.encode("utf-8")).digest()).decode("ascii")
+        self.assertIn("style-src 'self' '%s';" % digest, hdrs["Content-Security-Policy"])  # the logo style, nothing else
+        self.assertEqual(self.req("GET", "/static/lightweight-charts.js")[0], 200)
+        bad = self.get_json("/api/candles?symbol=BTCUSDT&interval=3m")
+        self.assertEqual((bad["candles"], bad["error"][:13]), ([], "bar size must"))
+        self.assertEqual(self.get_json("/api/candles?symbol=../../etc/passwd&interval=1d")["error"], "not a symbol")
+        self.assertEqual(self.get_json("/api/candles?symbol=BTCUSDT&interval=1d&end=yesterday")["error"],
+                         "end must be an ISO time")
+        app_js = (Path(self.server_mod.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("handleScroll: { vertTouchDrag: false }", app_js)  # a phone still scrolls the page
+        self.assertIn("placeCharts(view);", app_js)  # a kept chart moves in with the swap: the page does not jump
 
     def test_index_page_embeds_csrf_and_strict_csp(self):
         self.start()

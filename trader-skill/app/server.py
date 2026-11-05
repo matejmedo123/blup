@@ -62,16 +62,19 @@ GZIP_TYPES = ("text/", "application/json", "application/manifest+json", "image/s
 
 
 def asset_version() -> str:
-    """Changes whenever app.js or app.css changes — the browser may keep them until then."""
+    """Changes whenever app.js, app.css or the chart library changes — the browser may keep them until then."""
     h = hashlib.sha256()
-    for name in ("app.js", "app.css"):
+    for name in ("app.js", "app.css", "lightweight-charts.js"):
         try:
             st = (STATIC / name).stat()
             h.update(("%s:%d:%d" % (name, st.st_mtime_ns, st.st_size)).encode("ascii"))
         except OSError:
             pass
     return h.hexdigest()[:12]
-APP_CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; "
+# the chart library's attribution logo is styled by one fixed <style> element: allowed by its hash, nothing else inline
+LWC_LOGO_STYLE = "'sha256-3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY='"
+APP_CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self' " + LWC_LOGO_STYLE + "; script-src 'self'; "
+           "connect-src 'self'; "
            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 # generated reports carry inline SVG/CSS and a tiny inline script — sandbox them into an opaque origin
 REPORT_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; "
@@ -508,6 +511,44 @@ def trade_view(trade_id: str) -> dict:
         _CANDLE_CACHE[key] = (now_s, res)
     out.update(res)
     return out
+
+
+# the interactive chart: bar size → days of history fetched (about 1,000 bars each); the person zooms and pans in it
+CHART_DAYS = {"1m": 1, "5m": 4, "15m": 10, "1h": 40, "4h": 160, "1d": 1000}
+CHART_SYMBOL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9./:_-]{0,63}$")
+_CHART_CACHE = {}
+
+
+def candles_view(symbol: str, asset: str = "", interval: str = "1d", end: str = "") -> dict:
+    if interval not in CHART_DAYS:
+        return {"candles": [], "error": "bar size must be one of %s" % ", ".join(CHART_DAYS)}
+    if not CHART_SYMBOL.match(symbol or ""):
+        return {"candles": [], "error": "not a symbol"}
+    asset = asset if asset in ("crypto", "stock", "meme") else None
+    if end:
+        try:
+            end = market_clock.iso(market_clock.parse_iso(end))
+        except (ValueError, TypeError):
+            return {"candles": [], "error": "end must be an ISO time"}
+    key = (str(home()), symbol, asset, interval, end, os.environ.get("TRADER_NOW"))
+    ttl = 20 if interval in ("1m", "5m") else 60
+    with _CANDLE_LOCK:
+        hit = _CHART_CACHE.get(key)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    try:
+        from shared import data
+        series = data.get_candles(symbol, interval, days=CHART_DAYS[interval], asset=asset, end=end or None)
+        res = {"symbol": series.symbol.display, "interval": interval, "source": series.source,
+               "candles": [[c.t, c.o, c.h, c.l, c.c, c.v] for c in series.candles][-1500:]}
+    except Exception as exc:  # a chart is never worth a failed request
+        res = {"candles": [], "interval": interval, "error": "%s: %s" % (type(exc).__name__, exc)}
+    with _CANDLE_LOCK:
+        now_s = time.time()
+        for k in [k for k, v in _CHART_CACHE.items() if now_s - v[0] >= 300]:
+            del _CHART_CACHE[k]
+        _CHART_CACHE[key] = (now_s, res)
+    return res
 
 
 def decisions_view(limit: int = 200) -> dict:
@@ -1514,6 +1555,9 @@ def make_handler(app: DashboardApp):
                 return self._json(equity_view(q.get("range", "all")))
             if name == "positions":
                 return self._json({"positions": positions_view()})
+            if name == "candles":
+                return self._json(candles_view(q.get("symbol", ""), q.get("asset", ""), q.get("interval", "1d"),
+                                               q.get("end", "")))
             if name == "orders":
                 return self._json(orders_view())
             if name == "trades":
