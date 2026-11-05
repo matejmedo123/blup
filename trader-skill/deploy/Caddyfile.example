@@ -29,3 +29,27 @@ trader.example.com {
 #		-Server
 #	}
 #}
+
+# The landing page (site/index.html) on your own domain: an A record for it (and www) at this server, then remove
+# the # in front of the lines below, sudo systemctl enable --now trader-site and sudo systemctl reload caddy.
+# Sign-ups land in /var/lib/trader-site/waitlist.json; read them with:
+#   sudo python3 /opt/trader/site/server.py --data /var/lib/trader-site export
+#tvoja-domena.sk, www.tvoja-domena.sk {
+#	encode zstd gzip
+#	handle /api/waitlist {
+#		reverse_proxy 127.0.0.1:8770
+#	}
+#	handle {
+#		root * /opt/trader/site
+#		file_server
+#	}
+#	@private path /server.py /README.md
+#	respond @private 404
+#	header {
+#		Strict-Transport-Security "max-age=31536000"
+#		X-Content-Type-Options nosniff
+#		Referrer-Policy strict-origin-when-cross-origin
+#		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+#		-Server
+#	}
+#}

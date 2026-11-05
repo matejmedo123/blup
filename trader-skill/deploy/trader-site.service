@@ -1,0 +1,42 @@
+# /etc/systemd/system/trader-site.service — the landing page's access list (site/server.py), behind Caddy
+# Never reads /etc/trader/trader.env and cannot see the bot's state: it keeps sign-ups in /var/lib/trader-site.
+[Unit]
+Description=Trader landing page: the access list behind its form
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=trader-site
+StateDirectoryMode=0700
+WorkingDirectory=/opt/trader
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/trader/site/server.py --data /var/lib/trader-site --host 127.0.0.1 --port 8770
+Restart=always
+RestartSec=5
+UMask=0077
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+InaccessiblePaths=-/var/lib/trader -/var/lib/trader-test -/etc/trader
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

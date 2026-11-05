@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trader Krypto Bot</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="icon" href="img/logo.svg" type="image/svg+xml">
+<meta property="og:title" content="Trader · Prestaň naháňať pumpy">
+<meta property="og:description" content="Krypto bot, ktorý kupuje len denné prerazenia, dá stop vopred a beží 24/7 na tvojom serveri.">
+<meta name="description" content="Trader obchoduje kryptomeny podľa pravidiel: kupuje len denné prerazenia, ku každému obchodu dá stop vopred a beží 24/7 na tvojom vlastnom serveri.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one long dark trading-desk page; the hero is a live daily chart, cards only for prices and the proof */
+  :root {
+    --bg: #060c17; --surface: #0b1424; --raise: #101c31; --line: #1e2e47;
+    --text: #eef3f8; --muted: #9aa8bb; --faint: #6f7d92;
+    --mint: #3ddc97; --mint-ink: #04140c; --mint-soft: rgba(61, 220, 151, .13);
+    --coral: #ff6b5b; --coral-soft: rgba(255, 107, 91, .13); --blue: #5aa9ff;
+    --display: 'Inter', 'Inter Display', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    --r: 22px; --wrap: 1120px;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f3f6f9; --surface: #ffffff; --raise: #eef3f7; --line: #d8e1ea;
+      --text: #0d1726; --muted: #46546a; --faint: #5f6c80;
+      --mint: #067a51; --mint-ink: #ffffff; --mint-soft: rgba(6, 122, 81, .10);
+      --coral: #c8402f; --coral-soft: rgba(200, 64, 47, .10); --blue: #1f6fd1;
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f6f9; --surface: #ffffff; --raise: #eef3f7; --line: #d8e1ea;
+    --text: #0d1726; --muted: #46546a; --faint: #5f6c80;
+    --mint: #067a51; --mint-ink: #ffffff; --mint-soft: rgba(6, 122, 81, .10);
+    --coral: #c8402f; --coral-soft: rgba(200, 64, 47, .10); --blue: #1f6fd1;
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--body); font-size: 17px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; border-radius: 6px; }
+  .wrap { max-width: var(--wrap); margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+  h2 { font-weight: 900; font-size: clamp(32px, 5vw, 52px); line-height: 1.05; letter-spacing: -.035em; }
+  h3 { font-weight: 800; font-size: 21px; line-height: 1.25; letter-spacing: -.01em; }
+  p { margin: 0; }
+  .lead { color: var(--muted); font-size: clamp(17px, 2vw, 20px); max-width: 60ch; }
+  .eyebrow { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mint); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  section { padding-block: clamp(64px, 9vw, 120px); }
+  .stack { display: grid; gap: 18px; }
+
+  /* header */
+  header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+  .bar { display: flex; align-items: center; gap: 28px; min-height: 68px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 900; font-size: 22px; letter-spacing: -.02em; text-decoration: none; }
+  .logo svg { width: 34px; height: 34px; }
+  nav { display: flex; gap: 22px; margin-left: auto; }
+  nav a { text-decoration: none; color: var(--muted); font-weight: 500; font-size: 15px; padding-block: 12px; }
+  nav a:hover { color: var(--text); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 22px; border-radius: 999px;
+    font-family: var(--body); font-weight: 800; font-size: 16px; text-decoration: none; border: 2px solid transparent; cursor: pointer; transition: transform .15s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn.primary { background: var(--mint); color: var(--mint-ink); }
+  .btn.ghost { border-color: var(--line); color: var(--text); background: transparent; }
+  .bar .btn { min-height: 44px; padding: 0 18px; font-size: 15px; }
+  @media (max-width: 860px) { nav { display: none; } .bar .btn { margin-left: auto; } }
+
+  /* hero */
+  .hero { padding-block: clamp(40px, 7vw, 88px) clamp(48px, 7vw, 96px); }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: clamp(28px, 5vw, 64px); align-items: center; }
+  .hero h1 { font-weight: 900; font-size: clamp(44px, 5.6vw, 74px); line-height: .98; letter-spacing: -.045em; }
+  .hero h1 .c { color: var(--coral); }
+  .hero h1 .m { color: var(--mint); display: block; }
+  .hero .lead { margin-top: 22px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 28px; font-family: var(--mono); font-size: 13px; color: var(--faint); }
+  .facts span::before { content: "● "; color: var(--mint); }
+  .chart-card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 18px 12px; min-width: 0; }
+  .chart-head { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+  .chart-head b { color: var(--text); font-family: var(--mono); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; font-family: var(--mono); }
+  .chip.m { background: var(--mint-soft); color: var(--mint); }
+  .chip.c { background: var(--coral-soft); color: var(--coral); }
+  .chart-head .chip { margin-left: auto; }
+  #hero-chart { display: block; width: 100%; height: 340px; margin-top: 8px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); padding-top: 6px; }
+  .legend i { display: inline-block; width: 18px; height: 0; border-top: 2px dashed; vertical-align: middle; margin-right: 6px; }
+  .legend .l-hi { color: var(--blue); } .legend .l-st { color: var(--coral); }
+  @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; } #hero-chart { height: 280px; } }
+
+  /* the 5-minute problem */
+  .problem { background: var(--surface); border-block: 1px solid var(--line); }
+  .problem-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: clamp(24px, 4vw, 48px); align-items: end; }
+  .stat .big { white-space: nowrap; font-family: var(--display); font-weight: 900; font-size: clamp(60px, 7.4vw, 100px); line-height: .9; letter-spacing: -.05em; color: var(--coral); }
+  .stat p { color: var(--muted); margin-top: 12px; max-width: 32ch; }
+  .note { font-size: 13px; color: var(--faint); margin-top: 28px; max-width: 80ch; }
+  @media (max-width: 860px) { .problem-grid { grid-template-columns: 1fr; align-items: start; } }
+
+  /* steps: a real order of things */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 44px; counter-reset: s; }
+  .step { border-top: 2px solid var(--line); padding-top: 22px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .step::before { counter-increment: s; content: "Krok " counter(s); font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--mint); letter-spacing: .08em; text-transform: uppercase; }
+  .step p { color: var(--muted); }
+  .after { margin-top: 36px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; color: var(--muted); }
+  @media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
+
+  /* features */
+  .feat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px 36px; margin-top: 48px; }
+  .f { display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .f p { color: var(--muted); }
+  .f .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--mint-soft); color: var(--mint); }
+  .f .ico svg { width: 24px; height: 24px; }
+  .desks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .desks span { font-family: var(--mono); font-size: 12px; padding: 3px 9px; border-radius: 8px; background: var(--raise); color: var(--muted); }
+  .desks span::before { content: "✓ "; color: var(--mint); }
+  @media (max-width: 960px) { .feat { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 620px) { .feat { grid-template-columns: 1fr; } }
+
+  /* screens */
+  .screens { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 44px; align-items: start; }
+  .screens figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; min-width: 0; }
+  .screens img { display: block; width: 100%; height: auto; }
+  .screens figcaption { padding: 12px 18px 16px; font-size: 14px; color: var(--muted); }
+  .screens .wide { grid-column: 1 / -1; }
+  .sample { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-left: 6px; }
+  @media (max-width: 860px) { .screens { grid-template-columns: 1fr; } }
+
+  /* what it does not do */
+  .nots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 40px; margin-top: 40px; }
+  .nots div { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+  .nots b { display: block; }
+  .nots span { color: var(--muted); }
+  .nots svg { width: 26px; height: 26px; color: var(--coral); margin-top: 2px; }
+  @media (max-width: 760px) { .nots { grid-template-columns: 1fr; } }
+
+  /* pricing */
+  .pricing-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 20px; }
+  .toggle { display: inline-flex; padding: 5px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); }
+  .toggle button { min-height: 44px; padding: 0 18px; border-radius: 999px; border: 0; background: transparent; color: var(--muted); font: 700 15px var(--body); cursor: pointer; }
+  .toggle button[aria-pressed="true"] { background: var(--mint); color: var(--mint-ink); }
+  .toggle small { font-weight: 600; opacity: .85; }
+  .free { margin-top: 26px; padding: 16px 20px; border-radius: 16px; background: var(--mint-soft); color: var(--text); display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  .free b { color: var(--mint); }
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 24px; align-items: stretch; }
+  .plan { position: relative; display: grid; grid-template-rows: auto auto auto 1fr auto; gap: 16px; padding: 28px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+  .plan.best { border: 2px solid var(--mint); box-shadow: 0 30px 80px -30px rgba(61, 220, 151, .35); }
+  .plan .tag { position: absolute; top: -14px; left: 28px; padding: 4px 12px; border-radius: 999px; background: var(--mint); color: var(--mint-ink); font: 800 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .plan h3 { font-size: 24px; }
+  .plan .for { color: var(--muted); font-size: 15px; margin-top: -8px; }
+  .price { display: flex; align-items: baseline; gap: 6px; }
+  .price .amt { font-family: var(--display); font-weight: 900; font-size: 54px; letter-spacing: -.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .price .per { color: var(--muted); }
+  .billed { font-size: 14px; color: var(--faint); min-height: 1.6em; }
+  .plan ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; align-content: start; font-size: 15px; }
+  .plan li { display: grid; grid-template-columns: 20px 1fr; gap: 10px; }
+  .plan li::before { content: "✓"; color: var(--mint); font-weight: 900; }
+  .plan li.plus { color: var(--muted); }
+  .plan li.plus::before { content: "+"; }
+  .plan .btn { width: 100%; }
+  @media (max-width: 960px) { .plans { grid-template-columns: 1fr; max-width: 560px; } }
+
+  /* access form */
+  .access { background: var(--surface); border-block: 1px solid var(--line); }
+  .access-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 5vw, 64px); align-items: start; }
+  form { display: grid; gap: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 28px; min-width: 0; }
+  label { display: grid; gap: 6px; font-weight: 600; font-size: 15px; }
+  input[type="email"], select { min-height: 50px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: 500 16px var(--body); width: 100%; }
+  .check { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start; font-weight: 500; color: var(--muted); font-size: 14px; }
+  .check input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--mint); }
+  .msg { font-size: 15px; border-radius: 12px; padding: 12px 14px; }
+  .msg.ok { background: var(--mint-soft); color: var(--mint); }
+  .msg.err { background: var(--coral-soft); color: var(--coral); }
+  @media (max-width: 860px) { .access-grid { grid-template-columns: 1fr; } }
+
+  /* faq */
+  .faq { display: grid; gap: 0; margin-top: 36px; border-top: 1px solid var(--line); }
+  .faq details { border-bottom: 1px solid var(--line); }
+  .faq summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; gap: 18px; padding: 20px 4px; font-weight: 700; font-size: 18px; min-height: 44px; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; font-family: var(--mono); color: var(--mint); font-size: 22px; line-height: 1; }
+  .faq details[open] summary::after { content: "–"; }
+  .faq details p { color: var(--muted); padding: 0 4px 22px; max-width: 70ch; }
+
+  /* risk + footer */
+  .risk { border: 1px solid var(--line); border-radius: var(--r); padding: 24px 26px; display: grid; gap: 8px; background: var(--surface); }
+  .risk b { color: var(--coral); }
+  .risk p { color: var(--muted); font-size: 15px; max-width: 90ch; }
+  footer { padding-block: 40px 56px; color: var(--faint); font-size: 14px; }
+  .foot { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="logo" href="#top" aria-label="Trader, na začiatok">
+      <svg viewBox="0 0 28 28" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cecbb"/><stop offset="1" stop-color="#3ddc97"/></linearGradient></defs><rect width="28" height="28" rx="8" fill="url(#lg)"/><path d="M7.5 8h13M10.5 11.5h7M14 11.5V21" fill="none" stroke="#04140c" stroke-width="2.5" stroke-linecap="round"/></svg>
+      Trader
+    </a>
+    <nav aria-label="Hlavná navigácia">
+      <a href="#ako">Ako to funguje</a>
+      <a href="#funkcie">Funkcie</a>
+      <a href="#cennik">Cenník</a>
+      <a href="#otazky">Otázky</a>
+    </nav>
+    <a class="btn primary" href="#pristup">Vyskúšať zadarmo</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow">Krypto bot · denné signály · 24/7</p>
+        <h1 style="margin-top:14px">Prestaň naháňať <span class="c">pumpy.</span><span class="m">Obchoduj podľa pravidiel.</span></h1>
+        <p class="lead">Trader je bot, ktorý ti beží na vlastnom serveri. Kupuje iba vtedy, keď minca uzavrie deň nad svojím 20-dňovým maximom, ku každému obchodu dá stop vopred a pred nákupom prejde šiestimi kontrolami.</p>
+        <div class="cta">
+          <a class="btn primary" href="#pristup">Vyskúšať zadarmo</a>
+          <a class="btn ghost" href="#cennik">Cenník od 19 €</a>
+        </div>
+        <div class="facts"><span>Bybit EU</span><span>denné sviečky</span><span>stop na každom obchode</span><span>2–3 obchody mesačne</span></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-head"><b>UNI/USDT</b> · 1D <span class="chip m">● Kúpené po prerazení</span></div>
+        <canvas id="hero-chart" role="img" aria-label="Denný graf: cena sa týždne drží v pásme, potom uzavrie deň nad 20-dňovým maximom, Trader kúpi a hneď nastaví stop."></canvas>
+        <div class="legend"><span class="l-hi"><i></i>20-dňové maximum</span><span class="l-st"><i></i>stop</span><span>▲ nákup na ďalšej sviečke</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="problem" aria-labelledby="problem-h">
+    <div class="wrap">
+      <div class="problem-grid">
+        <div class="stack">
+          <p class="eyebrow">Prečo nie 5-minútovka</p>
+          <h2 id="problem-h">Na 5‑minútovom grafe to vyzerá jasne. Spätne.</h2>
+          <p class="lead">Dno spoznáš, až keď cena vyrastie. V tej chvíli to vyzerá ako ďalší pád. Otestovali sme presne tie signály, ktoré ľudia naháňajú.</p>
+        </div>
+        <div class="stat"><div class="big num">86&nbsp;%</div><p>z 2 462 prerazení na 5-minútových sviečkach skončilo po poplatkoch v strate.</p></div>
+        <div class="stat"><div class="big num" style="color:var(--text)">0,36&nbsp;%</div><p>stojí každý obchod na poplatkoch. To je viac, než sa minca bežne pohne za pár minút.</p></div>
+      </div>
+      <p class="note">Test na BTC, ETH, SOL, XRP, BNB a UNI za posledných 60 dní, poplatky Bybitu 0,18 % za stranu. Pravidlo: 5-minútová sviečka uzavrie nad maximom poslednej hodiny, stop pod jej minimom.</p>
+    </div>
+  </section>
+
+  <section id="ako" aria-labelledby="ako-h">
+    <div class="wrap">
+      <p class="eyebrow">Ako to funguje</p>
+      <h2 id="ako-h" style="margin-top:12px">Spustíš ho raz. Potom pracuje sám.</h2>
+      <div class="steps">
+        <div class="step"><h3>Prenajmi si server</h3><p>Stačí malý VPS, napríklad netcup alebo Hetzner za približne 5 € mesačne. Bot beží na ňom, nie u nás.</p></div>
+        <div class="step"><h3>Spusti jeden príkaz</h3><p>Skopíruješ jeden riadok a sprievodca sa spýta na heslo k prehľadu a licenciu. Návod ťa prevedie krok za krokom.</p></div>
+        <div class="step"><h3>Pripoj Bybit a zvoľ riziko</h3><p>API kľúč s právom obchodovať a bez práva výberu. Riziko na obchod si nastavíš sám, napríklad 1–2 % účtu.</p></div>
+      </div>
+      <p class="after"><span class="chip m">● 24/7</span>Odvtedy Trader sleduje trh a na mobil ti pošle správu, keď kúpi, predá alebo keď niečo potrebuje tvoju pozornosť.</p>
+    </div>
+  </section>
+
+  <section id="funkcie" aria-labelledby="funkcie-h" style="padding-top:0">
+    <div class="wrap">
+      <p class="eyebrow">Funkcie</p>
+      <h2 id="funkcie-h" style="margin-top:12px">Pravidlá namiesto emócií.</h2>
+      <div class="feat">
+        <div class="f">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></div>
+          <h3>Kupuje len denné prerazenia</h3>
+          <p>Prerazenie 20-dňového maxima a nástup trendu na 10 najväčších minciach, iba keď je Bitcoin nad svojím 200-dňovým priemerom.</p>
+        </div>
+        <div class="f">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></div>
+          <h3>Stop ešte pred nákupom</h3>
+          <p>Každý obchod má stop priamo na burze. Predáva podľa pravidla, napríklad pri prvom dennom uzavretí pod 10-dňovým minimom.</p>
+        </div>
+        <div class="f">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
+          <h3>6 kontrol pred každým nákupom</h3>
+          <p>Povie čo i len jedna nie, nekúpi.</p>
+          <div class="desks"><span>Výskum</span><span>Správy</span><span>Stratégia</span><span>Vykonanie</span><span>Riziko</span><span>Šéf</span></div>
+        </div>
+        <div class="f">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg></div>
+          <h3>Backtest laboratórium</h3>
+          <p>Raz týždenne preverí mince a stratégie na histórii. Obchoduje len tie, ktoré obstáli aj na dátach, ktoré predtým nevidelo.</p>
+        </div>
+        <div class="f">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div>
+          <h3>Prehľad v mobile</h3>
+          <p>Interaktívny graf ku každému obchodu, otvorené pozície, výsledok dňa a tlačidlo KILL, ktoré zruší príkazy a zavrie pozície naraz.</p>
+        </div>
+        <div class="f">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <h3>Kontroluje sám seba</h3>
+          <p>Porovnáva svoje obchody s backtestom. Keď sa začne správať inak alebo príde nezvyčajná séria strát, zastaví nové nákupy a povie prečo.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="screens-h" style="padding-top:0">
+    <div class="wrap">
+      <p class="eyebrow">Takto to vyzerá</p>
+      <h2 id="screens-h" style="margin-top:12px">Vidíš každý nákup aj dôvod, prečo nekúpil.</h2>
+      <div class="screens">
+        <figure class="wide"><img src="img/graf-denny.jpg" width="1000" height="605" alt="Denný graf UNI s čiarou nákupu za 7,64 dolára a stopom za 5,85 dolára."><figcaption>Graf ku každému obchodu: nákup, stop a výstup. Priblížiš kolieskom, prepneš na 1h alebo 5m.</figcaption></figure>
+        <figure><img src="img/pozicia.jpg" width="1000" height="380" alt="Karta otvorenej pozície s pásikom od stopu po aktuálnu cenu."><figcaption>Otvorená pozícia: kde je stop, za koľko kúpil a cena teraz.</figcaption></figure>
+        <figure><img src="img/kontrola.jpg" width="1000" height="536" alt="Karta stavu: bot beží, výsledky sú normálne, pravidlá dodržané, využité riziko."><figcaption>Je všetko v poriadku? Na jeden pohľad. <span class="sample">ukážkové dáta</span></figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="nots-h" style="padding-top:0">
+    <div class="wrap">
+      <p class="eyebrow">Na rovinu</p>
+      <h2 id="nots-h" style="margin-top:12px">Čo Trader nerobí.</h2>
+      <div class="nots">
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8"/></svg><p><b>Nesľubuje zisk.</b> <span>Bývajú týždne bez jediného obchodu aj stratové mesiace. Trader zarába na niekoľkých veľkých trendoch za rok.</span></p></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8"/></svg><p><b>Nedrží tvoje peniaze ani kľúče.</b> <span>Beží na tvojom serveri a kľúč k Bybitu nemá právo výberu. My k nemu nemáme prístup.</span></p></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8"/></svg><p><b>Nenaháňa pumpy.</b> <span>Žiadne 5-minútové signály a žiadne meme tokeny z DEX-ov. Rozhoduje na dennej sviečke.</span></p></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8"/></svg><p><b>Nešortuje a nepožičiava si bez teba.</b> <span>Páka je voliteľná, najviac 2× a nikdy na meme coinoch.</span></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="cennik" aria-labelledby="cennik-h" style="padding-top:0">
+    <div class="wrap">
+      <div class="pricing-head">
+        <div class="stack" style="gap:12px">
+          <p class="eyebrow">Cenník</p>
+          <h2 id="cennik-h">Vyber si plán.</h2>
+        </div>
+        <div class="toggle" role="group" aria-label="Spôsob platby">
+          <button type="button" id="bill-month" aria-pressed="true">Mesačne</button>
+          <button type="button" id="bill-year" aria-pressed="false">Ročne <small>· 2 mesiace zadarmo</small></button>
+        </div>
+      </div>
+      <p class="free"><b>Simulátor je zadarmo.</b> Bez licencie a bez karty si Trader vyskúšaš nanečisto. Licencia odomkne ostrý účet na Bybite.</p>
+      <div class="plans">
+        <article class="plan" aria-labelledby="p1">
+          <h3 id="p1">Štart</h3>
+          <p class="for">Prvý ostrý účet</p>
+          <div><div class="price"><span class="amt" data-m="19" data-y="15,83">19</span><span class="per">€ / mesiac</span></div><p class="billed" data-m="Platba mesačne, zrušíš kedykoľvek" data-y="190 € raz ročne">Platba mesačne, zrušíš kedykoľvek</p></div>
+          <ul>
+            <li>Bybit EU, spot</li>
+            <li>Denné prerazenia a nástup trendu</li>
+            <li>Stop na každom obchode, limity rizika</li>
+            <li>Týždenné backtest laboratórium</li>
+            <li>Prehľad v mobile a tlačidlo KILL</li>
+            <li>Upozornenia cez Telegram alebo ntfy</li>
+            <li>Aktualizácie</li>
+          </ul>
+          <a class="btn ghost" href="#pristup" data-plan="start">Chcem Štart</a>
+        </article>
+        <article class="plan best" aria-labelledby="p2">
+          <span class="tag">Odporúčame</span>
+          <h3 id="p2">Pro</h3>
+          <p class="for">Všetky stratégie a nastavenia</p>
+          <div><div class="price"><span class="amt" data-m="39" data-y="32,50">39</span><span class="per">€ / mesiac</span></div><p class="billed" data-m="Platba mesačne, zrušíš kedykoľvek" data-y="390 € raz ročne">Platba mesačne, zrušíš kedykoľvek</p></div>
+          <ul>
+            <li>Všetko zo Štartu</li>
+            <li class="plus">Stratégia short squeeze (funding)</li>
+            <li class="plus">Páka do 2× na Bybite, voliteľne</li>
+            <li class="plus">Etablované meme coiny, voliteľne</li>
+            <li class="plus">AI desk, ktorý môže nákup zastaviť (vlastný kľúč Anthropic)</li>
+            <li class="plus">Porovnávací bot s iným nastavením</li>
+            <li class="plus">Prednostná podpora e-mailom</li>
+          </ul>
+          <a class="btn primary" href="#pristup" data-plan="pro">Chcem Pro</a>
+        </article>
+        <article class="plan" aria-labelledby="p3">
+          <h3 id="p3">Max</h3>
+          <p class="for">Viac účtov a osobná pomoc</p>
+          <div><div class="price"><span class="amt" data-m="79" data-y="65,83">79</span><span class="per">€ / mesiac</span></div><p class="billed" data-m="Platba mesačne, zrušíš kedykoľvek" data-y="790 € raz ročne">Platba mesačne, zrušíš kedykoľvek</p></div>
+          <ul>
+            <li>Všetko z Pro</li>
+            <li class="plus">Až 3 servery s jednou licenciou</li>
+            <li class="plus">Inštalácia s nami cez videohovor</li>
+            <li class="plus">Nastavenie rizika s nami</li>
+            <li class="plus">Skorý prístup k novým stratégiám</li>
+          </ul>
+          <a class="btn ghost" href="#pristup" data-plan="max">Chcem Max</a>
+        </article>
+      </div>
+      <p class="note">Server si platíš sám u poskytovateľa, približne 5 € mesačne. Pri ročnej platbe zaplatíš 10 mesiacov a dostaneš 12.</p>
+    </div>
+  </section>
+
+  <section id="pristup" class="access" aria-labelledby="pristup-h">
+    <div class="wrap access-grid">
+      <div class="stack">
+        <p class="eyebrow">Prístup</p>
+        <h2 id="pristup-h">Buď medzi prvými.</h2>
+        <p class="lead">Predaj licencií otvárame postupne. Nechaj e-mail a pošleme ti návod na inštaláciu, simulátor zadarmo a ponuku na plán, ktorý si vyberieš.</p>
+      </div>
+      <form id="signup" novalidate>
+        <label for="f-email">E-mail
+          <input id="f-email" name="email" type="email" autocomplete="email" required placeholder="meno@domena.sk">
+        </label>
+        <label for="f-plan">Plán
+          <select id="f-plan" name="plan">
+            <option value="sim">Zatiaľ simulátor zadarmo</option>
+            <option value="start">Štart · 19 € mesačne</option>
+            <option value="pro" selected>Pro · 39 € mesačne</option>
+            <option value="max">Max · 79 € mesačne</option>
+          </select>
+        </label>
+        <label class="check" for="f-server"><input id="f-server" name="has_server" type="checkbox"><span>Server už mám</span></label>
+        <label class="check" for="f-consent"><input id="f-consent" name="consent" type="checkbox" required><span>Súhlasím, aby ste môj e-mail použili na zaslanie návodu a ponuky. Súhlas môžem kedykoľvek odvolať.</span></label>
+        <button class="btn primary" type="submit" id="f-submit">Pridať ma do zoznamu</button>
+        <p class="msg" id="f-msg" hidden role="status"></p>
+      </form>
+    </div>
+  </section>
+
+  <section id="otazky" aria-labelledby="otazky-h">
+    <div class="wrap">
+      <p class="eyebrow">Otázky</p>
+      <h2 id="otazky-h" style="margin-top:12px">Čo sa ľudia pýtajú.</h2>
+      <div class="faq">
+        <details><summary>Potrebujem skúsenosti s obchodovaním alebo s programovaním?</summary><p>Nie. Návod ťa prevedie prenájmom servera, inštaláciou aj pripojením Bybitu. Všetko ostatné nastavíš v prehľade na mobile. Odporúčame začať na simulátore a pozrieť sa, ako bot obchoduje.</p></details>
+        <details><summary>Môže Trader vybrať moje peniaze?</summary><p>Nie. Kľúč k Bybitu vytvoríš bez práva výberu, takže s ním nejde poslať peniaze nikam. Bot beží na tvojom serveri a my k nemu ani k tvojmu kľúču nemáme prístup.</p></details>
+        <details><summary>Ako často obchoduje?</summary><p>Približne 2 až 3 obchody mesačne. Signály chodia v dávkach, keď sa trh pohne nahor, a potom sú aj týždne bez obchodu. Keď je Bitcoin pod 200-dňovým priemerom, bot väčšinou drží hotovosť.</p></details>
+        <details><summary>Zaručuje Trader zisk?</summary><p>Nie. Žiadny bot nemôže zaručiť zisk. Stratégie sú overené na histórii a bot kontroluje, či sa správa ako v teste, no budúcnosť môže byť iná. Investuj len peniaze, ktorých stratu unesieš.</p></details>
+        <details><summary>Aké burzy podporuje?</summary><p>Bybit EU pre kryptomeny, na spot účte a voliteľne so spot maržou. Pre americké akcie a ETF podporuje aj Alpaca.</p></details>
+        <details><summary>Čo sa stane, keď licencia skončí?</summary><p>Bot prestane otvárať nové obchody na ostrom účte. Otvorené pozície dobehnú podľa svojich pravidiel a stopov, nič sa nezatvára natvrdo. Simulátor ostáva zadarmo.</p></details>
+        <details><summary>Môžem zrušiť predplatné?</summary><p>Áno, kedykoľvek. Licencia platí do konca zaplateného obdobia a potom sa nepredĺži.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <div class="risk" role="note">
+      <p><b>Upozornenie na riziko.</b> Obchodovanie s kryptoaktívami je vysoko riskantné a môžeš prísť o celý vklad. Trader je softvér, ktorý spúšťaš a nastavuješ sám. Nie je to investičné poradenstvo ani správa portfólia. Výsledky backtestov a minulé výsledky nezaručujú budúce.</p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>© 2026 Trader</span>
+    <span>Kryptomeny · denné signály · beží 24/7 na tvojom serveri</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // monthly / yearly prices
+  var month = document.getElementById('bill-month'), year = document.getElementById('bill-year');
+  function bill(yearly) {
+    month.setAttribute('aria-pressed', String(!yearly));
+    year.setAttribute('aria-pressed', String(yearly));
+    Array.prototype.forEach.call(document.querySelectorAll('.amt, .billed'), function (el) {
+      el.textContent = el.getAttribute(yearly ? 'data-y' : 'data-m');
+    });
+  }
+  month.addEventListener('click', function () { bill(false); });
+  year.addEventListener('click', function () { bill(true); });
+
+  // a plan button picks the plan in the form
+  Array.prototype.forEach.call(document.querySelectorAll('[data-plan]'), function (a) {
+    a.addEventListener('click', function () { document.getElementById('f-plan').value = a.getAttribute('data-plan'); });
+  });
+
+  // the access form: sent to /api/waitlist where the page is served from a Trader site server
+  var form = document.getElementById('signup'), msg = document.getElementById('f-msg'), btn = document.getElementById('f-submit');
+  function say(text, ok) { msg.hidden = false; msg.className = 'msg ' + (ok ? 'ok' : 'err'); msg.textContent = text; }
+  form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var email = document.getElementById('f-email').value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { say('Skontroluj e-mail, takto vyzerá neúplne.', false); return; }
+    if (!document.getElementById('f-consent').checked) { say('Bez súhlasu ti nemôžeme poslať návod ani ponuku.', false); return; }
+    btn.disabled = true;
+    fetch('api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, plan: document.getElementById('f-plan').value,
+        has_server: document.getElementById('f-server').checked, consent: true }) })
+      .then(function (r) {
+        if (r.status === 404 || r.status === 405) throw new Error('preview');
+        return r.json().then(function (j) { if (!r.ok || !j.ok) throw new Error(j.error || 'HTTP ' + r.status); return j; });
+      })
+      .then(function () { say('Hotovo. Návod a ponuku pošleme na ' + email + '.', true); form.reset(); })
+      .catch(function (e) {
+        say(e.message === 'preview' || e.name === 'TypeError'
+          ? 'Toto je náhľad stránky. Formulár začne fungovať, keď stránku nasadíš na svoju doménu.'
+          : 'Nepodarilo sa odoslať: ' + e.message + '. Skús to o chvíľu znova.', false);
+      })
+      .then(function () { btn.disabled = false; });
+  });
+
+  // the hero chart: weeks in a range, a daily close above the 20-day high, the buy on the next bar and the stop
+  var cv = document.getElementById('hero-chart'), ctx = cv.getContext('2d');
+  var seed = 7;
+  function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+  var bars = [], px = 100, BREAK = 46;
+  for (var i = 0; i < 68; i++) {
+    var drift = i < 14 ? -0.35 : i < BREAK ? 0.02 : i === BREAK ? 0 : 0.9;
+    var o = px, c = o + drift + (rnd() - 0.5) * (i < BREAK ? 3.2 : 3.6);
+    if (i < BREAK && i > 14) c = Math.max(94, Math.min(103.2, c));
+    if (i === BREAK) c = o + 4.4;
+    if (i > BREAK && i % 7 === 3) c = o - 2.6;
+    var h = Math.max(o, c) + rnd() * 1.6, l = Math.min(o, c) - rnd() * 1.6;
+    bars.push({ o: o, h: h, l: l, c: c }); px = c;
+  }
+  var hi20 = 0; for (var k = BREAK - 20; k < BREAK; k++) hi20 = Math.max(hi20, bars[k].c);
+  var entry = bars[BREAK + 1].o, stop = entry - 7.5;
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function draw(t) {
+    var dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    var mint = css('--mint'), coral = css('--coral'), blue = css('--blue'), line = css('--line'), muted = css('--faint'), text = css('--text');
+    var live = bars.slice(), last = live[live.length - 1];
+    var wob = reduce ? 0 : Math.sin(t / 700) * 0.6;
+    live[live.length - 1] = { o: last.o, h: Math.max(last.h, last.c + wob), l: last.l, c: last.c + wob };
+    var lo = 1e9, hi = -1e9;
+    live.forEach(function (b) { lo = Math.min(lo, b.l); hi = Math.max(hi, b.h); });
+    lo = Math.min(lo, stop) - 2; hi += 2;
+    var padR = 58, padB = 18, n = live.length, bw = (W - padR) / n;
+    function X(i) { return (i + 0.5) * bw; }
+    function Y(v) { return 8 + (hi - v) / (hi - lo) * (H - 8 - padB); }
+    ctx.lineWidth = 1; ctx.strokeStyle = line; ctx.fillStyle = muted; ctx.font = '11px ' + css('--mono');
+    for (var g = 0; g <= 4; g++) {
+      var v = lo + (hi - lo) * g / 4, y = Y(v);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W - padR, y); ctx.stroke();
+      ctx.fillText(v.toFixed(0), W - padR + 8, y + 4);
+    }
+    // the 20-day high the breakout closes above
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = blue; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(X(BREAK - 20), Y(hi20)); ctx.lineTo(X(BREAK + 0.5), Y(hi20)); ctx.stroke();
+    // the stop from the buy on
+    ctx.strokeStyle = coral;
+    ctx.beginPath(); ctx.moveTo(X(BREAK + 1) - bw / 2, Y(stop)); ctx.lineTo(W - padR, Y(stop)); ctx.stroke();
+    ctx.setLineDash([]);
+    live.forEach(function (b, i) {
+      var up = b.c >= b.o, col = up ? mint : coral;
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(X(i), Y(b.h)); ctx.lineTo(X(i), Y(b.l)); ctx.stroke();
+      var top = Y(Math.max(b.o, b.c)), bot = Y(Math.min(b.o, b.c));
+      ctx.globalAlpha = i === BREAK ? 1 : (i < BREAK - 20 ? .55 : .9);
+      ctx.fillRect(X(i) - bw * .32, top, bw * .64, Math.max(1.5, bot - top));
+      ctx.globalAlpha = 1;
+    });
+    // the breakout bar and the buy marker
+    var pulse = reduce ? 1 : 0.6 + 0.4 * Math.abs(Math.sin(t / 600));
+    ctx.strokeStyle = mint; ctx.globalAlpha = pulse; ctx.lineWidth = 2;
+    ctx.strokeRect(X(BREAK) - bw * .7, Y(bars[BREAK].h) - 6, bw * 1.4, Y(bars[BREAK].l) - Y(bars[BREAK].h) + 12);
+    ctx.globalAlpha = 1;
+    var bx = X(BREAK + 1), by = Y(bars[BREAK + 1].l) + 14;
+    ctx.fillStyle = mint;
+    ctx.beginPath(); ctx.moveTo(bx, by - 8); ctx.lineTo(bx - 8, by + 6); ctx.lineTo(bx + 8, by + 6); ctx.closePath(); ctx.fill();
+    ctx.font = '700 12px ' + css('--mono'); ctx.fillStyle = text;
+    ctx.fillText('Kúpil', bx - 16, by + 22);
+    ctx.fillStyle = blue; ctx.fillText('20d max', X(BREAK - 20), Y(hi20) - 8);
+    ctx.fillStyle = coral; ctx.fillText('stop', W - padR - 34, Y(stop) - 8);
+  }
+  function loop(t) { draw(t || 0); if (!reduce) requestAnimationFrame(loop); }
+  window.addEventListener('resize', function () { draw(performance.now()); });
+  loop(0);
+})();
+</script>
+</body>
+</html>

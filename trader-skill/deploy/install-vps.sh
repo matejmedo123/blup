@@ -89,6 +89,8 @@ for u in "${UNITS[@]}"; do
   install -o root -g root -m 644 "$PREFIX/deploy/$u.service" "/etc/systemd/system/$u.service"
 done
 install -o root -g root -m 755 "$PREFIX/deploy/traderctl" /usr/local/bin/traderctl
+# the landing page's access list (site/server.py): installed here, started only once you enable it
+install -o root -g root -m 644 "$PREFIX/deploy/trader-site.service" /etc/systemd/system/trader-site.service
 # the comparison bot of test-bot.sh, if there is one: its units follow the update too
 TEST_UNITS=()
 for u in trader-test-autopilot trader-test-dashboard; do
@@ -99,6 +101,7 @@ for u in trader-test-autopilot trader-test-dashboard; do
 done
 systemctl daemon-reload
 systemctl enable "${UNITS[@]}" >/dev/null
+if systemctl is-enabled --quiet trader-site 2>/dev/null; then TEST_UNITS+=(trader-site); fi
 if [ "$START" -eq 1 ]; then
   echo "    (re)starting — the autopilot finishes its current cycle first, which can take up to 2 minutes"
   systemctl restart "${UNITS[@]}" ${TEST_UNITS[@]+"${TEST_UNITS[@]}"}
