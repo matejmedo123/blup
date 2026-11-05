@@ -89,6 +89,7 @@ class Page(TraderTestCase):
         self.assertEqual(html.count("data-login aria-haspopup"), 2)  # in the header and the footer
         self.assertIn("localStorage.setItem('trader-bot'", html)  # each visitor's own bot, remembered on their device
         self.assertNotIn("adpilot", html)  # no one's bot address is published on the page
+        self.assertIn("fetch('/login'", html)  # on the bot's own address it goes straight to the bot's login
         for tracker in ("gtag(", "googletagmanager", "fbq(", "connect.facebook.net", "analytics"):
             self.assertNotIn(tracker, html)
         for img in ("graf-denny.jpg", "pozicia.jpg", "kontrola.jpg", "logo.svg"):

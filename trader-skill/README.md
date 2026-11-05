@@ -1090,7 +1090,9 @@ sudo traderctl setup                                         # customer, any tim
 sign-ups of its form (`deploy/trader-site.service`, `deploy/Caddyfile.example`). `sudo traderctl site
 trader.your-domain` (`deploy/site-on.sh`) puts it on its own address behind the dashboard's Caddy. Its **Prihlásiť sa**
 button asks each visitor once for the address of their own bot (kept in that browser only) and sends them to that bot's
-login; no bot address is written on the page. Before taking money: the seller's
+login; no bot address is written on the page. Given the dashboard's own address instead, the command puts both on it:
+visitors get the landing page at `/`, whoever has a dashboard session gets the dashboard, and the button goes straight
+to `/login`. Before taking money: the seller's
 company details, terms and a privacy notice on the page, and a check with a lawyer that selling self-run trading
 software is all the business does (MiCA/MiFID licences cover managing other people's money or advising them).
 

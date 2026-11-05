@@ -3,10 +3,13 @@
 #
 #   sudo bash /opt/trader/deploy/site-on.sh trader.tvojadomena.sk     # or: sudo traderctl site trader.tvojadomena.sk
 #   bash deploy/site-on.sh --print trader.tvojadomena.sk              # only show the Caddy block it would add
+#   bash deploy/site-on.sh --print-combined bot.tvojadomena.sk        # the block for page + dashboard on one address
 #
 # Before: a DNS A record for that address pointing at this server, and Caddy installed (deploy/Caddyfile.example).
-# It adds one site block to /etc/caddy/Caddyfile (checked with caddy validate, the old file put back if it fails),
-# starts trader-site (the sign-up list behind the form) and reloads Caddy. Running it again changes nothing.
+# A new address gets its own site block. The dashboard's own address (its block is already in the Caddyfile) gets
+# both on one address instead: visitors see the landing page, whoever is signed in the dashboard. Either way the
+# Caddyfile is checked with caddy validate and the old one put back if it fails; then trader-site (the sign-up list
+# behind the form) starts and Caddy reloads. Running it again changes nothing.
 set -euo pipefail
 
 PREFIX="${TRADER_PREFIX:-/opt/trader}"
@@ -16,23 +19,32 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 EXAMPLE="$HERE/Caddyfile.example"
 
 PRINT=0
+COMBINED=0
 if [ "${1:-}" = "--print" ]; then PRINT=1; shift; fi
+if [ "${1:-}" = "--print-combined" ]; then PRINT=1; COMBINED=1; shift; fi
 DOMAIN="$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')"
 if ! [[ "$DOMAIN" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
   echo "usage: sudo bash $0 trader.tvojadomena.sk   (the address the landing page should have)" >&2
   exit 2
 fi
 
-# the block is the commented landing-page block of Caddyfile.example, uncommented, for this address
+# the blocks are the commented ones of Caddyfile.example, uncommented, for this address
 # (www. only when that name exists too, or Caddy keeps asking for a certificate nobody can get)
-hosts="$DOMAIN"
-if [ "$PRINT" = 0 ] && getent ahostsv4 "www.$DOMAIN" >/dev/null 2>&1; then hosts="$DOMAIN, www.$DOMAIN"; fi
-block="$(awk '/^#tvoja-domena\.sk, www\.tvoja-domena\.sk \{$/{on=1} on{print} on&&/^#\}$/{exit}' "$EXAMPLE" | sed 's/^#//')"
-if [ -z "$block" ]; then echo "the landing-page block is missing from $EXAMPLE" >&2; exit 1; fi
-block="# trader-site: $DOMAIN
-$hosts {
-$(printf '%s\n' "$block" | sed '1d')"
-if [ "$PRINT" = 1 ]; then printf '%s\n' "$block"; exit 0; fi
+example_block() {  # $1: the first line of the commented block
+  awk -v first="$1" '$0 == first {on=1} on {print} on && /^#\}$/ {exit}' "$EXAMPLE" | sed 's/^#//'
+}
+make_block() {  # $1: combined (0/1)
+  local body hosts="$DOMAIN"
+  if [ "$1" = 1 ]; then
+    body="$(example_block '#bot.tvoja-domena.sk {')"
+    printf '# trader-site: %s (landing page + dashboard)\n%s {\n%s\n' "$DOMAIN" "$DOMAIN" "$(printf '%s\n' "$body" | sed '1d')"
+  else
+    body="$(example_block '#tvoja-domena.sk, www.tvoja-domena.sk {')"
+    if [ "$PRINT" = 0 ] && getent ahostsv4 "www.$DOMAIN" >/dev/null 2>&1; then hosts="$DOMAIN, www.$DOMAIN"; fi
+    printf '# trader-site: %s\n%s {\n%s\n' "$DOMAIN" "$hosts" "$(printf '%s\n' "$body" | sed '1d')"
+  fi
+}
+if [ "$PRINT" = 1 ]; then make_block "$COMBINED"; exit 0; fi
 
 if [ "$(id -u)" -ne 0 ]; then echo "run it as root: sudo bash $0 $DOMAIN" >&2; exit 1; fi
 command -v caddy >/dev/null 2>&1 || { echo "Caddy is not installed — set it up first (deploy/Caddyfile.example, step 2)" >&2; exit 1; }
@@ -51,11 +63,23 @@ else
   done
 fi
 
-if grep -qxF "# trader-site: $DOMAIN" "$CADDYFILE"; then
+# the dashboard's own address: its block (the line "DOMAIN {" up to the next "}" at the start of a line) is replaced
+own="$(awk -v first="$DOMAIN {" '$0 == first {on=1} on {print} on && /^\}$/ {exit}' "$CADDYFILE")"
+if grep -q "^# trader-site: $DOMAIN\( \|$\)" "$CADDYFILE"; then
   echo "$DOMAIN is already in $CADDYFILE"
 else
+  if [ -n "$own" ] && ! printf '%s\n' "$own" | grep -q "reverse_proxy 127.0.0.1:8765"; then
+    echo "$CADDYFILE already has a block for $DOMAIN that is not the dashboard — choose another address or edit it by hand" >&2
+    exit 1
+  fi
   cp -p "$CADDYFILE" "$CADDYFILE.before-site"
-  printf '\n%s\n' "$block" >> "$CADDYFILE"
+  if [ -n "$own" ]; then
+    echo "$DOMAIN is the dashboard's address: the landing page goes in front of it, the dashboard stays behind Prihlásiť sa"
+    awk -v first="$DOMAIN {" '$0 == first {skip=1} !skip {print} skip && /^\}$/ {skip=0}' "$CADDYFILE.before-site" > "$CADDYFILE"
+    printf '\n%s\n' "$(make_block 1)" >> "$CADDYFILE"
+  else
+    printf '\n%s\n' "$(make_block 0)" >> "$CADDYFILE"
+  fi
   if ! out="$(caddy validate --config "$CADDYFILE" --adapter caddyfile 2>&1)"; then
     cp -p "$CADDYFILE.before-site" "$CADDYFILE"
     echo "the new Caddyfile did not pass caddy validate — the old one is back in place:" >&2

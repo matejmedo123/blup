@@ -66,3 +66,47 @@ trader.example.com {
 #		-Server
 #	}
 #}
+
+# Landing page and dashboard on ONE address (e.g. bot.tvoja-domena.sk): visitors see the landing page at /, whoever
+# is signed in to the dashboard gets the dashboard there, and Prihlásiť sa goes straight to /login. It replaces the
+# dashboard's block for that address (two blocks for one address do not work):
+#   sudo traderctl site bot.tvoja-domena.sk      (deploy/site-on.sh swaps it in, checked with caddy validate)
+#bot.tvoja-domena.sk {
+#	encode zstd gzip
+#	# visitors without a dashboard session: the landing page
+#	@guest {
+#		path /
+#		not header Cookie *trader_session=*
+#	}
+#	handle @guest {
+#		root * /opt/trader/site
+#		rewrite * /index.html
+#		file_server
+#		header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+#		header Referrer-Policy strict-origin-when-cross-origin
+#	}
+#	handle /img/* {
+#		root * /opt/trader/site
+#		file_server
+#	}
+#	handle /api/waitlist {
+#		reverse_proxy 127.0.0.1:8770
+#	}
+#	handle /install.sh {
+#		root * /var/lib/trader-release
+#		file_server
+#	}
+#	handle /download/* {
+#		root * /var/lib/trader-release
+#		file_server
+#	}
+#	# everything else is the dashboard, with its own stricter headers and its password
+#	handle {
+#		reverse_proxy 127.0.0.1:8765
+#	}
+#	header {
+#		Strict-Transport-Security "max-age=31536000"
+#		X-Content-Type-Options nosniff
+#		-Server
+#	}
+#}

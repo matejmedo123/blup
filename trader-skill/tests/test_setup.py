@@ -174,6 +174,31 @@ class Scripts(TraderTestCase):
         self.assertIn("systemctl enable --now trader-site", calls.read_text(encoding="utf-8"))
         self.assertEqual(run().returncode, 0)
         self.assertEqual(caddyfile.read_text(encoding="utf-8"), text)  # a second run changes nothing
+        # the dashboard's own address: its block is swapped for page + dashboard on one address
+        one = self.tmp / "Caddyfile-one"
+        one.write_text("# top\nbot.example.invalid {\n\tencode gzip\n\treverse_proxy 127.0.0.1:8765\n}\n#tail {\n#}\n",
+                       encoding="utf-8")
+        env["CADDYFILE"] = str(one)
+        r = subprocess.run([bash, str(site), "bot.example.invalid"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           universal_newlines=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("the dashboard's address", r.stdout)
+        text = one.read_text(encoding="utf-8")
+        self.assertEqual(text.count("bot.example.invalid {"), 1)  # one block for the address, not two
+        self.assertNotIn("\tencode gzip\n", text)  # the old dashboard block is gone
+        self.assertIn("# trader-site: bot.example.invalid (landing page + dashboard)", text)
+        self.assertTrue(text.startswith("# top\n") and "#tail {" in text)  # the rest kept
+        server = (DEPLOY.parent / "app" / "server.py").read_text(encoding="utf-8")
+        self.assertIn('SESSION_COOKIE = "trader_session"', server)  # the cookie the @guest matcher looks for
+        self.assertIn("not header Cookie *trader_session=*", text)
+        other = self.tmp / "Caddyfile-other"
+        other.write_text("shop.example.invalid {\n\trespond hi\n}\n", encoding="utf-8")
+        env["CADDYFILE"] = str(other)
+        r = subprocess.run([bash, str(site), "shop.example.invalid"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           universal_newlines=True, env=env)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not the dashboard", r.stderr)
+        self.assertEqual(other.read_text(encoding="utf-8"), "shop.example.invalid {\n\trespond hi\n}\n")
         (self.tmp / "invalid").write_text("", encoding="utf-8")
         env["CADDYFILE"] = str(self.tmp / "Caddyfile2")
         Path(env["CADDYFILE"]).write_text("bot.example.sk {\n}\n", encoding="utf-8")

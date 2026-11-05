@@ -1498,7 +1498,7 @@ def make_handler(app: DashboardApp):
             if self._proxied_without_password():
                 return self._refuse_proxy()
             if path == "/login":
-                if not app.auth_required:
+                if not app.auth_required or self._authed():  # signed in already: straight to the dashboard
                     return self._redirect("/")
                 return self._send(200, (LOGIN_PAGE % "").encode("utf-8"), "text/html; charset=utf-8")
             if path.startswith("/static/"):

@@ -309,6 +309,11 @@ Stránka s cenami a formulárom (`site/index.html`) môže bežať na tom istom 
    adresu tvojho bota (napr. `bot.tvojadomena.sk`), zapamätá si ju v tom prehliadači a odvtedy ťa pošle rovno na
    prihlásenie. Adresa tvojho bota na stránke nikde nie je, každý zákazník zadá adresu svojho bota.
 
+**Alebo všetko na jednej adrese.** Namiesto novej adresy daj príkazu adresu nástenky, napr.
+`sudo traderctl site bot.tvojadomena.sk`. Na `https://bot.tvojadomena.sk` potom návštevníci uvidia landing page a
+ty po prihlásení nástenku. Tlačidlo **Prihlásiť sa** ťa vtedy pošle rovno na prihlásenie, na nič sa nepýta. Nový DNS
+záznam netreba. Landing page, keď si prihlásený, uvidíš v súkromnom okne prehliadača.
+
 ---
 
 ## 11. Upozornenia na mobil

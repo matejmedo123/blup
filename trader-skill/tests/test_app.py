@@ -441,6 +441,9 @@ class Security(DashboardCase):
         self.assertIn("HttpOnly", cookie)
         self.assertIn("SameSite=Strict", cookie)
         jar = {"Cookie": cookie.split(";", 1)[0]}
+        self.assertEqual(self.req("GET", "/login")[0], 200)
+        code, hdrs, _ = self.req("GET", "/login", headers=jar)  # signed in already (the landing page's button)
+        self.assertEqual((code, hdrs.get("Location")), (303, "/"))
         bodies = [self.req("GET", "/", headers=jar)[2]]
         for ep in ENDPOINTS:
             code, _, text = self.req("GET", "/api/" + ep, headers=jar)

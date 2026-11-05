@@ -591,7 +591,14 @@
     (r ? document.getElementById('login-go') : lu).focus();
   }
   function closeLogin() { if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
-  Array.prototype.forEach.call(document.querySelectorAll('[data-login]'), function (b) { b.addEventListener('click', openLogin); });
+  // served on the bot's own address, the bot's login page is right here: no address to ask for
+  function signIn() {
+    fetch('/login', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (t) { if (t.indexOf('action="/login"') >= 0) window.location.assign('/login'); else openLogin(); })
+      .catch(openLogin);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-login]'), function (b) { b.addEventListener('click', signIn); });
   document.getElementById('login-cancel').addEventListener('click', closeLogin);
   document.getElementById('login-try').addEventListener('click', closeLogin);
   lf.addEventListener('submit', function (ev) {
