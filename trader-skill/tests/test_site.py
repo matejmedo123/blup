@@ -22,9 +22,10 @@ class Form(TraderTestCase):
         self.store = self.mod.Store(self.tmp / "site")
 
     def test_what_a_sign_up_needs(self):
-        ok, err = self.mod.check({"email": "jana@example.sk", "plan": "pro", "has_server": True, "consent": True})
+        ok, err = self.mod.check({"email": "jana@example.sk", "plan": "pro", "has_server": True, "install": True,
+                                  "consent": True})
         self.assertIsNone(err)
-        self.assertEqual((ok["email"], ok["plan"], ok["has_server"]), ("jana@example.sk", "pro", True))
+        self.assertEqual((ok["email"], ok["plan"], ok["has_server"], ok["install"]), ("jana@example.sk", "pro", True, True))
         self.assertNotIn("ip", ok)
         for bad in ({"email": "jana", "consent": True}, {"email": "jana@example.sk"},
                     {"email": "jana@example.sk", "plan": "gold", "consent": True}, ["jana@example.sk"]):
@@ -42,8 +43,8 @@ class Form(TraderTestCase):
         out = io.StringIO()
         self.mod.export(self.store, out)
         rows = list(csv.reader(io.StringIO(out.getvalue())))
-        self.assertEqual(rows[0], ["email", "plan", "has_server", "first_at", "at"])
-        self.assertEqual(rows[1][:3], ["jana@example.sk", "max", "no"])
+        self.assertEqual(rows[0], ["email", "plan", "has_server", "install", "first_at", "at"])
+        self.assertEqual(rows[1][:4], ["jana@example.sk", "max", "no", "no"])
 
     def test_the_endpoint(self):
         httpd = self.mod.make_server("127.0.0.1", 0, self.store)
@@ -79,7 +80,8 @@ class Page(TraderTestCase):
     def test_prices_form_and_no_tracking(self):
         html = (SITE / "index.html").read_text(encoding="utf-8")
         self.assertTrue(html.startswith("<!doctype html>"))
-        for price in ('data-m="19"', 'data-m="39"', 'data-m="79"', "190 € raz ročne", "390 € raz ročne", "790 € raz ročne"):
+        for price in ('data-m="19"', 'data-m="39"', 'data-m="79"', "190 € raz ročne", "390 € raz ročne", "790 € raz ročne",
+                      "Inštalácia na kľúč", "+49 € jednorazovo"):
             self.assertIn(price, html)
         self.assertIn("fetch('api/waitlist'", html)
         self.assertIn("Upozornenie na riziko", html)

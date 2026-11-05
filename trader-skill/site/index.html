@@ -171,6 +171,13 @@
   .plan li.plus::before { content: "+"; }
   .plan .btn { width: 100%; }
   @media (max-width: 960px) { .plans { grid-template-columns: 1fr; max-width: 560px; } }
+  .addon { margin-top: 20px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; padding: 26px 28px; border-radius: var(--r); border: 1px dashed var(--line); background: var(--surface); }
+  .addon p:not(.eyebrow) { color: var(--muted); max-width: 62ch; }
+  .addon-price { display: grid; justify-items: end; gap: 4px; }
+  .addon-price .amt { font-family: var(--display); font-weight: 900; font-size: 44px; letter-spacing: -.04em; line-height: 1; }
+  .addon-price .per { color: var(--muted); font-size: 14px; }
+  .addon-price .btn { margin-top: 10px; }
+  @media (max-width: 760px) { .addon { grid-template-columns: 1fr; } .addon-price { justify-items: start; } }
 
   /* access form */
   .access { background: var(--surface); border-block: 1px solid var(--line); }
@@ -386,12 +393,19 @@
           <ul>
             <li>Všetko z Pro</li>
             <li class="plus">Až 3 servery s jednou licenciou</li>
-            <li class="plus">Inštalácia s nami cez videohovor</li>
-            <li class="plus">Nastavenie rizika s nami</li>
+            <li class="plus">Podpora do 24 hodín</li>
             <li class="plus">Skorý prístup k novým stratégiám</li>
           </ul>
           <a class="btn ghost" href="#pristup" data-plan="max">Chcem Max</a>
         </article>
+      </div>
+      <div class="addon">
+        <div class="stack" style="gap:6px">
+          <p class="eyebrow">Doplnok ku každému plánu</p>
+          <h3>Inštalácia na kľúč</h3>
+          <p>Nechceš to robiť sám? Nainštalujeme Trader na tvoj server, pripojíme Bybit a nastavíme riziko spolu s tebou cez videohovor, do 60 minút.</p>
+        </div>
+        <div class="addon-price"><span class="amt">49</span><span class="per">€ jednorazovo</span><a class="btn ghost" href="#pristup" data-install="1">Chcem inštaláciu</a></div>
       </div>
       <p class="note">Server si platíš sám u poskytovateľa, približne 5 € mesačne. Pri ročnej platbe zaplatíš 10 mesiacov a dostaneš 12.</p>
     </div>
@@ -417,6 +431,7 @@
           </select>
         </label>
         <label class="check" for="f-server"><input id="f-server" name="has_server" type="checkbox"><span>Server už mám</span></label>
+        <label class="check" for="f-install"><input id="f-install" name="install" type="checkbox"><span>Chcem inštaláciu na kľúč (+49 € jednorazovo)</span></label>
         <label class="check" for="f-consent"><input id="f-consent" name="consent" type="checkbox" required><span>Súhlasím, aby ste môj e-mail použili na zaslanie návodu a ponuky. Súhlas môžem kedykoľvek odvolať.</span></label>
         <button class="btn primary" type="submit" id="f-submit">Pridať ma do zoznamu</button>
         <p class="msg" id="f-msg" hidden role="status"></p>
@@ -429,7 +444,7 @@
       <p class="eyebrow">Otázky</p>
       <h2 id="otazky-h" style="margin-top:12px">Čo sa ľudia pýtajú.</h2>
       <div class="faq">
-        <details><summary>Potrebujem skúsenosti s obchodovaním alebo s programovaním?</summary><p>Nie. Návod ťa prevedie prenájmom servera, inštaláciou aj pripojením Bybitu. Všetko ostatné nastavíš v prehľade na mobile. Odporúčame začať na simulátore a pozrieť sa, ako bot obchoduje.</p></details>
+        <details><summary>Potrebujem skúsenosti s obchodovaním alebo s programovaním?</summary><p>Nie. Návod ťa prevedie prenájmom servera, inštaláciou aj pripojením Bybitu. Všetko ostatné nastavíš v prehľade na mobile. Ak to nechceš robiť sám, objednaj si inštaláciu na kľúč za 49 € a urobíme to spolu cez videohovor.</p></details>
         <details><summary>Môže Trader vybrať moje peniaze?</summary><p>Nie. Kľúč k Bybitu vytvoríš bez práva výberu, takže s ním nejde poslať peniaze nikam. Bot beží na tvojom serveri a my k nemu ani k tvojmu kľúču nemáme prístup.</p></details>
         <details><summary>Ako často obchoduje?</summary><p>Približne 2 až 3 obchody mesačne. Signály chodia v dávkach, keď sa trh pohne nahor, a potom sú aj týždne bez obchodu. Keď je Bitcoin pod 200-dňovým priemerom, bot väčšinou drží hotovosť.</p></details>
         <details><summary>Zaručuje Trader zisk?</summary><p>Nie. Žiadny bot nemôže zaručiť zisk. Stratégie sú overené na histórii a bot kontroluje, či sa správa ako v teste, no budúcnosť môže byť iná. Investuj len peniaze, ktorých stratu unesieš.</p></details>
@@ -468,9 +483,12 @@
   month.addEventListener('click', function () { bill(false); });
   year.addEventListener('click', function () { bill(true); });
 
-  // a plan button picks the plan in the form
+  // a plan button picks the plan in the form, the installation button ticks it
   Array.prototype.forEach.call(document.querySelectorAll('[data-plan]'), function (a) {
     a.addEventListener('click', function () { document.getElementById('f-plan').value = a.getAttribute('data-plan'); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-install]'), function (a) {
+    a.addEventListener('click', function () { document.getElementById('f-install').checked = true; });
   });
 
   // the access form: sent to /api/waitlist where the page is served from a Trader site server
@@ -484,7 +502,7 @@
     btn.disabled = true;
     fetch('api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email, plan: document.getElementById('f-plan').value,
-        has_server: document.getElementById('f-server').checked, consent: true }) })
+        has_server: document.getElementById('f-server').checked, install: document.getElementById('f-install').checked, consent: true }) })
       .then(function (r) {
         if (r.status === 404 || r.status === 405) throw new Error('preview');
         return r.json().then(function (j) { if (!r.ok || !j.ok) throw new Error(j.error || 'HTTP ' + r.status); return j; });

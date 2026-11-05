@@ -2,7 +2,7 @@
 """The landing page's one dynamic part: the access list behind its form. Stdlib only.
 
 Caddy serves the static page and passes POST /api/waitlist here (deploy/Caddyfile.example). Each sign-up keeps the
-e-mail, the plan, whether the person has a server and when they agreed — no IP address, no tracking. A second
+e-mail, the plan, whether the person has a server or wants it installed, and when they agreed — no IP address, no tracking. A second
 sign-up with the same e-mail updates the first.
 
     python3 site/server.py --data /var/lib/trader-site            # serve on 127.0.0.1:8770
@@ -72,8 +72,8 @@ def check(body: dict):
     if plan not in PLANS:
         return None, "Neznámy plán."
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    return {"email": email, "plan": plan, "has_server": bool(body.get("has_server")), "at": now,
-            "first_at": now, "consent": CONSENT}, None
+    return {"email": email, "plan": plan, "has_server": bool(body.get("has_server")), "install": bool(body.get("install")),
+            "at": now, "first_at": now, "consent": CONSENT}, None
 
 
 def make_server(host: str, port: int, store: Store) -> ThreadingHTTPServer:
@@ -145,9 +145,10 @@ def make_server(host: str, port: int, store: Store) -> ThreadingHTTPServer:
 def export(store: Store, out=sys.stdout) -> int:
     rows = sorted(store.load().values(), key=lambda r: r.get("first_at") or "")
     w = csv.writer(out)
-    w.writerow(["email", "plan", "has_server", "first_at", "at"])
+    w.writerow(["email", "plan", "has_server", "install", "first_at", "at"])
     for r in rows:
-        w.writerow([r.get("email"), r.get("plan"), "yes" if r.get("has_server") else "no", r.get("first_at"), r.get("at")])
+        w.writerow([r.get("email"), r.get("plan"), "yes" if r.get("has_server") else "no",
+                    "yes" if r.get("install") else "no", r.get("first_at"), r.get("at")])
     return 0
 
 
