@@ -157,6 +157,16 @@ class Feed(SocialCase):
         res = news.refresh_feed(**kw)
         return news, res, self.read_state("news_feed.json")
 
+    def test_a_server_stocktwits_refuses_says_so(self):
+        news = load(SKILL, TOOL)
+        refused = http.SourceError(stocktwits.BASE % "TSLA", "api.stocktwits.com request failed: Forbidden", 403)
+        with mock.patch.object(news.stocktwits, "stream", side_effect=refused):
+            res = news.refresh_feed(symbols=["TSLA", "BTCUSDT"])
+        self.assertIn("blocked: StockTwits refuses this server's address (HTTP 403)", res["sources"]["StockTwits"])
+        with mock.patch.object(news.stocktwits, "stream", side_effect=http.SourceError("u", "timed out")):
+            res = news.refresh_feed(symbols=["TSLA", "BTCUSDT"])
+        self.assertTrue(res["sources"]["StockTwits"].startswith("error: TSLA: timed out"))
+
     def test_refresh_merges_ranks_and_orders(self):
         news, res, doc = self.feed(symbols=["TSLA", "BTCUSDT"])
         self.assertEqual(res["sources"]["X"], "ok")

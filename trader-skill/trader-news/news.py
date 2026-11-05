@@ -611,13 +611,19 @@ def _refresh_feed(assets, raw_symbols, now) -> dict:
         else:
             status["X"] = x.ST_DISABLED
         if (news_cfg.get("stocktwits") or {}).get("enabled", True):
-            errs = []
+            errs, refused = [], 0
             for sym, asset in [(t, "stock") for t in stocks] + [(c, "crypto") for c in coins]:
                 try:
                     fresh += stocktwits_items(sym, asset, crowd_summary(sym, asset, now), now)
                 except Exception as exc:
                     errs.append("%s: %s" % (sym, exc))
-            status["StockTwits"] = ("error: " + "; ".join(errs)[:200]) if errs else "ok"
+                    refused += getattr(exc, "status", None) == 403
+            if errs and refused == len(errs):
+                # its Cloudflare turns away many data-center addresses (a VPS); from a home connection it answers
+                status["StockTwits"] = ("blocked: StockTwits refuses this server's address (HTTP 403) — the crowd "
+                                        "chatter is left out, nothing else depends on it")
+            else:
+                status["StockTwits"] = ("error: " + "; ".join(errs)[:200]) if errs else "ok"
     if memes:
         snaps = doc.setdefault("meme_snapshots", {})
         before = len(notes)

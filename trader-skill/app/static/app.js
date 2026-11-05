@@ -398,9 +398,9 @@
     var ticks = W < 500 ? 3 : 5;
     for (var k = 0; k < ticks && n > 1; k++) {
       var i2 = Math.round(k * (n - 1) / (ticks - 1));
-      var d = new Date(cs[i2][0] * 1000);
+      var d = new Date(cs[i2][0] * 1000), daily = n > 1 && cs[1][0] - cs[0][0] >= 86400;
       svg.appendChild(sv('text', { x: X(i2), y: H - 6, 'text-anchor': k === 0 ? 'start' : (k === ticks - 1 ? 'end' : 'middle') },
-        d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })));
+        daily ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })));
     }
     box.appendChild(svg);
   }
@@ -505,10 +505,12 @@
 
   // stop on the left, target on the right, a tick at the entry and a dot where the price is now; a trade the exit
   // rule closes has no target in reach — its bar ends a little past the price and says so
+  // a rule-exit trade's take-profit is only a far cap at the broker: drawn or listed it reads like a forecast
+  function noTarget(tgt, entry, stop) { return tgt === null || (entry > stop && tgt > entry + 20 * (entry - stop)); }
   function rangeBar(p) {
     var stop = num(p.stop), tgt = num(p.target), entry = num(p.avg_entry), last = num(p.last);
     if (stop === null || entry === null || !(entry > stop)) return null;
-    var open = p.rule_exit || p.riding || tgt === null || tgt > entry + 20 * (entry - stop);
+    var open = p.rule_exit || p.riding || noTarget(tgt, entry, stop);
     var lo = Math.min(stop, last === null ? stop : last);
     var hi = open ? Math.max(entry + 2 * (entry - stop), last === null ? entry : last + 0.25 * (entry - stop)) : Math.max(tgt, last === null ? tgt : last);
     if (!(hi > lo)) return null;
@@ -519,9 +521,11 @@
       setLeft(h('span', { class: 'entry' }), at(entry)),
       last !== null ? setLeft(h('span', { class: 'now ' + (last >= entry ? 'up' : 'down') }), at(last)) : null);
     function level(cls, label, value) { return h('span', { class: cls }, h('i', { text: label }), value); }
-    return [bar, h('div', { class: 'levels' }, level('stop', 'Stop', price(stop)), level('entry', 'Entry', price(entry)),
-      open ? level('target open', 'Target', p.riding ? 'riding — the trend decides' : 'none — the exit rule decides')
-        : level('target', 'Target', price(tgt)))];
+    var nowTxt = last === null ? '—' : price(last) + ' (' + pct(100 * (last / entry - 1), true, 1) + ')';
+    return [bar, h('div', { class: 'levels' }, level('stop', 'Stop — sells here', price(stop)), level('entry', 'Bought', price(entry)),
+      open ? level('target open', 'Now', nowTxt) : level('target', 'Target', price(tgt))),
+      open ? h('div', { class: 'small faint', text: p.riding ? 'No price target: the rest rides while the trend holds.'
+        : 'No price target: it sells when its exit rule says so (below).' }) : null];
   }
   function positionCards(list) {
     if (!list.length) return empty('No open positions.');
@@ -537,7 +541,7 @@
           h('span', { class: 'last', text: 'last ' + price(p.last) })),
         rangeBar(p),
         p.story ? h('div', { class: 'story', text: p.story }) : null);
-    })), h('div', { class: 'hint', text: 'The bar runs from the stop (left) towards the target — the tick is the entry, the dot is where the price is now.' }));
+    })), h('div', { class: 'hint', text: 'The bar runs from the stop (left, where it sells if the price falls) to the right — the tick is where it bought, the dot is the price now.' }));
   }
 
   // the answers on top of the Overview: is the bot up, is it normal, did it follow its rules, how much risk is in use
@@ -630,7 +634,7 @@
         h('div', { class: 'detail' }, fk ? h('span', { class: 'rk ' + fk[1], text: fk[0] }) : null, first + ((d.reasons || []).length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '') +
           (d.entry ? ' · entry ' + price(d.entry) : '')));
     }
-    return h('div', { class: 'row dec ' + kind }, h('div', { class: 'time', text: hm(d.at) }), mid, right);
+    return h('div', { class: 'row dec ' + kind, 'data-key': (d.id || '') + '@' + (d.at || '') }, h('div', { class: 'time', text: hm(d.at) }), mid, right);
   }
 
   function newsCard(i) {
@@ -730,7 +734,7 @@
     var entry = t.entry || {}, exit = t.exit || {};
     var unit = t.qty_unit === 'shares' ? 'sh' : (t.qty_unit || '');
     var open = !!S.expanded[t.id];
-    var row = h('div', { class: 'row clickable', tabindex: 0, role: 'button', 'aria-expanded': String(open) },
+    var row = h('div', { class: 'row clickable', tabindex: 0, role: 'button', 'aria-expanded': String(open), 'data-key': t.id || '' },
       h('div', { class: 'title' }, st(t.asset || '?', t.asset === 'meme' ? 'purple' : (t.asset === 'crypto' ? 'amber' : 'blue')),
         h('span', { class: 'sym', text: t.display || t.symbol || '?' }), h('span', { class: 'muted', text: t.setup || '' }),
         st(t.status || '?', statusColor(t.status)), t.source === 'autopilot' ? st('auto', 'blue') : null),
@@ -753,25 +757,31 @@
 
   function tradeDetail(t) {
     var box = h('div', { class: 'expand' }, h('div', { class: 'skel' }), h('div', { class: 'skel' }));
+    // the page is rebuilt every few seconds: an open trade keeps showing what it had while a fresh copy loads
     var cached = S.tradeCache[t.id];
-    var p = cached && Date.now() - cached.at < 60000 ? Promise.resolve(cached.data)
-      : api('/api/trade/' + encodeURIComponent(t.id)).then(function (d) { S.tradeCache[t.id] = { at: Date.now(), data: d }; return d; });
-    p.then(function (d) {
+    if (cached) fill(cached.data);
+    if (!cached || Date.now() - cached.at >= 60000) {
+      api('/api/trade/' + encodeURIComponent(t.id)).then(function (d) { S.tradeCache[t.id] = { at: Date.now(), data: d }; fill(d); })
+        .catch(function (e) { if (!cached) { clear(box); box.appendChild(h('div', { class: 'small down', text: 'Could not load the trade: ' + e.message })); } });
+    }
+    return box;
+    function fill(d) {
       clear(box);
       var tr = d.trade || t, entry = tr.entry || {}, exit = tr.exit || {};
+      var capped = noTarget(num(tr.target), num(entry.price), num(tr.stop));
       if ((d.candles || []).length > 3) {
         box.appendChild(candleChart(d.candles,
-          [{ price: tr.target, label: 'Target', color: 'var(--green)', dash: true }, { price: entry.price, label: 'Entry', color: 'var(--blue)' },
-           { price: tr.stop, label: 'Stop', color: 'var(--red)', dash: true }].concat(exit && exit.price ? [{ price: exit.price, label: 'Exit', color: 'var(--amber)' }] : []),
+          (capped ? [] : [{ price: tr.target, label: 'Target', color: 'var(--green)', dash: true }]).concat([{ price: entry.price, label: 'Entry', color: 'var(--blue)' },
+           { price: tr.stop, label: 'Stop', color: 'var(--red)', dash: true }]).concat(exit && exit.price ? [{ price: exit.price, label: 'Exit', color: 'var(--amber)' }] : []),
           [{ t: entry.time, price: entry.price, color: 'var(--blue)', shape: 'up' }].concat(exit && exit.time ? [{ t: exit.time, price: exit.price, color: 'var(--amber)', shape: 'down' }] : [])));
         box.appendChild(h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-b' }), 'entry'), h('span', null, h('i', { class: 'lg-a' }), 'exit'),
-          h('span', { class: 'faint', text: (d.candles_source || '') + ' · 5-min bars' })));
+          h('span', { class: 'faint', text: (d.candles_source || '') + (d.interval === '1d' ? ' · daily bars' : ' · 5-min bars') })));
       } else {
         box.appendChild(h('div', { class: 'small faint', text: d.candles_error ? 'Chart unavailable: ' + d.candles_error : 'No candles for this trade.' }));
       }
       var kv = h('div', { class: 'kvgrid' });
       [['Entry', price(entry.price) + ' · ' + hm(entry.time, true)], ['Exit', exit && exit.price ? price(exit.price) + ' · ' + (exit.reason || '') : 'open'],
-       ['Stop', price(tr.stop)], ['Target', price(tr.target)], ['Qty', qty(tr.qty, tr.qty_unit === 'usd' ? 'usd' : tr.qty_unit)],
+       ['Stop', price(tr.stop)], ['Target', capped ? 'none — sells by its exit rule' : price(tr.target)], ['Qty', qty(tr.qty, tr.qty_unit === 'usd' ? 'usd' : tr.qty_unit)],
        ['R (net)', rr(tr.r_net !== undefined && tr.r_net !== null ? tr.r_net : tr.r_multiple)], ['P&L', money(tr.pnl_usd, true)],
        ['Fees + slippage', money((num(tr.fees_usd) || 0) + (num(tr.slippage_usd) || 0))], ['Source', (tr.source || 'manual') + (tr.broker ? ' · ' + tr.broker : '')],
        ['Mode', tr.paper === false ? 'LIVE' : 'paper']].forEach(function (p2) {
@@ -780,8 +790,7 @@
       box.appendChild(kv);
       var rl = reportLink(tr.chart, 'Open the trade report ↗');
       if (rl) box.appendChild(h('p', { class: 'small' }, rl));
-    }).catch(function (e) { clear(box); box.appendChild(h('div', { class: 'small down', text: 'Could not load the trade: ' + e.message })); });
-    return box;
+    }
   }
 
   function renderBot() {
@@ -1061,7 +1070,8 @@
         (u.off || {}).stock ? tile('Stocks watched', 'off', 'crypto only — no stock setup in this profile')
           : tile('Stocks watched', ua.stock ? String(ua.stock.count) : '—', u.mode === 'auto' ? 'picked itself · top ' + (cfgU.stock_top_n || '?') : 'watchlist'),
         tile('Crypto watched', ua.crypto ? String(ua.crypto.count) : '—', u.mode === 'auto' ? 'by 24h volume · top ' + (cfgU.crypto_top_n || '?') : 'watchlist'),
-        tile('Risk per trade', a.available ? '× ' + (num(a.risk_mult) === null ? '1' : String(+num(a.risk_mult).toFixed(2))) : '× 1', a.risk_reason || 'full size', num(a.risk_mult) !== null && num(a.risk_mult) < 1 ? 'down' : ''),
+        tile('Risk size it learned', a.available ? '× ' + (num(a.risk_mult) === null ? '1' : String(+num(a.risk_mult).toFixed(2))) : '× 1',
+          (a.risk_reason || 'full size — its own record cuts this after losses') + ' · not the leverage', num(a.risk_mult) !== null && num(a.risk_mult) < 1 ? 'down' : ''),
         tile('Drawdown', dd === null ? '—' : pct(dd, false, 1), ddMax !== null ? 'pauses itself at ' + pct(ddMax, false, 0) : null, a.drawdown_pause ? 'down' : ''),
         tile('Setups sitting out', String(a.paused_setups || 0), (a.cooling || 0) + ' symbol' + (a.cooling === 1 ? '' : 's') + ' cooling off', a.paused_setups ? 'down' : ''),
         tile('AI desk', ai.enabled ? (ai.ready ? 'on' : 'not ready') : 'off', ai.enabled ? (ai.today ? (ai.today.calls || 0) + ' calls · ' + money(ai.today.usd) + ' today' : '') : 'optional, veto only', ai.enabled && !ai.ready ? 'down' : '')));
@@ -1365,6 +1375,21 @@
     $('tabs').classList.toggle('open', open);
     $('more-btn').setAttribute('aria-expanded', String(open));
   }
+  // the view is rebuilt every REFRESH_MS: a section someone opened is found again by its row and its title
+  function detailsKey(el, seen) {
+    var row = el.closest('[data-key]'), sum = el.querySelector('summary');
+    var k = (row ? row.getAttribute('data-key') : '') + '|' + (sum ? sum.textContent.replace(/\s*\(\d+\)\s*$/, '') : '');
+    seen[k] = (seen[k] || 0) + 1;
+    return k + '|' + seen[k];
+  }
+  function openDetails(view, keys) {
+    var seen = {}, out = {};
+    Array.prototype.forEach.call(view.querySelectorAll('details'), function (el) {
+      var k = detailsKey(el, seen);
+      if (keys) { if (keys[k]) el.open = true; } else if (el.open) out[k] = true;
+    });
+    return out;
+  }
   function refresh() {
     if (S.busy) { S.again = true; return Promise.resolve(); }
     S.busy = true;
@@ -1376,10 +1401,11 @@
     }).then(function (frag) {
       if (tab !== S.tab) return;
       var view = $('view');
-      var y = window.scrollY;
+      var y = window.scrollY, opened = openDetails(view);
       S.charts = [];
       clear(view);
       append(view, frag);
+      openDetails(view, opened);
       window.scrollTo(0, y);
       var b = backgroundBanner();
       setBanner(b[0], b[1]);

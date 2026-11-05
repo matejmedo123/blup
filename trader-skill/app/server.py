@@ -480,19 +480,25 @@ def trade_view(trade_id: str) -> dict:
         out.update(hit[1])
         return out
     try:
-        from shared import data
+        from shared import data, setups
         entry_t = market_clock.parse_iso((trade.get("entry") or {}).get("time"))
         exit_s = (trade.get("exit") or {}).get("time")
         now = market_clock.now_utc()
         end = market_clock.parse_iso(exit_s) if exit_s else now
         end = min(now, end + timedelta(hours=1))
         asset = trade.get("asset")
-        days = 2 if asset == "stock" else 1.5
         sym = trade.get("symbol") or trade.get("display")
-        series = data.get_candles(sym, "5m", days=days, asset=asset, end=end)
-        start_ts = int((entry_t - timedelta(hours=2 if asset == "stock" else 3)).timestamp())
+        held_days = (end - entry_t).total_seconds() / 86400.0
+        if setups.exit_rule(trade.get("setup") or "") or held_days > 3:
+            # the exit-rule setups are daily and held for days or weeks: daily bars show the breakout, the stop, the ride
+            interval, days, start = "1d", held_days + 60, entry_t - timedelta(days=45)
+        else:
+            interval, days = "5m", 2 if asset == "stock" else 1.5
+            start = entry_t - timedelta(hours=2 if asset == "stock" else 3)
+        series = data.get_candles(sym, interval, days=days, asset=asset, end=end)
+        start_ts = int(start.timestamp())
         candles = [[c.t, c.o, c.h, c.l, c.c, c.v] for c in series.candles if c.t >= start_ts]
-        res = {"candles": candles[-240:], "candles_source": series.source}
+        res = {"candles": candles[-240:], "candles_source": series.source, "interval": interval}
     except Exception as exc:  # the chart is a bonus — never fail the request over it
         res = {"candles": [], "candles_error": "%s: %s" % (type(exc).__name__, exc)}
     with _CANDLE_LOCK:

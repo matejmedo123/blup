@@ -438,6 +438,20 @@ held made +12 to +16 %/yr (price only), and in one account the stock positions h
 needed — the XRP breakout of 8 Nov 2024 (+30R, the hold-out's biggest trade) was skipped. Shorts stay off
 (`isLeverage` 0) and stocks stay off in the trend profile.
 
+**More coins: the 20, 30 or 50 biggest instead of the 10 biggest** (pre-registered 5 Nov 2026, research-top50; same
+account, point in time):
+
+| | Selection | Hold-out | Since 2020 | Worst drop since 2020 | Average trade |
+|---|---|---|---|---|---|
+| Top 10 (deployed) | €6,701 | €1,928 | €12,922 | −31 % | +0.98R |
+| Top 20 | €4,345 | €972 | €4,221 | −48 % | +0.50R |
+| Top 30 | €4,245 | €919 | €3,998 | −52 % | +0.46R |
+| Top 50 | €5,210 | €828 | €4,244 | −62 % | +0.50R — fails |
+
+More coins give more breakouts, but the smaller coins' breakouts fail more often (25 % wins on the top 50 in the
+hold-out against 37 %) and they fill the five slots before the big coins' trends start. The list of candidates
+holds only coins that were once among the biggest, which flatters the top 50 if anything. The bot stays on the top 10.
+
 **With established meme coins switched on** (`profile --memes`: only while among the biggest coins, a year
 listed, validated by the lab, half the risk — DEX tokens never), point in time, same rules otherwise:
 
