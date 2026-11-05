@@ -80,7 +80,12 @@
   .btn.primary { background: var(--mint); color: var(--mint-ink); }
   .btn.ghost { border-color: var(--line); color: var(--text); background: transparent; }
   .bar .btn { min-height: 44px; padding: 0 18px; font-size: 15px; }
-  @media (max-width: 760px) { nav { display: none; } .bar .btn { margin-left: auto; } }
+  .bar-cta { display: flex; align-items: center; gap: 10px; }
+  .login-btn svg { width: 18px; height: 18px; flex: none; }
+  @media (max-width: 760px) { nav { display: none; } .bar { gap: 12px; } .bar-cta { margin-left: auto; } }
+  .bar .btn { white-space: nowrap; }
+  @media (max-width: 380px) { .cta-long { display: none; } }
+  @media (max-width: 440px) { .bar .btn.primary { padding: 0 14px; font-size: 14px; } .login-btn { padding: 0 12px; } .login-btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
 
   /* hero */
   .hero { padding-block: clamp(36px, 6vw, 84px) clamp(64px, 8vw, 104px);
@@ -216,6 +221,19 @@
   .risk b { color: var(--coral); }
   .risk p { color: var(--muted); font-size: 14px; max-width: 95ch; }
   footer { padding-block: 36px 56px; color: var(--faint); font-size: 14px; }
+  .linkish { background: none; border: 0; padding: 0; min-height: 44px; font: inherit; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .linkish:hover { color: var(--text); }
+
+  /* sign in: every bot runs on its own server, so this only finds the way to it */
+  dialog { padding: 0; border: 0; background: transparent; color: var(--text); width: min(460px, calc(100vw - 32px)); max-width: none; }
+  dialog::backdrop { background: rgba(3, 6, 12, .62); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  dialog form { box-shadow: 0 40px 100px -30px var(--shadow); }
+  dialog h3 { font-size: 24px; letter-spacing: -.02em; }
+  dialog p { color: var(--muted); font-size: 15px; }
+  input[type="text"] { min-height: 52px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: 500 16px var(--body); width: 100%; }
+  .dlg-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .dlg-actions .btn { flex: 1 1 auto; }
+  .dlg-note { font-size: 14px; }
   .foot { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; justify-content: space-between; }
 </style>
 </head>
@@ -232,7 +250,10 @@
       <a href="#cennik">Cenník</a>
       <a href="#otazky">Otázky</a>
     </nav>
-    <a class="btn primary" href="#pristup">Vyskúšať zadarmo</a>
+    <div class="bar-cta">
+      <button class="btn ghost login-btn" type="button" data-login aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg><span>Prihlásiť sa</span></button>
+      <a class="btn primary" href="#pristup"><span>Vyskúšať<span class="cta-long"> zadarmo</span></span></a>
+    </div>
   </div>
 </header>
 
@@ -436,9 +457,26 @@
 <footer>
   <div class="wrap foot">
     <span>© 2026 Trader</span>
+    <button class="linkish" type="button" data-login aria-haspopup="dialog">Prihlásiť sa do bota</button>
     <span>Emócie OFF · Disciplína ON</span>
   </div>
 </footer>
+
+<dialog id="login" aria-labelledby="login-h">
+  <form id="login-form" novalidate>
+    <h3 id="login-h">Prihlásiť sa do bota</h3>
+    <p>Každý Trader beží na vlastnom serveri, preto ťa pošleme rovno na prihlásenie do tvojho bota. Adresu si zapamätáme v tomto prehliadači.</p>
+    <label for="login-url">Adresa tvojho bota
+      <input id="login-url" name="bot" type="text" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="bot.tvojadomena.sk">
+    </label>
+    <p class="msg err" id="login-msg" hidden role="status"></p>
+    <div class="dlg-actions">
+      <button class="btn primary" type="submit" id="login-go">Pokračovať na prihlásenie</button>
+      <button class="btn ghost" type="button" id="login-cancel">Zrušiť</button>
+    </div>
+    <p class="dlg-note">Ešte nemáš bota? <a href="#pristup" id="login-try">Vyskúšaj ho zadarmo</a>.</p>
+  </form>
+</dialog>
 
 <script>
 (function () {
@@ -498,6 +536,36 @@
           : 'Nepodarilo sa odoslať: ' + e.message + '. Skús to o chvíľu znova.', false);
       })
       .then(function () { btn.disabled = false; });
+  });
+
+  // sign in: the address of the person's own bot, remembered in this browser only, then its own login page
+  var dlg = document.getElementById('login'), lf = document.getElementById('login-form');
+  var lu = document.getElementById('login-url'), lm = document.getElementById('login-msg');
+  function botUrl(raw) {
+    var t = String(raw || '').trim();
+    var scheme = /^http:\/\//i.test(t) ? 'http://' : 'https://';
+    t = t.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split(/[\/?#]/)[0].toLowerCase();
+    var host = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(:\d{2,5})?$/, ip = /^(\d{1,3}\.){3}\d{1,3}(:\d{2,5})?$/;
+    return host.test(t) || ip.test(t) ? scheme + t + '/' : null;
+  }
+  function remembered() { try { return localStorage.getItem('trader-bot') || ''; } catch (e) { return ''; } }
+  function openLogin() {
+    var r = remembered();
+    lu.value = r.replace(/^https:\/\//, '').replace(/\/$/, '');
+    lm.hidden = true;
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    (r ? document.getElementById('login-go') : lu).focus();
+  }
+  function closeLogin() { if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-login]'), function (b) { b.addEventListener('click', openLogin); });
+  document.getElementById('login-cancel').addEventListener('click', closeLogin);
+  document.getElementById('login-try').addEventListener('click', closeLogin);
+  lf.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var url = botUrl(lu.value);
+    if (!url) { lm.hidden = false; lm.textContent = 'Napíš adresu svojho bota, napríklad bot.tvojadomena.sk.'; lu.focus(); return; }
+    try { localStorage.setItem('trader-bot', url); } catch (e) { /* private window: asked again next time */ }
+    window.location.assign(url);
   });
 
   // the hero chart: weeks in a range, a daily close above the 20-day high, the buy on the next bar and the stop

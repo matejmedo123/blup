@@ -13,6 +13,7 @@
 #   sudo traderctl update | update-log     look for a new version now (tested, then installed) / what it did
 #   sudo traderctl license [--install FILE] the plan this server runs on / install a licence file
 #   sudo traderctl setup                   the guided set-up: password, licence, Bybit key, risk, notifications
+#   sudo traderctl site ADDRESS            the landing page on its own address, e.g. trader.tvojadomena.sk
 #
 #   sudo traderctl compare                 the real bot and the comparison bot (deploy/test-bot.sh) side by side
 #   sudo traderctl test <command>          any command above for the comparison bot, e.g. sudo traderctl test status
@@ -56,6 +57,7 @@ case "$cmd" in
     systemctl start trader-update.service || true
     exec tail -n 12 /var/log/trader-update.log ;;
   update-log) exec tail -n 40 /var/log/trader-update.log ;;
+  site) exec bash "$PREFIX/deploy/site-on.sh" "${2:-}" ;;
   logs) exec journalctl -u "$AP" -f -n 100 ;;
   dashboard-logs) exec journalctl -u "$DASH" -f -n 100 ;;
   start) exec systemctl start "$AP" "$DASH" ;;

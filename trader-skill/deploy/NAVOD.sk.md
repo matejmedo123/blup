@@ -292,6 +292,23 @@ a kým je okno otvorené, v prehliadači **http://127.0.0.1:8765**.
 * **Bot** — či žije, každé rozhodnutie s dôvodom, tlačidlá **Pause**, **Run once** a **KILL**.
 * **Checks** — či výsledky zodpovedajú backtestu a či dodržal pravidlá.
 
+### Landing page na vlastnej adrese, s tlačidlom Prihlásiť sa
+
+Stránka s cenami a formulárom (`site/index.html`) môže bežať na tom istom serveri, vedľa nástenky.
+
+1. DNS rovnako ako v bode A: nový záznam typu **A**, napr. názov `trader`, hodnota = IP servera. Nič nemaž.
+2. Na serveri (Caddy už beží z bodu A, adresu prepíš na svoju):
+
+   ```bash
+   sudo traderctl site trader.tvojadomena.sk
+   ```
+
+   Príkaz pridá stránku do Caddy (najprv ju overí, pri chybe vráti pôvodný súbor), zapne formulár a obnoví
+   Caddy. Keď DNS ešte nie je hotové, len to napíše. HTTPS sa zapne samo, keď začne platiť.
+3. Otvor **https://trader.tvojadomena.sk**. Tlačidlo **Prihlásiť sa** vpravo hore sa pri prvom kliknutí spýta na
+   adresu tvojho bota (napr. `bot.tvojadomena.sk`), zapamätá si ju v tom prehliadači a odvtedy ťa pošle rovno na
+   prihlásenie. Adresa tvojho bota na stránke nikde nie je, každý zákazník zadá adresu svojho bota.
+
 ---
 
 ## 11. Upozornenia na mobil

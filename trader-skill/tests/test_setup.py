@@ -123,3 +123,62 @@ class Scripts(TraderTestCase):
         r = subprocess.run([bash, str(DEPLOY / "release.sh"), "not a domain"], stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE)
         self.assertEqual(r.returncode, 2)
+
+    def test_the_landing_page_on_its_own_address(self):
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("bash not available")
+        site = DEPLOY / "site-on.sh"
+        r = subprocess.run([bash, str(site), "--print", "Trader.Example.sk"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           universal_newlines=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        block = r.stdout
+        self.assertTrue(block.startswith("# trader-site: trader.example.sk\ntrader.example.sk {\n"))
+        self.assertEqual(block.count("{"), block.count("}"))
+        self.assertNotIn("\n#", block.split("\n", 1)[1].replace("\t#", ""))  # every line uncommented
+        for part in ("reverse_proxy 127.0.0.1:8770", "root * /opt/trader/site", "handle @private {"):
+            self.assertIn(part, block)
+        # the private files are answered by their own handle, before the catch-all one serves the folder
+        self.assertLess(block.index("handle @private"), block.rindex("handle {"))
+        self.assertEqual(subprocess.run([bash, str(site), "no domain"], stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode, 2)
+        if os.geteuid() != 0:
+            self.skipTest("the install half runs as root")
+        # the install half, with systemctl / caddy / hostname stood in for: one block, added once, put back if invalid
+        bin_ = self.tmp / "bin"
+        bin_.mkdir()
+        calls = self.tmp / "calls"
+        for name, body in (("systemctl", 'echo "systemctl $*" >> "%s"' % calls), ("hostname", "echo 192.0.2.1"),
+                           ("ufw", "exit 0"), ("caddy", '[ -f "%s" ] && exit 1; exit 0' % (self.tmp / "invalid"))):
+            (bin_ / name).write_text("#!/bin/sh\n" + body + "\n", encoding="utf-8")
+            os.chmod(str(bin_ / name), 0o755)
+        prefix = self.tmp / "opt"
+        (prefix / "site").mkdir(parents=True)
+        (prefix / "site" / "index.html").write_text("<!doctype html>", encoding="utf-8")
+        unit = self.tmp / "trader-site.service"
+        unit.write_text("[Unit]\n", encoding="utf-8")
+        caddyfile = self.tmp / "Caddyfile"
+        caddyfile.write_text("bot.example.sk {\n\treverse_proxy 127.0.0.1:8765\n}\n", encoding="utf-8")
+        env = dict(os.environ, PATH="%s:%s" % (bin_, os.environ.get("PATH", "")), TRADER_PREFIX=str(prefix),
+                   CADDYFILE=str(caddyfile), TRADER_SITE_UNIT=str(unit))
+
+        def run():
+            return subprocess.run([bash, str(site), "trader.example.invalid"], stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, universal_newlines=True, env=env)
+        r = run()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("https://trader.example.invalid", r.stdout)
+        self.assertIn("does not resolve yet", r.stdout)
+        text = caddyfile.read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("bot.example.sk {"))  # the dashboard's block untouched
+        self.assertEqual(text.count("# trader-site: trader.example.invalid"), 1)
+        self.assertIn("systemctl enable --now trader-site", calls.read_text(encoding="utf-8"))
+        self.assertEqual(run().returncode, 0)
+        self.assertEqual(caddyfile.read_text(encoding="utf-8"), text)  # a second run changes nothing
+        (self.tmp / "invalid").write_text("", encoding="utf-8")
+        env["CADDYFILE"] = str(self.tmp / "Caddyfile2")
+        Path(env["CADDYFILE"]).write_text("bot.example.sk {\n}\n", encoding="utf-8")
+        r = run()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("did not pass caddy validate", r.stderr)
+        self.assertEqual(Path(env["CADDYFILE"]).read_text(encoding="utf-8"), "bot.example.sk {\n}\n")
+
