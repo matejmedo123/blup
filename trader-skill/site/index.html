@@ -13,13 +13,21 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap">
 <style>
-  /* One dark trading-desk page: a hero that switches emotions off, one proof number, three reasons, prices, sign-up */
+  /* One glass trading-desk page, the same look as the bot's dashboard: frosted panels over a night aurora in the bot's
+     colours and a faint chart grid. A hero that switches emotions off, one proof number, three reasons, prices, sign-up */
   :root {
-    --bg: #060c17; --surface: #0b1424; --raise: #12203a; --line: #1e2e47; --off: #263753;
-    --text: #eef3f8; --muted: #9aa8bb; --faint: #6f7d92;
+    --bg: #050a14; --surface: rgba(13, 23, 41, .64); --raise: rgba(255, 255, 255, .07); --line: rgba(255, 255, 255, .11); --off: #2b3c58;
+    --text: #eef3f8; --muted: #b0bccc; --faint: #9ba7b9;
     --mint: #3ddc97; --mint-ink: #04140c; --mint-soft: rgba(61, 220, 151, .13);
-    --coral: #ff6b5b; --coral-soft: rgba(255, 107, 91, .13); --blue: #5aa9ff;
+    --coral: #ff8070; --coral-soft: rgba(255, 128, 112, .13); --blue: #5aa9ff;
     --knob: #ffffff; --shadow: rgba(0, 0, 0, .55);
+    --pop: rgba(12, 21, 38, .9); --glass-line: rgba(255, 255, 255, .13); --glass-hi: rgba(255, 255, 255, .10);
+    --sheen: linear-gradient(150deg, rgba(255, 255, 255, .065), rgba(255, 255, 255, .012) 42%, rgba(255, 255, 255, 0) 70%);
+    --blur: blur(20px) saturate(160%); --grid-line: rgba(255, 255, 255, .035);
+    --aurora: radial-gradient(900px 620px at 92% -10%, rgba(61, 220, 151, .26), transparent 62%),
+              radial-gradient(760px 560px at -6% 28%, rgba(90, 169, 255, .20), transparent 62%),
+              radial-gradient(820px 620px at 28% 108%, rgba(180, 140, 255, .19), transparent 62%),
+              radial-gradient(620px 460px at 98% 88%, rgba(245, 185, 74, .11), transparent 60%);
     --display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
     --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
     --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
@@ -28,29 +36,51 @@
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
-      --bg: #f3f6f9; --surface: #ffffff; --raise: #e9eff5; --line: #d8e1ea; --off: #c3cfdb;
-      --text: #0d1726; --muted: #46546a; --faint: #5f6c80;
+      --bg: #e8eef5; --surface: rgba(255, 255, 255, .62); --raise: rgba(13, 23, 38, .05); --line: rgba(13, 23, 38, .10); --off: #c3cfdb;
+      --text: #0d1726; --muted: #46546a; --faint: #5c697d;
       --mint: #067a51; --mint-ink: #ffffff; --mint-soft: rgba(6, 122, 81, .10);
-      --coral: #c8402f; --coral-soft: rgba(200, 64, 47, .10); --blue: #1f6fd1;
+      --coral: #b3301f; --coral-soft: rgba(179, 48, 31, .10); --blue: #1a5bb8;
       --knob: #ffffff; --shadow: rgba(13, 23, 38, .18);
+      --pop: rgba(255, 255, 255, .92); --glass-line: rgba(255, 255, 255, .85); --glass-hi: rgba(255, 255, 255, .95);
+      --sheen: linear-gradient(150deg, rgba(255, 255, 255, .6), rgba(255, 255, 255, .12) 55%, rgba(255, 255, 255, 0));
+      --blur: blur(20px) saturate(170%); --grid-line: rgba(13, 23, 38, .045);
+      --aurora: radial-gradient(900px 620px at 92% -10%, rgba(6, 160, 100, .17), transparent 62%),
+                radial-gradient(760px 560px at -6% 28%, rgba(26, 98, 214, .13), transparent 62%),
+                radial-gradient(820px 620px at 28% 108%, rgba(116, 72, 216, .12), transparent 62%),
+                radial-gradient(620px 460px at 98% 88%, rgba(255, 150, 60, .12), transparent 60%);
       color-scheme: light;
     }
   }
   :root[data-theme="light"] {
-    --bg: #f3f6f9; --surface: #ffffff; --raise: #e9eff5; --line: #d8e1ea; --off: #c3cfdb;
-    --text: #0d1726; --muted: #46546a; --faint: #5f6c80;
+    --bg: #e8eef5; --surface: rgba(255, 255, 255, .62); --raise: rgba(13, 23, 38, .05); --line: rgba(13, 23, 38, .10); --off: #c3cfdb;
+    --text: #0d1726; --muted: #46546a; --faint: #5c697d;
     --mint: #067a51; --mint-ink: #ffffff; --mint-soft: rgba(6, 122, 81, .10);
-    --coral: #c8402f; --coral-soft: rgba(200, 64, 47, .10); --blue: #1f6fd1;
+    --coral: #b3301f; --coral-soft: rgba(179, 48, 31, .10); --blue: #1a5bb8;
     --knob: #ffffff; --shadow: rgba(13, 23, 38, .18);
+    --pop: rgba(255, 255, 255, .92); --glass-line: rgba(255, 255, 255, .85); --glass-hi: rgba(255, 255, 255, .95);
+    --sheen: linear-gradient(150deg, rgba(255, 255, 255, .6), rgba(255, 255, 255, .12) 55%, rgba(255, 255, 255, 0));
+    --blur: blur(20px) saturate(170%); --grid-line: rgba(13, 23, 38, .045);
+    --aurora: radial-gradient(900px 620px at 92% -10%, rgba(6, 160, 100, .17), transparent 62%),
+              radial-gradient(760px 560px at -6% 28%, rgba(26, 98, 214, .13), transparent 62%),
+              radial-gradient(820px 620px at 28% 108%, rgba(116, 72, 216, .12), transparent 62%),
+              radial-gradient(620px 460px at 98% 88%, rgba(255, 150, 60, .12), transparent 60%);
     color-scheme: light;
   }
 
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; scroll-padding-top: 100px; }  /* a jump to a section lands below the floating bar */
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--body); font-size: 17px; line-height: 1.6;
     -webkit-font-smoothing: antialiased; overflow-x: hidden; }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+  .sky { position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--aurora); }
+  .sky::after { content: ""; position: absolute; inset: 0;
+    background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 70% 20%, #000, transparent 78%); mask-image: radial-gradient(ellipse 80% 70% at 70% 20%, #000, transparent 78%); }
+  .glass { background: var(--sheen), var(--surface); border: 1px solid var(--glass-line); box-shadow: inset 0 1px 0 var(--glass-hi), 0 30px 70px -36px var(--shadow);
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+  @media (prefers-reduced-transparency: reduce) { .glass { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; } }
   a { color: inherit; }
   :focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; border-radius: 6px; }
   .wrap { max-width: var(--wrap); margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
@@ -66,9 +96,10 @@
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
   /* header */
-  header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--bg) 86%, transparent);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
-  .bar { display: flex; align-items: center; gap: 28px; min-height: 68px; }
+  header { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); z-index: 20; margin-top: 12px; }
+  .bar { display: flex; align-items: center; gap: 28px; min-height: 64px; padding: 0 10px 0 16px; border-radius: 22px;
+    background: var(--sheen), var(--pop); border: 1px solid var(--glass-line); box-shadow: inset 0 1px 0 var(--glass-hi), 0 20px 50px -30px var(--shadow);
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
   .logo { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 900; font-size: 22px; letter-spacing: -.02em; text-decoration: none; }
   .logo svg { width: 34px; height: 34px; }
   nav { display: flex; gap: 22px; margin-left: auto; }
@@ -78,7 +109,7 @@
     font-family: var(--body); font-weight: 800; font-size: 16px; text-decoration: none; border: 2px solid transparent; cursor: pointer; transition: transform .15s ease; }
   .btn:hover { transform: translateY(-1px); }
   .btn.primary { background: var(--mint); color: var(--mint-ink); }
-  .btn.ghost { border-color: var(--line); color: var(--text); background: transparent; }
+  .btn.ghost { border-color: var(--glass-line); color: var(--text); background: var(--raise); box-shadow: inset 0 1px 0 var(--glass-hi); }
   .bar .btn { min-height: 44px; padding: 0 18px; font-size: 15px; }
   .bar-cta { display: flex; align-items: center; gap: 10px; }
   .login-btn svg { width: 18px; height: 18px; flex: none; }
@@ -89,7 +120,7 @@
 
   /* hero */
   .hero { padding-block: clamp(36px, 6vw, 84px) clamp(64px, 8vw, 104px);
-    background: radial-gradient(55% 60% at 85% 35%, var(--mint-soft), transparent 70%); }
+  }
   .hero-grid { display: grid; grid-template-columns: 1.08fr .92fr; gap: clamp(36px, 5vw, 64px); align-items: center; }
   .switches { display: grid; gap: .12em; margin-top: 18px; font-weight: 900; font-size: clamp(42px, 5.2vw, 72px); line-height: 1.05; letter-spacing: -.045em; }
   .sw-row { display: flex; align-items: center; gap: .3em; }
@@ -112,11 +143,10 @@
   .trust span { display: inline-flex; align-items: center; gap: 7px; }
   .trust svg { width: 16px; height: 16px; color: var(--mint); flex: none; }
 
-  .chart-card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 58px 18px 14px; min-width: 0;
-    box-shadow: 0 40px 90px -40px var(--shadow); }
+  .chart-card { position: relative; border-radius: var(--r); padding: 58px 18px 14px; min-width: 0; }
   .toast { position: absolute; top: -26px; left: 18px; right: 18px; max-width: 420px; margin-left: auto; display: grid; grid-template-columns: 38px 1fr auto;
-    gap: 12px; align-items: center; padding: 12px 14px; border-radius: 16px; background: var(--raise); border: 1px solid var(--line);
-    box-shadow: 0 22px 50px -14px var(--shadow); animation: drop .6s cubic-bezier(.2, 1.35, .4, 1) 1.9s both; z-index: 2; }
+    gap: 12px; align-items: center; padding: 12px 14px; border-radius: 16px; background: var(--sheen), var(--pop); border: 1px solid var(--glass-line);
+    box-shadow: inset 0 1px 0 var(--glass-hi), 0 22px 50px -14px var(--shadow); animation: drop .6s cubic-bezier(.2, 1.35, .4, 1) 1.9s both; z-index: 2; }
   .toast .t-ico { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--mint); color: var(--mint-ink); }
   .toast .t-ico svg { width: 20px; height: 20px; }
   .toast b { display: block; font-size: 15px; line-height: 1.3; }
@@ -132,8 +162,8 @@
   @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } .chart-card { margin-top: 18px; } #hero-chart { height: 260px; } }
 
   /* the one number */
-  .proof { background: var(--surface); border-block: 1px solid var(--line); padding-block: clamp(44px, 6vw, 72px); }
-  .proof-grid { display: grid; grid-template-columns: auto 1fr; gap: clamp(20px, 4vw, 48px); align-items: center; }
+  .proof { padding-block: clamp(8px, 2vw, 24px); }
+  .proof-grid { display: grid; grid-template-columns: auto 1fr; gap: clamp(20px, 4vw, 48px); align-items: center; padding: clamp(24px, 4vw, 44px); border-radius: var(--r); }
   .proof .big { white-space: nowrap; font-family: var(--display); font-weight: 900; font-size: clamp(72px, 10vw, 128px); line-height: .9; letter-spacing: -.05em; color: var(--coral); }
   .proof-text { font-size: clamp(20px, 2.6vw, 28px); font-weight: 600; line-height: 1.3; letter-spacing: -.01em; max-width: 30ch; text-wrap: balance; }
   .proof-text b { color: var(--mint); font-weight: 800; }
@@ -142,7 +172,7 @@
 
   /* three reasons */
   .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 44px; }
-  .card { display: grid; gap: 12px; align-content: start; padding: 28px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+  .card { display: grid; gap: 12px; align-content: start; padding: 28px; border-radius: var(--r); min-width: 0; }
   .card p { color: var(--muted); }
   .card .ico { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: var(--mint-soft); color: var(--mint); }
   .card .ico svg { width: 26px; height: 26px; }
@@ -150,7 +180,8 @@
 
   /* how you start */
   .start { display: grid; grid-template-columns: 1.15fr .85fr; gap: clamp(28px, 5vw, 56px); align-items: center; margin-top: clamp(56px, 7vw, 88px); }
-  .start figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; min-width: 0; }
+  .start figure { margin: 0; border-radius: var(--r); overflow: hidden; min-width: 0; padding: 8px 8px 0; }
+  .start img { border-radius: 14px; }
   .start img { display: block; width: 100%; height: auto; }
   .start figcaption { padding: 12px 18px 16px; font-size: 14px; color: var(--muted); }
   .steps { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 22px; counter-reset: s; }
@@ -163,15 +194,16 @@
 
   /* pricing */
   .pricing-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 20px; }
-  .toggle { display: inline-flex; padding: 5px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); }
+  .toggle { display: inline-flex; padding: 5px; border-radius: 999px; }
   .toggle button { min-height: 44px; padding: 0 18px; border-radius: 999px; border: 0; background: transparent; color: var(--muted); font: 700 15px var(--body); cursor: pointer; }
   .toggle button[aria-pressed="true"] { background: var(--mint); color: var(--mint-ink); }
   .toggle small { font-weight: 600; opacity: .85; }
   .free { margin-top: 26px; padding: 16px 20px; border-radius: 16px; background: var(--mint-soft); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
   .free b { color: var(--mint); }
   .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 26px; align-items: stretch; }
-  .plan { position: relative; display: grid; grid-template-rows: auto auto auto 1fr auto; gap: 16px; padding: 28px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); min-width: 0; }
-  .plan.best { border: 2px solid var(--mint); box-shadow: 0 30px 80px -30px var(--mint-soft); }
+  .plan { position: relative; display: grid; grid-template-rows: auto auto auto 1fr auto; gap: 16px; padding: 28px; border-radius: var(--r); min-width: 0; }
+  .plan.best { border: 2px solid var(--mint); background: linear-gradient(160deg, var(--mint-soft), transparent 60%), var(--sheen), var(--surface);
+    box-shadow: inset 0 1px 0 var(--glass-hi), 0 30px 80px -30px var(--mint-soft); }
   .plan .tag { position: absolute; top: -14px; left: 28px; padding: 4px 12px; border-radius: 999px; background: var(--mint); color: var(--mint-ink); font: 800 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
   .plan h3 { font-size: 24px; }
   .plan .for { color: var(--muted); font-size: 15px; margin-top: -8px; }
@@ -185,20 +217,20 @@
   .plan li.plus::before { content: "+"; }
   .plan .btn { width: 100%; }
   @media (max-width: 960px) { .plans { grid-template-columns: 1fr; max-width: 560px; } }
-  .extra { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; padding: 20px 24px; border-radius: var(--r); border: 1px dashed var(--line); }
+  .extra { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; padding: 20px 24px; border-radius: var(--r); }
   .extra div { display: grid; gap: 4px; min-width: 0; flex: 1 1 320px; }
   .extra p { color: var(--muted); font-size: 15px; }
   .extra .num { color: var(--mint); font-weight: 700; }
 
   /* sign-up */
-  .access { background: var(--surface); border-block: 1px solid var(--line); }
+  .access { padding-top: 0; }
   .access-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 5vw, 64px); align-items: start; }
   .gets { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
   .gets li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; color: var(--muted); }
   .gets li::before { content: "✓"; color: var(--mint); font-weight: 900; }
-  form { display: grid; gap: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 28px; min-width: 0; }
+  form { display: grid; gap: 16px; border-radius: var(--r); padding: 28px; min-width: 0; }
   label { display: grid; gap: 6px; font-weight: 600; font-size: 15px; }
-  input[type="email"], select { min-height: 52px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: 500 16px var(--body); width: 100%; }
+  input[type="email"], select { min-height: 52px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--glass-line); background: var(--raise); color: var(--text); font: 500 16px var(--body); width: 100%; }
   .check { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start; font-weight: 500; color: var(--muted); font-size: 14px; min-height: 44px; }
   .check input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--mint); }
   form .btn { width: 100%; font-size: 17px; }
@@ -208,7 +240,8 @@
   @media (max-width: 860px) { .access-grid { grid-template-columns: 1fr; } }
 
   /* faq */
-  .faq { display: grid; margin-top: 36px; border-top: 1px solid var(--line); max-width: 860px; }
+  .faq { display: grid; margin-top: 36px; max-width: 860px; padding: 4px 24px; border-radius: var(--r); }
+  .faq details:last-child { border-bottom: 0; }
   .faq details { border-bottom: 1px solid var(--line); }
   .faq summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; gap: 18px; padding: 20px 4px; font-weight: 700; font-size: 18px; min-height: 44px; }
   .faq summary::-webkit-details-marker { display: none; }
@@ -217,7 +250,7 @@
   .faq details p { color: var(--muted); padding: 0 4px 22px; max-width: 70ch; }
 
   /* risk + footer */
-  .risk { border: 1px solid var(--line); border-radius: var(--r); padding: 22px 26px; background: var(--surface); }
+  .risk { border-radius: var(--r); padding: 22px 26px; }
   .risk b { color: var(--coral); }
   .risk p { color: var(--muted); font-size: 14px; max-width: 95ch; }
   footer { padding-block: 36px 56px; color: var(--faint); font-size: 14px; }
@@ -227,10 +260,10 @@
   /* sign in: every bot runs on its own server, so this only finds the way to it */
   dialog { padding: 0; border: 0; background: transparent; color: var(--text); width: min(460px, calc(100vw - 32px)); max-width: none; }
   dialog::backdrop { background: rgba(3, 6, 12, .62); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  dialog form { box-shadow: 0 40px 100px -30px var(--shadow); }
+  dialog form { background: var(--sheen), var(--pop); box-shadow: inset 0 1px 0 var(--glass-hi), 0 40px 100px -30px var(--shadow); }
   dialog h3 { font-size: 24px; letter-spacing: -.02em; }
   dialog p { color: var(--muted); font-size: 15px; }
-  input[type="text"] { min-height: 52px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: 500 16px var(--body); width: 100%; }
+  input[type="text"] { min-height: 52px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--glass-line); background: var(--raise); color: var(--text); font: 500 16px var(--body); width: 100%; }
   .dlg-actions { display: flex; flex-wrap: wrap; gap: 10px; }
   .dlg-actions .btn { flex: 1 1 auto; }
   .dlg-note { font-size: 14px; }
@@ -238,6 +271,7 @@
 </style>
 </head>
 <body>
+<div class="sky" aria-hidden="true"></div>
 
 <header>
   <div class="wrap bar">
@@ -278,7 +312,7 @@
           <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Zrušíš kedykoľvek</span>
         </div>
       </div>
-      <div class="chart-card">
+      <div class="chart-card glass">
         <div class="toast">
           <span class="t-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>
           <div><b>Trader kúpil UNI/USDT</b><span>Denné prerazenie · stop 5,85 $ nastavený</span></div>
@@ -291,13 +325,13 @@
   </section>
 
   <section class="proof" aria-label="Prečo nie 5-minútový graf">
-    <div class="wrap proof-grid">
+    <div class="wrap"><div class="proof-grid glass">
       <div class="big num">86&nbsp;%</div>
       <div>
         <p class="proof-text">5-minútových „pumpov“ skončilo po poplatkoch v strate. <b>Trader ich preto vôbec nenaháňa.</b></p>
         <p class="note">Test: 2 462 prerazení na 5-minútových sviečkach, BTC, ETH, SOL, XRP, BNB a UNI za 60 dní, poplatky Bybitu 0,18 % za stranu.</p>
       </div>
-    </div>
+    </div></div>
   </section>
 
   <section id="preco" aria-labelledby="preco-h">
@@ -305,17 +339,17 @@
       <p class="eyebrow">Prečo Trader</p>
       <h2 id="preco-h" style="margin-top:12px">Pravidlá namiesto emócií.</h2>
       <div class="cards">
-        <div class="card">
+        <div class="card glass">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></div>
           <h3>Kupuje len silné trendy</h3>
           <p>Iba keď minca uzavrie deň nad svojím 20-dňovým maximom a Bitcoin je v raste. Žiadne naháňanie 5-minútových sviečok.</p>
         </div>
-        <div class="card">
+        <div class="card glass">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></div>
           <h3>Stop na každom obchode</h3>
           <p>Stop je na burze ešte pred nákupom. Vieš vopred, koľko môžeš stratiť. Žiadne „ešte chvíľu počkám“.</p>
         </div>
-        <div class="card">
+        <div class="card glass">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div>
           <h3>Ty spíš, on stráži</h3>
           <p>Beží 24/7 a na mobil ti napíše, keď kúpi alebo predá. Tlačidlo KILL zruší príkazy a zavrie pozície naraz.</p>
@@ -323,7 +357,7 @@
       </div>
 
       <div class="start">
-        <figure><img src="img/graf-denny.jpg" width="1000" height="605" alt="Denný graf UNI v prehľade Tradera s čiarou nákupu za 7,64 dolára a stopom za 5,85 dolára." loading="lazy"><figcaption>Ku každému obchodu graf: kde kúpil, kde je stop a kedy predá.</figcaption></figure>
+        <figure class="glass"><img src="img/graf-denny.jpg" width="1000" height="605" alt="Denný graf UNI v prehľade Tradera s čiarou nákupu za 7,64 dolára a stopom za 5,85 dolára." loading="lazy"><figcaption>Ku každému obchodu graf: kde kúpil, kde je stop a kedy predá.</figcaption></figure>
         <div>
           <h3 style="font-size:clamp(24px,3vw,32px);letter-spacing:-.02em">Začneš za jeden večer.</h3>
           <ol class="steps">
@@ -343,14 +377,14 @@
           <p class="eyebrow">Cenník</p>
           <h2 id="cennik-h">Začni zadarmo. Plať, až keď chceš naostro.</h2>
         </div>
-        <div class="toggle" role="group" aria-label="Spôsob platby">
+        <div class="toggle glass" role="group" aria-label="Spôsob platby">
           <button type="button" id="bill-month" aria-pressed="true">Mesačne</button>
           <button type="button" id="bill-year" aria-pressed="false">Ročne <small>· 2 mesiace zadarmo</small></button>
         </div>
       </div>
       <p class="free"><b>Zadarmo:</b> všetky funkcie bez skutočných peňazí, bez karty a bez záväzku.</p>
       <div class="plans">
-        <article class="plan" aria-labelledby="p1">
+        <article class="plan glass" aria-labelledby="p1">
           <h3 id="p1">Štart</h3>
           <p class="for">Prvý ostrý účet</p>
           <div><div class="price"><span class="amt" data-m="19" data-y="15,83">19</span><span class="per">€ / mesiac</span></div><p class="billed" data-m="Približne 0,63 € denne" data-y="190 € raz ročne">Približne 0,63 € denne</p></div>
@@ -363,7 +397,7 @@
           </ul>
           <a class="btn ghost" href="#pristup" data-plan="start">Chcem Štart</a>
         </article>
-        <article class="plan best" aria-labelledby="p2">
+        <article class="plan best glass" aria-labelledby="p2">
           <span class="tag">Najobľúbenejší</span>
           <h3 id="p2">Pro</h3>
           <p class="for">Všetky stratégie</p>
@@ -377,7 +411,7 @@
           </ul>
           <a class="btn primary" href="#pristup" data-plan="pro">Chcem Pro</a>
         </article>
-        <article class="plan" aria-labelledby="p3">
+        <article class="plan glass" aria-labelledby="p3">
           <h3 id="p3">Max</h3>
           <p class="for">Viac účtov a osobná pomoc</p>
           <div><div class="price"><span class="amt" data-m="79" data-y="65,83">79</span><span class="per">€ / mesiac</span></div><p class="billed" data-m="Zrušíš kedykoľvek" data-y="790 € raz ročne">Zrušíš kedykoľvek</p></div>
@@ -390,7 +424,7 @@
           <a class="btn ghost" href="#pristup" data-plan="max">Chcem Max</a>
         </article>
       </div>
-      <div class="extra">
+      <div class="extra glass">
         <div>
           <p><b style="color:var(--text)">Inštalácia na kľúč</b> · <span class="num">49 € jednorazovo</span></p>
           <p>Nechceš to robiť sám? Nainštalujeme a nastavíme Trader spolu s tebou cez videohovor.</p>
@@ -413,7 +447,7 @@
           <li>Plán si vyberieš, až keď budeš chcieť</li>
         </ul>
       </div>
-      <form id="signup" novalidate>
+      <form id="signup" class="glass" novalidate>
         <label for="f-email">E-mail
           <input id="f-email" name="email" type="email" autocomplete="email" required placeholder="meno@domena.sk">
         </label>
@@ -437,7 +471,7 @@
     <div class="wrap">
       <p class="eyebrow">Otázky</p>
       <h2 id="otazky-h" style="margin-top:12px">Čo sa ľudia pýtajú.</h2>
-      <div class="faq">
+      <div class="faq glass">
         <details><summary>Potrebujem skúsenosti s obchodovaním alebo s počítačmi?</summary><p>Nie. Sprievodca sa pýta po slovensky a všetko ostatné nastavíš v mobile. Potrebuješ účet na Bybite a malý server za približne 5 € mesačne. Ak to nechceš robiť sám, inštaláciu na kľúč za 49 € urobíme spolu cez videohovor.</p></details>
         <details><summary>Môže Trader vybrať moje peniaze?</summary><p>Nie. Kľúč k Bybitu vytvoríš bez práva výberu, takže s ním nejde poslať peniaze nikam. Peniaze ostávajú na tvojom účte a my k nim ani ku kľúču nemáme prístup.</p></details>
         <details><summary>Ako často obchoduje?</summary><p>Približne 2 až 3 obchody mesačne. Signály prichádzajú, keď sa trh pohne nahor, a potom bývajú aj týždne bez obchodu. Keď Bitcoin klesá, Trader väčšinou drží hotovosť a čaká.</p></details>
@@ -448,7 +482,7 @@
   </section>
 
   <div class="wrap">
-    <div class="risk" role="note">
+    <div class="risk glass" role="note">
       <p><b>Upozornenie na riziko.</b> Obchodovanie s kryptoaktívami je vysoko riskantné a môžeš prísť o celý vklad. Trader je softvér, ktorý spúšťaš a nastavuješ sám. Nie je to investičné poradenstvo ani správa portfólia. Výsledky testov a minulé výsledky nezaručujú budúce.</p>
     </div>
   </div>
@@ -632,7 +666,7 @@
     ctx.beginPath(); ctx.moveTo(bx, by - 8); ctx.lineTo(bx - 8, by + 6); ctx.lineTo(bx + 8, by + 6); ctx.closePath(); ctx.fill();
     ctx.font = '700 12px ' + css('--mono');
     var tw = ctx.measureText('Kúpil').width;
-    ctx.fillStyle = css('--surface'); ctx.fillRect(bx - tw / 2 - 5, by + 10, tw + 10, 17);
+    ctx.fillStyle = css('--pop'); ctx.fillRect(bx - tw / 2 - 5, by + 10, tw + 10, 17);
     ctx.fillStyle = text; ctx.fillText('Kúpil', bx - tw / 2, by + 22);
     ctx.fillStyle = blue; ctx.fillText('20d max', X(BREAK - 20), Y(hi20) - 8);
     ctx.fillStyle = coral; ctx.fillText('stop', W - padR - 34, Y(stop) - 8);
