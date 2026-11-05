@@ -857,6 +857,13 @@
     }
   }
 
+  // which plan this installation runs on; the simulator is free with every feature
+  function licenceTile(l) {
+    var sub = l.valid && l.expires ? 'until ' + l.expires : (l.reason || '');
+    var m = (S.summary || {}).mode || {};
+    var bad = l.configured && !l.valid && m.broker && m.broker !== 'simulator';  // a real broker without a licence buys nothing
+    return tile('Licence', l.label || '—', sub, bad ? 'down' : '');
+  }
   function renderBot() {
     return api('/api/decisions?limit=200').then(function (d) {
       var s = S.summary, bot = s.bot || {}, m = s.mode || {}, ctl = s.control || {}, cfg = s.autopilot_config || {}, srv = (s.server || {}).autopilot || {};
@@ -907,7 +914,8 @@
         tile('Opened today', String(today.trades_opened || 0), cfg.max_new_trades_per_day ? 'max ' + cfg.max_new_trades_per_day + ' per day' : null),
         tile('Skipped today', String(today.skipped || 0), 'setups that failed a gate'),
         tile('Realized today', money(today.realized_pnl, true), null, tone(today.realized_pnl)),
-        tile('Kill switch', today.kill_reason ? 'tripped' : 'off', today.kill_reason || (cfg.flatten_on_kill ? 'flattens positions' : 'cancels orders only'), today.kill_reason ? 'down' : '')));
+        tile('Kill switch', today.kill_reason ? 'tripped' : 'off', today.kill_reason || (cfg.flatten_on_kill ? 'flattens positions' : 'cancels orders only'), today.kill_reason ? 'down' : ''),
+        licenceTile(s.licence || {})));
       var g = cfg.gates || {};
       var gateList = h('ul', { class: 'checklist' },
         h('li', null, h('span', { class: 'mark', text: '1' }), h('span', { text: 'Fresh trigger: the setup fired on the last ' + (g.max_trigger_age_bars || 1) + ' closed bar(s)' })),

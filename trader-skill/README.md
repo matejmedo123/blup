@@ -1054,6 +1054,34 @@ app, no account — use a long random topic name) or your own Telegram bot. You 
 kill switch, drawdown pause, what it learned, repeated errors and a daily summary after the US close.
 `autopilot.py notify-test` checks the setup.
 
+## Selling it — licences and the landing page
+
+Trader is sold as software people run on their own server: we never hold a customer's keys or money. A licence is a
+small JSON file signed with the seller's RSA key (`shared/licence.py`, stdlib); the bot checks it offline.
+
+| Plan | What it unlocks on a real broker |
+|---|---|
+| none | nothing — the simulator is free with every feature (the trial) |
+| Štart, 19 €/month | Bybit / Alpaca for the trend rules |
+| Pro, 39 €/month | also the funding squeeze, leverage (≤ 2×), established meme coins, the AI desk, the comparison bot |
+| Max, 79 €/month | Pro for up to 3 servers |
+
+Installation on the customer's server is a 49 € add-on. A licence that ran out stops new entries on a real broker;
+open positions keep their stops and exits. A build without `shared/license_key.json` locks nothing (the seller's own).
+
+```bash
+python3 deploy/license-tool.py keygen          # once, outside the repo: ~/trader-vendor/vendor-private.json stays secret
+cp ~/trader-vendor/license_key.json shared/    # the public key goes into the code you ship
+python3 deploy/license-tool.py issue --email jana@example.sk --plan pro --months 1
+sudo traderctl license --install jana-example-sk-pro.json   # on the customer's server
+sudo traderctl license                                       # which plan it runs on
+```
+
+`site/index.html` is the Slovak landing page (prices, FAQ, risk notice, no trackers); `site/server.py` keeps the
+sign-ups of its form (`deploy/trader-site.service`, `deploy/Caddyfile.example`). Before taking money: the seller's
+company details, terms and a privacy notice on the page, and a check with a lawyer that selling self-run trading
+software is all the business does (MiCA/MiFID licences cover managing other people's money or advising them).
+
 ## Dashboard
 
 A local web app over the `trader/` folder (stdlib server, no CDN, dark/light, built for phones):

@@ -52,7 +52,7 @@ if not os.path.isdir(os.path.join(_ROOT, "shared")):
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from shared import adapt, brokers, cli, config, data, fmt, market_clock, notify, setups, skills, state  # noqa: E402
+from shared import adapt, brokers, cli, config, data, fmt, licence, market_clock, notify, setups, skills, state  # noqa: E402
 from shared import health, http, indicators, shadow, symbols, universe  # noqa: E402
 from shared.brokers import BrokerError, broker_symbol  # noqa: E402
 from shared.brokers.base import OPEN_STATUSES  # noqa: E402
@@ -2216,6 +2216,14 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     if held:
         return _decision(reasons=["already holding or waiting on %s (%s)" % (sym.display, held[0].get("setup") or
                                                                          held[0].get("plan_id"))], **base)
+    lic = licence.status()
+    real = broker.name != "simulator"  # the simulator is the free trial: every feature, no licence
+    if real:
+        for feature, applies in (("real_broker", True), ("funding_squeeze", c["setup"] == "funding_squeeze"),
+                                 ("memes", meme)):
+            ok, why = licence.allows(feature, lic) if applies else (True, "")
+            if not ok:
+                return _decision(reasons=["licence: " + why], **base)
     if learned is not None:
         ok, why = adapt.check(learned, asset, c["setup"], sym.key)
         if not ok:
@@ -2290,6 +2298,8 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
     if plan.get("runner_note"):
         gates.append({"name": "let winners ride", "ok": True, "detail": plan["runner_note"]})
     lev, lev_why = config.leverage(cfg, limits, asset, broker.name, sym)
+    if lev > 1 and real and not licence.allows("leverage", lic)[0]:
+        lev, lev_why = 1.0, "1× — " + licence.allows("leverage", lic)[1]
     if lev_why:
         gates.append({"name": "leverage", "ok": True, "detail": lev_why})
     s_cfg, s_limits = _scaled(cfg, limits, asset, mult)
@@ -2333,7 +2343,10 @@ def judge(c: dict, cfg: dict, limits: dict, broker, book: dict, approved: bool, 
         return _decision(reasons=["dry run — the autopilot is not enabled (autopilot.enabled or --approve); "
                                   "it would have placed: " + text], desk=desk_info, gates=gates, dry_run=True, **base)
     ai_info = None
-    if (cfg.get("ai_desk") or {}).get("enabled"):
+    ai_ok, ai_why = licence.allows("ai_desk", lic) if real else (True, "")
+    if (cfg.get("ai_desk") or {}).get("enabled") and not ai_ok:
+        gates.append({"name": "AI desk", "ok": True, "detail": "skipped — " + ai_why})
+    elif (cfg.get("ai_desk") or {}).get("enabled"):
         # last, because it is the only step that costs money — and it can only say no
         block, gate, ai_info = ai_review(plan, desk, cfg)
         if str((cfg.get("ai_desk") or {}).get("mode") or "veto").lower() == "advise":
@@ -3615,14 +3628,31 @@ def daemon(args, cfg) -> int:
     return 0
 
 
+def licence_text(st: dict) -> str:
+    lines = ["LICENCE · %s%s" % (st["label"], " · valid until %s" % st["expires"] if st.get("valid") and st.get("expires")
+                                  else "")]
+    if st.get("email"):
+        lines.append("  for %s · up to %s server(s) · id %s" % (st["email"], st.get("instances", 1), st.get("id")))
+    if st.get("reason"):
+        lines.append("  " + st["reason"])
+    for feature in licence.NEEDS:
+        ok, why = licence.allows(feature, st)
+        lines.append("  %s %s%s" % ("✓" if ok else "✗", licence.FEATURE_TEXT[feature], "" if ok else " — %s plan" % (
+            licence.LABEL[licence.NEEDS[feature]])))
+    lines.append("  the simulator: every feature, no licence needed")
+    return "\n".join(lines)
+
+
 # --- CLI ----------------------------------------------------------------------------------------------------
 
 def build_parser():
     p = cli.parser("autopilot.py", __doc__)
     p.add_argument("action", choices=("status", "run", "loop", "daemon", "pause", "resume", "kill", "replay",
                                       "check-live", "broker-test", "universe", "learned", "notify-test", "profile", "check",
-                                      "forget", "lab", "ai-report"))
+                                      "forget", "lab", "ai-report", "license"))
     p.add_argument("--once", action="store_true", help="run: a single cycle (default)")
+    p.add_argument("--install", metavar="FILE",
+                   help="license: check this licence file (or - for pasted text) and keep it in the state folder")
     p.add_argument("--refresh", action="store_true", help="universe: rebuild it now instead of showing the cached one")
     p.add_argument("--live-keys", action="store_true",
                    help="broker-test: check the LIVE keys, read only, without switching the bot to live (nothing is "
@@ -4109,6 +4139,22 @@ def main(argv=None) -> int:
     if args.action == "learned":
         doc = adapt.evaluate(cfg)
         cli.emit(args, learned_text(doc), doc)
+        return 0
+    if args.action == "license":
+        if args.install:
+            try:
+                if args.install == "-":
+                    raw = sys.stdin.read()
+                else:
+                    with open(args.install, encoding="utf-8") as fh:
+                        raw = fh.read()
+                lic = licence.install(json.loads(raw))
+            except (OSError, ValueError) as exc:
+                print("Licence refused: %s" % exc, file=sys.stderr)
+                return 1
+            print("Licence installed: %s, valid until %s." % (licence.LABEL[lic["plan"]], lic.get("expires")))
+        st = licence.status()
+        cli.emit(args, licence_text(st), st)
         return 0
     if args.action == "ai-report":
         rep = ai_report()

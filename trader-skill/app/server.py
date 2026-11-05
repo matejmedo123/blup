@@ -47,7 +47,7 @@ if not os.path.isdir(os.path.join(_ROOT, "shared")):
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from shared import config, disclaimer, market_clock, secrets, skills, state  # noqa: E402
+from shared import config, disclaimer, licence, market_clock, secrets, skills, state  # noqa: E402
 from shared import brokers  # noqa: E402
 
 STATIC = _HERE / "static"
@@ -348,6 +348,7 @@ def summary_view(app) -> dict:
         "offline": config.is_offline(),
         "mode": mode_info(cfg, bot),
         "setup": setup_info(cfg),
+        "licence": licence.status(),
         "bot": {"installed": autopilot_installed(), "status": bot.get("status") or ("not started" if autopilot_installed()
                                                                                      else "not installed"),
                 "last_cycle": bot.get("last_cycle"), "next_cycle": bot.get("next_cycle"), "cycles": bot.get("cycles"),

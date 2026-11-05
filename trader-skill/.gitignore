@@ -14,3 +14,6 @@ trader-sniper/research/data
 trader-sniper/research/results/*.json
 trader-sniper/research/results/*.jsonl
 trader-sniper/research/results/*.csv
+
+# the licence signing key: whoever has it can make licences (deploy/license-tool.py keeps it in ~/trader-vendor)
+vendor-private*.json

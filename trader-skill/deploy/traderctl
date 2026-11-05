@@ -11,6 +11,7 @@
 #   sudo traderctl logs                    follow the daemon's log (Ctrl+C to leave)
 #   sudo traderctl start | stop | restart  the services (a stop can take up to 2 min: it finishes its cycle)
 #   sudo traderctl update | update-log     look for a new version now (tested, then installed) / what it did
+#   sudo traderctl license [--install FILE] the plan this server runs on / install a licence file
 #
 #   sudo traderctl compare                 the real bot and the comparison bot (deploy/test-bot.sh) side by side
 #   sudo traderctl test <command>          any command above for the comparison bot, e.g. sudo traderctl test status
@@ -76,5 +77,10 @@ if [ "$cmd" = "health" ]; then
   exec runuser -u trader -- python3 "$PREFIX/deploy/healthcheck.py" --home "$DATA"
 fi
 [ $# -gt 0 ] || set -- status
+# a licence file in root's home is not readable by the bot's user: root reads it and hands it over
+if [ "$cmd" = "license" ] && [ "${2:-}" = "--install" ] && [ -n "${3:-}" ] && [ "$3" != "-" ]; then
+  [ -r "$3" ] || { echo "cannot read $3" >&2; exit 1; }
+  exec runuser -u trader -- python3 "$PREFIX/trader-autopilot/autopilot.py" license --install - --home "$DATA" < "$3"
+fi
 # always as the trader user, so every state file stays owned by the bot
 exec runuser -u trader -- python3 "$PREFIX/trader-autopilot/autopilot.py" "$@" --home "$DATA"

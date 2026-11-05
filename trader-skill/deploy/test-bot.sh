@@ -38,6 +38,16 @@ if [ "$(id -u)" -ne 0 ]; then
   echo "Run it as root: sudo bash $0" >&2
   exit 1
 fi
+# the comparison bot comes with the Pro and Max plans (a build without a licence key locks nothing)
+if [ "$REMOVE" -eq 0 ] && ! TRADER_HOME="$MAIN" python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+from shared import licence
+ok, why = licence.allows("comparison_bot")
+print(why) if not ok else None
+sys.exit(0 if ok else 1)' "$PREFIX"; then
+  echo "Install a Pro or Max licence first: sudo traderctl license --install FILE" >&2
+  exit 1
+fi
 
 if [ "$REMOVE" -eq 1 ]; then
   systemctl disable --now "${UNITS[@]}" 2>/dev/null || true
